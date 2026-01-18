@@ -1,0 +1,779 @@
+/* static/properties/floor_parking_report.adapter.css */
+/* ===========================
+   AUDIT REPORT THEME (STRICT)
+   Accent: #2F5597 (dark blue)
+   =========================== */
+
+/* ---------- TOKENS ---------- */
+:root{
+  /* main accent (как в графиках) */
+  --accent:#2F5597;
+  --muted:#6B6F76;
+
+  /* neutrals */
+  --text:#111111;
+  --line:#D9D9D9;
+  --soft:#ECECEC;
+  --bg:#FFFFFF;
+  --bg-soft:#FAFAFA;
+
+  /* typography */
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,"Noto Sans",sans-serif;
+
+  /* page width for screen */
+  --page-max:1080px;
+
+  /* screen paddings (визуально “по нормам”) */
+  --pad-x:64px;
+  --pad-top:56px;
+  --pad-bottom:64px;
+}
+
+/* ---------- BASE ---------- */
+html, body{
+  margin:0;
+  padding:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  font-size:12px;
+  line-height:1.45;
+}
+
+/* иногда чужие стили добавляют лишние отступы */
+*{ box-sizing:border-box; }
+
+/* ---------- PAGE GEOMETRY ---------- */
+/* ВАЖНО: у тебя было padding:18px 0 -> липло к краям */
+.report-body .page{
+  box-shadow:none !important;
+  border:none !important;
+  border-radius:0 !important;
+
+  max-width:var(--page-max);
+  margin:0 auto 18px;
+
+  padding:var(--pad-top) var(--pad-x) var(--pad-bottom) var(--pad-x) !important;
+  width:auto !important;
+}
+
+/* ---------- PRINT (A4 margins) ---------- */
+@media print{
+  /* поля листа задаём нормами */
+  @page{
+    size: A4;
+    margin: 20mm 18mm 22mm 20mm; /* top right bottom left */
+  }
+
+  body{
+    background:#fff !important;
+  }
+
+  /* На печати сами .page паддинги не нужны — поля даёт @page */
+  .report-body .page{
+    margin:0 !important;
+    padding:0 !important;
+    max-width:none !important;
+  }
+
+  *{
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print{ display:none !important; }
+}
+
+/* ---------- COVER / TITLE PAGE ---------- */
+.report-cover{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+
+  border:none !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  overflow:visible !important;
+}
+
+/* верхняя линия — в синей палитре */
+.report-cover::before{
+  content:"";
+  display:block;
+  height:2px;
+  background:linear-gradient(90deg, var(--accent), #fff);
+  margin-bottom:48px;
+}
+
+/* внутренний контейнер */
+.cover-inner{
+  max-width:var(--page-max);
+  margin:0 auto;
+
+  /* одинаковые поля как у страницы */
+  padding:0 var(--pad-x) 48px var(--pad-x) !important;
+
+  flex:1 1 auto;
+  display:flex !important;
+  flex-direction:column;
+  justify-content:center;
+}
+
+.cover-type{
+  font-size:10px !important;
+  font-weight:800 !important;
+  letter-spacing:.20em !important;
+  text-transform:uppercase !important;
+  color:var(--muted) !important;
+}
+
+.cover-center{ margin-top:22px; }
+
+.cover-building{
+  font-size:34px !important;
+  font-weight:900 !important;
+  letter-spacing:.2px !important;
+  line-height:1.15 !important;
+  margin:6px 0 0;
+  color:var(--text) !important;
+}
+
+.cover-sub{
+  margin-top:12px !important;
+  font-size:13px !important;
+  color:var(--muted) !important;
+}
+
+.cover-bottom{
+  margin-top:36px !important;
+  font-size:10.5px !important;
+  color:var(--muted) !important;
+}
+
+.report-cover .pagebreak{ margin-top:auto; }
+
+@media print{
+  .report-cover{ min-height:100vh; }
+  .report-cover::before{ margin-bottom:40px; }
+  .cover-inner{ padding:0 var(--pad-x) 40px var(--pad-x) !important; }
+}
+
+/* ---------- TOC ---------- */
+.toc, #toc, section.toc{
+  break-before:page;
+  page-break-before:always;
+
+  min-height:100vh;
+  max-width:var(--page-max);
+  margin:0 auto;
+
+  padding:var(--pad-top) var(--pad-x) 0 var(--pad-x);
+}
+
+.toc h2{
+  margin:0 0 20px;
+  font-size:15px;
+  font-weight:900;
+  letter-spacing:.15px;
+  color:var(--text);
+}
+
+.toc ol{
+  list-style:none;
+  padding:0;
+  margin:0;
+}
+
+.toc li{ margin:14px 0; }
+
+.toc a{
+  display:block;
+  font-size:13.5px;         
+  font-weight:600;
+  color:var(--text);
+  text-decoration:none;
+}
+
+.toc a:hover{ text-decoration:underline; }
+
+@media print{
+  .toc{
+    min-height:100vh;
+    padding:72px var(--pad-x) 0 var(--pad-x);
+  }
+}
+
+/* ---------- ACCENT LINE ---------- */
+.report-accent-line{
+  height:2px;
+  width:100%;
+  background:linear-gradient(90deg, var(--accent), #fff);
+}
+
+.report-accent-line.container{
+  max-width:var(--page-max);
+  margin-left:auto;
+  margin-right:auto;
+}
+
+.report-accent-line.spaced{ margin:0 0 28px; }
+.report-accent-line.compact{ margin:0 0 14px; }
+
+@media print{
+  .report-accent-line{
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background:linear-gradient(90deg, var(--accent), #fff) !important;
+  }
+}
+
+/* ---------- TOOLBAR (screen only) ---------- */
+.toolbar{
+  display:flex;
+  width:var(--page-max);
+  max-width:calc(100vw - 28px);
+  margin:12px auto 0;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+
+/* ---------- EXECUTIVE SUMMARY (то, что мы делали) ---------- */
+:root{
+  --ar-text:var(--text);
+  --ar-muted:var(--muted);
+  --ar-line:var(--line);
+  --ar-soft:var(--soft);
+  --ar-accent:var(--accent);
+  --ar-font:var(--font);
+}
+
+.ar-sec{ font-family:var(--ar-font); color:var(--ar-text); }
+.ar-head{ display:flex; flex-direction:column; gap:6px; margin:0 0 8px 0; }
+
+.ar-h2{
+  margin:0;
+  font-size:18px;
+  font-weight:900;
+  letter-spacing:.1px;
+}
+
+.ar-muted{
+  font-size:11px;
+  color:var(--ar-muted);
+}
+
+.ar-rule{
+  height:1px;
+  background:var(--ar-line);
+  margin:8px 0 14px;
+}
+
+.ar-h3{
+  margin:0 0 8px 0;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+.ar-mt{ margin-top:14px; }
+
+/* KPI LIST */
+.kpi-list{ border-top:1px solid var(--ar-line); }
+
+.kpi-row{
+  display:grid;
+  grid-template-columns: 42% 58%;
+  gap:14px;
+  padding:9px 0;
+  border-bottom:1px solid var(--ar-soft);
+  align-items:start;
+}
+
+.kpi-label{
+  font-size:10.5px;
+  font-weight:800;
+  color:var(--ar-muted);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+
+.kpi-value{
+  font-size:11.5px;
+  line-height:1.28;
+}
+
+.kpi-value b{
+  font-weight:800;
+  color:var(--ar-text);
+}
+
+.kpi-meta{
+  margin-left:8px;
+  font-size:10.5px;
+  color:var(--ar-muted);
+  font-weight:700;
+}
+
+.kpi-note{
+  display:block;
+  margin-top:4px;
+  font-size:10.5px;
+  color:var(--ar-muted);
+  font-weight:600;
+}
+
+.kpi-sep{
+  margin:0 8px;
+  color:var(--ar-muted);
+}
+
+/* ключевой KPI — тонкая синяя линия (как в графиках) */
+.kpi-row--key{ position:relative; }
+.kpi-row--key::before{
+  content:"";
+  position:absolute;
+  left:-10px;
+  top:8px;
+  bottom:8px;
+  width:2px;
+  background:var(--ar-accent);
+}
+
+/* FIGURE */
+.ar-figure{ margin:0; padding:6px 0 0 0; }
+.ar-figure-body{ margin:0; }
+.ar-caption{
+  margin-top:6px;
+  font-size:10.5px;
+  color:var(--ar-muted);
+}
+
+/* делаем SVG аккуратно по ширине, чтобы не вылезал */
+.ar-figure svg{ max-width:100% !important; height:auto !important; }
+
+/* PRINT */
+@media print{
+  .kpi-row, .ar-figure { break-inside: avoid; page-break-inside: avoid; }
+}
+
+
+
+/* ===========================
+   SECTION MARKER (Big4 style)
+   =========================== */
+
+/* Все заголовки разделов (H2) */
+.ar-h2{
+  position: relative;
+  padding-left: 16px;              /* место под маркер */
+  margin-top: 0;
+}
+
+/* Тонкий вертикальный маркер */
+.ar-h2::before{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  background: var(--accent);       /* тёмно-синий #2F5597 */
+}
+
+
+
+
+/* ===========================
+   FLOOR PLAN (II. Plan)
+   =========================== */
+
+.ar-figure--plan{
+  margin-top: 0;
+}
+
+.ar-plan{
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* SVG занимает всю доступную ширину */
+.ar-plan svg{
+  width:100% !important;
+  height:auto !important;
+  display:block;
+}
+
+
+/* note  */
+.ar-note{
+  margin-top:10px;
+  font-size:11px;
+  color:var(--muted);
+  border-left:3px solid var(--accent);
+  padding-left:10px;
+}
+
+
+
+/* ---------- 3 РАЗДЕЛ ---------- */
+
+/* Отступ для блоков внутри секции */
+.ar-mt{
+  margin-top: 12px;
+}
+
+/* Графики: чтобы SVG всегда помещался по ширине страницы */
+.ar-figure-body svg{
+  width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+
+/* Примечание */
+.ar-note{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid rgba(47,85,151,0.35);
+  background: rgba(47,85,151,0.06);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+/* Подзаголовок перед таблицей */
+.ar-subhead{
+  margin-top: 14px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ar-subhead .ar-h3{
+  margin: 0;
+}
+
+/* Таблица */
+.table-wrap{
+  margin-top: 10px;
+}
+
+/* Строка итого */
+.tbl-total td{
+  border-top: 2px solid rgba(0,0,0,0.12);
+  padding-top: 10px;
+}
+
+/* Ячейка целиком = progress bar */
+.share-cell-full{
+  position: relative;
+  width: 100%;
+  min-width: 120px;
+  height: 18px;
+
+  background: rgba(0,0,0,0.035);     /* лёгкий фон */
+  border: 1px solid rgba(0,0,0,0.04);
+  border-radius: 0;                  /* ❗ УБРАЛИ СКРУГЛЕНИЕ */
+  overflow: hidden;
+}
+
+/* Заливка */
+.share-bar-full{
+  position: absolute;
+  left: 0;
+  top: 0;                            /* ❗ на всю высоту */
+  bottom: 0;
+  width: 0%;
+
+  background: rgba(47,85,151,0.22);  /* спокойный синий */
+  border-radius: 0;                  /* ❗ УБРАЛИ СКРУГЛЕНИЕ */
+
+  transition: width 0.3s ease;
+}
+
+/* МАП — другой цвет */
+.share-bar-map{
+  background: rgba(233,30,99,0.22);  /* мягкий акцент */
+}
+
+
+
+/* Текст поверх */
+.share-text-full{
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12px;
+  color: #111;
+}
+
+/* KPI-блок (summary) */
+.ar-kpi-row{
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 12px;
+}
+
+.ar-kpi{
+  background: rgba(0,0,0,0.02);
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.ar-kpi-label{
+  font-size: 11px;
+  color: rgba(17,17,17,0.70);
+  margin-bottom: 6px;
+}
+
+.ar-kpi-value{
+  font-size: 16px;
+  font-weight: 800;
+  color: #111;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-kpi-hint{
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+/* Печать: избегаем разрывов внутри ключевых блоков */
+@media print{
+  .ar-figure,
+  .ar-kpi-row,
+  .table-wrap,
+  .ar-note{
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+
+
+
+/* ---------- 4 РАЗДЕЛ - АНАЛИЗ СТАВОК ---------- */
+
+.tbl-compact td {
+  padding: 6px 8px;
+}
+
+.tenant-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.glyph {
+  font-family: NotoManu, Arial, sans-serif;
+  font-size: 13px;
+}
+
+.rate {
+  font-weight: 500;
+}
+
+.delta {
+  font-variant-numeric: tabular-nums;
+}
+
+.delta--pos {
+  font-weight: 600;
+}
+
+.delta--neg {
+  opacity: 0.75;
+}
+
+.delta--zero {
+  opacity: 0.6;
+}
+
+.tbl tbody tr:hover {
+  background: rgba(47,85,151,0.04);
+}
+
+
+
+/* ---------- ПРИЛОЖЕНИЕ  - АРЕНДАТОРЫ  ---------- */
+
+.appendix {
+  padding-top: 6px;
+}
+
+.appendix-head{
+  padding: 10px 12px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: rgba(47,85,151,0.04);
+  border-left: 4px solid rgba(47,85,151,0.35);
+  margin-bottom: 12px;
+}
+
+.appendix-title{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.appendix-tenant{
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase; /* если не хочешь капсом — убери */
+}
+
+.appendix-head .glyph{
+  font-family: NotoManu, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.agreement-block{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.agreement-title{
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.tbl-compact td{
+  padding: 6px 10px;
+}
+
+
+
+
+
+
+
+/* --- VI.1 Free places table polish (pro) --- */
+
+.table-free-places{
+  font-variant-numeric: tabular-nums;
+}
+
+.table-free-places thead th{
+  border-bottom: 1px solid rgba(0,0,0,0.10);
+}
+
+.table-free-places tbody tr:nth-child(2n){
+  background: rgba(0,0,0,0.018);
+}
+
+.table-free-places tbody tr:hover{
+  background: rgba(47,85,151,0.04);
+}
+
+.col-idx{
+  width: 44px;
+  text-align: right;
+  color: rgba(17,17,17,0.55);
+  font-weight: 700;
+}
+
+.num{
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- VI.1 downtime highlighting (>=180 / >=365) --- */
+.table-free-places tbody tr.row-warn{
+  background: rgba(220, 53, 69, 0.06) !important; /* >=180: бледно-красный */
+}
+
+.table-free-places tbody tr.row-critical{
+  background: rgba(220, 53, 69, 0.10) !important; /* >=365: сильнее */
+}
+
+/* акцентная полоска слева */
+.table-free-places tbody tr.row-warn td:first-child{
+  box-shadow: inset 4px 0 0 rgba(220, 53, 69, 0.35);
+}
+
+.table-free-places tbody tr.row-critical td:first-child{
+  box-shadow: inset 4px 0 0 rgba(220, 53, 69, 0.55);
+}
+
+/* hover не должен убивать подсветку */
+.table-free-places tbody tr.row-warn:hover,
+.table-free-places tbody tr.row-critical:hover{
+  background: rgba(220, 53, 69, 0.14) !important;
+}
+
+/* красим ТОЛЬКО значение простоя (колонку), чтобы выглядело делово */
+.table-free-places td.downtime-cell{
+  font-weight: 600;
+}
+
+.table-free-places td.downtime-cell.is-warn{
+  color: #b02a37; /* >=180 */
+}
+
+.table-free-places td.downtime-cell.is-critical{
+  color: #842029; /* >=365 */
+  font-weight: 700;
+}
+
+
+
+
+
+
+
+
+/* чтобы не рвало "22 000 ₽" на две строки */
+.tbl td.rate,
+.tbl td.rate .money,
+.tbl th.col-map {
+  white-space: nowrap;
+}
+
+/* печать: чуть больше места под ставку */
+@media print {
+  .tbl th.col-map,
+  .tbl td.rate {
+    width: 9ch;        /* под "999 999 ₽" */
+    min-width: 9ch;
+  }
+
+  /* если у вас где-то включен fixed — для печати лучше auto */
+  .tbl { table-layout: auto; }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ---------- misc: section header print adjust (если было) ---------- */
+@media print{
+  .section-head::after,
+  .type-title:after{
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

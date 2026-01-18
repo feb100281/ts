@@ -1,0 +1,16 @@
+{# templates/admin/properties/floor/report/partials/_cover.html #}
+
+<section class="report-cover" id="cover">
+  <div class="cover-inner">
+    <div class="cover-type">Отчёт по аренде · Паркинг</div>
+
+    <div class="cover-center">
+      <h1 class="cover-building">{{ building_name }}</h1>
+      <div class="cover-sub">Этаж {{ floor_number }} · срез на {{ current_date|date:"d.m.Y" }}</div>
+    </div>
+
+    <div class="cover-bottom">Сформировано: {{ print_date|date:"d.m.Y H:i" }}</div>
+  </div>
+
+  <div class="pagebreak"></div>
+</section>

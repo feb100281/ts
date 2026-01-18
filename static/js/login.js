@@ -1,3 +1,4 @@
+// static/js/login.js
 document.addEventListener("DOMContentLoaded", function () {
     const pass = document.getElementById('password');
     const btn  = document.getElementById('togglePass');

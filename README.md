@@ -2,6 +2,12 @@
 
 ## Переходим в папку проекта и клонируем с github
 
+```
+git clone https://github.com/feb100281/ts.git
+cd ts
+git switch -c daria
+```
+
 ## Создаем виртуальное окружение для python 3.12
 
 ```
@@ -19,8 +25,14 @@ pip install --upgrade pip
 ```
 pip install -r requirements.txt
 ```
-Обновляем `requirements.txt`
+Обновляем `requirements.txt` если пипнула библиотеку
 ```
 pip freeze > requirements.txt
 ```
 
+## добавляем .env
+
+```
+touch .env
+в файл записываем инфу из телеги
+```

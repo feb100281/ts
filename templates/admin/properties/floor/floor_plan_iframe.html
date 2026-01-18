@@ -13,6 +13,11 @@
       margin: 0;
       padding: 0;
   }
+
+  #content {
+  width: 100% !important;
+}
+
   iframe {
       display: block;
       width: 100%;
@@ -23,6 +28,5 @@
 {% endblock %}
 
 {% block content %}
-<h2>План этажа сука {{ floor.floor_number }} — {{ floor.property }}</h2>
 <iframe src="{{ iframe_url }}"></iframe>
 {% endblock %}

@@ -2,9 +2,18 @@ from django.db import models
 from django.contrib.auth.models import User
 from utils.choises import COUNTRY_CHOICES
 
+
 class Gr(models.Model):
     name = models.CharField(max_length=30, verbose_name='Группа')
     description = models.TextField(null=True, blank=True, verbose_name='Описание')
+    
+    logo = models.CharField(
+        max_length=1,
+        null=True,
+        blank=True,
+        verbose_name="Глиф (символ)",
+        help_text="Хранится реальный символ (PUA)."
+    )
 
     class Meta:
         verbose_name = 'Группа контрагентов'
@@ -18,6 +27,18 @@ class Counterparty(models.Model):
     tax_id   = models.CharField(max_length=250, verbose_name='ИНН', unique=True)
     name     = models.CharField(max_length=250, verbose_name='Контрагент', db_index=True)
     logo     = models.CharField(max_length=10, verbose_name='Логотип (глиф)', blank=True, null=True)
+    # logo = models.ForeignKey(
+    #     "Glyph",
+    #     on_delete=models.SET_NULL,
+    #     null=True,
+    #     blank=True,
+    #     to_field="code",
+    #     db_column="logo",
+    #     db_constraint=False,          # <-- очень рекомендую на первом шаге
+    #     verbose_name="Логотип (глиф)",
+    #     related_name="counterparties",
+    # )
+    
     logo_svg = models.TextField(verbose_name='Логотип (SVG)', blank=True, null=True)
     gr       = models.ForeignKey('Gr', on_delete=models.PROTECT, verbose_name='Группа', null=True, blank=True)
 
@@ -78,14 +99,59 @@ class Counterparty(models.Model):
         return self.name
 
 
+
+
+class GlyphKind(models.Model):
+    title = models.CharField(max_length=100, verbose_name="Название категории")
+    sort = models.IntegerField(default=0, verbose_name="Порядок", help_text="Используется для сортировки. Элементы с меньшим числом отображаются выше.")
+
+    class Meta:
+        ordering = ("sort", "title")
+
+    def __str__(self):
+        return self.title
+    
+
+class Glyph(models.Model):
+    code = models.CharField(max_length=10, unique=True, verbose_name="Код (E07B)")
+    title = models.CharField(max_length=120, verbose_name="Название")
+    kind = models.ForeignKey(
+        GlyphKind,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="glyphs",
+        verbose_name="Категория"
+    )
+    is_brand = models.BooleanField(
+        default=False,
+        verbose_name="Логотип бренда",
+        help_text="Отметь, если это реальный логотип компании/бренда, а не универсальная иконка."
+    )
+    
+    is_common = models.BooleanField(default=False)
+    sort = models.IntegerField(default=0)
+
+
+    class Meta:
+        verbose_name = 'Глиф'
+        verbose_name_plural = 'Глифы'
+        ordering = ("sort", "title")
+
+    def __str__(self):
+        return f"{self.code} — {self.title}"
+
+
+
 class Tenant(models.Model):
     user = models.OneToOneField(User, verbose_name='Ответ. лицо', on_delete=models.CASCADE, related_name="tenant")
     counterparty = models.OneToOneField(Counterparty, verbose_name='Контрагент', on_delete=models.CASCADE, related_name="tenant")
 
     class Meta:
-        verbose_name = 'Кабинет контрагента'
-        verbose_name_plural = 'Кабинеты контрагентов'
+        verbose_name = 'Кабинет арендатора'
+        verbose_name_plural = 'Кабинеты арендаторов'
         ordering = ['counterparty']
+    
 
     def __str__(self):
         return f"👤 Личный кабинет: {self.counterparty.name}"

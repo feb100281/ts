@@ -68,6 +68,50 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 
 
 
+/* ===== Glyph select in admin ===== */
+#id_logo_glyph,
+#id_logo_glyph option {
+  font-family: "NotoManuGlyph", "NotoManu", sans-serif !important;
+  font-size: 18px;
+  font-variant-ligatures: none;
+}
+
+
+
+
+/* ===== Select2 glyph list ===== */
+.glyph2-wrap{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+}
+
+.glyph2-icon{
+  font-family:"NotoManu", sans-serif !important; /* как ты просила — первый */
+  font-size:20px;
+  line-height:1;
+  width:22px;
+  text-align:center;
+  display:inline-block;
+}
+
+.glyph2-label{
+  white-space:nowrap;
+}
+
+/* высота поля select2 в админке */
+.select2-container--default .select2-selection--single{
+  height: 42px;
+  padding-top: 6px;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered{
+  line-height: 28px;
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow{
+  height: 40px;
+}
+
+
 
 
 

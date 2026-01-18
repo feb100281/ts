@@ -1,0 +1,28 @@
+{# templates/admin/properties/floor/report/partials/_plan.html #}
+
+<section class="ar-sec" id="sec-ii">
+
+  <div class="ar-head">
+    <h2 class="ar-h2">II. План этажа</h2>
+    <div class="ar-muted">План с учётом фильтров и выделенных помещений.</div>
+  </div>
+
+  <div class="ar-rule"></div>
+
+  <figure class="ar-figure ar-figure--plan">
+    <div class="ar-figure-body ar-plan">
+      {{ floor_svg|safe }}
+    </div>
+    <figcaption class="ar-caption">
+      Рис. 2. План этажа по состоянию на {{ current_date|date:"d.m.Y" }} (учтены фильтры).
+    </figcaption>
+  </figure>
+
+  {% if selected_count == 0 %}
+    <div class="ar-note">
+      На плане нет выделенных помещений.
+    </div>
+  {% endif %}
+
+  <div class="pagebreak"></div>
+</section>

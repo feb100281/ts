@@ -1,0 +1,108 @@
+{# templates/admin/properties/floor/report/partials/_summary.html #}
+
+<section class="ar-sec" id="sec-i">
+
+  <div class="ar-head">
+    <h2 class="ar-h2">I. Ключевые показатели</h2>
+    <div class="ar-muted">Ключевые показатели на дату {{ current_date|date:"d.m.Y" }}.</div>
+  </div>
+
+  <div class="ar-rule"></div>
+
+  <h3 class="ar-h3">Ключевые показатели</h3>
+
+  <div class="kpi-list" role="list">
+
+    <div class="kpi-row" role="listitem">
+      <div class="kpi-label">Всего м/мест</div>
+      <div class="kpi-value"><b>{{ total_parking }}</b></div>
+    </div>
+
+    <div class="kpi-row" role="listitem">
+      <div class="kpi-label">Занято</div>
+      <div class="kpi-value">
+        <b>{{ occupied_parking }}</b>
+        <span class="kpi-meta">{{ parking_occ_pct|floatformat:1 }}%</span>
+      </div>
+    </div>
+
+    <div class="kpi-row" role="listitem">
+      <div class="kpi-label">Вакантно</div>
+      <div class="kpi-value">
+        <b>{{ free_parking }}</b>
+        <span class="kpi-meta">{{ parking_vac_pct|floatformat:1 }}%</span>
+      </div>
+    </div>
+
+    <div class="kpi-row kpi-row--key" role="listitem">
+      <div class="kpi-label">Фактический МАП</div>
+      <div class="kpi-value">
+        <b>{{ parking_total_map_fmt }}</b>
+      </div>
+    </div>
+
+    <div class="kpi-row" role="listitem">
+      <div class="kpi-label">Потенциал (100% загрузка)</div>
+      <div class="kpi-value">
+        <b>{{ parking_potential_map_fmt }}</b>
+        <span class="kpi-note">оценка по ср. ставке / место</span>
+      </div>
+    </div>
+
+    <div class="kpi-row" role="listitem">
+      <div class="kpi-label">Потери от вакантности</div>
+      <div class="kpi-value">
+        <b>{{ parking_vacancy_loss_fmt }}</b>
+        <span class="kpi-meta">в месяц</span>
+      </div>
+    </div>
+
+    <div class="kpi-row" role="listitem">
+      <div class="kpi-label">Концентрация арендаторов</div>
+      <div class="kpi-value">
+        <b>Топ-1:</b> {{ top1_share|floatformat:1 }}%
+        <span class="kpi-sep">·</span>
+        <b>Топ-5:</b> {{ top5_share|floatformat:1 }}%
+        <span class="kpi-note">доля МАП крупнейших арендаторов</span>
+      </div>
+    </div>
+
+  </div>
+
+
+
+
+
+  {% if parking_occupancy_bar_svg %}
+  <h3 class="ar-h3 ar-mt">Загрузка паркинга</h3>
+  <figure class="ar-figure">
+    <div class="ar-figure-body">{{ parking_occupancy_bar_svg|safe }}</div>
+  </figure>
+{% endif %}
+
+{% if parking_concentration_svg %}
+  <h3 class="ar-h3 ar-mt">Концентрация МАП</h3>
+  <figure class="ar-figure">
+    <div class="ar-figure-body">{{ parking_concentration_svg|safe }}</div>
+  </figure>
+{% endif %}
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="pagebreak"></div>
+</section>
+
+
+
+
+
+

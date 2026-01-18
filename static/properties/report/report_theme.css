@@ -1,0 +1,226 @@
+/* ===========================
+   THEME CORE (Darya Markdown Style)
+   =========================== */
+
+
+
+:root{
+  --accent: #6d5efc;
+  --accent2:#111827;
+  --danger:#c2410c;
+  --muted:#6b7280;
+}
+
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+
+body{
+  margin:0;
+  font-size:11px;
+  line-height:1.58;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  color:#111;
+  background:#fff;
+}
+
+a{ color:var(--accent); text-decoration:none; font-weight:700; }
+a:hover{ text-decoration:underline; }
+a[id]{ scroll-margin-top:14px; }
+
+.pagebreak{
+  page-break-after:always;
+  break-after:page;
+}
+
+/* ---------- Headings ---------- */
+h1,h2,h3{ margin:0; }
+
+h2{
+  font-size:20px;
+  margin:10px 0 8px;
+  letter-spacing:.2px;
+  font-weight:900;
+  color:#111;
+}
+
+h3{
+  font-size:14px;
+  margin:8px 0 6px;
+  font-weight:800;
+  color:#111;
+}
+
+.type-title{
+  padding-bottom:10px;
+}
+
+/* ---------- KPI ---------- */
+.kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:12px;
+  margin:12px 0 14px;
+}
+
+.kpi{
+  border:1px solid #e6e6e6;
+  padding:12px 14px;
+  border-radius:12px;
+  background:#fff;
+}
+
+.kpi .ttl{
+  font-size:10px;
+  color:var(--muted);
+  margin-bottom:4px;
+  letter-spacing:.2px;
+}
+
+.kpi .val{
+  font-size:18px;
+  font-weight:900;
+  color:#111;
+}
+
+.kpi .sub{
+  font-size:10px;
+  color:var(--muted);
+  margin-top:4px;
+}
+
+/* ---------- Insights ---------- */
+.insights{
+  border-left:4px solid var(--accent);
+  background:#fbfbff;
+  padding:10px 12px;
+  border-radius:4px;
+}
+
+.insights b{ color:#111; }
+.insights ul{ margin:8px 0 0; padding-left:18px; }
+.insights li{ margin:6px 0; }
+
+/* ---------- Tables ---------- */
+.tbl{
+  border-collapse:collapse;
+  width:100%;
+  border:1px solid #eee;
+  border-radius:10px;
+  overflow:hidden;
+}
+
+.tbl th, .tbl td{
+  padding:6px 10px;
+  border-bottom:1px solid #eee;
+  vertical-align:top;
+}
+
+.tbl thead th{
+  border-bottom:1px solid #dcdcdc;
+  background:#fafafa;
+}
+
+.tbl tr.total td{
+  border-top:2px solid #dcdcdc;
+  font-weight:900;
+  background:#fbfbff;
+}
+
+.muted{ color:var(--muted); }
+
+/* ---------- Badges ---------- */
+.badge{
+  display:inline-block;
+  padding:2px 9px;
+  border-radius:6px;
+  font-size:10px;
+  margin-left:6px;
+  border:1px solid transparent;
+  font-weight:700;
+}
+
+.badge.ok{ background:#E8F7EE; color:#1E6B3A; border-color:#BFE8CF; }
+.badge.mid{ background:#FFF4E5; color:#8A5200; border-color:#FFD7A8; }
+.badge.hi{ background:#FDECEC; color:#8A1F1F; border-color:#F6B5B5; }
+
+/* ---------- TOC ---------- */
+.toc{ margin-top:6px; }
+.toc ul{ padding-left:18px; margin:6px 0 0; }
+.toc li{ margin:6px 0; }
+.toc a{ color:var(--accent); font-weight:700; }
+.toc a:hover{ text-decoration:underline; }
+
+/* ---------- Print styles ---------- */
+@media print {
+
+  @page {
+    size: A4;
+    margin: 18mm 14mm 20mm 14mm; /* место под футер */
+  }
+
+  .no-print{ display:none !important; }
+
+  /* Футер отчёта */
+  .print-footer{
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 7mm;
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    padding: 0 14mm;
+    padding-top: 3mm;
+
+    font-size:10px;
+    line-height:1.2;
+
+    color:#6b7280;
+    border-top:1px solid #e5e7eb;
+    background:transparent;
+    z-index:9999;
+  }
+
+  .print-footer__left{
+    display:flex;
+    gap:6px;
+    align-items:baseline;
+    min-width:0;
+  }
+
+  .print-footer__building{
+    font-weight:600;
+    color:#111827;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:120mm;
+  }
+
+  .print-footer__sep{ color:#9ca3af; }
+
+  .print-footer__floor{
+    white-space:nowrap;
+    color:#6b7280;
+  }
+
+  .print-footer__right{
+    white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+    color:#6b7280;
+  }
+
+  /* Нумерация страниц — работает в Chrome */
+  .print-page::after{
+    content: "Стр. " counter(page);
+  }
+
+  /* Safari: скрываем номер, т.к. counter(page) нестабилен */
+  body.is-safari .print-footer__right{
+    display:none !important;
+  }
+}
+
+

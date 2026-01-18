@@ -1,7 +1,7 @@
 # counterparties/admin.py
 
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import Count
 from django.http import JsonResponse
@@ -14,11 +14,19 @@ from django.core.mail import EmailMultiAlternatives
 from django.http import HttpResponseRedirect
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
+from django.shortcuts import redirect
+
+
+
+
+
+
+from .utils.glyphs import normalize_code, generate_glyph_map_css
 
 from decimal import Decimal
 import base64
 
-from .models import Tenant, Counterparty, Gr, CounterpartyFinancialYear
+from .models import Tenant, Counterparty, Gr, CounterpartyFinancialYear, Glyph, GlyphKind
 from counterparties.checko_client import (
     build_counterparty_payload,
     PhysicalPersonNotFound,
@@ -46,19 +54,106 @@ from .services import _val_fin, _val_fin_total
 from django.forms.models import BaseInlineFormSet
 from django.core.exceptions import ValidationError
 
+from counterparties.helpers.glyph_fields import GlyphChoiceField, char_to_code, code_to_char
+
+
 # ---------------------- FORM ----------------------
 
 
 class CounterpartyForm(forms.ModelForm):
-    # оставляем только историю "было"
-    was_notes = forms.CharField(
-        widget=forms.HiddenInput(),
+    was_notes = forms.CharField(widget=forms.HiddenInput(), required=False)
+
+    logo_glyph = GlyphChoiceField(
+        queryset=Glyph.objects.all().order_by("sort", "title"),
         required=False,
+        label="Логотип (глиф)",
+        help_text="Выберите глиф из справочника. В базе сохранится символ (как раньше).",
     )
 
     class Meta:
         model = Counterparty
         fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # прячем logo (символ)
+        if "logo" in self.fields:
+            self.fields["logo"].widget = forms.HiddenInput()
+            self.fields["logo"].required = False
+
+        # initial для выбора по текущему символу
+        current = getattr(self.instance, "logo", None)
+        code = char_to_code(current)
+        if code:
+            self.fields["logo_glyph"].initial = Glyph.objects.filter(code=code).first()
+
+        # ✅ максимум, что можно сделать для обычного <select> без select2:
+        # применить шрифт к самому select (option может игнорироваться браузером)
+        self.fields["logo_glyph"].widget.attrs.update({
+            "style": "font-family:NotoManu, sans-serif; font-size:18px;",
+        })
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        g = self.cleaned_data.get("logo_glyph")
+        if g:
+            instance.logo = code_to_char(g.code)  # сохраняем СИМВОЛ
+        else:
+            instance.logo = None
+
+        if commit:
+            instance.save()
+            self.save_m2m()
+
+        return instance
+
+
+class GrForm(forms.ModelForm):
+    logo_glyph = GlyphChoiceField(
+        queryset=Glyph.objects.all().order_by("sort", "title"),
+        required=False,
+        label="Логотип (глиф)",
+        help_text="Выберите глиф из справочника. В базе сохранится символ.",
+    )
+
+    class Meta:
+        model = Gr
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # прячем logo (символ)
+        if "logo" in self.fields:
+            self.fields["logo"].widget = forms.HiddenInput()
+            self.fields["logo"].required = False
+
+        # initial по текущему символу
+        current = getattr(self.instance, "logo", None)
+        code = char_to_code(current)
+        if code:
+            self.fields["logo_glyph"].initial = Glyph.objects.filter(code=code).first()
+
+        # шрифт на select
+        self.fields["logo_glyph"].widget.attrs.update({
+            "style": "font-family:NotoManu, sans-serif; font-size:18px;",
+        })
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        g = self.cleaned_data.get("logo_glyph")
+        instance.logo = code_to_char(g.code) if g else None
+
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+
+
 
 
 # ---------------------- АНАЛИЗ АРЕНДАТОРОВ ----------------------
@@ -102,15 +197,18 @@ class CounterpartyAdmin(admin.ModelAdmin):
     form = CounterpartyForm
     actions = ["print_counterparty_registry"]
     inlines = [CounterpartyFinancialYearInline]
+    list_per_page = 25 
+    preserve_filters = True
+
 
     # ---------- список / поиск / фильтры ----------
 
     list_display = (
+        "logo_preview",
         "name",
         "tax_id",
-        "logo_preview",
         "ceo_display",
-        "website_link",
+        # "website_link",
         "checko_status_column",
         "print_counterparty_link",
     )
@@ -132,7 +230,7 @@ class CounterpartyAdmin(admin.ModelAdmin):
         CounterpartyCheckoUpdatedFilter,
         CounterpartyLegalFormFilter,
         # CounterpartyOkvedPrefixFilter,  # можно включить при необходимости
-        ("logo_svg", admin.EmptyFieldListFilter),
+        ("logo", admin.EmptyFieldListFilter),
     )
 
     list_display_links = ("name",)
@@ -168,7 +266,9 @@ class CounterpartyAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        ("🖼️ Логотипы", {"fields": ("logo", "logo_svg")}),
+        # ("🖼️ Логотипы", {"fields": ("logo", "logo_svg")}),
+        ("🖼️ Логотипы", {"fields": ("logo_glyph", "logo_svg")}),
+
         ("История полей", {"fields": ("was_notes",)}),
         (
             "📊 ОКВЭД / ОКОПФ",
@@ -233,14 +333,30 @@ class CounterpartyAdmin(admin.ModelAdmin):
         return "—"
 
     ceo_display.short_description = "👤 Руководитель"
-
+    
+    
+    @admin.display(description="Лого")
     def logo_preview(self, obj):
-        if obj.logo:
-            return format_html(
-                '<span style="font-family: NotoManu; font-size:24px;">{}</span>',
-                obj.logo,
-            )
-        return "—"
+        if not obj.logo:
+            return "—"
+
+        outer = (
+            "display:inline-flex;align-items:center;justify-content:center;"
+            "width:28px;height:28px;border-radius:999px;"
+            "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+        )
+
+        inner = "font-family:NotoManu;font-size:20px;line-height:1;"
+
+        return format_html(
+            '<span style="{}"><span style="{}">{}</span></span>',
+            outer,
+            inner,
+            obj.logo,
+        )
+
+
 
     logo_preview.short_description = "Лого"
 
@@ -645,23 +761,27 @@ class CounterpartyAdmin(admin.ModelAdmin):
 
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
-        js = ("js/counterparty_search.js", "js/counterparty_fill_by_inn.js")
+        js = (
+            "admin/js/vendor/jquery/jquery.min.js",
+            "admin/js/vendor/select2/select2.full.min.js",
+            "admin/js/jquery.init.js",
+            
+            "js/counterparty_search.js", "js/counterparty_fill_by_inn.js", 
+            
+            "js/glyph_select2.js",
+            )
 
     # ---------- save_model ----------
 
+
+    
+    
     @transaction.atomic
     def save_model(self, request, obj, form, change):
-        if obj.logo and obj.logo.startswith("\\u"):
-            try:
-                obj.logo = obj.logo.encode().decode("unicode_escape")
-            except Exception:
-                pass
-
         super().save_model(request, obj, form, change)
 
-
-
-
+    
+    
 
 
 
@@ -670,14 +790,16 @@ class CounterpartyAdmin(admin.ModelAdmin):
 
 class TenantAdmin(admin.ModelAdmin):
     list_display = (
-        "counterparty_column",
+        "counterparty_logo",
+         "counterparty_name",
         "tax_id_column",
         "user_column",
         "email_column", 
-        "logo_svg_column",
-        "last_login_column",
+        "logo_svg_badge",
+        "last_login_badge",
         "print_access_link",
     )
+    list_display_links = ("counterparty_name",)
     list_select_related = ("counterparty", "user")
     ordering = ("counterparty__name",)
 
@@ -700,6 +822,71 @@ class TenantAdmin(admin.ModelAdmin):
 
     class Media:
         css = {"all": ("fonts/glyphs.css",)}
+    
+    
+    @admin.display(description="Лого", ordering="counterparty__name")
+    def counterparty_logo(self, obj):
+        cp = obj.counterparty
+        if not cp or not getattr(cp, "logo", None):
+            return "—"
+
+        outer = (
+            "display:inline-flex;align-items:center;justify-content:center;"
+            "width:28px;height:28px;border-radius:999px;"
+            "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+        )
+        inner = "font-family:NotoManu;font-size:20px;line-height:1;"
+        return format_html('<span style="{}"><span style="{}">{}</span></span>', outer, inner, cp.logo)
+
+    @admin.display(description="Контрагент", ordering="counterparty__name")
+    def counterparty_name(self, obj):
+            return obj.counterparty.name if obj.counterparty else "—"
+
+    @admin.display(description="SVG", ordering="counterparty__logo_svg")
+    def logo_svg_badge(self, obj):
+            has_svg = bool(getattr(obj.counterparty, "logo_svg", None))
+            base = (
+                "display:inline-flex;align-items:center;justify-content:center;"
+                "width:28px;height:28px;border-radius:999px;"
+                "font-size:13px;font-weight:700;line-height:1;"
+                "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+                "user-select:none;"
+            )
+            if has_svg:
+                style = base + "background:linear-gradient(135deg,#dcfce7,#ecfeff);color:#047857;"
+                return format_html('<span style="{}" title="SVG логотип есть">✓</span>', style)
+
+            style = base + "background:linear-gradient(135deg,#f1f5f9,#f8fafc);color:#64748b;"
+            return format_html('<span style="{}" title="SVG логотип отсутствует">—</span>', style)
+
+    @admin.display(description="Последний вход", ordering="user__last_login")
+    def last_login_badge(self, obj):
+            user = obj.user
+            if not user or not user.last_login:
+                return format_html('<span style="color:#b0bec5;">—</span>')
+
+            dt = user.last_login
+            pretty = dt.strftime("%d.%m.%Y %H:%M")
+
+            delta = timezone.now() - dt
+            if delta.days < 1:
+                color = "#16a34a"
+            elif delta.days < 7:
+                color = "#2563eb"
+            else:
+                color = "#64748b"
+
+            # аккуратный “pill”
+            style = (
+                "display:inline-flex;align-items:center;"
+                "padding:4px 10px;border-radius:6px;"
+                "font-size:12px;font-weight:600;line-height:1;"
+                "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+                f"color:{color};background:#f8fafc;"
+                "white-space:nowrap;"
+            )
+            return format_html('<span style="{}" title="{}">{}</span>', style, pretty, pretty)
 
     # ---------- кастомные URL: печать + аналитика ----------
 
@@ -864,28 +1051,6 @@ class TenantAdmin(admin.ModelAdmin):
 
     # ------- печатная карточка доступа -------
 
-    # def print_access(self, request, pk):
-    #     tenant = get_object_or_404(Tenant, pk=pk)
-    #     user = tenant.user
-    #     cp = tenant.counterparty
-
-    #     try:
-    #         login_url = request.build_absolute_uri(reverse("login"))
-    #     except Exception:
-    #         login_url = request.build_absolute_uri("/login/")
-
-    #     group_name = cp.gr.name if getattr(cp, "gr", None) else "Не указана"
-
-    #     context = {
-    #         "tenant": tenant,
-    #         "user": user,
-    #         "cp": cp,
-    #         "login_url": login_url,
-    #         "group_name": group_name,
-    #     }
-    #     return render(request, "admin/tenant_access_print.html", context)
-    
-    
     def print_access(self, request, pk):
         tenant = get_object_or_404(Tenant, pk=pk)
         user = tenant.user
@@ -1008,15 +1173,64 @@ class TenantAdmin(admin.ModelAdmin):
 
 
 class GrAdmin(admin.ModelAdmin):
+    form = GrForm
     list_display = (
+        "logo_preview",   
         "name",
         "counterparty_count_link",
         "analytics_link",
         "print_counterparties_link",
     )
+
+    list_display_links = ("name",)
     search_fields = ("name", "description")
     ordering = ("name",)
     actions = []
+    
+    fieldsets = (
+        ("🧾 Основное", {"fields": ("name", "description")}),
+        ("🖼️ Логотип", {"fields": ("logo_glyph", "logo")}),  # logo будет hidden, но пусть остается
+    )
+    
+
+    
+    
+    @admin.display(description="Лого")
+    def logo_preview(self, obj):
+        if not obj.logo:
+            return "—"
+
+        outer = (
+            "display:inline-flex;align-items:center;justify-content:center;"
+            "width:28px;height:28px;border-radius:999px;"
+            "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+        )
+        inner = "font-family:NotoManu;font-size:20px;line-height:1;"
+
+        return format_html(
+            '<span style="{}"><span style="{}">{}</span></span>',
+            outer, inner, obj.logo
+        )
+        
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        if object_id:
+            obj = self.get_object(request, object_id)
+            extra_context["counterparty_count"] = (
+                Counterparty.objects.filter(gr=obj).count() if obj else 0
+            )
+        else:
+            extra_context["counterparty_count"] = 0
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+    
+    
+    class Media:
+        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
+        js = (
+            "js/glyph_select2.js",
+        )
 
     # ---------- queryset с числом контрагентов ----------
     def get_queryset(self, request):
@@ -1119,9 +1333,177 @@ class GrAdmin(admin.ModelAdmin):
 
 
 
+# ---------------------- ГЛИФЫ ----------------------
+@admin.register(GlyphKind)
+class GlyphKindAdmin(admin.ModelAdmin):
+    def has_module_permission(self, request):
+        return False
+
+@admin.register(Glyph)
+class GlyphAdmin(admin.ModelAdmin):
+    exclude = ("is_common", 'sort') 
+    list_display = ("preview", "code", "title", 'counterparty_count', 'is_brand_badge', "kind_title")
+    list_display_links = ( "code", "title")
+    search_fields = ("title", )
+    list_filter = ( "is_brand", "kind")
+    ordering = ("sort", "title")
+    change_list_template = "admin/counterparties/glyph/change_list.html"
+    list_per_page = 25
+    
+    
+    def _build_logo_counts(self):
+        """
+        Считаем, сколько контрагентов на каждый СИМВОЛ (Counterparty.logo).
+        Возвращаем dict: { "E07B": 12, ... } — ключ это код глифа.
+        """
+        rows = (
+            Counterparty.objects
+            .exclude(logo__isnull=True)
+            .exclude(logo="")
+            .values("logo")
+            .annotate(c=Count("pk"))
+        )
+
+        code_cnt = {}
+        for r in rows:
+            sym = (r["logo"] or "").strip()
+            if not sym:
+                continue
+            # на всякий случай берём первый символ
+            sym = sym[0]
+            code = format(ord(sym), "X").upper()  # '\uE07B' -> 'E07B'
+            code_cnt[code] = code_cnt.get(code, 0) + r["c"]
+
+        return code_cnt
+
+
+    def changelist_view(self, request, extra_context=None):
+        # кеш на время одного запроса (страницы)
+        self._code_cnt_cache = self._build_logo_counts()
+        return super().changelist_view(request, extra_context=extra_context)
+
+
+    @admin.display(description="Контрагенты")
+    def counterparty_count(self, obj):
+        code = normalize_code(obj.code) or ""
+        cnt = getattr(self, "_code_cnt_cache", {}).get(code, 0)
+
+        if cnt == 0:
+            return "—"
+
+        try:
+            sym = chr(int(code, 16))
+            url = reverse("admin:counterparties_counterparty_changelist") + f"?logo__exact={sym}"
+
+            return format_html(
+                '<a href="{}" style="text-decoration:none;">'
+                '<span style="'
+                'display:inline-flex;align-items:center;justify-content:center;'
+                'min-width:22px;height:22px;padding:0 8px;'
+                'border-radius:999px;'
+                'background:#eef2ff;'
+                'color:#1e40af;'
+                'font-size:12px;font-weight:600;'
+                'line-height:1;'
+                'box-shadow:0 0 0 1px rgba(99,102,241,.25);'
+                '">'
+                '{}'
+                '</span></a>',
+                url,
+                cnt,
+            )
+        except Exception:
+            return str(cnt)
+
+
+    
+    @admin.display(description="Бренд", boolean=False)
+    def is_brand_badge(self, obj):
+        base = (
+            "display:inline-flex;align-items:center;gap:6px;"
+            "padding:4px 10px;border-radius:999px;"
+            "font-size:12px;font-weight:600;line-height:1;"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+            "white-space:nowrap;"
+        )
+        if obj.is_brand:
+            style = base + "background:#ecfeff;color:#0f766e;"
+            return format_html('<span style="{}">✓ Brand</span>', style)
+        style = base + "background:#f8fafc;color:#64748b;"
+        return format_html('<span style="{}">—</span>', style)
+
+    @admin.display(description="Иконка")
+    def preview(self, obj):
+        code = normalize_code(obj.code) or ""
+
+        style = (
+            "display:inline-flex;align-items:center;justify-content:center;"
+            "width:28px;height:28px;border-radius:999px;"
+            "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+        )
+
+        return format_html(
+            '<span style="{}">'
+            '<span class="tenant-glyph-preview" data-glyph="{}"></span>'
+            '</span>',
+            style,
+            code,
+        )
+    
+    @admin.display(description="Категория", ordering="kind__title")
+    def kind_title(self, obj):
+        return obj.kind.title if obj.kind else "—"
+    
+
+
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "generate-css/",
+                self.admin_site.admin_view(self.generate_css_view),
+                name="counterparties_glyph_generate_css",
+            )
+        ]
+        return custom + urls
+
+    def generate_css_view(self, request):
+        try:
+            path_, rules, skipped = generate_glyph_map_css()
+            self.message_user(
+                request,
+                f"Готово: {path_.name} | правил: {rules} | пропущено: {skipped}",
+                level=messages.SUCCESS,
+            )
+        except Exception as e:
+            self.message_user(
+                request,
+                f"Ошибка генерации glyph-map.css: {e}",
+                level=messages.ERROR,
+            )
+        return redirect("..")
+    
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id) if object_id else None
+        extra_context["glyph_code_norm"] = normalize_code(obj.code) if (obj and obj.code) else ""
+        extra_context["glyph_title"] = (obj.title if obj else "") or ""
+        extra_context["glyph_code_raw"] = (obj.code if obj else "") or ""
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+
+    class Media:
+        css = {"all": ("fonts/glyphs.css", "fonts/glyph-map.css")}
+
+
+
+
 
 # ---------------------- REGISTRY ----------------------
 
 admin.site.register(Gr, GrAdmin)
 admin.site.register(Tenant, TenantAdmin)
 admin.site.register(Counterparty, CounterpartyAdmin)
+

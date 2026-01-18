@@ -3,11 +3,61 @@ from django.db.models import Count
 from django.utils.html import format_html
 from django.contrib import messages
 from django.shortcuts import redirect
-from .models import Owners, BankAccount, Bank, СfItems, COA
+from django import forms
+from .models import Owners, BankAccount, Bank, COA, СfItems
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.admin import DraggableMPTTAdmin
 
+
+from counterparties.models import Glyph
+from counterparties.helpers.glyph_fields import GlyphChoiceField, char_to_code, code_to_char
+
+
+
+#---------- ФОРМЫ ---------#
+class BankForm(forms.ModelForm):
+    logo_glyph = GlyphChoiceField(
+        queryset=Glyph.objects.all().order_by("sort", "title"),
+        required=False,
+        label="Логотип (глиф)",
+        help_text="Выберите глиф банка. В базе сохранится символ.",
+    )
+
+    class Meta:
+        model = Bank
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # скрываем реальное поле logo
+        if "logo" in self.fields:
+            self.fields["logo"].widget = forms.HiddenInput()
+            self.fields["logo"].required = False
+
+        # initial по сохранённому символу
+        current = getattr(self.instance, "logo", None)
+        code = char_to_code(current)
+        if code:
+            self.fields["logo_glyph"].initial = Glyph.objects.filter(code=code).first()
+
+        # шрифт для select
+        self.fields["logo_glyph"].widget.attrs.update({
+            "style": "font-family:NotoManu, sans-serif; font-size:18px;",
+        })
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        g = self.cleaned_data.get("logo_glyph")
+        instance.logo = code_to_char(g.code) if g else None
+
+        if commit:
+            instance.save()
+            self.save_m2m()
+
+        return instance
 
 
 
@@ -139,35 +189,52 @@ class OwnersAdmin(admin.ModelAdmin):
 # ----- БАНКИ ---- #
 @admin.register(Bank)
 class BankAdmin(admin.ModelAdmin):
+    form = BankForm
     exclude = ("inn", "kpp")
-    list_display = ("name", "bik", "corr_account")
+    list_display = ( "logo_preview","name", "bik", "corr_account")
     search_fields = ("name", "bik")
+    list_display_links = ("name",)
 
     fieldsets = (
-        (
-            "Реквизиты банка",
-            {
-                "fields": (
-                    "name",
-                    "name_eng",
-                    "bik",
-                    "corr_account",
-                )
-            },
-        ),
-        (
-            "Адрес и тип",
-            {
-                "fields": (
-                    "type",
-                    "address",
-                )
-            },
-        ),
-    )
+    ("🏦 Банк", {
+        "fields": ("name", "name_eng", "bik", "corr_account"),
+    }),
+    ("🖼️ Логотип", {
+        "fields": ("logo_glyph", "logo"),  # logo hidden в форме, но пусть будет
+        "description": "Выберите глиф — в базе сохранится символ в поле «logo».",
+    }),
+    ("📍 Адрес и тип", {
+        "fields": ("type", "address"),
+    }),
+)
+    
+    
+    @admin.display(description="Лого")
+    def logo_preview(self, obj):
+            if not obj.logo:
+                return "—"
+
+            outer = (
+                "display:inline-flex;align-items:center;justify-content:center;"
+                "width:28px;height:28px;border-radius:999px;"
+                "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+                "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+            )
+            inner = "font-family:NotoManu;font-size:20px;line-height:1;"
+
+            return format_html(
+                '<span style="{}"><span style="{}">{}</span></span>',
+                outer, inner, obj.logo
+            )
 
     class Media:
-        js = ("corporate/js/bank_fill.js",)
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",  # ← критично, ты уже поймала это 👍
+            )
+        }
+        js = ("corporate/js/bank_fill.js", "js/glyph_select2.js",)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         """
@@ -218,10 +285,42 @@ class BankAdmin(admin.ModelAdmin):
 
 
 # ----- БАНКОВСКИЕ СЧЕТА ---- #
+
 @admin.register(BankAccount)
 class BankAccountAdmin(admin.ModelAdmin):
-    list_display = ("corporate", "bank", "bik", "account", "currency")
+    list_display = ("corporate", "bank_logo", "bank_name", "bik", "account", "currency")
+    list_display_links = ("bank_name",)
     search_fields = ("corporate__name", "bank__name", "bik", "account")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("bank", "corporate")
+    
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",
+            )
+        }
+
+    @admin.display(description="", ordering="bank__name")
+    def bank_logo(self, obj):
+        if not obj.bank or not obj.bank.logo:
+            return "—"
+
+        outer = (
+            "display:inline-flex;align-items:center;justify-content:center;"
+            "width:24px;height:24px;border-radius:999px;"
+            "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+        )
+        inner = "font-family:NotoManu;font-size:16px;line-height:1;"
+        return format_html('<span style="{}"><span style="{}">{}</span></span>', outer, inner, obj.bank.logo)
+
+    @admin.display(description="Банк", ordering="bank__name")
+    def bank_name(self, obj):
+        return obj.bank.name if obj.bank else "—"
 
 
 @admin.register(COA)

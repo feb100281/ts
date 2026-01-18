@@ -2,9 +2,18 @@
 
 @font-face {
   font-family: "NotoManu";
-  src: url("/static/fonts/NotoManu-Regular3.ttf") format("truetype");
+  src: url("/static/fonts/NotoManu-Regular4.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+}
+
+
+@font-face {
+  font-family: "NotoManuGlyph";
+  src: url("/static/fonts/NotoManu-Regular4.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
 }
 
 
@@ -41,3 +50,47 @@
   align-items: center !important;
   justify-content: center !important;
 } */
+
+
+
+/* выбранное значение в инпуте */
+.tenant-select-input {
+  font-family: "NotoManu", var(--mantine-font-family), sans-serif !important;
+}
+
+/* строки в выпадающем списке */
+.tenant-select-option {
+  font-family: "NotoManu", var(--mantine-font-family), sans-serif !important;
+}
+
+
+
+
+/* ===== Render glyph by codepoint (E07B) via data-glyph ===== */
+
+/* ===== Render glyph by codepoint (E07B) via data-glyph ===== */
+.tenant-glyph-icon::before,
+.tenant-glyph-icon-small::before {
+  font-family: "NotoManuGlyph", sans-serif !important;
+  line-height: 1;
+  display: inline-block;
+  content: "";
+}
+
+.tenant-glyph-icon::before { font-size: 36px; }
+.tenant-glyph-icon-small::before { font-size: 14px; }
+
+/* ===== Preview ===== */
+.tenant-glyph-preview::before {
+  font-family: "NotoManuGlyph", sans-serif !important;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-block;
+  content: "";
+}
+
+
+
+
+
+

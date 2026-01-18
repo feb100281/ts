@@ -1,0 +1,104 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Отчёт · {{ building_name }} · {{ floor_number }} этаж</title>
+
+  <link rel="stylesheet" href="{% static 'properties/report/report_theme.css' %}">
+  <link rel="stylesheet" href="{% static 'properties/report/floor_parking_report.adapter.css' %}">
+  <link rel="stylesheet" href="{% static 'fonts/glyphs.css' %}">
+</head>
+
+<body class="report-body">
+
+<div class="toolbar no-print">
+  <a href="#"
+     class="btn btn-ghost"
+     id="btnBack"
+     data-fallback-url="{% if back_url %}{{ back_url }}{% else %}/{% endif %}">
+    ← Назад
+  </a>
+
+  <button class="btn btn-primary" type="button" onclick="window.print()">
+    🖨 Печать
+  </button>
+</div>
+
+<div class="page">
+
+  <!-- COVER -->
+  {% include "admin/properties/floor/report/partials/_cover.html" %}
+
+  <!-- TOC -->
+  {% include "admin/properties/floor/report/partials/_toc.html" %}
+
+  <!-- SUMMARY -->
+  {% include "admin/properties/floor/report/partials/_summary.html" %}
+
+  <!-- PLAN -->
+  {% include "admin/properties/floor/report/partials/_plan.html" %}
+
+  <!-- PARKING STRUCTURE -->
+  {% include "admin/properties/floor/report/partials/_parking_structure.html" %}
+
+  <!-- RATES ANALYSIS -->
+  {% include "admin/properties/floor/report/partials/_rates_analysis.html" %}
+
+  <div class="pagebreak"></div>
+
+  <!-- APPENDIX: FREE PLACES -->
+  {% include "admin/properties/floor/report/partials/_appendix_free_places.html" %}
+
+  <div class="pagebreak"></div>
+
+  <!-- APPENDIX: TENANTS -->
+  {% include "admin/properties/floor/report/partials/_parking_tenants.html" %}
+
+  <footer class="footer">
+    <div>Документ сформирован: <b>{{ print_date|date:"d.m.Y" }}</b></div>
+    <div class="muted small">Отчёт предназначен для внутреннего использования.</div>
+  </footer>
+
+</div>
+
+
+
+<script>
+
+
+/* кнопка "Назад" */
+(function () {
+  const btn = document.getElementById("btnBack");
+  if (!btn) return;
+
+  btn.addEventListener("click", function (e) {
+    e.preventDefault();
+
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.close();
+        return;
+      }
+    } catch (err) {}
+
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    if (document.referrer) {
+      window.location.href = document.referrer;
+      return;
+    }
+
+    const fallbackUrl = btn.getAttribute("data-fallback-url") || "/";
+    window.location.href = fallbackUrl;
+  });
+})();
+</script>
+
+</body>
+</html>
+

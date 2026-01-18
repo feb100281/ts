@@ -15,8 +15,8 @@ from dotenv import load_dotenv
 # Загружаем .env
 load_dotenv()
 
-# TELEGRAM_TOKEN = "7919707031:AAEzS5evL-uqRDmdhVtSrQuWdO8_eXFcgsQ"
-# TELEGRAM_ADMIN_CHAT_ID = -5096019284
+# TELEGRAM_TOKEN = ""
+# TELEGRAM_ADMIN_CHAT_ID = 
 # 1326519741
 
 # ---------------------------
@@ -310,16 +310,16 @@ JAZZMIN_SETTINGS = {
 
 
     #     # --- Пользователи ---
-    #     "auth": "fa-solid fa-users",
-    #     "auth.Group": "fa-solid fa-users-gear",
-    #     "auth.User": "fa-solid fa-user",
+        "auth": "fa-solid fa-users",
+        "auth.Group": "fa-solid fa-users-gear",
+        "auth.User": "fa-solid fa-user",
 
     #     # --- Служебные ---
     #     "services": "fa-solid fa-gear",
     #     "services.Migrations": "fa-solid fa-code-branch",
 
     #     # --- Общие ---
-    #     "admin": "fa-solid fa-gauge",
+        "admin": "fa-solid fa-gauge",
     },
     "default_icon_parents": "fa-solid fa-folder-tree",
     "default_icon_children": "fa-solid fa-file-lines",

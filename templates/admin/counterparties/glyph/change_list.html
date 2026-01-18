@@ -1,0 +1,188 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные breadcrumbs и object-tools #}
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url cl.opts|admin_urlname:'add' as add_url %}
+  {% url 'admin:counterparties_glyph_generate_css' as generate_css_url %}
+
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: аватар + текст #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      <!-- Аватар раздела -->
+      <div style="
+          width:40px;
+          height:40px;
+          border-radius:6px;
+          background:#0f172a;
+          color:#e5e7eb;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:20px;
+          font-weight:600;
+          box-shadow:0 0 0 1px rgba(15,23,42,.18);
+      ">
+        🔣
+      </div>
+
+      <!-- Текстовый блок -->
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.06em;
+            color:#6b7280;
+        ">
+          Справочник
+        </span>
+
+        <span style="font-size:19px; font-weight:600; color:#111827;">
+          Глифы (иконки шрифта)
+        </span>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+
+          <!-- Количество глифов -->
+          <span style="
+              font-size:11px;
+              padding:2px 8px;
+              border-radius:6px;
+              background:#ecfeff;
+              color:#155e75;
+              font-weight:700;
+          ">
+            Всего глифов: {{ cl.result_count }}
+          </span>
+
+
+
+
+
+        </div>
+      </div>
+    </div>
+
+    {# СПЕЙСЕР #}
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: действия #}
+    <div style="
+        min-width:240px;
+        max-width:320px;
+        border-radius:14px;
+        background:rgba(248,250,252,0.9);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Инструменты
+        </span>
+        <span style="font-size:13px;font-weight:600;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {% if has_add_permission %}
+          <a href="{{ add_url }}"
+             class="button"
+             style="
+               font-size:13px;
+               padding:5px 10px;
+               border-radius:8px;
+               display:inline-flex;
+               align-items:center;
+               gap:8px;
+               justify-content:flex-start;
+               background:#e0f2fe;
+             ">
+            ➕ Добавить глиф
+          </a>
+        {% endif %}
+
+        <a href="{{ generate_css_url }}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:6px 10px;
+             border-radius:10px;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             justify-content:flex-start;
+             border:0;
+             background: linear-gradient(90deg, #00C2FF, #00E3A1);
+             color:#062a2e;
+             font-weight:800;
+             box-shadow:0 10px 26px rgba(0, 194, 255, .25);
+           ">
+          ⚡ Сгенерировать глиф
+        </a>
+
+        <span style="font-size:11px;color:#6b7280;line-height:1.35;margin-top:2px;">
+          Нажми после добавления/изменения глифов.
+        </span>
+
+      </div>
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        СПРАВОЧНИКИ
+      </span>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+        ГЛИФЫ
+      </span>
+    </nav>
+
+    <span style="color:#9ca3af;">
+      {{ cl.result_count }} записей
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}
+

@@ -1,0 +1,88 @@
+
+  <section class="ar-sec" id="sec-v">
+  <div class="ar-head">
+    <h2 class="ar-h2">V. Свободные машино-места</h2>
+  </div>
+
+  <div class="muted">
+    Список свободных мест на выбранную дату (с последним арендатором и простоем).
+    {% if free_parking_list %} Всего: <b>{{ free_parking_list|length }}</b>{% endif %}
+  </div>
+
+  {% if free_parking_list %}
+    <div class="table-wrap" style="margin-top:10px;">
+      <table class="table table-compact table-free-places">
+        <thead>
+          <tr>
+            <th class="col-idx">№</th>
+            <th style="width:140px;">Номер</th>
+            <th>Последний арендатор</th>
+            <th style="width:210px;">Последний договор</th>
+            <th style="width:120px;">Последний день</th>
+            <th class="num" style="width:140px; text-align:center;">Ставка</th>
+            <th class="num" style="width:120px;">Простой, дн.</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for p in free_parking_list %}
+            <tr class="{% if p.downtime_days is not None %}
+                         {% if p.downtime_days >= 365 %}row-critical
+                         {% elif p.downtime_days >= 180 %}row-warn
+                         {% endif %}
+                       {% endif %}">
+
+              <td class="col-idx">{{ forloop.counter }}</td>
+
+              <td style="text-align:center;">{{ p.label|default:"—" }}</td>
+
+              <td class="tenant-cell">
+                {% if p.last_tenant_logo %}
+                  <span class="glyph">{{ p.last_tenant_logo }}</span>
+                {% endif %}
+                <span>{{ p.last_tenant|default:"—" }}</span>
+              </td>
+
+              <td>{{ p.last_la|default:"—" }}</td>
+
+              <td style="text-align:center;">
+                {% if p.last_finish %}
+                  {{ p.last_finish|date:"d.m.Y" }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+
+              <td class="num">{{ p.last_rate_fmt|default:"—" }}</td>
+
+              <td class="num downtime-cell
+                         {% if p.downtime_days is not None %}
+                           {% if p.downtime_days >= 365 %}is-critical
+                           {% elif p.downtime_days >= 180 %}is-warn
+                           {% endif %}
+                         {% endif %}"
+                  {% if p.downtime_days is not None %}data-downtime="{{ p.downtime_days }}"{% endif %}>
+                {% if p.downtime_days is not None %}
+                  {{ p.downtime_days }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  {% else %}
+    <div class="note" style="margin-top:10px;">
+      Свободные машино-места отсутствуют (по текущей выборке).
+    </div>
+  {% endif %}
+</section>
+
+
+
+
+

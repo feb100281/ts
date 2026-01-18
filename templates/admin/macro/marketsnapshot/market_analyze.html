@@ -1,0 +1,258 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+
+<style>
+  .market-page { display:grid; grid-template-columns:420px 1fr; gap:22px; align-items:start; }
+  .settings-panel { position:sticky; top:16px; background:var(--body-bg,#fff); border:1px solid var(--hairline-color,#e5e5e5); border-radius:14px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.04); }
+  .settings-title { font-size:14px; font-weight:800; letter-spacing:.02em; margin:0 0 14px 0; opacity:.85; }
+
+  .field { display:grid; grid-template-columns:1fr; gap:6px; margin-bottom:14px; }
+  .field label { font-size:12px; font-weight:700; opacity:.8; }
+  .field-row { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+
+  .settings-panel select,
+  .settings-panel input[type="date"],
+  .settings-panel input[type="text"],
+  .settings-panel input[type="number"]{
+    width:100%;
+    height:38px;
+    padding:0 12px;
+    border-radius:10px;
+    border:1px solid var(--hairline-color,#e5e5e5);
+    background:var(--body-bg,#fff);
+    outline:none;
+    font-size:13px;
+  }
+
+  .settings-panel select:focus,
+  .settings-panel input[type="date"]:focus,
+  .settings-panel input[type="text"]:focus,
+  .settings-panel input[type="number"]:focus{
+    border-color:var(--primary,#0b57d0);
+    box-shadow:0 0 0 3px rgba(11,87,208,.12);
+  }
+
+  .inline-tools { display:inline-flex; gap:6px; flex:0 0 auto; }
+  .iconbtn { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid var(--hairline-color,#e5e5e5); background:rgba(0,0,0,.015); text-decoration:none; cursor:pointer; transition:.15s ease; font-size:14px; line-height:1; user-select:none; }
+  .iconbtn:hover { background:rgba(0,0,0,.05); transform:translateY(-1px); }
+
+  .actions { margin-top:12px; display:flex; gap:10px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:32px; padding:0 12px; border-radius:10px; border:1px solid var(--hairline-color,#e5e5e5); background:#fff; cursor:pointer; font-weight:800; font-size:12.5px; letter-spacing:.01em; width:auto; white-space:nowrap; }
+  .btn:hover { background:rgba(0,0,0,.03); }
+  .btn-primary { background:var(--primary,#0b57d0); border-color:var(--primary,#0b57d0); color:#fff; box-shadow:0 6px 18px rgba(11,87,208,.18); }
+  .btn-primary:hover { filter:brightness(.97); }
+  .btn-outline { background:#fff; }
+
+  .content-area { background:transparent; }
+  .page-header { display:flex; align-items:baseline; justify-content:space-between; margin:0 0 12px 0; }
+  .page-header h1 { margin:0; font-size:28px; font-weight:900; }
+
+  .result-card { background:var(--body-bg,#fff); border:1px solid var(--hairline-color,#e5e5e5); border-radius:14px; padding:18px; box-shadow:0 2px 10px rgba(0,0,0,.04); }
+  .result-grid { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:12px; }
+  .metric { border:1px solid var(--hairline-color,#e5e5e5); border-radius:12px; padding:12px; background:linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.01)); }
+  .metric .k { font-size:11px; opacity:.7; font-weight:800; letter-spacing:.03em; text-transform:uppercase; }
+  .metric .v { margin-top:6px; font-size:22px; font-weight:900; }
+  .section-title { margin:0 0 10px 0; font-size:14px; font-weight:900; opacity:.85; }
+
+  .checkbox-row { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12.5px; font-weight:600; opacity:.9; }
+
+  @media (max-width:1100px){
+    .market-page{ grid-template-columns:1fr; }
+    .settings-panel{ position:relative; top:0; }
+    .result-grid{ grid-template-columns:repeat(2,minmax(140px,1fr)); }
+    .actions{ flex-direction:column; }
+    .btn{ width:100%; }
+  }
+</style>
+
+<div class="market-page">
+
+  <div class="settings-panel">
+    <div class="settings-title">Настройки анализа</div>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="field">
+        <label>Тип недвижимости</label>
+        <div class="field-row">
+          <select id="id_property_type" name="property_type" required>
+            {% for pt in property_types %}
+              <option value="{{ pt.id }}" {% if selected.property_type == pt.id|stringformat:"s" %}selected{% endif %}>{{ pt.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="inline-tools">
+            <a class="iconbtn" href="{{ admin_links.property_type_add }}" onclick="return showAddAnotherPopup(this);" title="Добавить">+</a>
+            <a class="iconbtn" id="lnk_property_type_change" href="#" onclick="return showRelatedObjectLookupPopup(this);" title="Изменить">✎</a>
+            <a class="iconbtn" id="lnk_property_type_delete" href="#" title="Удалить">🗑</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Город</label>
+        <div class="field-row">
+          <select id="id_region" name="region" required>
+            {% for r in regions %}
+              <option value="{{ r.id }}" {% if selected.region == r.id|stringformat:"s" %}selected{% endif %}>{{ r.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="inline-tools">
+            <a class="iconbtn" href="{{ admin_links.region_add }}" onclick="return showAddAnotherPopup(this);" title="Добавить">+</a>
+            <a class="iconbtn" id="lnk_region_change" href="#" onclick="return showRelatedObjectLookupPopup(this);" title="Изменить">✎</a>
+            <a class="iconbtn" id="lnk_region_delete" href="#" title="Удалить">🗑</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Район</label>
+        <div class="field-row">
+          <select id="id_district" name="district" required>
+            {% for d in districts %}
+              <option value="{{ d.id }}" {% if selected.district == d.id|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="inline-tools">
+            <a class="iconbtn" href="{{ admin_links.district_add }}" onclick="return showAddAnotherPopup(this);" title="Добавить">+</a>
+            <a class="iconbtn" id="lnk_district_change" href="#" onclick="return showRelatedObjectLookupPopup(this);" title="Изменить">✎</a>
+            <a class="iconbtn" id="lnk_district_delete" href="#" title="Удалить">🗑</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Класс</label>
+        <div class="field-row">
+          <select id="id_office_class" name="office_class" required>
+            {% for c in office_classes %}
+              <option value="{{ c.id }}" {% if selected.office_class == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="inline-tools">
+            <a class="iconbtn" href="{{ admin_links.office_class_add }}" onclick="return showAddAnotherPopup(this);" title="Добавить">+</a>
+            <a class="iconbtn" id="lnk_class_change" href="#" onclick="return showRelatedObjectLookupPopup(this);" title="Изменить">✎</a>
+            <a class="iconbtn" id="lnk_class_delete" href="#" title="Удалить">🗑</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Сделка</label>
+        <select name="deal_type" required>
+          <option value="rent" {% if selected.deal_type == "rent" %}selected{% endif %}>Аренда</option>
+          <option value="sale" {% if selected.deal_type == "sale" %}selected{% endif %}>Продажа</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>CIAN URL (выдача) — нужно для «Подгрузить данные»</label>
+        <input type="text" name="cian_list_url" value="{{ selected.cian_list_url }}" placeholder="https://www.cian.ru/rent/commercial/..." />
+      </div>
+
+      <div class="field">
+        <label>Страниц (для импорта)</label>
+        <input type="number" name="pages" min="1" max="20" value="{{ selected.pages|default:'1' }}" />
+      </div>
+
+      <div class="field">
+        <label>Период</label>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div>
+            <div style="font-size:11px; opacity:.7; font-weight:800; margin-bottom:4px;">с</div>
+            <input type="date" name="date_from" value="{{ selected.date_from }}" required>
+          </div>
+          <div>
+            <div style="font-size:11px; opacity:.7; font-weight:800; margin-bottom:4px;">по</div>
+            <input type="date" name="date_to" value="{{ selected.date_to }}" required>
+          </div>
+        </div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" name="save_snapshot" value="1" {% if selected.save_snapshot %}checked{% endif %}>
+          Сохранить снимок в историю
+        </label>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-outline" type="submit" name="action" value="load">⭳ Подгрузить данные</button>
+        <button class="btn btn-primary" type="submit" name="action" value="calc">Посчитать</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="content-area">
+    <div class="page-header">
+      <h1>Анализ рынка</h1>
+    </div>
+
+    {% if result %}
+      <div class="result-card">
+        <div class="section-title">Результат по выбранным фильтрам</div>
+        <div class="result-grid">
+          <div class="metric"><div class="k">Объявлений</div><div class="v">{{ result.count }}</div></div>
+          <div class="metric"><div class="k">Медиана</div><div class="v">{{ result.median }}</div></div>
+          <div class="metric"><div class="k">P25</div><div class="v">{{ result.p25 }}</div></div>
+          <div class="metric"><div class="k">P75</div><div class="v">{{ result.p75 }}</div></div>
+        </div>
+      </div>
+    {% else %}
+      <div class="result-card">
+        <div class="section-title">Данные</div>
+        <div style="opacity:.75">Выбери фильтры слева и нажми <b>«Посчитать»</b>.</div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+  function setLinks(selectId, changeId, deleteId, changeBase, deleteBase) {
+    const sel = document.getElementById(selectId);
+    const lnkChange = document.getElementById(changeId);
+    const lnkDelete = document.getElementById(deleteId);
+
+    function update() {
+      const id = sel.value;
+      lnkChange.href = changeBase.replace("__id__", id);
+      lnkDelete.href = deleteBase.replace("__id__", id);
+    }
+    sel.addEventListener("change", update);
+    update();
+  }
+
+  setLinks("id_property_type","lnk_property_type_change","lnk_property_type_delete",
+    "{{ admin_links.property_type_change_base }}",
+    "{{ admin_links.property_type_delete_base }}"
+  );
+
+  setLinks("id_region","lnk_region_change","lnk_region_delete",
+    "{{ admin_links.region_change_base }}",
+    "{{ admin_links.region_delete_base }}"
+  );
+
+  setLinks("id_district","lnk_district_change","lnk_district_delete",
+    "{{ admin_links.district_change_base }}",
+    "{{ admin_links.district_delete_base }}"
+  );
+
+  setLinks("id_office_class","lnk_class_change","lnk_class_delete",
+    "{{ admin_links.office_class_change_base }}",
+    "{{ admin_links.office_class_delete_base }}"
+  );
+
+  const origAdd = window.dismissAddRelatedObjectPopup;
+  window.dismissAddRelatedObjectPopup = function() {
+    if (origAdd) origAdd.apply(this, arguments);
+    window.location.reload();
+  };
+
+  const origChange = window.dismissChangeRelatedObjectPopup;
+  window.dismissChangeRelatedObjectPopup = function() {
+    if (origChange) origChange.apply(this, arguments);
+    window.location.reload();
+  };
+})();
+</script>
+
+{% endblock %}

@@ -44,8 +44,8 @@ class Owners(models.Model):
     )
 
     class Meta:
-        verbose_name = "Компании"
-        verbose_name_plural = "Группа компаний"
+        verbose_name = "Собственник"
+        verbose_name_plural = "Собственники"
 
     def __str__(self):
         return self.name
@@ -79,6 +79,15 @@ class Owners(models.Model):
 class Bank(models.Model):
     name = models.CharField(max_length=255, verbose_name="Наименование")
     bik = models.CharField(max_length=9, verbose_name="БИК", unique=True)
+    
+    logo = models.CharField(
+        max_length=1,
+        verbose_name="Логотип (глиф)",
+        null=True,
+        blank=True,
+        help_text="Символ-глиф банка",
+    )
+    
     address = models.TextField(verbose_name="Адрес", null=True, blank=True)
     corr_account = models.CharField(
         max_length=20, verbose_name="Кор. счёт", null=True, blank=True

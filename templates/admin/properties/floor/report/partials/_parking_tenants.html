@@ -1,0 +1,100 @@
+{# templates/admin/properties/floor/report/partials/_parking_tenants.html #}
+{# VI. ПРИЛОЖЕНИЯ / АРЕНДАТОРЫ (ПАРКОВКА) #}
+
+<section class="ar-sec" id="sec-vi">
+  <div class="ar-head">
+    <h2 class="ar-h2">VI. ПРИЛОЖЕНИЯ: детализация по арендаторам</h2>
+  </div>
+
+{% if parking_appendices %}
+
+  {% for t in parking_appendices %}
+
+  <section class="section appendix">
+
+    <div class="appendix-head">
+      <div class="appendix-title">
+        {% if t.tenant_logo %}
+          <span class="glyph">{{ t.tenant_logo }}</span>
+        {% endif %}
+        <span class="appendix-tenant">
+          {{ t.tenant_short|default:t.tenant }}
+        </span>
+      </div>
+
+      <div class="muted small">
+        {% if t.tenant_inn %}
+          ИНН: {{ t.tenant_inn }} ·
+        {% endif %}
+        Договоров: {{ t.agreements|length }} ·
+        М/мест: {{ t.places_total }} ·
+        МАП: {{ t.map_total_fmt|default:"—" }}
+      </div>
+    </div>
+
+    {% for a in t.agreements %}
+
+      <div class="agreement-block">
+
+        <div class="agreement-head">
+          <div class="agreement-title">
+            Договор {{ a.la }}
+          </div>
+
+          <div class="muted small">
+            {% if a.date_start %}
+              {{ a.date_start|date:"d.m.Y" }}
+            {% else %}
+              —
+            {% endif %}
+            —
+            {% if a.date_end %}
+              {{ a.date_end|date:"d.m.Y" }}
+            {% else %}
+              ∞
+            {% endif %}
+
+            · М/мест: {{ a.places }}
+            · Средняя ставка: {{ a.rate_avg_fmt|default:"—" }}
+          </div>
+        </div>
+
+        <table class="tbl tbl-compact">
+          <thead>
+            <tr>
+              <th>Помещение / м-место</th>
+              <th class="num">Ставка</th>
+            </tr>
+          </thead>
+
+          <tbody>
+          {% for i in a.items %}
+            <tr>
+              <td>{{ i.room_label|default:"—" }}</td>
+              <td class="num">{{ i.rate_fmt|default:"—" }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+
+    {% endfor %}
+
+  </section>
+
+  <div class="pagebreak"></div>
+
+  {% endfor %}
+
+{% else %}
+
+  <section class="section appendix">
+    <div class="section-head">
+      <h3>VI. Приложения</h3>
+      <div class="muted small">Данные по арендаторам парковки отсутствуют.</div>
+    </div>
+  </section>
+
+{% endif %}
+

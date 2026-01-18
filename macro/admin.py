@@ -1,3 +1,4 @@
+from __future__ import annotations
 from django.contrib import admin, messages
 from django.contrib.auth.admin import (
     UserAdmin as DjangoUserAdmin,
@@ -8,18 +9,19 @@ from django import forms
 from django.utils.safestring import mark_safe
 from .utils.admin_calendar import WorkingCalendar
 import json
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from collections import OrderedDict
 from django.contrib.auth.models import Permission
 from collections import defaultdict
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path 
-from django.shortcuts import redirect
 from django.contrib.auth.models import User, Group
 from django.db.models import Count
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.dateparse import parse_date
 
 
 from datetime import date as dt_date, timedelta
@@ -31,7 +33,25 @@ from .utils.calendar_loader import load_work_calendar_for_year
 from utils.choises import CURRENCY_SYMBOLS, CURRENCY_FLAGS
 
 
-from .services import sync_keyrates_from_cbr, sync_inflation_from_cbr
+
+
+
+from decimal import Decimal
+from typing import Iterable, Optional, List
+from django.db import transaction
+from django.db.models import OuterRef, Subquery, F, Q
+from django.http import HttpRequest
+from django.urls import path
+from django.utils import timezone
+
+
+from macro.services.cian_import import run_cian_import
+
+
+
+
+
+from .service_funcs import sync_keyrates_from_cbr, sync_inflation_from_cbr
 from .models import (
     WACC,
     Inflation,
@@ -39,8 +59,16 @@ from .models import (
     CalendarExceptions,
     TaxesList,
     TaxRates,
-    CurrencyRate
-
+    CurrencyRate, 
+    
+    MarketRegion,
+    MarketDistrict,
+    OfficeClass,
+    MarketSource,
+    PropertyType,
+    MarketListingObservation,
+    MarketSnapshot,
+    
 
 )
 
@@ -1286,6 +1314,286 @@ class CurrencyRateAdmin(admin.ModelAdmin):
             context,
         )
 
+
+
+
+
+
+
+ #=========================
+
+
+
+#----- РЫНОЧНЫЕ ЦЕНЫ -----#
+def quantile(sorted_vals, q: Decimal):
+    n = len(sorted_vals)
+    if n == 0:
+        return None
+    if n == 1:
+        return sorted_vals[0]
+
+    pos = (Decimal(n) - 1) * q
+    lo = int(pos)
+    hi = min(lo + 1, n - 1)
+    frac = pos - Decimal(lo)
+
+    if lo == hi:
+        return sorted_vals[lo]
+
+    return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * frac
+
+
+class ReturnToNextMixin:
+    """
+    Если в URL есть ?next=/admin/.../analyze/ — после add/change/delete
+    возвращаемся на next.
+    """
+
+    def _get_next_url(self, request):
+        nxt = request.GET.get("next")
+        if not nxt:
+            return None
+        # безопасность: разрешаем только локальные пути
+        if url_has_allowed_host_and_scheme(
+            url=nxt,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return nxt
+        return None
+
+    def response_add(self, request, obj, post_url_continue=None):
+        nxt = self._get_next_url(request)
+        if nxt:
+            return HttpResponseRedirect(nxt)
+        return super().response_add(request, obj, post_url_continue=post_url_continue)
+
+    def response_change(self, request, obj):
+        nxt = self._get_next_url(request)
+        if nxt:
+            return HttpResponseRedirect(nxt)
+        return super().response_change(request, obj)
+
+    def response_delete(self, request, obj_display, obj_id):
+        nxt = self._get_next_url(request)
+        if nxt:
+            return HttpResponseRedirect(nxt)
+        return super().response_delete(request, obj_display, obj_id)
+
+
+
+@admin.register(MarketRegion)
+class MarketRegionAdmin(ReturnToNextMixin, admin.ModelAdmin):
+    search_fields = ("name",)
+    def get_model_perms(self, request):
+        return {}
+
+
+@admin.register(MarketDistrict)
+class MarketDistrictAdmin(ReturnToNextMixin, admin.ModelAdmin):
+    search_fields = ("name",)
+    list_filter = ("region",)
+    autocomplete_fields = ("region",)
+    def get_model_perms(self, request):
+        return {}
+
+
+@admin.register(OfficeClass)
+class OfficeClassAdmin(ReturnToNextMixin, admin.ModelAdmin):
+    search_fields = ("code", "name")
+    def get_model_perms(self, request):
+        return {}
+
+
+@admin.register(PropertyType)
+class PropertyTypeAdmin(ReturnToNextMixin, admin.ModelAdmin):
+    search_fields = ("code", "name")
+    list_filter = ("is_active",)
+    def get_model_perms(self, request):
+        return {}
+
+
+@admin.register(MarketSource)
+class MarketSourceAdmin(ReturnToNextMixin, admin.ModelAdmin):
+    search_fields = ("code", "name")
+    def get_model_perms(self, request):
+        return {}
+
+
+
+def admin_url_for(model_cls, action: str, args=None):
+    """
+    action: add / change / delete
+    """
+    opts = model_cls._meta
+    return reverse(f"admin:{opts.app_label}_{opts.model_name}_{action}", args=args or [])
+
+
+@admin.register(MarketSnapshot)
+class MarketAnalyticsAdminView(admin.ModelAdmin):
+    change_list_template = "admin/macro/marketsnapshot/market_analyze.html"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        context = extra_context or {}
+
+        # справочники
+        context["regions"] = MarketRegion.objects.all()
+        context["districts"] = MarketDistrict.objects.select_related("region")
+        context["office_classes"] = OfficeClass.objects.all()
+        context["sources"] = MarketSource.objects.all()
+        context["property_types"] = PropertyType.objects.filter(is_active=True)
+
+        # чтобы template не падал
+        context["selected"] = request.POST if request.method == "POST" else {}
+
+        next_url = request.get_full_path()
+
+        def admin_url_for(model_cls, action: str, args=None):
+            opts = model_cls._meta
+            return reverse(f"admin:{opts.app_label}_{opts.model_name}_{action}", args=args or [])
+
+        def _base(model_cls, action):
+            u = admin_url_for(model_cls, action, args=[0])
+            return u.replace("/0/", "/__id__/")
+
+        context["admin_links"] = {
+            "property_type_add": admin_url_for(PropertyType, "add") + f"?_popup=1&next={next_url}",
+            "region_add": admin_url_for(MarketRegion, "add") + f"?_popup=1&next={next_url}",
+            "district_add": admin_url_for(MarketDistrict, "add") + f"?_popup=1&next={next_url}",
+            "office_class_add": admin_url_for(OfficeClass, "add") + f"?_popup=1&next={next_url}",
+
+            "property_type_change_base": _base(PropertyType, "change") + f"?_popup=1&next={next_url}",
+            "region_change_base": _base(MarketRegion, "change") + f"?_popup=1&next={next_url}",
+            "district_change_base": _base(MarketDistrict, "change") + f"?_popup=1&next={next_url}",
+            "office_class_change_base": _base(OfficeClass, "change") + f"?_popup=1&next={next_url}",
+
+            "property_type_delete_base": _base(PropertyType, "delete") + f"?next={next_url}",
+            "region_delete_base": _base(MarketRegion, "delete") + f"?next={next_url}",
+            "district_delete_base": _base(MarketDistrict, "delete") + f"?next={next_url}",
+            "office_class_delete_base": _base(OfficeClass, "delete") + f"?next={next_url}",
+        }
+
+        result = None
+
+        if request.method == "POST":
+            action = request.POST.get("action")
+
+            # ВСЕ поля читаем СРАЗУ (важно: и для load, и для calc)
+            region_id = request.POST.get("region")
+            district_id = request.POST.get("district")
+            office_class_id = request.POST.get("office_class")
+            property_type_id = request.POST.get("property_type")
+            deal_type = request.POST.get("deal_type")
+
+            date_from = request.POST.get("date_from")
+            date_to = request.POST.get("date_to")
+            save_snapshot = request.POST.get("save_snapshot") == "1"
+
+            # ─────────────────────────────
+            # 1) LOAD
+            # ─────────────────────────────
+            if action == "load":
+                try:
+                    list_url = (request.POST.get("cian_list_url") or "").strip()
+                    pages = int(request.POST.get("pages") or 1)
+
+                    if not list_url:
+                        raise ValueError("Укажи CIAN URL (выдача)")
+
+                    # для подгрузки обязательны сегментные поля
+                    if not all([region_id, district_id, office_class_id, property_type_id, deal_type]):
+                        raise ValueError("Для подгрузки выбери: Тип, Город, Район, Класс и Сделку.")
+
+                    stats = run_cian_import(
+                        list_url=list_url,
+                        region_id=int(region_id),
+                        district_id=int(district_id),
+                        office_class_id=int(office_class_id),
+                        property_type_id=int(property_type_id),
+                        deal_type=deal_type,
+                        pages=pages,
+                    )
+
+                    messages.success(
+                        request,
+                        f"Импорт ЦИАН: обработано {stats.get('processed', 0)}, "
+                        f"новых наблюдений {stats.get('created_obs', 0)}, "
+                        f"обновлено {stats.get('updated_obs', 0)}."
+                    )
+                except Exception as e:
+                    messages.error(request, f"Ошибка подгрузки данных: {e}")
+
+                context["result"] = None
+                context["selected"] = request.POST
+                return super().changelist_view(request, extra_context=context)
+
+            # ─────────────────────────────
+            # 2) CALC
+            # ─────────────────────────────
+            if not all([region_id, district_id, office_class_id, property_type_id, deal_type, date_from, date_to]):
+                messages.warning(request, "Заполните все поля фильтра.")
+                context["result"] = None
+                context["selected"] = request.POST
+                return super().changelist_view(request, extra_context=context)
+
+            qs = MarketListingObservation.objects.filter(
+                observed_date__gte=date_from,
+                observed_date__lte=date_to,
+                is_active=True,
+                norm_rub_m2_month__gt=0,
+                norm_rub_m2_month__isnull=False,
+                listing__region_id=region_id,
+                listing__district_id=district_id,
+                listing__office_class_id=office_class_id,
+                listing__property_type_id=property_type_id,
+                listing__deal_type=deal_type,
+            )
+
+            values = sorted(
+                Decimal(v) for v in qs.values_list("norm_rub_m2_month", flat=True)
+                if v is not None
+            )
+
+            if values:
+                result = {
+                    "count": len(values),
+                    "median": quantile(values, Decimal("0.5")),
+                    "p25": quantile(values, Decimal("0.25")),
+                    "p75": quantile(values, Decimal("0.75")),
+                }
+
+                if save_snapshot:
+                    MarketSnapshot.objects.create(
+                        period=date_from,
+                        property_type_id=property_type_id,
+                        deal_type=deal_type,
+                        region_id=region_id,
+                        district_id=district_id,
+                        office_class_id=office_class_id,
+                        metric="norm_rub_m2_month",
+                        currency="RUB",
+                        listings_count=result["count"],
+                        median_price=result["median"],
+                        p25_price=result["p25"],
+                        p75_price=result["p75"],
+                    )
+                    messages.success(request, "Снимок рынка сохранён.")
+            else:
+                messages.warning(request, "Нет данных по выбранным фильтрам.")
+
+            context["result"] = result
+            context["selected"] = request.POST
+
+        return super().changelist_view(request, extra_context=context)
 
 
 

@@ -1,0 +1,79 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Ошибка формирования отчёта</title>
+
+  <link rel="stylesheet" href="{% static 'properties/report/report_theme.css' %}">
+  <style>
+    body {
+      background: #0f1115;
+      color: #e6e6e6;
+      font-family: Inter, sans-serif;
+    }
+
+    .error-page {
+      max-width: 720px;
+      margin: 80px auto;
+      padding: 40px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .error-title {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .error-message {
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      color: #cfd3dc;
+    }
+
+    .error-meta {
+      font-size: 13px;
+      color: #8b93a6;
+      margin-top: 16px;
+    }
+
+    .actions {
+      margin-top: 32px;
+      display: flex;
+      gap: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="error-page">
+
+  <div class="error-title">
+    Не удалось сформировать отчёт
+  </div>
+
+  <div class="error-message">
+    {{ error|default:"При формировании отчёта возникла ошибка." }}
+  </div>
+
+  {% if details %}
+    <div class="error-meta">
+      {{ details }}
+    </div>
+  {% endif %}
+
+  <div class="actions">
+    <a href="javascript:history.back()" class="btn btn-ghost">
+      ← Вернуться назад
+    </a>
+  </div>
+
+</div>
+
+</body>
+</html>

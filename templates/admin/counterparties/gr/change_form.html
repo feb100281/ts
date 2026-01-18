@@ -26,28 +26,37 @@
 
       {# --- АВАТАР ГРУППЫ --- #}
       <div style="
-          width:40px;
-          height:40px;
-          border-radius:6px;
-          background:{% if obj.pk %}#111827{% else %}#e5e7eb{% endif %};
-          color:{% if obj.pk %}#f9fafb{% else %}#4b5563{% endif %};
+    width:40px;
+    height:40px;
+    border-radius:6px;
+    background:{% if obj.pk %}#111827{% else %}#e5e7eb{% endif %};
+    color:{% if obj.pk %}#f9fafb{% else %}#4b5563{% endif %};
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 0 0 1px rgba(15,23,42,.12);
+">
+  {% if obj.pk %}
+    {% if obj.logo %}
+      <span style="
+          font-family:NotoManu;
+          font-size:22px;
+          line-height:1;
           display:flex;
           align-items:center;
           justify-content:center;
-          font-size:18px;
-          font-weight:600;
-          box-shadow:0 0 0 1px rgba(15,23,42,.12);
       ">
-        {% if obj.pk %}
-          {% if obj.name %}
-            {{ obj.name|first|upper }}
-          {% else %}
-            G
-          {% endif %}
-        {% else %}
-          +
-        {% endif %}
-      </div>
+        {{ obj.logo }}
+      </span>
+    {% else %}
+      <span style="font-weight:600;font-size:18px;">
+        {% if obj.name %}{{ obj.name|first|upper }}{% else %}G{% endif %}
+      </span>
+    {% endif %}
+  {% else %}
+    +
+  {% endif %}
+</div>
 
       {# --- ТЕКСТОВЫЙ БЛОК --- #}
       <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">

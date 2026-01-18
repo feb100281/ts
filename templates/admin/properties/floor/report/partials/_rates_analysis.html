@@ -1,0 +1,134 @@
+{# templates/admin/properties/floor/report/partials/_rates_analysis.html #}
+
+<section class="section" id="sec-iv">
+
+  <div class="section-head">
+    <h2>IV. Анализ ставок</h2>
+  </div>
+
+
+  <div class="cards-2">
+    <div class="card">
+      <h3 class="ar-h3">Ключевые показатели ставок</h3>
+      <ul class="bullets">
+        <li>Средняя ставка (простая): <b>{{ rate_avg|floatformat:0 }} ₽</b></li>
+        <li>Средняя ставка (взвеш. по м/местам): <b>{{ rate_avg_weighted|floatformat:0 }} ₽</b></li>
+        <li>Медиана: <b>{{ rate_median|floatformat:0 }} ₽</b></li>
+        <li>Min / Max:
+          <b>{{ rate_min|floatformat:0 }} ₽</b> /
+          <b>{{ rate_max|floatformat:0 }} ₽</b>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+
+
+
+  <div class="charts" style="margin-top:14px;">
+
+    {% if parking_rate_box_svg %}
+      <div class="chart-card" style="grid-column:1/-1;">
+        <h3 class="ar-h3">Boxplot ставок</h3>
+        <div class="chart-body">{{ parking_rate_box_svg|safe }}</div>
+      </div>
+    {% endif %}
+
+    {% if parking_rate_hist_svg %}
+      <div class="chart-card" style="grid-column:1/-1;">
+        <h3 class="ar-h3">Гистограмма распределения ставок</h3>
+        <div class="chart-body">{{ parking_rate_hist_svg|safe }}</div>
+      </div>
+    {% endif %}
+
+    {% if parking_rate_dist_svg %}
+      <div class="chart-card" style="grid-column:1/-1;">
+        <div class="chart-title">Распределение ставок (по корзинам)</div>
+        <div class="chart-body">{{ parking_rate_dist_svg|safe }}</div>
+      </div>
+    {% endif %}
+
+    {% if parking_rate_lollipop_svg %}
+      <div class="chart-card" style="grid-column:1/-1;">
+        <div class="chart-title">
+          Ставки по договорам
+          <span class="muted">(кружок = МАП)</span>
+        </div>
+        <div class="chart-body">{{ parking_rate_lollipop_svg|safe }}</div>
+      </div>
+    {% endif %}
+
+  </div>
+
+
+
+
+
+  <div class="table-wrap" style="margin-top:16px;">
+
+    <div class="muted small" style="margin-bottom:6px;">
+      Детализация по арендаторам
+     
+    </div>
+
+    <table class="tbl tbl-compact">
+      <thead>
+        <tr>
+          <th class="col-n">№</th>
+          <th>Арендатор</th>
+          <th>Договор</th>
+          <th class="col-count">М/мест</th>
+          <th class="col-map">Ставка</th>
+          <th class="col-delta">Δ к медиане</th>
+          <th>Окончание дог.</th>
+        </tr>
+      </thead>
+
+      <tbody>
+      {% for r in agreement_table %}
+        <tr>
+
+          <td class="num">{{ forloop.counter }}</td>
+
+          <td class="tenant-cell">
+            {% if r.tenant_logo %}
+              <span class="glyph">{{ r.tenant_logo }}</span>
+            {% endif %}
+            <span class="tenant-name">
+              {{ r.tenant_short|default:r.tenant }}
+            </span>
+          </td>
+
+          <td class="muted">{{ r.la }}</td>
+
+          <td class="num">{{ r.places }}</td>
+
+          <td class="num rate">
+            <span class="money">{{ r.rate_fmt }}</span>
+          </td>
+
+          <td class="num delta delta--{{ r.rate_delta_sign }}">
+
+
+            {% if r.rate_delta > 0 %}+{% endif %}{{ r.rate_delta_fmt }}
+
+          </td>
+
+          <td class="muted">
+            {% if r.date_end %}
+              {{ r.date_end|date:"d.m.Y" }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+
+</section>
+
+<div class="pagebreak"></div>

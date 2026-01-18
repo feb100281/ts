@@ -248,20 +248,27 @@ tbody tr:nth-child(even) td { background:#f9fafb33; }
   margin-top:2px;
 }
 
-/* print */
+/* -------------------- */
+/* PRINT — общие вещи   */
+/* -------------------- */
 @media print {
-  @page { margin: 12mm; }
+  @page {
+    margin: 12mm;
+  }
+
   body {
     background:#ffffff !important;
     padding:0 !important;
     margin:0 !important;
     display:block;
   }
+
   .card {
     box-shadow:none !important;
     border-radius:0 !important;
     border:none !important;
   }
+
   .toolbar {
     display:none !important;
   }
@@ -271,10 +278,179 @@ tbody tr:nth-child(even) td { background:#f9fafb33; }
     page-break-before: always;
     margin-top: 24px;
   }
+}
 
+/* ====================================================== */
+/*           СПЕЦИФИЧЕСКИЕ СТИЛИ ОТЧЁТА ПО ЭТАЖУ           */
+/* ====================================================== */
 
+.floor-print-page .plan-svg-wrapper {
+  margin-top: 14px;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+  background: #f9fafb;
+}
 
+.floor-print-page .plan-svg-wrapper svg {
+  width: 100%;
+  height: auto;
+  max-height: 17cm;
+}
 
-  
+.floor-print-page .legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #4b5563;
+}
 
+.floor-print-page .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floor-print-page .comment-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  height: 120px;
+  margin-top: 8px;
+}
+
+.floor-print-page .charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.floor-print-page .chart-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 8px;
+  background: #f9fafb;
+}
+
+.floor-print-page .chart-card svg {
+  width: 100%;
+  height: auto;
+}
+
+.floor-print-page .tenant-list {
+  margin-top: 10px;
+  font-size: 11px;
+}
+
+.floor-print-page .tenant-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f9fafb;
+}
+
+.floor-print-page .tenant-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.floor-print-page .tenant-logo {
+  font-size: 14px;
+  min-width: 18px;
+}
+
+.floor-print-page .tenant-title {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.floor-print-page .tenant-sub {
+  font-size: 10px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.floor-print-page .tenant-meta {
+  font-size: 10px;
+  color: #4b5563;
+  margin-top: 4px;
+}
+
+.floor-print-page .tenant-right {
+  text-align: right;
+  font-size: 10px;
+  min-width: 90px;
+}
+
+.floor-print-page .tenant-right .value {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.floor-print-page .badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 10px;
+  margin-top: 6px;
+}
+
+.floor-print-page .badge-list span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+}
+
+.floor-print-page .free-parking-block {
+  font-size: 11px;
+}
+
+.floor-print-page .free-parking-badges {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.floor-print-page .free-parking-badges span {
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px dashed #9ca3af;
+  background: #f9fafb;
+  font-size: 10px;
+}
+
+/* Печать именно для страницы плана этажа */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body.floor-print-page {
+    background:#ffffff !important;
+    padding:0 !important;
+    margin:0 !important;
+    display:block !important;
+  }
+
+  body.floor-print-page .toolbar {
+    display:none !important;
+  }
+
+  body.floor-print-page .card {
+    box-shadow:none !important;
+    border-radius:0 !important;
+    border:none !important;
+  }
 }

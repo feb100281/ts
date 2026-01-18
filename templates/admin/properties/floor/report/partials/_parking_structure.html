@@ -1,0 +1,104 @@
+{# templates/admin/properties/floor/report/partials/_parking_structure.html #}
+
+
+
+<section class="ar-sec" id="sec-iii">
+  <div class="ar-head">
+    <h2 class="ar-h2">III. Паркинг: структура и концентрация</h2>
+    <div class="ar-muted">Структура арендаторов и концентрация дохода (МАП).</div>
+  </div>
+
+  {# ГРАФИК 1: количество мест #}
+  {% if parking_tenants_places_svg %}
+    <h3 class="ar-h3 ar-mt">Арендаторы → количество м/мест</h3>
+    <figure class="ar-figure">
+      <div class="ar-figure-body">
+        {{ parking_tenants_places_svg|safe }}
+      </div>
+    </figure>
+  {% endif %}
+
+  
+
+  {% if parking_singletons_count %}
+    <div class="ar-note">
+      Примечание: в группе «Прочие (по 1 месту)» объединено арендаторов:
+      <b>{{ parking_singletons_count }}</b>.
+    </div>
+  {% endif %}
+
+
+  {# ГРАФИК 2: МАП — начинаем с новой страницы #}
+  {% if parking_tenants_map_svg %}
+    <div class="pagebreak"></div>
+    <h3 class="ar-h3">Арендаторы → МАП</h3>
+    <figure class="ar-figure">
+      <div class="ar-figure-body">
+        {{ parking_tenants_map_svg|safe }}
+      </div>
+    </figure>
+  {% endif %}
+
+
+  <div class="pagebreak"></div>
+  <div class="ar-subhead">
+    <h3 class="ar-h3">Детализация по арендаторам</h3>
+    <div class="ar-muted">М/места, МАП и доли в общем портфеле.</div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Арендатор</th>
+          <th class="num">М/мест</th>
+          <th class="num">МАП</th>
+          <th class="num">Доля м/мест</th>
+          <th class="num">Доля МАП</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for r in tenant_parking_table %}
+          <tr>
+            <td>
+              {% if r.tenant_logo %}
+                <span class="tenant-glyph-small">{{ r.tenant_logo }}</span>&nbsp;&nbsp;
+              {% endif %}
+              {{ r.tenant_name|default:"—" }}
+            </td>
+
+            <td class="num">{{ r.count|default:"—" }}</td>
+            <td class="num">{{ r.total_map_fmt }}</td>
+
+            <td class="num">
+              <div class="share-cell-full">
+                <div class="share-bar-full" style="width:{{ r.share_places_pct }}%;"></div>
+                <div class="share-text-full">{{ r.share_places_pct|floatformat:2 }}%</div>
+              </div>
+            </td>
+
+            <td class="num">
+              <div class="share-cell-full">
+                <div class="share-bar-full share-bar-map" style="width:{{ r.share_map_pct }}%;"></div>
+                <div class="share-text-full">{{ r.share_map_pct|floatformat:2 }}%</div>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+
+      <tfoot>
+        <tr class="tbl-total">
+          <td><b>ИТОГО</b></td>
+          <td class="num"><b>{{ table_total_places }}</b></td>
+          <td class="num"><b>{{ table_total_map_fmt }}</b></td>
+          <td class="num"><b>100%</b></td>
+          <td class="num"><b>100%</b></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="pagebreak"></div>
+</section>

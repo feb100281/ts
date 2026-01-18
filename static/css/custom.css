@@ -11,39 +11,39 @@
 
 /* Уменьшение размера шрифта для навбара */
 .navbar {
-
+   
     font-size: 12px !important;
 }
 
 .navbar-brand {
-
+   
     font-size: 12px !important;
 }
 
 .navbar .nav-link {
-
+   
     font-size: 12px !important;
 }
 
 /* Уменьшение размера шрифта для сайдбара */
 .sidebar {
-
+   
     font-size: 12px !important;
 }
 
 .sidebar .nav-sidebar .nav-link {
-
+    
     font-size: 12px !important;
 }
 
 /* Уменьшение размера шрифта для футера */
 .main-footer {
-
+   
     font-size: 12px !important;
 }
 
 .main-footer .footer-text {
-
+   
     font-size: 12px !important;
 }
 
@@ -165,7 +165,7 @@
    ================================ */
 
 .valuation-inline__badge {
-    border-radius: 999px;
+    border-radius: 6px;
     padding: 2px 8px;
     font-size: 11px;
     line-height: 1.3;
@@ -218,16 +218,16 @@
     font-weight: 600 !important;
     padding: 0 0 6px 0 !important;
     margin: 0 0 14px 0 !important;
-    color: #1f2937 !important;
+    color: #1f2937 !important;       
     letter-spacing: 0.3px;
     border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .valuation-inline__meta {
-    color: #6b7280;
+    color: #6b7280;           
     font-weight: 500;
     margin-left: 4px;
-    white-space: nowrap;
+    white-space: nowrap;      
     font-size: 12px;
 }
 
@@ -387,6 +387,7 @@
 .fa-user-tie,
 .fa-handshake-simple,
 .fa-handshake,
+.fa-icons,
 .fa-people-group {
     color: var(--color-counterparties) !important;
 }
@@ -406,6 +407,7 @@
 .fa-calendar-days,
 .fa-money-bill-trend-up,
 .fa-coins,
+.fa-magnifying-glass-chart,
 .fa-file-invoice-dollar {
     color: var(--color-macro) !important;
 }
@@ -490,7 +492,7 @@
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    font-size: 0.78rem;
+    font-size: 0.6rem;
 }
 
 /* Таблицы внутри карточек – более минималистичные */
@@ -578,7 +580,7 @@
     background: transparent;
     padding: 0;
     margin-bottom: 0;
-    font-size: 0.8rem;
+    font-size: 0.6rem;
     margin-top: 0.4rem;
 }
 
@@ -610,7 +612,7 @@
     color: var(--accent);
     font-weight: 500;
     padding: 2px 10px;
-    border-radius: 999px;
+    border-radius: 6px;
     background: rgba(236, 72, 153, 0.06);
 }
 
@@ -645,7 +647,7 @@
     top: 0.4rem;
     bottom: 0.4rem;
     width: 2px;
-    border-radius: 999px;
+    border-radius: 6px;
     background: linear-gradient(
         to bottom,
         rgba(148, 163, 184, 0.6),
@@ -671,7 +673,7 @@
     top: 0.95rem;
     width: 0.55rem;
     height: 0.55rem;
-    border-radius: 999px;
+    border-radius: 6px;
     background: var(--accent);
     box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.16);
 }
@@ -679,15 +681,15 @@
 /* заголовок действия (название контрагента) */
 .content .timeline-header a {
     font-weight: 600;
-    font-size: 0.83rem;
+    font-size: 0.7rem;
 }
 
 /* время – в виде маленького бейджа */
 .content .timeline .time {
-    font-size: 0.7rem;
+    font-size: 0.5rem;
     color: #6b7280;
     background: #e5e7eb;
-    border-radius: 999px;
+    border-radius: 6px;
     padding: 2px 8px;
     margin-left: auto;
 }
@@ -708,7 +710,278 @@
 }
 
 /* ==== Вернуть нормальный шрифт в таблицах админки ==== */
-table td,
+table td, 
 table th {
-    font-size: 0.88rem !important;
+    font-size: 0.75rem !important;
 }
+
+
+
+
+/* ============================
+   Django Admin / Jazzmin — Filters font size
+   ============================ */
+
+/* Все фильтры и поиск в списках */
+.change-list .form-control,
+.change-list select,
+.change-list input[type="text"],
+.change-list input[type="search"] {
+    font-size: 11px !important;
+}
+
+/* Placeholder (подсказка в поиске) */
+.change-list input::placeholder {
+    font-size: 11px;
+    color: #9CA3AF;
+}
+
+/* Кнопка "Найти" */
+.change-list .btn,
+.change-list .button {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px; /* не pill */
+}
+
+
+/* ============================
+   Sticky header: all changelists
+   ============================ */
+
+.change-list .content-wrapper .card-body {
+  overflow: auto;
+  max-height: calc(100vh - 230px);
+}
+
+.change-list #result_list thead th {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+}
+
+
+
+
+
+
+
+/* ============================
+   Jazzmin Navbar: premium look
+   ============================ */
+
+
+
+.main-header.navbar .navbar-nav {
+  align-items: center;
+  gap: .15rem;
+}
+
+/* Аккуратная кнопка */
+.main-header.navbar .navbar-nav .nav-link.jm-toplink {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  width: 74px;
+  height: 44px;
+
+  border-radius: 12px;
+  padding: .25rem .35rem;
+  margin: 0 .05rem;
+
+  text-decoration: none;
+  user-select: none;
+
+  opacity: .92;
+  transition: background-color .18s ease, opacity .18s ease;
+}
+
+.main-header.navbar .navbar-nav .nav-link.jm-toplink:hover {
+  opacity: 1;
+  background: rgba(255,255,255,.06);
+}
+
+/* Контейнер иконки — прямые углы, без движения */
+.main-header.navbar .navbar-nav .nav-link.jm-toplink .jm-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+
+  display: grid;
+  place-items: center;
+
+  background: transparent;
+}
+
+/* Сама иконка */
+.main-header.navbar .navbar-nav .nav-link.jm-toplink .jm-ico i {
+  font-size: 14px;
+  opacity: .9;
+}
+
+/* Подпись */
+.main-header.navbar .navbar-nav .nav-link.jm-toplink .jm-label {
+  font-size: 11px;
+  line-height: 1;
+  margin-top: 4px;
+  opacity: .82;
+}
+
+/* Активный пункт (если Jazzmin ставит active) */
+.main-header.navbar .navbar-nav .nav-link.jm-toplink.active,
+.main-header.navbar .navbar-nav .nav-link.jm-toplink[aria-current="page"] {
+  opacity: 1;
+  background: rgba(255,255,255,.08);
+}
+
+/* Всегда нейтральный цвет иконок */
+.main-header.navbar .nav-link.jm-toplink .jm-ico i {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+
+
+
+
+
+
+
+
+/* ============================
+   "Сегодня" dropdown 
+   ============================ */
+
+.main-header .navbar-nav .jm-today-wrap {
+  position: relative;
+}
+
+.main-header .navbar-nav .jm-today-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  opacity: .92;
+  transition: background-color .18s ease, opacity .18s ease;
+}
+
+.main-header .navbar-nav .jm-today-btn:hover {
+  opacity: 1;
+  background: rgba(255,255,255,.06);
+}
+
+.main-header .navbar-nav .jm-today-btn .jm-ico i {
+  font-size: 16px;
+  color: rgba(255,255,255,.85) !important;
+}
+
+.main-header .navbar-nav .jm-today-badge {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(236, 72, 153, .95);
+  color: #fff;
+}
+
+/* меню */
+.jm-today-menu {
+  position: absolute;
+  right: 0;
+  top: 52px;
+  width: 310px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  padding: 8px;
+  z-index: 1050;
+  display: none;
+}
+
+.jm-today-menu.is-open {
+  display: block;
+}
+
+.jm-today-menu__head {
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  margin-bottom: 6px;
+}
+
+.jm-today-menu__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.jm-today-menu__date {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* строки */
+.jm-today-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #111827;
+  text-decoration: none;
+}
+
+.jm-today-item:hover {
+  background: rgba(15, 23, 42, 0.06);
+  text-decoration: none;
+}
+
+.jm-today-item__label {
+  flex: 1 1 auto;
+}
+
+.jm-today-item__count {
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #111827;
+  font-weight: 700;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* маркеры (не круглые) */
+.jm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.jm-dot-purple { background: rgba(139, 92, 246, 0.95); }
+.jm-dot-amber  { background: rgba(245, 158, 11, 0.95); }
+.jm-dot-blue   { background: rgba(59, 130, 246, 0.95); }
+
+
+
