@@ -22,10 +22,10 @@ load_dotenv()
 # ---------------------------
 # External API settings
 # ---------------------------
-# CBR_DAILY_URL = "https://www.cbr.ru/scripts/XML_daily.asp"
-# CHECKO_API_KEY = 'SIwfo6CFilGM4fUX'
-# CHECKO_API_BANK_URL = "https://api.checko.ru/v2/bank"
-# CHECKO_API_COMPANY_URL = "https://api.checko.ru/v2/company"
+CBR_DAILY_URL = "https://www.cbr.ru/scripts/XML_daily.asp"
+CHECKO_API_KEY = 'SIwfo6CFilGM4fUX'
+CHECKO_API_BANK_URL = "https://api.checko.ru/v2/bank"
+CHECKO_API_COMPANY_URL = "https://api.checko.ru/v2/company"
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -93,7 +93,22 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 # INSTALLED_APPS += ['dpd_static_support']
-MIDDLEWARE += ['whitenoise.middleware.WhiteNoiseMiddleware']
+# MIDDLEWARE += ['whitenoise.middleware.WhiteNoiseMiddleware']
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django_plotly_dash.middleware.BaseMiddleware",
+    "django_plotly_dash.middleware.ExternalRedirectionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 ROOT_URLCONF = "ts.urls"
@@ -262,6 +277,7 @@ JAZZMIN_SETTINGS = {
         "counterparties.Counterparty": "fa-solid fa-handshake",
         "counterparties.Tenant": "fa-solid fa-user-tie",
         "counterparties.Gr": "fa-solid fa-people-group",
+        "counterparties.Glyph": "fa-solid fa-icons",
 
     #     # --- СОБСТВЕННИКИ ---
         "corporate": "fa-solid fa-building-user",
@@ -270,6 +286,9 @@ JAZZMIN_SETTINGS = {
         # --- БАНКИ ---
         "corporate.Bank": "fa-solid fa-landmark",
         "corporate.BankAccount": "fa-solid fa-credit-card",
+        
+        "corporate.COA": "fa-solid fa-sitemap",
+        "corporate.СfItems": "fa-solid fa-money-bill-transfer",
 
     #     # --- МАКРОЭКОНОМИКА ---
         "macro": "fa-solid fa-chart-line",
@@ -279,6 +298,7 @@ JAZZMIN_SETTINGS = {
         "macro.KeyRate": "fa-solid fa-money-bill-trend-up",
         "macro.TaxesList": "fa-solid fa-file-invoice-dollar",
         "macro.CurrencyRate": "fa-solid fa-coins",
+        "macro.MarketSnapshot": "fa-solid fa-magnifying-glass-chart",
 
     #     # --- Договоры аренжды ---
     #     "la": "fa-solid fa-file-signature ",
@@ -328,18 +348,18 @@ JAZZMIN_SETTINGS = {
 
     # "order_with_respect_to": ["rr.Properties", "rr.Premisses", "rr.PremissesTypes", "rr.Floors", "rr.PremissesStatus", "rr.PremissesUsage", "rr.SupportDocuments"],
 
-    # "order_with_respect_to": [
-    #     "macro",           # Макропоказатели
-    #     "properties",      # Объекты недвижимости
-    #     "la",              # Договоры аренды
-    #     "counterparties",  # Контрагенты
-    #     "corporate",       # Собственники/банки
-    #      "botconfig",
-    #     "auth",            # Пользователи и группы
-    #     "services",        # Служебные — всегда в конце
-    # ],
+    "order_with_respect_to": [
+        "macro",           # Макропоказатели
+        "properties",      # Объекты недвижимости
+        "la",              # Договоры аренды
+        "counterparties",  # Контрагенты
+        "corporate",       # Собственники/банки
+        "botconfig",
+        "auth",            # Пользователи и группы
+        "services",        # Служебные — всегда в конце
+    ],
 
-    # "changeform_format_overrides": {"auth.user": "vertical_tabs",},
+    "changeform_format_overrides": {"auth.user": "vertical_tabs",},
 
 }
 

@@ -8,7 +8,9 @@
 {% block object-tools %}{% endblock %}
 
 {% block content_title %}
-  {% url cl.opts|admin_urlname:'add' as add_url %}
+  {% comment %} {% url cl.opts|admin_urlname:'add' as add_url %} {% endcomment %}
+  {% url 'admin:counterparties_counterparty_add' as add_url %}
+
 
   <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
 

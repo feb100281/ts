@@ -326,9 +326,9 @@ class CounterpartyAdmin(admin.ModelAdmin):
             return obj.ceo
 
         if getattr(obj, "ceo_hidden_by_fns", False):
-            return format_html(
-                '<span style="color:#b00020;">ФИО скрыто ФНС</span>'
-            )
+            return format_html('<span style="color:#b00020;">{}</span>', "ФИО скрыто ФНС")
+
+            
 
         return "—"
 
@@ -363,10 +363,11 @@ class CounterpartyAdmin(admin.ModelAdmin):
     def ceo_restriction_note(self, obj):
         if getattr(obj, "ceo_hidden_by_fns", False):
             return format_html(
-                '<div style="margin-top:4px;color:#b00020;">'
-                "<em>ФИО руководителя скрыто ФНС (ограничение доступа)</em>"
-                "</div>"
-            )
+                    '<div style="margin-top:4px;color:#b00020;"><em>{}</em></div>',
+                    "ФИО руководителя скрыто ФНС (ограничение доступа)",
+                )
+
+            
         return ""
 
     ceo_restriction_note.short_description = "Примечание"
@@ -864,7 +865,9 @@ class TenantAdmin(admin.ModelAdmin):
     def last_login_badge(self, obj):
             user = obj.user
             if not user or not user.last_login:
-                return format_html('<span style="color:#b0bec5;">—</span>')
+                return format_html('<span style="color:#b0bec5;">{}</span>', "—")
+
+                
 
             dt = user.last_login
             pretty = dt.strftime("%d.%m.%Y %H:%M")
@@ -950,7 +953,9 @@ class TenantAdmin(admin.ModelAdmin):
 
     def user_column(self, obj: Tenant):
         if not obj.user:
-            return format_html('<span style="color:#b00020;">не назначен</span>')
+            return format_html('<span style="color:#b00020;">{}</span>', "не назначен")
+
+        
 
         user = obj.user
         url = reverse("admin:auth_user_change", args=[user.pk])
@@ -976,7 +981,8 @@ class TenantAdmin(admin.ModelAdmin):
     def email_column(self, obj: Tenant):
         user = obj.user
         if not user or not user.email:
-            return format_html('<span style="color:#b0bec5;">—</span>')
+            return format_html('<span style="color:#b0bec5;">{}</span>', "—")
+
 
         url = reverse("admin:auth_user_change", args=[user.pk])
         return format_html(
@@ -1006,8 +1012,9 @@ class TenantAdmin(admin.ModelAdmin):
     def group_column(self, obj: Tenant):
         gr = obj.counterparty.gr
         if not gr:
-            return format_html('<span style="color:#b0bec5;">—</span>')
+            return format_html('<span style="color:#b0bec5;">{}</span>', "—")
 
+            
         return format_html(
             '<span style="padding:2px 8px;'
             "border:1px solid #263238;"

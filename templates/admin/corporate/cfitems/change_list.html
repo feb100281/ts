@@ -1,0 +1,280 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные крошки и object-tools #}
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url cl.opts|admin_urlname:'add' as add_url %}
+  {% url cl.opts|admin_urlname:'changelist' as changelist_url %}
+    {% url cl.opts|admin_urlname:'print_all' as print_all_url %}
+
+
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: аватар + текст #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      <!-- Аватар -->
+      <div style="
+          width:40px;height:40px;border-radius:10px;
+          background:linear-gradient(135deg,#0f766e,#0ea5e9);
+          color:#ecfeff;
+          display:flex;align-items:center;justify-content:center;
+          font-size:20px;font-weight:800;
+          box-shadow:0 0 0 1px rgba(15,23,42,.14), 0 12px 28px rgba(15,23,42,.10);
+      ">
+        💸
+      </div>
+
+      <!-- Текстовый блок -->
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.25;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.08em;
+            color:#6b7280;
+        ">
+          Справочник
+        </span>
+
+        <span style="font-size:19px; font-weight:700; color:#0f172a;">
+          Статьи ДС
+        </span>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+
+          <!-- Всего -->
+          <span style="
+              font-size:11px;
+              padding:2px 8px;
+              border-radius:6px;
+              background:rgba(14,165,233,.10);
+              color:#075985;
+              font-weight:800;
+              border:1px solid rgba(14,165,233,.18);
+          ">
+            Всего статей: {{ cl.result_count }}
+          </span>
+
+          <!-- Поиск -->
+          {% if cl.query %}
+            <span style="
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:6px;
+                background:#fef3c7;
+                color:#92400e;
+                font-weight:700;
+                border:1px solid rgba(146,64,14,.18);
+            ">
+              Поиск: “{{ cl.query }}”
+            </span>
+          {% endif %}
+
+          <!-- Фильтры -->
+          {% if cl.has_filters %}
+            <span style="
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:6px;
+                background:#f3f4f6;
+                color:#4b5563;
+                font-weight:700;
+                border:1px solid rgba(75,85,99,.18);
+            ">
+              Фильтры применены
+            </span>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: действия #}
+    <div style="
+        min-width:250px;
+        max-width:300px;
+        border-radius:16px;
+        background:rgba(248,250,252,0.92);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        border:1px solid rgba(15,23,42,.08);
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:700;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {% if has_add_permission %}
+          <a href="{{ add_url }}"
+             class="button"
+             style="
+               font-size:13px;
+               padding:6px 10px;
+               border-radius:10px;
+               display:inline-flex;
+               align-items:center;
+               gap:8px;
+               justify-content:flex-start;
+               background:rgba(16,185,129,.10);
+               border:1px solid rgba(16,185,129,.22);
+               color:#065f46;
+               font-weight:800;
+             ">
+            ➕ Добавить статью
+          </a>
+        {% endif %}
+
+        {# Печать всего дерева #}
+        <a href="{{ print_all_url }}"
+           style="
+             font-size:12px;
+             padding:6px 10px;
+             border-radius:10px;
+             text-decoration:none;
+             background:rgba(15,23,42,.06);
+             color:#0f172a;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(15,23,42,.10);
+             font-weight:700;
+           ">
+          🖨 Печать списка
+        </a>
+
+
+
+        <a href="{{ changelist_url }}"
+           style="
+             font-size:11px;
+             padding:5px 10px;
+             border-radius:10px;
+             text-decoration:none;
+             background:rgba(14,165,233,.10);
+             color:#075985;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(14,165,233,.18);
+           ">
+          🌳 Обновить дерево
+        </a>
+
+        <a href="{{ changelist_url }}"
+           style="
+             font-size:11px;
+             padding:5px 10px;
+             border-radius:10px;
+             text-decoration:none;
+             background:#fff1f2;
+             color:#9f1239;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(159,18,57,.16);
+           ">
+          🧹 Сбросить фильтры
+        </a>
+
+      </div>
+    </div>
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        СПРАВОЧНИКИ
+      </span>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:800;">
+        СТАТЬИ ДС
+      </span>
+    </nav>
+
+    <span style="color:#9ca3af;">
+      {{ cl.result_count }} записей
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'macro/keyrate_admin.css' %}">
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const rows = document.querySelectorAll('#result_list tbody tr');
+
+      rows.forEach(function (row) {
+        const link = row.querySelector('th a');
+        if (!link) return;
+
+        row.style.cursor = 'pointer';
+
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('a')) return;
+          if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
+          if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
+          if (e.target.tagName === 'BUTTON') return;
+
+          window.location.href = link.href;
+        });
+      });
+    });
+  </script>
+
+  <style>
+    #result_list tbody tr:hover {
+      background: rgba(14,165,233,0.06);
+    }
+    .drag-handler, .drag-handler:hover { cursor: grab; }
+    .drag-handler:active { cursor: grabbing; }
+
+    /* чуть “дороже” заголовки таблицы */
+    #result_list thead th {
+      font-weight: 800;
+      letter-spacing: .04em;
+      color: #0f172a;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

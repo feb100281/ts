@@ -1,1 +1,6 @@
-
+.tenant-glyph-preview[data-glyph="E016"]::before { content: "\e016"; }
+.tenant-glyph-preview[data-glyph="E017"]::before { content: "\e017"; }
+.tenant-glyph-preview[data-glyph="E061"]::before { content: "\e061"; }
+.tenant-glyph-preview[data-glyph="E09E"]::before { content: "\e09e"; }
+.tenant-glyph-preview[data-glyph="E09F"]::before { content: "\e09f"; }
+.tenant-glyph-preview[data-glyph="E0A0"]::before { content: "\e0a0"; }

@@ -1,0 +1,298 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные крошки #}
+{% block breadcrumbs %}{% endblock %}
+
+{# прячем стандартные object-tools (мы сделаем свои) #}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {# ссылки #}
+  {% url opts|admin_urlname:'changelist' as changelist_url %}
+    {% url opts|admin_urlname:'add' as add_url %}
+    {% url opts|admin_urlname:'print_all' as print_all_url %}
+
+
+
+  {# ссылка "добавить дочернюю" — только если редактируем существующий объект #}
+  {% if original %}
+    {% url cl.opts|admin_urlname:'add' as add_child_base %}
+    {# add/?parent=<id> — MPTT-админ обычно подхватывает parent в форме #}
+    {% with add_child_url=add_child_base|add:"?parent="|add:original.pk %}
+    {% endwith %}
+  {% endif %}
+
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:10px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: заголовок #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      <div style="
+          width:40px;height:40px;border-radius:10px;
+          background:linear-gradient(135deg,#0f766e,#0ea5e9);
+          color:#ecfeff;
+          display:flex;align-items:center;justify-content:center;
+          font-size:20px;font-weight:800;
+          box-shadow:0 0 0 1px rgba(15,23,42,.14), 0 12px 28px rgba(15,23,42,.10);
+      ">
+        💸
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.25;">
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.08em;
+            color:#6b7280;
+        ">
+          Справочник
+        </span>
+
+        {% if original %}
+          <span style="font-size:19px; font-weight:800; color:#0f172a;">
+            Статья ДС — редактирование
+          </span>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
+            <span style="
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:999px;
+                background:rgba(14,165,233,.10);
+                color:#075985;
+                font-weight:800;
+                border:1px solid rgba(14,165,233,.18);
+            ">
+              {{ original.code }} — {{ original.name }}
+            </span>
+
+            {% if original.is_active %}
+              <span style="
+                  font-size:11px;
+                  padding:2px 8px;
+                  border-radius:999px;
+                  background:rgba(16,185,129,.10);
+                  color:#065f46;
+                  font-weight:800;
+                  border:1px solid rgba(16,185,129,.22);
+              ">Активна</span>
+            {% else %}
+              <span style="
+                  font-size:11px;
+                  padding:2px 8px;
+                  border-radius:999px;
+                  background:rgba(239,68,68,.10);
+                  color:#7f1d1d;
+                  font-weight:800;
+                  border:1px solid rgba(239,68,68,.20);
+              ">Выключена</span>
+            {% endif %}
+
+            {% if original.parent %}
+              <span style="
+                  font-size:11px;
+                  padding:2px 8px;
+                  border-radius:999px;
+                  background:#f3f4f6;
+                  color:#4b5563;
+                  font-weight:700;
+                  border:1px solid rgba(75,85,99,.18);
+              ">Родитель: {{ original.parent }}</span>
+            {% endif %}
+          </div>
+        {% else %}
+          <span style="font-size:19px; font-weight:800; color:#0f172a;">
+            Статья ДС — создание
+          </span>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
+            <span style="
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:999px;
+                background:#fef3c7;
+                color:#92400e;
+                font-weight:800;
+                border:1px solid rgba(146,64,14,.18);
+            ">
+              Заполните код, наименование и выберите родителя (если нужно)
+            </span>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: действия #}
+    <div style="
+        min-width:280px;
+        max-width:320px;
+        border-radius:16px;
+        background:rgba(248,250,252,0.92);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        border:1px solid rgba(15,23,42,.08);
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Быстрые действия
+        </span>
+        <span style="font-size:13px;font-weight:800;color:#0f172a;">
+          Навигация
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        <a href="{{ changelist_url }}"
+           style="
+             font-size:12px;
+             padding:7px 10px;
+             border-radius:10px;
+             text-decoration:none;
+             background:rgba(14,165,233,.10);
+             color:#075985;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(14,165,233,.18);
+             font-weight:800;
+           ">
+          ← К дереву статей ДС
+        </a>
+
+        <a href="{{ print_all_url }}"
+           style="
+             font-size:12px;
+             padding:7px 10px;
+             border-radius:10px;
+             text-decoration:none;
+             background:rgba(15,23,42,.06);
+             color:#0f172a;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(15,23,42,.10);
+             font-weight:800;
+           ">
+          🖨 Печать списка
+        </a>
+
+        {% if original %}
+          <a href="{{ add_url }}?parent={{ original.pk }}"
+             style="
+               font-size:12px;
+               padding:7px 10px;
+               border-radius:10px;
+               text-decoration:none;
+               background:rgba(16,185,129,.10);
+               border:1px solid rgba(16,185,129,.22);
+               color:#065f46;
+               display:inline-flex;
+               align-items:center;
+               gap:8px;
+               font-weight:900;
+             ">
+            ➕ Добавить дочернюю
+          </a>
+        {% endif %}
+
+        <a href="{{ add_url }}"
+           style="
+             font-size:11px;
+             padding:6px 10px;
+             border-radius:10px;
+             text-decoration:none;
+             background:#f3f4f6;
+             color:#4b5563;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(75,85,99,.14);
+             font-weight:700;
+           ">
+          ＋ Новая статья
+        </a>
+
+      </div>
+
+      <div style="
+          margin-top:6px;
+          padding-top:8px;
+          border-top:1px solid rgba(148,163,184,.35);
+          color:#64748b;
+          font-size:11px;
+          line-height:1.35;
+      ">
+        <div style="font-weight:800;color:#0f172a;margin-bottom:2px;">
+          Подсказка
+        </div>
+        <div>
+          Код — 6 цифр (уникально). Родитель нужен только для вложенных статей.
+          Описание можно не заполнять.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:2px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+      Справочники › Статьи ДС
+    </span>
+    <span style="color:#9ca3af;">
+      {% if original %}ID: {{ original.pk }}{% else %}новая запись{% endif %}
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'macro/keyrate_admin.css' %}">
+
+  <style>
+    /* чуть мягче формы */
+    .module h2, .module caption, .inline-group h2 {
+      font-weight: 800 !important;
+      letter-spacing: .02em;
+      color:#0f172a;
+    }
+    .form-row {
+      border-bottom: 1px solid rgba(226,232,240,.7);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    /* кнопки сохранения — “дороже” */
+    .submit-row input.default {
+      background:#0f172a !important;
+      border-color:#0f172a !important;
+      border-radius:10px !important;
+      padding:8px 14px !important;
+      font-weight:800 !important;
+    }
+    .submit-row a.deletelink {
+      border-radius:10px !important;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

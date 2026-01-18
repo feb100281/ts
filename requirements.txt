@@ -10,7 +10,7 @@ dash==3.3.0
 dash-bootstrap-components==2.0.4
 dash-iconify==0.1.2
 dash_mantine_components==2.4.1
-Django==6.0.1
+Django>=5.2,<6.0
 django-jazzmin==3.0.1
 django-js-asset==3.1.2
 django-mptt==0.18.0

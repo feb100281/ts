@@ -1,5 +1,10 @@
 from django.contrib import admin
 from django.db.models import Count
+from django.shortcuts import render
+from django.urls import path
+from django.utils import timezone
+from datetime import datetime
+from django.conf import settings
 from django.utils.html import format_html
 from django.contrib import messages
 from django.shortcuts import redirect
@@ -288,9 +293,9 @@ class BankAdmin(admin.ModelAdmin):
 
 @admin.register(BankAccount)
 class BankAccountAdmin(admin.ModelAdmin):
-    list_display = ("corporate", "bank_logo", "bank_name", "bik", "account", "currency")
+    list_display = ("corporate", "bank_logo", "bank_name",  "account", "currency")
     list_display_links = ("bank_name",)
-    search_fields = ("corporate__name", "bank__name", "bik", "account")
+    search_fields = ("corporate__name", "bank__name",  "account")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -323,16 +328,248 @@ class BankAccountAdmin(admin.ModelAdmin):
         return obj.bank.name if obj.bank else "—"
 
 
+# ----- ПЛАН СЧЕТОВ ---- #
+
+def _now_pretty():
+    if getattr(settings, "USE_TZ", False):
+        return timezone.localtime(timezone.now())
+    return datetime.now()
+
+
 @admin.register(COA)
 class AccountAdmin(DraggableMPTTAdmin):
-    mptt_level_indent = 7
-    list_display = ("tree_actions", "indented_title", "code", "is_active")
+    mptt_level_indent = 12
+    actions = ["print_coa_registry"]
+
+    list_display = ("tree_actions", "indented_title", "active_badge", "children_badge")
     list_display_links = ("indented_title",)
     search_fields = ("code", "name")
+    list_filter = ("is_active",)
+    ordering = ("code",)
+    preserve_filters = True
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(_children_count=Count("children"))
+
+    @admin.display(description="Статус", ordering="is_active")
+    def active_badge(self, obj):
+        if obj.is_active:
+            return format_html(
+                '<span style="display:inline-flex;align-items:center;gap:6px;'
+                'padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;'
+                'background:rgba(16,185,129,.12);color:#065f46;'
+                'border:1px solid rgba(16,185,129,.22);'
+                'box-shadow:0 6px 18px rgba(15,23,42,.08);">'
+                '<span style="width:8px;height:8px;border-radius:50%;background:#10b981;'
+                'box-shadow:0 0 0 3px rgba(16,185,129,.18);"></span>'
+                'Активен</span>'
+            )
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:6px;'
+            'padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;'
+            'background:rgba(239,68,68,.10);color:#7f1d1d;'
+            'border:1px solid rgba(239,68,68,.20);'
+            'box-shadow:0 6px 18px rgba(15,23,42,.08);">'
+            '<span style="width:8px;height:8px;border-radius:50%;background:#ef4444;'
+            'box-shadow:0 0 0 3px rgba(239,68,68,.16);"></span>'
+            'Выключен</span>'
+        )
+
+    @admin.display(description="Дочерних", ordering="_children_count")
+    def children_badge(self, obj):
+        n = getattr(obj, "_children_count", 0) or 0
+        if n == 0:
+            return format_html(
+                '<span style="display:inline-flex;align-items:center;justify-content:center;'
+                'min-width:30px;padding:4px 10px;border-radius:999px;'
+                'font-size:12px;font-weight:800;'
+                'background:rgba(148,163,184,.16);color:#475569;'
+                'border:1px solid rgba(148,163,184,.28);">0</span>'
+            )
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;justify-content:center;'
+            'min-width:30px;padding:4px 10px;border-radius:999px;'
+            'font-size:12px;font-weight:800;'
+            'background:rgba(59,130,246,.10);color:#1e3a8a;'
+            'border:1px solid rgba(59,130,246,.18);">{}</span>',
+            n,
+        )
+
+    # ---------- ACTION: печать выбранных ----------
+    @admin.action(description="🖨 Печатная форма выбранных счетов")
+    def print_coa_registry(self, request, queryset):
+        qs = queryset.order_by("tree_id", "lft", "code")
+        items = list(qs)
+        for x in items:
+            x.indent_px = (getattr(x, "level", 0) or 0) * 16  # можно 14–18
+
+        context = {
+            "title": "План счетов — печатная форма (выбранные)",
+            "printed_at": _now_pretty(),
+            "items": items,
+            "mode": "selected",
+            "total": len(items),
+        }
+        return render(request, "admin/corporate/coa/coa_print.html", context)
+
+
+    # ---------- URL: печать всего плана ----------
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "print/",
+                self.admin_site.admin_view(self.print_all),
+                name=f"{COA._meta.app_label}_{COA._meta.model_name}_print_all",
+            ),
+        ]
+        return custom + urls
+
+
+    def print_all(self, request):
+        qs = COA.objects.all().order_by("tree_id", "lft", "code")
+        items = list(qs)
+        for x in items:
+            x.indent_px = (getattr(x, "level", 0) or 0) * 16
+
+        context = {
+            "title": "План счетов — печатная форма",
+            "printed_at": _now_pretty(),   
+            "items": items,
+            "mode": "all",
+            "total": len(items),
+        }
+        return render(request, "admin/corporate/coa/coa_print.html", context)
+    
+
+
+
+# ----- СТАТЬИ ДВИЖЕНИЯ ДЕНЕЖНЫХ СРЕДСТВ ---- #  
 
 @admin.register(СfItems)
 class CashFlowItemAdmin(DraggableMPTTAdmin):
-    mptt_level_indent = 7
-    list_display = ("tree_actions", "indented_title", "code", "is_active")
+    mptt_level_indent = 12
+
+    list_display = ("tree_actions", "indented_title",  "active_badge", "children_badge")
     list_display_links = ("indented_title",)
+
     search_fields = ("code", "name")
+    list_filter = ("is_active",)
+    ordering = ("code",)
+    preserve_filters = True
+    
+    change_list_template = "admin/corporate/cfitems/change_list.html"
+    change_form_template = "admin/corporate/cfitems/change_form.html"
+
+
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(_children_count=Count("children"))
+
+    @admin.display(description="Статус", ordering="is_active")
+    def active_badge(self, obj):
+        if obj.is_active:
+            return format_html(
+                '<span style="display:inline-flex;align-items:center;gap:6px;'
+                'padding:4px 10px;border-radius:999px;'
+                'font-size:12px;font-weight:700;'
+                'background:rgba(16,185,129,.12);color:#065f46;'
+                'border:1px solid rgba(16,185,129,.22);">'
+                '<span style="width:8px;height:8px;border-radius:50%;background:#10b981;'
+                'box-shadow:0 0 0 3px rgba(16,185,129,.16);"></span>'
+                'Активна</span>'
+            )
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:6px;'
+            'padding:4px 10px;border-radius:999px;'
+            'font-size:12px;font-weight:700;'
+            'background:rgba(239,68,68,.10);color:#7f1d1d;'
+            'border:1px solid rgba(239,68,68,.20);">'
+            '<span style="width:8px;height:8px;border-radius:50%;background:#ef4444;'
+            'box-shadow:0 0 0 3px rgba(239,68,68,.12);"></span>'
+            'Выключена</span>'
+        )
+
+    @admin.display(description="Дочерних", ordering="_children_count")
+    def children_badge(self, obj):
+        n = getattr(obj, "_children_count", 0) or 0
+        if n == 0:
+            return format_html(
+                '<span style="display:inline-flex;align-items:center;justify-content:center;'
+                'min-width:30px;padding:4px 10px;border-radius:999px;'
+                'font-size:12px;font-weight:800;'
+                'background:rgba(148,163,184,.16);color:#475569;'
+                'border:1px solid rgba(148,163,184,.28);">0</span>'
+            )
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;justify-content:center;'
+            'min-width:30px;padding:4px 10px;border-radius:999px;'
+            'font-size:12px;font-weight:800;'
+            'background:rgba(14,165,233,.10);color:#075985;'
+            'border:1px solid rgba(14,165,233,.18);">{}</span>',
+            n,
+        )
+
+
+    @admin.display(description="Код", ordering="code")
+    def code_badge(self, obj):
+        return format_html(
+            '<span style="font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'
+            '\'Liberation Mono\',monospace;'
+            'font-weight:800;font-size:12px;'
+            'padding:4px 10px;border-radius:10px;'
+            'background:#f1f5f9;color:#0f172a;'
+            'border:1px solid rgba(15,23,42,.10);'
+            'display:inline-flex;align-items:center;">{}</span>',
+            obj.code,
+        )
+        
+    
+    
+    # ---------- ACTION: печать выбранных ----------
+    @admin.action(description="🖨 Печатная форма выбранных статей ДС")
+    def print_cfitems_registry(self, request, queryset):
+        items = list(queryset.order_by("tree_id", "lft", "code"))
+        for x in items:
+            x.indent_px = (getattr(x, "level", 0) or 0) * 16
+
+        context = {
+            "title": "Статьи ДС — печатная форма (выбранные)",
+            "printed_at": _now_pretty(),
+
+            "items": items,
+            "mode": "selected",
+            "total": len(items),
+            "back_url": request.META.get("HTTP_REFERER") or "",
+        }
+        return render(request, "admin/corporate/cfitems/cfitems_print.html", context)
+
+    # ---------- URL: печать всего списка ----------
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "print/",
+                self.admin_site.admin_view(self.print_all),
+                name=f"{СfItems._meta.app_label}_{СfItems._meta.model_name}_print_all",
+            ),
+        ]
+        return custom + urls
+
+    def print_all(self, request):
+        items = list(СfItems.objects.all().order_by("tree_id", "lft", "code"))
+        for x in items:
+            x.indent_px = (getattr(x, "level", 0) or 0) * 16
+
+        context = {
+            "title": "Статьи ДС — печатная форма",
+            "printed_at": _now_pretty(),
+   
+            "items": items,
+            "mode": "all",
+            "total": len(items),
+            "back_url": request.META.get("HTTP_REFERER") or "",
+        }
+        return render(request, "admin/corporate/cfitems/cfitems_print.html", context)

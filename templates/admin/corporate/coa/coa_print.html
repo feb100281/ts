@@ -1,0 +1,419 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+
+  <style>
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --border:#e5e7eb;
+      --text:#0f172a;
+      --muted:#6b7280;
+
+      --accent:#1d4ed8;
+      --accent2:#06b6d4;
+
+      --ok:#16a34a;
+      --bad:#ef4444;
+
+      --tree-line:#cbd5e1;
+    }
+    *{ box-sizing:border-box; }
+
+    body{
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;          /* ⬅ ключевое */
+      line-height: 1.35;        /* компактнее */
+      margin:0;
+      padding:24px 12px;
+      background:var(--bg);
+      display:flex;
+      justify-content:center;
+      color:var(--text);
+    }
+
+    .page-wrap{
+      width:100%;
+      max-width:860px;
+      display:flex;
+      justify-content:center;
+    }
+
+    .card{
+      width:100%;
+      background:var(--card);
+      border-radius:16px;
+      border:1px solid var(--border);
+      padding:22px 24px 20px;
+      box-shadow:0 18px 45px rgba(15,23,42,.12);
+    }
+
+    /* === TOOLBAR === */
+    .toolbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .btn-back{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 12px;
+      border-radius:8px;
+      border:1px solid #cbd5e1;
+      background:#fff;
+      color:#111827;
+      cursor:pointer;
+      font-size:13px;
+      text-decoration:none;
+    }
+    .btn-back:hover{ background:#e5e7eb; }
+
+    .btn-print{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 12px;
+      border-radius:8px;
+      border:1px solid #0f172a;
+      background:#0f172a;
+      color:#fff;
+      cursor:pointer;
+      font-size:13px;
+    }
+    .btn-print:hover{ background:#020617; }
+
+    /* === HEADER === */
+    .card-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:14px;
+    }
+
+    .logo-mark{
+      width:64px;height:64px;border-radius:18px;
+      background:radial-gradient(circle at 30% 0%,
+        rgba(29,78,216,.75),
+        rgba(15,23,42,1) 70%);
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 14px 32px rgba(15,23,42,.45);
+      flex-shrink:0;
+      overflow:hidden;
+    }
+    .logo-glyph{
+      font-size:30px;
+      color:#e0f2fe;
+      line-height:1;
+    }
+
+    .brand-block{ flex:1 1 auto; }
+    .brand-label{
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+    .title{
+      margin:0;
+      font-size:17px;
+      font-weight:700;
+      color:#111827;
+    }
+    .subtitle{
+      margin-top:6px;
+      color:var(--muted);
+      font-size:13px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:4px 10px;
+      border-radius:6px;
+      border:1px solid #e5e7eb;
+      background:#f9fafb;
+      font-size:12px;
+      font-weight:700;
+      color:#334155;
+      white-space:nowrap;
+    }
+
+    /* === TREE TABLE === */
+    .tree{
+      margin-top:12px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      overflow:hidden;
+    }
+    .tree-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:10px 12px;
+      background:#f8fafc;
+      border-bottom:1px solid var(--border);
+    }
+    .tree-head .h{
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      color:#64748b;
+    }
+    .tree-head .meta{
+      font-size:12px;
+      color:#64748b;
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .row{
+      display:grid;
+      grid-template-columns: 120px 1fr 140px;
+      gap:12px;
+      padding:6px 10px;
+      border-bottom:1px solid #eef2f7;
+      align-items:flex-start;
+    }
+    .row:last-child{ border-bottom:none; }
+
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-weight:700;
+      font-size:12px;
+      color:#0f172a;
+      white-space:nowrap;
+      letter-spacing:.02em;
+    }
+
+    .name{
+      font-weight:750;
+      color:#111827;
+      font-size:13px;
+      line-height:1.25;
+    }
+    .desc{
+      margin-top:3px;
+      font-size:12px;
+      color:#6b7280;
+      line-height:1.35;
+    }
+
+    /* дерево: отступ + линии */
+    .tree-cell{
+      position:relative;
+      padding-left:0;
+    }
+    .indent{
+      display:inline-block;
+      width: var(--w, 0px);
+    }
+    .branch{
+      display:inline-flex;
+      align-items:flex-start;
+      gap:10px;
+    }
+    .lines{
+      position:relative;
+      width:18px;
+      height:18px;
+      margin-top:1px;
+      flex-shrink:0;
+    }
+    .lines:before{
+      content:"";
+      position:absolute;
+      left:8px; top:-8px; bottom:-8px;
+      width:1px;
+      background:linear-gradient(to bottom, transparent, var(--tree-line), transparent);
+      opacity:.9;
+    }
+    .lines:after{
+      content:"";
+      position:absolute;
+      left:8px; top:8px;
+      width:10px; height:1px;
+      background:var(--tree-line);
+      opacity:.9;
+    }
+    .node-dot{
+      width:10px;height:10px;border-radius:4px;
+      margin-top:4px;
+      background:linear-gradient(135deg, rgba(29,78,216,.25), rgba(6,182,212,.18));
+      box-shadow:0 0 0 1px rgba(99,102,241,.20);
+      flex-shrink:0;
+    }
+
+    /* статус */
+    .status{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:3px 8px;
+      border-radius:999px;
+      border:1px solid rgba(15,23,42,.10);
+      font-size:11px;
+      font-weight:600;
+      white-space:nowrap;
+      width:max-content;
+    }
+    .status .dot{
+      width:7px;height:7px;border-radius:50%;
+    }
+    .status.on{
+      background:rgba(22,163,74,.08);
+      color:#166534;
+      border-color:rgba(22,163,74,.22);
+    }
+    .status.on .dot{
+      background:var(--ok);
+      box-shadow:0 0 0 3px rgba(22,163,74,.14);
+    }
+    .status.off{
+      background:rgba(239,68,68,.07);
+      color:#7f1d1d;
+      border-color:rgba(239,68,68,.20);
+    }
+    .status.off .dot{
+      background:var(--bad);
+      box-shadow:0 0 0 3px rgba(239,68,68,.12);
+    }
+
+    .footer-note{
+      margin-top:14px;
+      font-size:11px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
+    @media (max-width: 720px){
+      .card{ padding:18px 14px 14px; border-radius:14px; }
+      .row{ grid-template-columns: 110px 1fr; }
+      .row .status{ grid-column: 1 / -1; }
+    }
+
+    @media print{
+      @page { margin: 12mm; }
+      body{
+        background:#fff !important;
+        padding:0 !important;
+        margin:0 !important;
+        display:block;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .card{
+        box-shadow:none !important;
+        border-radius:0 !important;
+        border:none !important;
+      }
+      .toolbar{ display:none !important; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="page-wrap">
+  <div class="card">
+
+    <!-- === TOOLBAR === -->
+    <div class="toolbar">
+      {# если хочешь: вести назад в список плана #}
+      <a href="{% url 'admin:corporate_coa_changelist' %}" class="btn-back">
+        ← К плану счетов
+      </a>
+
+      <button class="btn-print" onclick="window.print()">
+        <span>🖨</span>
+        <span>Распечатать</span>
+      </button>
+    </div>
+
+    <!-- === HEADER === -->
+    <div class="card-header">
+      <div class="logo-mark">
+        <span class="logo-glyph">🧾</span>
+      </div>
+
+      <div class="brand-block">
+        <div class="brand-label">Печатная форма</div>
+        <h1 class="title">{{ title }}</h1>
+        <div class="subtitle">
+          <span class="pill">Записей: {{ total }}</span>
+          {% if mode == "selected" %}
+            <span class="pill">Режим: выбранные</span>
+          {% else %}
+            <span class="pill">Режим: весь план</span>
+          {% endif %}
+          <span class="pill">Сформировано: {{ printed_at|date:"d.m.Y H:i" }}</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- === TREE === -->
+    <div class="tree">
+      <div class="tree-head">
+        <div class="h">Структура</div>
+        <div class="meta">
+          <span style="display:inline-flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:4px;background:linear-gradient(135deg,rgba(29,78,216,.25),rgba(6,182,212,.18));box-shadow:0 0 0 1px rgba(99,102,241,.20);"></span>
+            уровни дерева
+          </span>
+        </div>
+      </div>
+
+      {% for a in items %}
+        <div class="row">
+          <div class="code">{{ a.code }}</div>
+
+          <div class="tree-cell">
+            <span class="indent" style="--w: {{ a.indent_px }}px;"></span>
+            <span class="branch">
+              <span class="lines" aria-hidden="true"></span>
+              <span class="node-dot" aria-hidden="true"></span>
+              <span>
+                <span class="name">{{ a.name }}</span>
+                {% if a.desctiption %}
+                  <div class="desc">{{ a.desctiption }}</div>
+                {% endif %}
+              </span>
+            </span>
+          </div>
+
+          <div>
+            {% if a.is_active %}
+              <span class="status on"><span class="dot"></span>Активен</span>
+            {% else %}
+              <span class="status off"><span class="dot"></span>Выключен</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="footer-note">
+      Документ сформирован автоматически из административной панели.
+      При необходимости распечатайте или сохраните в PDF через системное меню печати.
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+

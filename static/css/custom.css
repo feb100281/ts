@@ -388,17 +388,21 @@
 .fa-handshake-simple,
 .fa-handshake,
 .fa-icons,
+.fa-icons,
 .fa-people-group {
     color: var(--color-counterparties) !important;
 }
 
 /* 4. Собственники (отдельный тёплый цвет) */
 .fa-building-user,
+
 .fa-building-circle-check {
     color: var(--color-owners) !important;
 }
 
 /* 5. Макро / финансы / банки / налоги */
+.fa-sitemap, 
+.fa-money-bill-transfer,
 .fa-landmark,
 .fa-credit-card,
 .fa-chart-line,
@@ -982,6 +986,9 @@ table th {
 .jm-dot-purple { background: rgba(139, 92, 246, 0.95); }
 .jm-dot-amber  { background: rgba(245, 158, 11, 0.95); }
 .jm-dot-blue   { background: rgba(59, 130, 246, 0.95); }
+
+
+
 
 
 

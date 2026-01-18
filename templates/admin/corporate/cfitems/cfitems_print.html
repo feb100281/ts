@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{{ title }}</title>
+
+  <style>
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --border:#e5e7eb;
+      --muted:#6b7280;
+      --text:#0f172a;
+
+      /* cash-flow акцент */
+      --teal:#0f766e;
+      --teal2:#0ea5e9;
+    }
+    *{ box-sizing:border-box; }
+
+    body{
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+      font-size:13px;
+      line-height:1.35;
+      background:var(--bg);
+      margin:0;
+      padding:24px 12px;
+      color:var(--text);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      display:flex;
+      justify-content:center;
+    }
+
+    .page-wrap{ width:100%; max-width:980px; }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow:0 18px 45px rgba(15,23,42,.12);
+      padding:18px 18px 14px;
+    }
+
+    /* toolbar */
+    .toolbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 12px;
+      border-radius:10px;
+      border:1px solid rgba(15,23,42,.18);
+      background:#fff;
+      color:#111827;
+      text-decoration:none;
+      font-size:13px;
+      cursor:pointer;
+    }
+    .btn:hover{ background:#f1f5f9; }
+
+    .btn-print{
+      border-color:#0f172a;
+      background:#0f172a;
+      color:#fff;
+      font-weight:700;
+    }
+    .btn-print:hover{ background:#020617; }
+
+    /* header */
+    .header{
+      display:flex;
+      justify-content:space-between;
+      gap:14px;
+      padding:14px 14px 10px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      background:linear-gradient(135deg, rgba(15,118,110,.08), rgba(14,165,233,.08));
+      margin-bottom:12px;
+    }
+    .h-left{ display:flex; gap:12px; align-items:flex-start; }
+    .avatar{
+      width:44px;height:44px;border-radius:14px;
+      background:radial-gradient(circle at 30% 0%, rgba(14,165,233,.85), rgba(15,118,110,1) 70%);
+      color:#eaffff;
+      display:flex;align-items:center;justify-content:center;
+      font-size:20px;font-weight:900;
+      box-shadow:0 14px 32px rgba(15,23,42,.25);
+      flex-shrink:0;
+    }
+    .kicker{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+      margin-bottom:3px;
+    }
+    .title{
+      font-size:17px;
+      font-weight:800;
+      margin:0;
+      line-height:1.15;
+    }
+    .meta{
+      margin-top:6px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:3px 10px;
+      border-radius:999px;
+      border:1px solid rgba(15,23,42,.10);
+      background:#fff;
+      font-weight:700;
+      color:#334155;
+    }
+    .brand{
+      text-align:right;
+      color:#64748b;
+      font-size:12px;
+      min-width:220px;
+    }
+    .brand b{ color:#0f172a; }
+
+    /* table */
+    .table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      border:1px solid var(--border);
+      border-radius:14px;
+      overflow:hidden;
+      background:#fff;
+    }
+    thead th{
+      text-align:left;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.10em;
+      color:#64748b;
+      background:#f1f5f9;
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+    }
+    tbody td{
+      padding:7px 12px;
+      border-bottom:1px solid #eef2f7;
+      vertical-align:top;
+      font-size:13px;
+    }
+    tbody tr:last-child td{ border-bottom:none; }
+
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-weight:800;
+      font-size:12.5px;
+      color:#0f172a;
+      white-space:nowrap;
+    }
+
+    .name{
+      font-weight:700;
+      color:#0f172a;
+    }
+    .desc{
+      color:#64748b;
+      font-size:12px;
+      margin-top:2px;
+      max-width:680px;
+    }
+
+    .tree{
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+    }
+    .indent{
+      flex:0 0 auto;
+      width:0;
+      height:1px;
+    }
+    .branch{
+      flex:0 0 auto;
+      width:10px;
+      height:10px;
+      border-radius:4px;
+      margin-top:4px;
+      background:rgba(15,118,110,.18);
+      border:1px solid rgba(15,118,110,.25);
+    }
+
+    .status{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:3px 8px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:700;
+      border:1px solid rgba(15,23,42,.10);
+      white-space:nowrap;
+    }
+    .status .dot{ width:7px; height:7px; border-radius:50%; }
+    .on{ background:rgba(16,185,129,.10); color:#065f46; border-color:rgba(16,185,129,.22); }
+    .on .dot{ background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.14); }
+    .off{ background:rgba(239,68,68,.08); color:#7f1d1d; border-color:rgba(239,68,68,.18); }
+    .off .dot{ background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.12); }
+
+    .footer{
+      margin-top:10px;
+      display:flex;
+      justify-content:space-between;
+      color:#94a3b8;
+      font-size:11px;
+    }
+
+    @media print{
+      @page{ margin: 12mm; }
+      body{
+        background:#fff !important;
+        padding:0 !important;
+        display:block;
+      }
+      .card{
+        box-shadow:none !important;
+        border:none !important;
+        border-radius:0 !important;
+        padding:0 !important;
+      }
+      .toolbar{ display:none !important; }
+      thead{ display: table-header-group; }
+      tr{ break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="card">
+
+      <!-- toolbar -->
+      <div class="toolbar">
+        {% if back_url %}
+          <a class="btn" href="{{ back_url }}">← Назад</a>
+        {% else %}
+          <a class="btn" href="{% url 'admin:corporate_сfitems_changelist' %}">← К списку</a>
+        {% endif %}
+
+        <button class="btn btn-print" onclick="window.print()">
+          🖨 Распечатать
+        </button>
+      </div>
+
+      <!-- header -->
+      <div class="header">
+        <div class="h-left">
+          <div class="avatar">💸</div>
+          <div>
+            <div class="kicker">Справочник</div>
+            <h1 class="title">{{ title }}</h1>
+            <div class="meta">
+              <span class="pill">Записей: {{ total }}</span>
+              {% if mode == "selected" %}
+                <span class="pill">Режим: выбранные</span>
+              {% else %}
+                <span class="pill">Режим: весь список</span>
+              {% endif %}
+              <span class="pill">Печать: {{ printed_at|date:"d.m.Y H:i" }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="brand">
+          <div>Движение денежных средств</div>
+        </div>
+      </div>
+
+      <!-- table -->
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:120px;">Код</th>
+            <th>Наименование</th>
+            <th style="width:150px;">Статус</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in items %}
+            <tr>
+              <td class="code">{{ a.code }}</td>
+              <td>
+                <div class="tree">
+                  <span class="indent" style="width: {{ a.indent_px|default:0 }}px;"></span>
+                  <span class="branch" title="Уровень: {{ a.level }}"></span>
+                  <div>
+                    <div class="name">{{ a.name }}</div>
+                    {% if a.desctiption %}
+                      <div class="desc">{{ a.desctiption }}</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td>
+                {% if a.is_active %}
+                  <span class="status on"><span class="dot"></span>Активна</span>
+                {% else %}
+                  <span class="status off"><span class="dot"></span>Выключена</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="footer">
+        <span>Сформировано из административной панели</span>
+        <span>{{ total }} строк</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
