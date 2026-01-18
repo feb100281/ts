@@ -1,0 +1,912 @@
+{% load static humanize %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Карточка контрагента — {{ cp.name }}</title>
+  <link rel="stylesheet" href="{% static 'fonts/glyphs.css' %}">
+  <style>
+    :root {
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --border:#e5e7eb;
+      --accent:#0f172a;
+      --accent-soft:#111827;
+      --muted:#6b7280;
+    }
+    * { box-sizing:border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px 12px;
+      background:var(--bg);
+      display:flex;
+      justify-content:center;
+    }
+
+    .page-wrap {
+      width:100%;
+      max-width:720px;
+      display:flex;
+      justify-content:center;
+    }
+
+    .card {
+      width:100%;
+      background:var(--card);
+      border-radius:16px;
+      border:1px solid var(--border);
+      padding:22px 24px 20px;
+      box-shadow:0 18px 45px rgba(15,23,42,.12);
+    }
+
+    /* === TOOLBAR === */
+    .toolbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      margin-bottom:14px;
+    }
+
+    .btn-back {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:6px;
+      border:1px solid #cbd5e1;
+      background:#ffffff;
+      color:#111827;
+      cursor:pointer;
+      font-size:13px;
+      text-decoration:none;
+    }
+    .btn-back:hover { background:#e5e7eb; }
+
+    .btn-print {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:6px;
+      border:1px solid #111827;
+      background:#111827;
+      color:#ffffff;
+      cursor:pointer;
+      font-size:13px;
+    }
+    .btn-print span.icon { font-size:14px; }
+    .btn-print:hover { background:#020617; }
+
+    /* === HEADER === */
+    .card-header {
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:14px;
+    }
+
+    .logo-mark {
+      width:64px;
+      height:64px;
+      border-radius:18px;
+      background:radial-gradient(circle at 30% 0%, rgba(20,184,166,.7), rgba(15,23,42,1) 70%);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 14px 32px rgba(15,23,42,.45);
+      flex-shrink:0;
+      overflow:hidden;
+    }
+    .logo-glyph {
+      font-family:NotoManu;
+      font-size:32px;
+      color:#e5fdf9;
+      line-height:1;
+    }
+    .logo-empty {
+      font-size:11px;
+      color:#cbd5e1;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+
+    .brand-block { flex:1 1 auto; }
+    .brand-label {
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+    .title {
+      margin:0;
+      font-size:20px;
+      font-weight:700;
+      color:var(--accent-soft);
+    }
+    .subtitle {
+      margin-top:4px;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .badge-group {
+      padding:4px 10px;
+      border-radius:6px;
+      border:1px solid #d1d5db;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.10em;
+      color:#374151;
+      white-space:nowrap;
+      margin-left:auto;
+    }
+
+    /* === SECTIONS === */
+    .section { margin-top:16px; }
+    .section-title {
+      font-size:11px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    .subsection-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:11px;
+      color:#6b7280;
+      margin:6px 0 2px;
+    }
+    .subsection-title {
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:600;
+      color:#4b5563;
+    }
+    .subsection-meta {
+      font-size:11px;
+      color:#9ca3af;
+    }
+
+    .info-grid {
+      border-radius:10px;
+      border:1px solid var(--border);
+      padding:10px 12px;
+      font-size:13px;
+    }
+    .info-row {
+      display:flex;
+      gap:8px;
+      padding:3px 0;
+    }
+    .info-label {
+      width:160px;
+      flex-shrink:0;
+      font-weight:600;
+      color:var(--accent);
+    }
+    .info-value { color:var(--accent-soft); }
+
+    .footer-note {
+      margin-top:14px;
+      font-size:11px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
+    a.site-link {
+      color:#2563eb;
+      text-decoration:none;
+    }
+    a.site-link:hover { text-decoration:underline; }
+
+    /* === Финансовые таблицы === */
+    .info-grid.financial {
+      padding:8px 10px 10px;
+    }
+
+    .fin-columns {
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .fin-block-title {
+      font-size:11px;
+      font-weight:600;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      color:#4b5563;
+      margin-bottom:6px;
+    }
+
+    .fin-table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .fin-table thead {
+      background:#f9fafb;
+    }
+
+    .fin-table th,
+    .fin-table td {
+      padding:6px 10px;
+      border-bottom:1px solid #e5e7eb;
+    }
+
+    .fin-table thead th {
+      font-weight:600;
+      color:var(--accent-soft);
+      white-space:normal;
+    }
+
+    .fin-table th:first-child,
+    .fin-table td:first-child {
+      text-align:left;
+    }
+
+    .fin-table th:not(:first-child),
+    .fin-table td.fin-num {
+      text-align:right;
+    }
+
+    .fin-table tr:last-child td {
+      border-bottom:none;
+    }
+
+    .fin-table .text-negative { color:#b91c1c; }
+    .fin-table .text-positive { color:#15803d; }
+
+    /* === KPI по финансам (мини-отчёт) === */
+    .metrics-grid {
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-bottom:10px;
+      margin-top:6px;
+    }
+    .metric-card {
+      flex:1 1 0;
+      min-width:150px;
+      border-radius:10px;
+      border:1px solid #e5e7eb;
+      background:#f9fafb;
+      padding:8px 10px;
+    }
+    .metric-label {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:#6b7280;
+      margin-bottom:3px;
+    }
+    .metric-value {
+      font-size:16px;
+      font-weight:600;
+      color:#111827;
+    }
+    .metric-sub {
+      margin-top:2px;
+      font-size:11px;
+      color:#6b7280;
+    }
+    .metric-chip {
+      display:inline-block;
+      margin-top:4px;
+      padding:2px 8px;
+      border-radius:6px;
+      font-size:11px;
+      font-variant-numeric:tabular-nums;
+    }
+    .delta-positive {
+      background:rgba(22,163,74,.08);
+      color:#15803d;
+    }
+    .delta-negative {
+      background:rgba(220,38,38,.08);
+      color:#b91c1c;
+    }
+
+    /* === Долговая нагрузка: чип-светофор === */
+    .debt-chip {
+      display:inline-block;
+      margin-top:4px;
+      padding:2px 8px;
+      border-radius:6px;
+      font-size:11px;
+      font-variant-numeric:tabular-nums;
+      border:1px solid transparent;
+    }
+    .debt-low {
+      background:rgba(22,163,74,.06);
+      color:#166534;
+      border-color:rgba(22,163,74,.25);
+    }
+    .debt-moderate {
+      background:rgba(234,179,8,.06);
+      color:#92400e;
+      border-color:rgba(234,179,8,.35);
+    }
+    .debt-high {
+      background:rgba(249,115,22,.06);
+      color:#9a3412;
+      border-color:rgba(249,115,22,.35);
+    }
+    .debt-critical {
+      background:rgba(239,68,68,.06);
+      color:#b91c1c;
+      border-color:rgba(239,68,68,.35);
+    }
+
+    /* === Мини-барчики по выручке === */
+    .mini-bars {
+      margin-top:4px;
+      margin-bottom:10px;
+    }
+    .mini-bar-row {
+      display:flex;
+      align-items:center;
+      gap:6px;
+      margin-bottom:4px;
+      font-size:11px;
+    }
+    .mini-bar-label {
+      width:40px;
+      color:#6b7280;
+      flex-shrink:0;
+    }
+    .mini-bar-track {
+      flex:1 1 auto;
+      height:6px;
+      border-radius:6px;
+      background:#e5e7eb;
+      overflow:hidden;
+    }
+    .mini-bar-fill {
+      height:100%;
+      background:linear-gradient(90deg,#0ea5e9,#22c55e);
+    }
+    .mini-bar-value {
+      width:110px;
+      text-align:right;
+      color:#374151;
+      font-variant-numeric:tabular-nums;
+      flex-shrink:0;
+    }
+
+    /* === Спарклайн долговой нагрузки === */
+    .mini-debt-bars {
+      margin-top:4px;
+      margin-bottom:10px;
+    }
+    .mini-debt-row {
+      display:flex;
+      align-items:center;
+      gap:6px;
+      margin-bottom:3px;
+      font-size:11px;
+    }
+    .mini-debt-label {
+      width:40px;
+      color:#6b7280;
+      flex-shrink:0;
+    }
+    .mini-debt-track {
+      flex:1 1 auto;
+      height:4px;
+      border-radius:6px;
+      background:#e5e7eb;
+      overflow:hidden;
+    }
+    .mini-debt-fill {
+      height:100%;
+      background:linear-gradient(90deg,#22c55e,#f97316,#b91c1c);
+    }
+    .mini-debt-value {
+      width:60px;
+      text-align:right;
+      color:#374151;
+      font-variant-numeric:tabular-nums;
+      flex-shrink:0;
+    }
+
+    @media (max-width: 600px) {
+      body { padding:16px 8px; }
+      .card { padding:18px 14px 14px; border-radius:14px; }
+      .info-label { width:130px; }
+    }
+
+    @media print {
+      @page { margin: 12mm; }
+      body {
+        background:#ffffff !important;
+        padding:0 !important;
+        margin:0 !important;
+        display:block;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .card {
+        box-shadow:none !important;
+        border-radius:0 !important;
+        border:none !important;
+      }
+      .toolbar { display:none !important; }
+      .fin-table .text-positive { color:#166534; }
+
+      .metric-card,
+      .mini-bar-track,
+      .mini-bar-fill,
+      .mini-debt-track,
+      .mini-debt-fill {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+  <div class="card">
+
+    <!-- === TOOLBAR === -->
+    <div class="toolbar">
+      {% if request.GET.src == "change" %}
+        <a href="{% url 'admin:counterparties_counterparty_change' cp.pk %}" class="btn-back">
+          ← Назад к контрагенту
+        </a>
+      {% else %}
+        <a href="{% url 'admin:counterparties_counterparty_changelist' %}" class="btn-back">
+          ← К списку контрагентов
+        </a>
+      {% endif %}
+
+      <button class="btn-print" onclick="window.print()">
+        <span class="icon">🖨</span>
+        <span>Распечатать карточку</span>
+      </button>
+    </div>
+
+    <!-- === HEADER === -->
+    <div class="card-header">
+      <div class="logo-mark">
+        {% if cp.logo %}
+          <span class="logo-glyph">{{ cp.logo }}</span>
+        {% else %}
+          <span class="logo-empty">NO&nbsp;LOGO</span>
+        {% endif %}
+      </div>
+
+      <div class="brand-block">
+        <div class="brand-label">Карточка контрагента</div>
+        <h1 class="title">{{ cp.name }}</h1>
+        <div class="subtitle">
+          ИНН {{ cp.tax_id }}{% if cp.ogrn %} • ОГРН {{ cp.ogrn }}{% endif %}
+        </div>
+      </div>
+
+      {% if cp.gr %}
+        <div class="badge-group">
+          {{ cp.gr.name }}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- === РЕКВИЗИТЫ === -->
+    <div class="section">
+      <div class="section-title">Реквизиты</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Полное наименование</div>
+          <div class="info-value">
+            {% if cp.fullname %}{{ cp.fullname }}{% else %}—{% endif %}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">ИНН / КПП</div>
+          <div class="info-value">
+            {{ cp.tax_id }}{% if cp.kpp %} / {{ cp.kpp }}{% endif %}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Страна / Регион</div>
+          <div class="info-value">
+            {% if cp.country %}{{ cp.country }}{% else %}RU{% endif %}
+            {% if cp.region %} • {{ cp.region }}{% endif %}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Адрес</div>
+          <div class="info-value">
+            {% if cp.adress %}{{ cp.adress }}{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- === КОНТАКТЫ === -->
+    <div class="section">
+      <div class="section-title">Контакты</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Руководитель</div>
+          <div class="info-value">
+            {% if cp.ceo %}
+              {{ cp.ceo }}
+              {% if cp.ceo_post %} — {{ cp.ceo_post }}{% endif %}
+            {% elif cp.ceo_hidden_by_fns %}
+              ФИО скрыто ФНС
+            {% else %}
+              —
+            {% endif %}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Сайт</div>
+          <div class="info-value">
+            {% if website %}
+              <a href="{{ website_full }}" class="site-link">{{ website }}</a>
+            {% else %}
+              —
+            {% endif %}
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Email</div>
+          <div class="info-value">
+            {% if cp.email %}{{ cp.email }}{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if cp.okved_code or cp.okved_name %}
+      <div class="section">
+        <div class="section-title">ОКВЭД</div>
+        <div class="info-grid">
+          <div class="info-row">
+            <div class="info-label">Код</div>
+            <div class="info-value">
+              {% if cp.okved_code %}{{ cp.okved_code }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="info-row">
+            <div class="info-label">Наименование</div>
+            <div class="info-value">
+              {% if cp.okved_name %}{{ cp.okved_name }}{% else %}—{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- === ФИНАНСОВЫЕ ПОКАЗАТЕЛИ === -->
+    {% if financial_years %}
+      <div class="section">
+        <div class="section-title">
+          Финансовые показатели
+          {% if unit_label %}
+            <span style="text-transform:none; letter-spacing:0; font-weight:400; color:#9ca3af;">
+              (в {{ unit_label }} ₽)
+            </span>
+          {% endif %}
+        </div>
+
+        {# KPI-блок #}
+        {% if fin_summary %}
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-label">
+                Выручка, {{ fin_summary.year|stringformat:"i" }} г.
+              </div>
+              <div class="metric-value">
+                {% if fin_summary.revenue is not None %}
+                  {{ fin_summary.revenue|floatformat:1 }}
+                  {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                {% else %}—{% endif %}
+              </div>
+              {% if fin_summary.change_abs %}
+                <div class="metric-chip {% if fin_summary.change_abs > 0 %}delta-positive{% else %}delta-negative{% endif %}">
+                  {% if fin_summary.change_abs > 0 %}+{% endif %}
+                  {{ fin_summary.change_abs|floatformat:1 }}
+                  {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                  {% if fin_summary.change_pct %}
+                    ({{ fin_summary.change_pct|floatformat:1 }}&nbsp;%)
+                  {% endif %}
+                </div>
+              {% else %}
+                <div class="metric-sub">Динамика к прошлому году не рассчитана</div>
+              {% endif %}
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Рентабельность продаж</div>
+              <div class="metric-value">
+                {% if fin_summary.margin is not None %}
+                  {{ fin_summary.margin|floatformat:1 }}&nbsp;%
+                {% else %}—{% endif %}
+              </div>
+              <div class="metric-sub">
+                Чистая прибыль / выручка
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Долговая нагрузка</div>
+              <div class="metric-value">
+                {% if fin_summary.debt_to_equity is not None %}
+                  {{ fin_summary.debt_to_equity|floatformat:2 }}&nbsp;×
+                {% else %}—{% endif %}
+              </div>
+              <div class="metric-sub">
+                Долг / собственный капитал
+              </div>
+              {% if fin_summary.debt_level %}
+                <div class="debt-chip debt-{{ fin_summary.debt_level }}">
+                  {{ fin_summary.debt_level_label }}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
+
+        {# Мини-бары по выручке #}
+        <div class="subsection-header">
+          <div class="subsection-title">Динамика выручки</div>
+          <div class="subsection-meta">
+            {% if unit_label %}значения в {{ unit_label }} ₽{% else %}значения в ₽{% endif %}
+          </div>
+        </div>
+        <div class="mini-bars">
+          {% for fy in financial_years %}
+            <div class="mini-bar-row">
+              <div class="mini-bar-label">{{ fy.year|stringformat:"i" }}</div>
+              <div class="mini-bar-track">
+                <div class="mini-bar-fill" style="width:{{ fy.rev_rel }}%;"></div>
+              </div>
+              <div class="mini-bar-value">
+                {% if fy.revenue_scaled is not None %}
+                  {{ fy.revenue_scaled|floatformat:1 }}
+                  {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                {% else %}—{% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+
+        {# Спарклайн по долговой нагрузке (Debt / Equity) #}
+        <div class="subsection-header">
+          <div class="subsection-title">Долговая нагрузка по годам</div>
+          <div class="subsection-meta">коэффициент Долг / капитал, ×</div>
+        </div>
+        <div class="mini-debt-bars">
+          {% for fy in financial_years %}
+            {% if fy.debt_to_equity is not None %}
+              <div class="mini-debt-row">
+                <div class="mini-debt-label">{{ fy.year|stringformat:"i" }}</div>
+                <div class="mini-debt-track">
+                  <div class="mini-debt-fill" style="width:{{ fy.de_rel }}%;"></div>
+                </div>
+                <div class="mini-debt-value">
+                  {{ fy.debt_to_equity|floatformat:2 }}×
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <div class="info-grid financial">
+          <div class="fin-columns">
+
+            <!-- Блок 1: прибыль и ДДС -->
+            <div>
+              <div class="fin-block-title">Прибыль и денежный поток</div>
+              <table class="fin-table">
+                <thead>
+                  <tr>
+                    <th>Год</th>
+                    <th>Выручка</th>
+                    <th>Чистая прибыль</th>
+                    <th>Опер. ДДС</th>
+                    <th>Рентаб-сть</th>
+                  </tr>
+                </thead>
+                <tbody>
+                {% for fy in financial_years %}
+                  <tr>
+                    <td>{{ fy.year|stringformat:"i" }}</td>
+
+                    <td class="fin-num">
+                      {% if fy.revenue_scaled is not None %}
+                        {{ fy.revenue_scaled|floatformat:1 }}
+                        {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                      {% else %}—{% endif %}
+                    </td>
+
+                    <td class="fin-num {% if fy.net_profit_scaled and fy.net_profit_scaled < 0 %}text-negative{% endif %}">
+                      {% if fy.net_profit_scaled is not None %}
+                        {{ fy.net_profit_scaled|floatformat:1 }}
+                        {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                      {% else %}—{% endif %}
+                    </td>
+
+                    <td class="fin-num {% if fy.cf_operating_scaled and fy.cf_operating_scaled < 0 %}text-negative{% endif %}">
+                      {% if fy.cf_operating_scaled is not None %}
+                        {{ fy.cf_operating_scaled|floatformat:1 }}
+                        {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                      {% else %}—{% endif %}
+                    </td>
+
+                    <td class="fin-num
+                        {% if fy.margin is not None %}
+                          {% if fy.margin < 0 %}text-negative{% else %}text-positive{% endif %}
+                        {% endif %}">
+                      {% if fy.margin is not None %}
+                        {{ fy.margin|floatformat:1 }}&nbsp;%
+                      {% else %}—{% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Блок 2: капитал и долг -->
+            <div>
+              <div class="fin-block-title">Капитал и долговая нагрузка</div>
+              <table class="fin-table">
+                <thead>
+                  <tr>
+                    <th>Год</th>
+                    <th>Собств. капитал</th>
+                    <th>Долгоср. обяз-ва</th>
+                    <th>Краткоср. обяз-ва</th>
+                    <th>Долг / капитал</th>
+                  </tr>
+                </thead>
+                <tbody>
+                {% for fy in financial_years %}
+                  <tr>
+                    <td>{{ fy.year|stringformat:"i" }}</td>
+
+                    <td class="fin-num">
+                      {% if fy.equity_scaled is not None %}
+                        {{ fy.equity_scaled|floatformat:1 }}
+                        {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                      {% else %}—{% endif %}
+                    </td>
+
+                    <td class="fin-num">
+                      {% if fy.liabilities_long_scaled is not None %}
+                        {{ fy.liabilities_long_scaled|floatformat:1 }}
+                        {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                      {% else %}—{% endif %}
+                    </td>
+
+                    <td class="fin-num">
+                      {% if fy.liabilities_short_scaled is not None %}
+                        {{ fy.liabilities_short_scaled|floatformat:1 }}
+                        {% if unit_label %}{{ unit_label }}&nbsp;₽{% else %}₽{% endif %}
+                      {% else %}—{% endif %}
+                    </td>
+
+                    <td class="fin-num">
+                      {% if fy.debt_to_equity is not None %}
+                        {{ fy.debt_to_equity|floatformat:2 }}&nbsp;×
+                      {% else %}—{% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- === РИСКИ / KYC === -->
+    <div class="section">
+      <div class="section-title">Факторы риска / KYC</div>
+      <div class="info-grid">
+
+        <div class="info-row">
+          <div class="info-label">Сводный уровень риска</div>
+          <div class="info-value">
+            {% if cp.risk_sanctions or cp.risk_sanctioned_founder %}
+              <span style="color:#b91c1c; font-weight:600;">Высокий риск</span>
+            {% elif cp.risk_illegal_fin or cp.risk_mass_directors or cp.risk_mass_founders or cp.risk_disq_persons %}
+              <span style="color:#f97316; font-weight:600;">Средний риск</span>
+            {% else %}
+              <span style="color:#16a34a; font-weight:600;">Низкий риск</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="info-row">
+          <div class="info-label">Дисквалифицированные лица</div>
+          <div class="info-value">
+            {% if cp.risk_disq_persons %}
+              Выявлены дисквалифицированные лица, связанные с контрагентом.
+            {% else %}
+              Не отмечены по данным источника.
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="info-row">
+          <div class="info-label">Массовые директора / учредители</div>
+          <div class="info-value">
+            {% if cp.risk_mass_directors or cp.risk_mass_founders %}
+              {% if cp.risk_mass_directors %}Массовые руководители{% endif %}
+              {% if cp.risk_mass_directors and cp.risk_mass_founders %} / {% endif %}
+              {% if cp.risk_mass_founders %}массовые учредители{% endif %}.
+            {% else %}
+              Признаков массовых директоров или учредителей не выявлено.
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="info-row">
+          <div class="info-label">Нелегальные схемы / финансы</div>
+          <div class="info-value">
+            {% if cp.risk_illegal_fin %}
+              Отмечены признаки участия в нелегальных финансовых операциях.
+              {% if cp.risk_illegal_fin_status %}
+                Статус: {{ cp.risk_illegal_fin_status }}.
+              {% endif %}
+            {% else %}
+              Признаков нелегальных финансовых схем не выявлено.
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="info-row">
+          <div class="info-label">Санкции</div>
+          <div class="info-value">
+            {% if cp.risk_sanctions or cp.risk_sanctioned_founder %}
+              Есть санкционные риски
+              {% if cp.risk_sanctioned_founder %} (санкционный учредитель){% endif %}.
+              {% if cp.risk_sanctions_countries %}
+                Страны / юрисдикции: {{ cp.risk_sanctions_countries }}.
+              {% endif %}
+            {% else %}
+              Санкционные ограничения по данным источника не выявлены.
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="footer-note">
+      Карточка сформирована автоматически на основании данных в системе.
+      {% if cp.checko_updated_at %}
+        Данные ФНС актуальны по состоянию на {{ cp.checko_updated_at|date:"d.m.Y" }}.
+      {% endif %}
+      При изменении реквизитов контрагента рекомендуется обновить информацию и
+      сформировать новую версию.
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+
+
+
+
+
+

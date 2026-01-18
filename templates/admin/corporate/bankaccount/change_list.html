@@ -1,0 +1,209 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные крошки и object-tools #}
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url cl.opts|admin_urlname:'add' as add_url %}
+
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: аватар + текст #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      <!-- Аватар -->
+      <div style="
+          width:40px;
+          height:40px;
+          border-radius:6px;
+          background:#0f766e;
+          color:#ccfbf1;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:20px;
+          font-weight:600;
+          box-shadow:0 0 0 1px rgba(15,23,42,.15);
+      ">
+        💳
+      </div>
+
+      <!-- Текстовый блок -->
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.06em;
+            color:#6b7280;
+        ">
+          Справочник
+        </span>
+
+        <span style="font-size:19px; font-weight:600; color:#111827;">
+          Банковские счета
+        </span>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+
+          <!-- Всего счетов -->
+          <span style="
+              font-size:11px;
+              padding:2px 8px;
+              border-radius:6px;
+              background:#ecfdf5;
+              color:#047857;
+              font-weight:600;
+          ">
+            Всего счетов: {{ cl.result_count }}
+          </span>
+
+          <!-- Подсказка -->
+          <span style="
+              font-size:11px;
+              padding:2px 8px;
+              border-radius:6px;
+              background:#f3f4f6;
+              color:#4b5563;
+              font-weight:500;
+          ">
+            Хранятся данные о банковских счетах собственников и валюте расчётов
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {# Спейсер #}
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: навигация / действия #}
+    <div style="
+        min-width:220px;
+        max-width:260px;
+        border-radius:14px;
+        background:rgba(248,250,252,0.9);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:600;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {% if has_add_permission %}
+          <a href="{{ add_url }}"
+             class="button"
+             style="
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:6px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+               background:#d1fae5;
+             ">
+            ➕ Добавить банковский счёт
+          </a>
+        {% endif %}
+
+        
+        <a href="{% url 'admin:corporate_bank_changelist' %}"
+           style="
+             font-size:11px;
+             padding:3px 8px;
+             border-radius:6px;
+             text-decoration:none;
+             background:#f3f4f6;
+             color:#4b5563;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+           ">
+          🏦 Справочник банков
+        </a>
+        
+      </div>
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        СПРАВОЧНИКИ
+      </span>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+        БАНКОВСКИЕ СЧЕТА
+      </span>
+    </nav>
+
+    <span style="color:#9ca3af;">
+      {{ cl.result_count }} записей
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'macro/keyrate_admin.css' %}">
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const rows = document.querySelectorAll('#result_list tbody tr');
+
+      rows.forEach(function (row) {
+        const link = row.querySelector('th a');
+        if (!link) return;
+
+        row.style.cursor = 'pointer';
+
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('a')) return;
+          if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
+          if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
+          if (e.target.tagName === 'BUTTON') return;
+
+          window.location.href = link.href;
+        });
+      });
+    });
+  </script>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

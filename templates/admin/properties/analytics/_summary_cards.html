@@ -1,0 +1,108 @@
+{# templates/admin/properties/analytics/_summary_cards.html #}
+{% load l10n %}
+
+<div class="section section-divider">
+  <div class="section-title">I. Общая сводка по объектам</div>
+  <div class="section-sub">
+    Количество объектов, наличие оценок и заполненность площадей.
+  </div>
+
+  <div class="cards-row">
+
+    {# Всего объектов #}
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-label">Всего объектов</div>
+        <span class="card-badge">Справочник</span>
+      </div>
+      <div class="card-value">{{ total }}</div>
+      <div class="card-hint">
+        Общее количество записей в базе объектов недвижимости.
+      </div>
+    </div>
+
+    {# Оценки #}
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-label">Оценки</div>
+        <span class="card-badge">Отчёты об оценке</span>
+      </div>
+      <div class="card-value {% if without_valuations %}warn{% else %}good{% endif %}">
+        {{ with_valuations }} из {{ total }}
+      </div>
+      <div class="card-hint">
+        Без оценок: {{ without_valuations }}.
+        Всего отчётов: {{ valuations_total_count }}.
+        {% if valuations_min_date and valuations_max_date %}
+          Период: {{ valuations_min_date|date:"d.m.Y" }} — {{ valuations_max_date|date:"d.m.Y" }}.
+        {% endif %}
+      </div>
+    </div>
+
+    {# Суммарная стоимость #}
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-label">Суммарная стоимость</div>
+        <span class="card-badge">Последние оценки</span>
+      </div>
+      <div class="card-value">
+        {% if total_last %}
+          <span class="js-currency"
+                data-value="{{ total_last|unlocalize }}"></span>
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      <div class="card-hint">
+        {% if total_prev and total_diff is not None %}
+          {% if total_diff > 0 %}
+            Изменение к предыдущим оценкам:
+            <span class="delta-up">
+              ▲ <span class="js-currency"
+                    data-value="{{ total_diff|unlocalize }}"></span>
+              {% if total_diff_pct is not None %}
+                ({{ total_diff_pct|floatformat:1 }}%)
+              {% endif %}
+            </span>
+          {% elif total_diff < 0 %}
+            Изменение к предыдущим оценкам:
+            <span class="delta-down">
+              ▼ <span class="js-currency"
+                    data-value="{{ total_diff|unlocalize }}"></span>
+              {% if total_diff_pct is not None %}
+                ({{ total_diff_pct|floatformat:1 }}%)
+              {% endif %}
+            </span>
+          {% else %}
+            Изменение к предыдущим оценкам: без изменения.
+          {% endif %}
+        {% else %}
+          Недостаточно данных для сравнения с предыдущими оценками.
+        {% endif %}
+      </div>
+    </div>
+
+    {# Площадь #}
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-label">Площадь</div>
+        <span class="card-badge">По объектам</span>
+      </div>
+      <div class="card-value">
+        {% if total_area %}
+          {{ total_area|floatformat:0 }} м²
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      <div class="card-hint">
+        Объектов с заполненной площадью: {{ with_area }}.
+        {% if avg_area %}
+          Средняя площадь: {{ avg_area|floatformat:0 }} м².
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+

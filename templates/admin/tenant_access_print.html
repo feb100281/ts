@@ -1,0 +1,383 @@
+{% load static %}
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Доступ в личный кабинет — {{ cp.name }}</title>
+  <link rel="stylesheet" href="{% static 'fonts/glyphs.css' %}">
+  <style>
+    :root {
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --border:#e5e7eb;
+      --accent:#0f172a;
+      --accent-soft:#111827;
+      --accent-teal:#14b8a6;
+      --muted:#6b7280;
+    }
+
+    * { box-sizing:border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px 12px;
+      background:var(--bg);
+      display:flex;
+      justify-content:center;
+    }
+
+    .page-wrap {
+      width:100%;
+      display:flex;
+      justify-content:center;
+    }
+
+    .card {
+      max-width:680px;
+      width:100%;
+      background:var(--card);
+      border-radius:16px;
+      border:1px solid var(--border);
+      padding:22px 24px 20px;
+      box-shadow:0 18px 45px rgba(15,23,42,.12);
+    }
+
+    /* TOOLBAR */
+    .toolbar {
+      margin-bottom:14px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+    }
+
+    .toolbar-buttons {
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+
+    .btn-back {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:8px 14px;
+      border-radius:6px;
+      border:1px solid #cbd5e1;
+      background:#ffffff;
+      color:#111827;
+      cursor:pointer;
+      font-size:13px;
+      text-decoration:none;
+      white-space:nowrap;
+      height:38px;
+    }
+
+    .btn-back:hover { background:#e5e7eb; }
+
+    .btn-print,
+    .btn-email {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:8px 14px;
+      border-radius:6px;
+      font-size:13px;
+      cursor:pointer;
+      white-space:nowrap;
+      height:38px;
+    }
+
+    .btn-print {
+      border:1px solid #111827;
+      background:#111827;
+      color:#ffffff;
+    }
+    .btn-print:hover { background:#020617; }
+
+    .btn-email {
+      border:1px solid #0f766e;
+      background:#0d9488;
+      color:#ffffff;
+    }
+    .btn-email:hover { background:#0f766e; }
+
+    /* HEADER */
+    .card-header {
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:16px;
+    }
+
+    .brand-block { flex:1 1 auto; }
+
+    .brand-label {
+      font-size:13px;
+      font-weight:600;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      color:var(--accent-soft);
+      margin-bottom:4px;
+    }
+
+    .title {
+      margin:0;
+      font-size:22px;
+      font-weight:700;
+      color:var(--accent-soft);
+    }
+
+    .subtitle {
+      margin-top:6px;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    /* LOGO */
+    .logo-mark {
+      width:64px;
+      height:64px;
+      border-radius:18px;
+      background:radial-gradient(circle at 30% 0%, rgba(20,184,166,.7), rgba(15,23,42,1) 70%);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 14px 32px rgba(15,23,42,.45);
+      flex-shrink:0;
+      overflow:hidden;
+    }
+
+    .logo-glyph {
+      font-family:NotoManu;
+      font-size:36px;
+      color:#e5fdf9;
+      line-height:1;
+    }
+
+    /* CONTENT */
+    .section { margin-top:18px; }
+
+    .section-title {
+      font-size:11px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    .info-grid {
+      border-radius:10px;
+      border:1px solid var(--border);
+      padding:10px 12px;
+      font-size:13px;
+      background:#f9fafb;
+    }
+
+    .info-row {
+      display:flex;
+      gap:8px;
+      padding:3px 0;
+    }
+
+    .info-label {
+      width:150px;
+      flex-shrink:0;
+      font-weight:600;
+      color:var(--accent);
+    }
+
+    .info-value { color:var(--accent-soft); }
+
+    /* ACCESS BLOCK */
+    .access-block {
+      line-height:1.5;
+      margin-top:10px;
+      border-radius:12px;
+      background:#f9fafb;
+      color:var(--accent-soft);
+      padding:14px 14px 12px;
+      border:1px solid var(--border);
+    }
+
+    .access-title {
+      font-size:13px;
+      font-weight:600;
+      margin-bottom:6px;
+    }
+
+    .access-line {
+      display:flex;
+      flex-wrap:wrap;
+      gap:4px 10px;
+      font-size:13px;
+      margin-bottom:4px;
+    }
+
+    .access-label { font-weight:600; }
+
+    .access-value {
+      font-family:"SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      word-break:break-all;
+    }
+
+    .steps {
+      margin-top:6px;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .steps ol {
+      margin:4px 0 0 18px;
+      padding:0;
+    }
+
+    .steps li { margin-bottom:2px; }
+
+    .footer-note {
+      margin-top:14px;
+      font-size:11px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
+    @media (max-width: 600px) {
+      body { padding:16px 10px; }
+      .card { padding:18px 16px 16px; border-radius:14px; }
+      .info-label { width:120px; }
+
+      .toolbar {
+        flex-direction:column;
+        align-items:stretch;
+      }
+      .toolbar-buttons {
+        width:100%;
+        justify-content:space-between;
+      }
+    }
+
+    @media print {
+      @page { margin: 12mm; }
+      body {
+        background:#ffffff !important;
+        padding:0 !important;
+        margin:0 !important;
+      }
+      .card {
+        box-shadow:none !important;
+        border:1px solid #d1d5db !important;
+        border-radius:12px !important;
+        background:#ffffff !important;
+      }
+      .toolbar { display:none !important; }
+      .access-block {
+        background:#f3f4f6 !important;
+        border:1px solid #d1d5db !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+<div class="page-wrap">
+  <div class="card">
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <a href="{% url 'admin:counterparties_tenant_changelist' %}" class="btn-back">
+        ← К кабинетам арендаторов
+      </a>
+
+      <div class="toolbar-buttons">
+        <button class="btn-print" onclick="window.print()">
+          <span class="icon">🖨</span>
+          <span>Распечатать карточку</span>
+        </button>
+
+        <button class="btn-email" onclick="window.location.href='?email=1'">
+          <span class="icon">✉️</span>
+          <span>Отправить на e-mail</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- HEADER -->
+    <div class="card-header">
+      <div class="logo-mark">
+        <span class="logo-glyph">{{ cp.logo }}</span>
+      </div>
+
+      <div class="brand-block">
+        <div class="brand-label">{{ cp.name }}</div>
+        <h1 class="title">Доступ в личный кабинет арендатора</h1>
+        <div class="subtitle">ИНН {{ cp.tax_id }}</div>
+      </div>
+    </div>
+
+    <!-- ACCOUNT SECTION -->
+    <div class="section">
+      <div class="section-title">Учётная запись</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Ответственное лицо</div>
+          <div class="info-value">{{ user.get_full_name|default:user.username }}</div>
+        </div>
+
+        <div class="info-row">
+          <div class="info-label">Логин</div>
+          <div class="info-value">{{ user.username }}</div>
+        </div>
+
+        <div class="info-row">
+          <div class="info-label">Email</div>
+          <div class="info-value">
+            {% if user.email %}{{ user.email }}{% else %}не указан{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCESS SECTION -->
+    <div class="section">
+      <div class="section-title">Доступ</div>
+
+      <div class="access-block">
+        <div class="access-title">Параметры входа</div>
+
+        <div class="access-line">
+          <span class="access-label">Адрес входа:</span>
+          <span class="access-value">{{ login_url }}</span>
+        </div>
+
+        <div class="access-line">
+          <span class="access-label">Логин:</span>
+          <span class="access-value">{{ user.username }}</span>
+        </div>
+
+        <div class="steps">
+          Пароль по соображениям безопасности не указывается.  
+          Для первого входа или восстановления доступа:
+          <ol>
+            <li>Перейдите по адресу входа.</li>
+            <li>Нажмите ссылку «Забыли пароль?».</li>
+            <li>Следуйте инструкциям, отправленным на указанный e-mail.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer-note">
+      Карточка предназначена для внутреннего использования и не подлежит передаче третьим лицам.
+      При смене ответственного лица или e-mail необходимо сообщить управляющей компании.
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+

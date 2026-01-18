@@ -1,0 +1,85 @@
+{% comment %} templates/admin/properties/print/_comparison.html {% endcomment %}
+
+{# --- Вариант 1: есть и последняя рыночная, и последняя кадастровая --- #}
+{% if last_valuation and last_kadastr %}
+<div class="section section-divider">
+  <div class="section-title">II. Сравнение рыночной и кадастровой стоимости</div>
+
+  <div class="section-sub">
+    Визуальное сравнение последней рыночной оценки и последней кадастровой стоимости.
+  </div>
+
+  <table class="table-timeline comparison-table">
+    <thead>
+      <tr>
+        <th>Показатель</th>
+        <th>Сумма, ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr data-type="valuation">
+        <td class="cell-muted">Рыночная стоимость</td>
+        <td class="comparison-cell"
+            data-value="{{ last_valuation.valuation_amount|floatformat:0|cut:','|cut:' ' }}">
+        </td>
+      </tr>
+
+      <tr data-type="kadastr">
+        <td class="cell-muted">Кадастровая стоимость</td>
+        <td class="comparison-cell"
+            data-value="{{ last_kadastr.kadastr_amount|floatformat:0|cut:','|cut:' ' }}">
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if valuation_vs_kadastr_ratio %}
+  <div class="section-sub" style="margin-top:4px;">
+    Соотношение рыночной и кадастровой:
+    <strong>{{ valuation_vs_kadastr_ratio|floatformat:2 }} ×</strong>.
+  </div>
+  {% endif %}
+
+  {# --- Разница между рыночной и кадастровой стоимостью --- #}
+  {% if valuation_vs_kadastr_delta is not None %}
+    <div class="section-sub" style="margin-top:8px;">
+      {% if valuation_vs_kadastr_delta_dir == 'up' %}
+        Рыночная стоимость
+        <span class="delta-up">▲</span>
+        выше кадастровой на
+      {% elif valuation_vs_kadastr_delta_dir == 'down' %}
+        Рыночная стоимость
+        <span class="delta-down">▼</span>
+        ниже кадастровой на
+      {% else %}
+        Рыночная стоимость совпадает с кадастровой,
+        отклонение
+      {% endif %}
+      {{ valuation_vs_kadastr_delta_abs_str }} ₽
+    </div>
+  {% endif %}
+
+  {# --- График (Plotly): РС, КС и отношение РС / КС --- #}
+  {% if valuation_vs_kadastr_plot_data %}
+    <div class="section-sub" style="margin-top:12px;">
+      Динамика рыночной и кадастровой стоимости по датам отчётов об оценке
+      и отношение РС / КС:
+    </div>
+
+    {% include "admin/properties/print/_valuation_vs_kadastr_plotly.html" %}
+  {% endif %}
+</div>
+
+{# --- Вариант 2: нет последних значений, но есть данные для графика --- #}
+{% elif valuation_vs_kadastr_plot_data %}
+<div class="section section-divider">
+  <div class="section-title">II. Сравнение рыночной и кадастровой стоимости</div>
+
+  <div class="section-sub">
+    Графическое сравнение рыночной и кадастровой стоимости по датам отчётов об оценке
+    и отношение РС / КС.
+  </div>
+
+  {% include "admin/properties/print/_valuation_vs_kadastr_plotly.html" %}
+</div>
+{% endif %}

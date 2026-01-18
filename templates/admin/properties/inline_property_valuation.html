@@ -1,0 +1,108 @@
+{% load i18n admin_urls static %}
+
+<div class="js-inline-admin-formset inline-group"
+     id="{{ inline_admin_formset.formset.prefix }}-group"
+     data-inline-type="stacked"
+     data-inline-formset="{{ inline_admin_formset.inline_formset_data }}">
+
+  <fieldset class="module {{ inline_admin_formset.classes }}">
+
+    {{ inline_admin_formset.formset.management_form }}
+    {{ inline_admin_formset.formset.non_form_errors }}
+
+    {% for inline_admin_form in inline_admin_formset %}
+      <div class="inline-related{% if inline_admin_form.original or inline_admin_form.show_url %} has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form last-related{% endif %}"
+           id="{{ inline_admin_formset.formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
+
+        <details class="valuation-inline__details"
+                 {% if not inline_admin_form.original or inline_admin_form.form.errors %}open{% endif %}>
+
+          <summary class="valuation-inline__summary">
+
+            <span class="valuation-inline__title">
+
+              {% if inline_admin_form.original %}
+                {% with v=inline_admin_form.original %}
+                  {# Номер оценки: №1 — самая ранняя #}
+                  Оценка №{{ v.order_index }} от {{ v.valuation_date|date:"d.m.Y" }}
+
+                  {% if v.valuation_amount %}
+                    — {{ v.valuation_amount|floatformat:0 }} ₽
+                  {% endif %}
+
+                  {# Дельта к предыдущей оценке, если она есть #}
+                  {% if v.prev_amount %}
+                    {% if v.diff > 0 %}
+                      <span style="margin-left:6px; font-size:12px; color:#16a34a; font-weight:600;">
+                        ▲ +{{ v.diff|floatformat:0 }} ₽
+                        {% if v.diff_pct is not None %}
+                          (+{{ v.diff_pct|floatformat:1 }}%)
+                        {% endif %}
+                      </span>
+                    {% elif v.diff < 0 %}
+                      <span style="margin-left:6px; font-size:12px; color:#dc2626; font-weight:600;">
+                        ▼ {{ v.diff|floatformat:0 }} ₽
+                        {% if v.diff_pct is not None %}
+                          ({{ v.diff_pct|floatformat:1 }}%)
+                        {% endif %}
+                      </span>
+                    {% else %}
+                      <span style="margin-left:6px; font-size:12px; color:#6b7280;">
+                        ■ 0 ₽
+                      </span>
+                    {% endif %}
+                  {% endif %}
+
+                  {% if v.appraiser %}
+                    <span class="valuation-inline__meta">
+                      — Оценщик: {{ v.appraiser }}
+                    </span>
+                  {% endif %}
+                {% endwith %}
+              {% else %}
+                Новая оценка
+              {% endif %}
+            </span>
+
+            {% if inline_admin_form.form.errors %}
+              <span class="valuation-inline__badge valuation-inline__badge--error">
+                {% trans "Есть ошибки" %}
+              </span>
+            {% endif %}
+
+            {% if inline_admin_formset.formset.can_delete and inline_admin_form.original %}
+              <span class="valuation-inline__delete">
+                {{ inline_admin_form.deletion_field.field }}
+                {{ inline_admin_form.deletion_field.label_tag }}
+              </span>
+            {% endif %}
+          </summary>
+
+          <div class="valuation-inline__body">
+            {% if inline_admin_form.show_url %}
+              <p>
+                <a href="{{ inline_admin_form.absolute_url }}">{% trans "View on site" %}</a>
+              </p>
+            {% endif %}
+
+            {% if inline_admin_form.form.non_field_errors %}
+              <div class="errornote">
+                {{ inline_admin_form.form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            {% for fieldset in inline_admin_form %}
+              {% include "admin/includes/fieldset.html" %}
+            {% endfor %}
+
+            {% if inline_admin_form.has_auto_field or inline_admin_form.needs_explicit_pk_field %}
+              {{ inline_admin_form.pk_field.field }}
+            {% endif %}
+            {{ inline_admin_form.fk_field.field }}
+          </div>
+        </details>
+      </div>
+    {% endfor %}
+  </fieldset>
+</div>
+

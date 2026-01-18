@@ -1,0 +1,678 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Аналитика по группе {{ group.name }}</title>
+
+  <style>
+    :root {
+      --bg:#f5f5f5;
+      --card:#ffffff;
+      --border:#e2e8f0;
+      --accent:#111827;
+      --muted:#6b7280;
+      --accent-main:#2563eb;
+      --accent-soft:#eff4ff;
+    }
+
+    * { box-sizing:border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px 16px;
+      background:var(--bg);
+      display:flex;
+      justify-content:center;
+      color:var(--accent);
+    }
+
+    .page-wrap {
+      width:100%;
+      max-width:1200px;
+    }
+
+    /* HEADER */
+    .header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .title-block { flex:1 1 auto; }
+
+    .title-label {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    h1 {
+      margin:0;
+      font-size:20px;
+      font-weight:600;
+      color:var(--accent);
+    }
+
+    .subtitle {
+      margin-top:4px;
+      font-size:12px;
+      color:var(--muted);
+      max-width:520px;
+    }
+
+    .btn-back {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:6px;
+      border:1px solid var(--accent-main);
+      background:#ffffff;
+      color:var(--accent-main);
+      cursor:pointer;
+      font-size:13px;
+      text-decoration:none;
+      white-space:nowrap;
+    }
+    .btn-back:hover { background:var(--accent-soft); }
+
+    /* CARDS */
+    .cards-row {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    a.card-link {
+      text-decoration:none;
+      color:inherit;
+      display:block;
+    }
+
+    .card {
+      background:var(--card);
+      border-radius:10px;
+      border:1px solid var(--border);
+      padding:10px 12px 9px;
+      transition:box-shadow .15s ease, transform .15s ease, border-color .15s ease, background .12s ease;
+      cursor:pointer;
+    }
+
+    a.card-link:hover .card {
+      box-shadow:0 8px 18px rgba(15,23,42,.08);
+      transform:translateY(-1px);
+      border-color:#cbd5e1;
+      background:#f9fafb;
+    }
+
+    .card-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:4px;
+    }
+
+    .card-label {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+    }
+
+    .card-badge {
+      font-size:10px;
+      padding:2px 6px;
+      border-radius:6px;
+      border:1px solid var(--border);
+      color:var(--muted);
+      background:#f9fafb;
+    }
+
+    .card-value {
+      font-size:20px;
+      font-weight:600;
+      margin-top:2px;
+      color:var(--accent);
+    }
+
+    .card-value.risk-high { color:#b91c1c; }
+    .card-value.risk-mid  { color:#f97316; }
+    .card-value.risk-low  { color:#22c55e; }  /* мягче зелёный */
+
+    .card-value.fns-ok   { color:#16a34a; }
+    .card-value.fns-warn { color:#f97316; }
+    .card-value.fns-bad  { color:#b91c1c; }
+
+    .card-hint {
+      margin-top:2px;
+      font-size:11px;
+      color:var(--muted);
+    }
+
+    /* GRID */
+    .grid-two {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:8px;
+    }
+    @media (max-width: 900px) {
+      body { padding:16px 8px; }
+      .grid-two { grid-template-columns:1fr; }
+    }
+
+    .section-title {
+      font-size:13px;
+      font-weight:600;
+      margin:0 0 4px;
+    }
+    .section-sub {
+      font-size:11px;
+      color:var(--muted);
+      margin:0 0 8px;
+    }
+
+    /* TABLE */
+    table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+      border-radius:8px;
+      overflow:hidden;
+      background:#fff;
+      border:1px solid var(--border);
+    }
+
+    thead th {
+      background:#f9fafb;
+      padding:6px 8px;
+      border-bottom:1px solid var(--border);
+      font-weight:600;
+      font-size:11px;
+      color:#4b5563;
+      text-align:left;
+    }
+
+    tbody td {
+      padding:6px 8px;
+      border-bottom:1px solid var(--border);
+      vertical-align:top;
+    }
+
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:hover td { background:#f9fafb; }
+
+    .cell-muted { color:var(--muted); }
+
+    .cell-link {
+      color:var(--accent-main);
+      text-decoration:none;
+    }
+    .cell-link:hover {
+      text-decoration:underline;
+    }
+
+    /* таблицы с мини-барчартами */
+    .table-metric .cell-count {
+      text-align:right;
+      white-space:nowrap;
+    }
+
+    .metric-bar {
+      position:relative;
+      height:18px;
+      border-radius:6px;
+      background:var(--accent-soft);
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      padding:0 6px;
+      font-size:11px;
+      white-space:nowrap;
+    }
+
+    .metric-bar-fill {
+      position:absolute;
+      inset:0;
+      right:auto;
+      background:linear-gradient(90deg,#bfdbfe,#60a5fa);
+      opacity:0.9;
+    }
+
+    .metric-bar-label {
+      position:relative;
+      z-index:1;
+    }
+
+    /* полосы распределений (risk / FNS) */
+    .bars-wrap {
+      margin:4px 0 16px;
+    }
+
+    .bar-label {
+      font-size:11px;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    .bar-track {
+      display:flex;
+      border-radius:999px;
+      overflow:hidden;
+      border:1px solid var(--border);
+      background:#fff;
+      height:20px;
+      font-size:10px;
+    }
+
+    .bar-segment {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      white-space:nowrap;
+      padding:0 6px;
+      color:#ffffff;
+    }
+
+    .bar-segment.small-text {
+      font-size:9px;
+    }
+
+    .risk-high   { background:#b91c1c; }
+    .risk-mid    { background:#f97316; }
+    .risk-low    { background:#22c55e; }
+
+    .fns-never   { background:#9ca3af; }
+    .fns-recent  { background:#16a34a; }
+    .fns-mid     { background:#f97316; }
+    .fns-old     { background:#b91c1c; }
+
+    /* режим "только низкий риск" */
+    .bar-track.safe-only {
+      border-color:#bbf7d0;
+      background:#ecfdf3;
+    }
+
+    .bar-segment.risk-low-only {
+      background:rgba(34,197,94,0.25);
+      color:#166534;
+      font-weight:500;
+    }
+
+  </style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="title-block">
+      <div class="title-label">Аналитика</div>
+      <h1>Группа: {{ group.name }}</h1>
+      <div class="subtitle">
+        Аналитический обзор контрагентов внутри выбранной группы:
+        риск-профиль, актуальность данных ФНС, распределение по ОПФ,
+        регионам и видам деятельности (ОКВЭД).
+      </div>
+    </div>
+
+    <div>
+      <a href="{% url 'admin:counterparties_gr_changelist' %}" class="btn-back">
+        ← К списку групп
+      </a>
+    </div>
+  </div>
+
+  <!-- CARDS 1: Риски -->
+  <div class="cards-row">
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Контрагентов</div>
+          <span class="card-badge">Всего</span>
+        </div>
+        <div class="card-value">{{ total }}</div>
+        <div class="card-hint">Количество записей внутри группы.</div>
+      </div>
+    </a>
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&risk_level=high"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Высокий риск</div>
+          <span class="card-badge">Критично</span>
+        </div>
+        <div class="card-value risk-high">{{ high_risk }}</div>
+        <div class="card-hint">Санкции / санкционированные учредители.</div>
+      </div>
+    </a>
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&risk_level=mid"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Средний риск</div>
+          <span class="card-badge">Внимание</span>
+        </div>
+        <div class="card-value risk-mid">{{ mid_risk }}</div>
+        <div class="card-hint">Массовые директора / учредители, иные факторы.</div>
+      </div>
+    </a>
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&risk_level=low"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Низкий риск</div>
+          <span class="card-badge">OK</span>
+        </div>
+        <div class="card-value risk-low">{{ low_risk }}</div>
+        <div class="card-hint">Нет значимых рисков по текущим данным.</div>
+      </div>
+    </a>
+
+  </div>
+
+  <!-- График: распределение по рискам -->
+  <div class="bars-wrap">
+    <div class="bar-label">
+      Распределение контрагентов по уровню риска.
+    </div>
+    <div class="bar-track"
+         id="risk-bar"
+         data-total="{{ total }}"
+         data-high="{{ high_risk }}"
+         data-mid="{{ mid_risk }}"
+         data-low="{{ low_risk }}">
+      <!-- сегменты дорисует JS -->
+    </div>
+  </div>
+
+  <!-- CARDS 2: ФНС -->
+  <div class="cards-row">
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&checko_status=never"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">ФНС: нет отметки</div>
+          <span class="card-badge">Приоритет</span>
+        </div>
+        <div class="card-value fns-bad">{{ fns_never }}</div>
+        <div class="card-hint">Не обновлялось из Checko / ФНС.</div>
+      </div>
+    </a>
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&checko_status=recent"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">ФНС: ≤ 90 дней</div>
+          <span class="card-badge">Актуально</span>
+        </div>
+        <div class="card-value fns-ok">{{ fns_recent }}</div>
+        <div class="card-hint">Свежие данные.</div>
+      </div>
+    </a>
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&checko_status=mid"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">ФНС: 3–12 месяцев</div>
+          <span class="card-badge">Проверить</span>
+        </div>
+        <div class="card-value fns-warn">{{ fns_mid }}</div>
+        <div class="card-hint">Желательно обновить.</div>
+      </div>
+    </a>
+
+    <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&checko_status=old"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">ФНС: > 1 года</div>
+          <span class="card-badge">Просрочено</span>
+        </div>
+        <div class="card-value fns-bad">{{ fns_old }}</div>
+        <div class="card-hint">Требуется обновление.</div>
+      </div>
+    </a>
+
+  </div>
+
+  <!-- График: распределение по ФНС -->
+  <div class="bars-wrap">
+    <div class="bar-label">
+      Актуальность данных ФНС / Checko внутри группы.
+    </div>
+    <div class="bar-track"
+         id="fns-bar"
+         data-total="{{ total }}"
+         data-never="{{ fns_never }}"
+         data-recent="{{ fns_recent }}"
+         data-mid="{{ fns_mid }}"
+         data-old="{{ fns_old }}">
+      <!-- сегменты дорисует JS -->
+    </div>
+  </div>
+
+  <!-- TABLES -->
+  <div class="grid-two">
+
+    <!-- ОПФ -->
+    <div>
+      <p class="section-title">Структура по ОПФ</p>
+      <p class="section-sub">Определено по полю «Полн. наименование».</p>
+
+      <table class="table-metric">
+        <thead>
+        <tr>
+          <th>ОПФ</th>
+          <th>Контрагентов</th>
+        </tr>
+        </thead>
+
+        <tbody>
+        {% for row in by_opf %}
+          <tr>
+            <td>{{ row.opf }}</td>
+            <td class="cell-count" data-value="{{ row.cnt }}">{{ row.cnt }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="2" class="cell-muted" style="text-align:center;">Нет данных</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Регионы -->
+    <div>
+      <p class="section-title">Топ регионов</p>
+      <p class="section-sub">Первые 10 регионов в группе.</p>
+
+      <table class="table-metric">
+        <thead>
+        <tr>
+          <th>Регион</th>
+          <th>Контрагентов</th>
+        </tr>
+        </thead>
+
+        <tbody>
+        {% for row in by_region %}
+          <tr>
+            <td>
+              {% if row.region %}
+                <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&region={{ row.region|urlencode }}"
+                   class="cell-link">
+                  {{ row.region }}
+                </a>
+              {% else %}
+                <span class="cell-muted">Не указан</span>
+              {% endif %}
+            </td>
+            <td class="cell-count" data-value="{{ row.cnt }}">{{ row.cnt }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="2" class="cell-muted" style="text-align:center;">Нет данных</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- OKVED -->
+  <div style="margin-top:20px;">
+    <p class="section-title">Топ ОКВЭД</p>
+    <p class="section-sub">Первые 10 основных направлений деятельности.</p>
+
+    <table class="table-metric">
+      <thead>
+      <tr>
+        <th>Код</th>
+        <th>Наименование</th>
+        <th>Контрагентов</th>
+      </tr>
+      </thead>
+
+      <tbody>
+      {% for row in by_okved %}
+        <tr>
+          <td>
+<a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ group.pk }}&okved_code__startswith={{ row.okved_prefix|urlencode }}"
+   class="cell-link">
+  {{ row.okved_prefix }}
+</a>
+
+
+          </td>
+          <td class="cell-muted">
+            {{ row.okved_name }}
+          </td>
+          <td class="cell-count" data-value="{{ row.cnt }}">{{ row.cnt }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="3" class="cell-muted" style="text-align:center;">Нет данных</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  // мини-барчарты по количеству контрагентов
+  (function () {
+    document.querySelectorAll('table.table-metric').forEach(function (table) {
+      var cells = Array.from(table.querySelectorAll('td.cell-count'));
+      if (!cells.length) return;
+
+      var max = Math.max.apply(null, cells.map(function (c) {
+        return parseFloat(c.dataset.value || '0') || 0;
+      }));
+
+      cells.forEach(function (cell) {
+        var val = parseFloat(cell.dataset.value || '0') || 0;
+        var pct = max ? (val / max) * 100 : 0;
+        var label = cell.textContent.trim();
+
+        cell.innerHTML =
+          '<div class="metric-bar">' +
+            '<div class="metric-bar-fill" style="width:' + pct.toFixed(0) + '%"></div>' +
+            '<span class="metric-bar-label">' + label + '</span>' +
+          '</div>';
+      });
+    });
+  })();
+
+  // stacked-bar по уровням риска (с "safe only" режимом)
+  (function () {
+    var bar = document.getElementById('risk-bar');
+    if (!bar) return;
+
+    var total = parseInt(bar.getAttribute('data-total') || '0', 10) || 0;
+    var high  = parseInt(bar.getAttribute('data-high')  || '0', 10) || 0;
+    var mid   = parseInt(bar.getAttribute('data-mid')   || '0', 10) || 0;
+    var low   = parseInt(bar.getAttribute('data-low')   || '0', 10) || 0;
+
+    if (!total) return;
+
+    // только низкий риск
+    if (high === 0 && mid === 0 && low > 0) {
+      var pct = (low / total) * 100;
+      var text = 'Низкий — ' + low + ' (' + pct.toFixed(0) + '%)';
+      bar.classList.add('safe-only');
+      bar.innerHTML =
+        '<div class="bar-segment risk-low-only" style="width:100%;">' +
+          text +
+        '</div>';
+      return;
+    }
+
+    function seg(value, cls, label) {
+      if (!value) return '';
+      var pct = (value / total) * 100;
+      var txt = label + ' – ' + value + ' (' + pct.toFixed(0) + '%)';
+      var small = pct < 15 ? ' small-text' : '';
+      return '<div class="bar-segment ' + cls + small +
+             '" style="width:' + pct + '%;">' + txt + '</div>';
+    }
+
+    bar.innerHTML =
+      seg(high, 'risk-high',  'Высокий') +
+      seg(mid,  'risk-mid',   'Средний') +
+      seg(low,  'risk-low',   'Низкий');
+  })();
+
+  // stacked-bar по актуальности ФНС
+  (function () {
+    var bar = document.getElementById('fns-bar');
+    if (!bar) return;
+
+    var total = parseInt(bar.getAttribute('data-total') || '0', 10) || 0;
+    var never = parseInt(bar.getAttribute('data-never') || '0', 10) || 0;
+    var recent= parseInt(bar.getAttribute('data-recent')|| '0', 10) || 0;
+    var mid   = parseInt(bar.getAttribute('data-mid')   || '0', 10) || 0;
+    var old   = parseInt(bar.getAttribute('data-old')   || '0', 10) || 0;
+
+    if (!total) return;
+
+    function seg(value, cls, label) {
+      if (!value) return '';
+      var pct = (value / total) * 100;
+      var txt = label + ' – ' + value + ' (' + pct.toFixed(0) + '%)';
+      var small = pct < 15 ? ' small-text' : '';
+      return '<div class="bar-segment ' + cls + small +
+             '" style="width:' + pct + '%;">' + txt + '</div>';
+    }
+
+    bar.innerHTML =
+      seg(never,  'fns-never',  'Нет отметки') +
+      seg(recent, 'fns-recent', '≤ 90 дней') +
+      seg(mid,    'fns-mid',    '3–12 мес') +
+      seg(old,    'fns-old',    '> 1 года');
+  })();
+</script>
+
+</body>
+</html>
+

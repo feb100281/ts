@@ -1,0 +1,43 @@
+/* static/fonts/glyphs.css */
+
+@font-face {
+  font-family: "NotoManu";
+  src: url("/static/fonts/NotoManu-Regular3.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+
+/* Класс для символа арендатора */
+.tenant-glyph {
+  font-family: "NotoManu", sans-serif !important;
+  font-size: 36px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tenant-glyph-small {
+  font-family: "NotoManu", sans-serif !important;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+
+/* Для Tree */
+.tenant-tree .mantine-Tree-label {
+  font-family: "NotoManu", sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1 !important;
+}
+/* 
+.tenant-tree .mantine-Tree-node {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+} */

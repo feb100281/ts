@@ -1,0 +1,276 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Тип договора: {{ la_type.title }} — договоры аренды</title>
+  <style>
+    :root {
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --border:#e5e7eb;
+      --accent:#0f172a;
+      --muted:#6b7280;
+      --header-bg:#f9fafb;
+    }
+
+    * { box-sizing:border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px 16px;
+      background:var(--bg);
+      display:flex;
+      justify-content:center;
+    }
+
+    .page-wrap {
+      width:100%;
+      max-width:960px;
+    }
+
+    .card {
+      background:var(--card);
+      border-radius:16px;
+      border:1px solid var(--border);
+      padding:20px 20px 18px;
+      box-shadow:0 18px 45px rgba(15,23,42,.10);
+    }
+
+    /* --- toolbar --- */
+    .toolbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      margin-bottom:14px;
+    }
+
+    .btn-back {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:6px;
+      border:1px solid #cbd5e1;
+      background:#ffffff;
+      color:#111827;
+      cursor:pointer;
+      font-size:13px;
+      text-decoration:none;
+    }
+
+    .btn-back:hover {
+      background:#e5e7eb;
+    }
+
+    .btn-print {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:6px;
+      border:1px solid #111827;
+      background:#111827;
+      color:#ffffff;
+      cursor:pointer;
+      font-size:13px;
+    }
+
+    .btn-print span.icon { font-size:14px; }
+    .btn-print:hover { background:#020617; }
+
+    .header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:8px;
+    }
+
+    .title-block { flex:1 1 auto; }
+
+    .title-label {
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    h1 {
+      margin:0;
+      font-size:20px;
+      font-weight:700;
+      color:var(--accent);
+    }
+
+    .subtitle {
+      color:var(--muted);
+      margin-top:4px;
+      font-size:13px;
+    }
+
+    .tag {
+      padding:3px 10px;
+      border-radius:6px;
+      border:1px solid #d1d5db;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:#374151;
+      white-space:nowrap;
+    }
+
+    table {
+      border-collapse:collapse;
+      width:100%;
+      margin-top:14px;
+      border-radius:10px;
+      overflow:hidden;
+    }
+
+    thead th {
+      background:var(--header-bg);
+      border-bottom:1px solid var(--border);
+      padding:6px 8px;
+      font-size:12px;
+      font-weight:600;
+      color:#4b5563;
+      text-align:left;
+      white-space:nowrap;
+    }
+
+    tbody td {
+      border-bottom:1px solid var(--border);
+      padding:6px 8px;
+      font-size:13px;
+      vertical-align:top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom:none;
+    }
+
+    tbody tr:nth-child(even) td {
+      background:#f9fafb33;
+    }
+
+    .empty-row td {
+      text-align:center;
+      color:var(--muted);
+      font-size:13px;
+      padding:10px 8px;
+    }
+
+    .cell-muted { color:var(--muted); }
+
+    @media (max-width: 768px) {
+      body { padding:16px 8px; }
+      .card {
+        padding:16px 12px 14px;
+        border-radius:14px;
+      }
+      table { font-size:12px; }
+      thead th, tbody td { padding:5px 6px; }
+    }
+
+    @media print {
+      @page { margin: 12mm; }
+      body {
+        background:#ffffff !important;
+        padding:0 !important;
+        margin:0 !important;
+        display:block;
+      }
+      .card {
+        box-shadow:none !important;
+        border-radius:0 !important;
+        border:none !important;
+      }
+      .toolbar {
+        display:none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+  <div class="card">
+
+    <!-- === TOOLBAR === -->
+    <div class="toolbar">
+      <a href="{% url 'admin:la_latypes_changelist' %}" class="btn-back">
+        ← К типам договоров аренды
+      </a>
+
+      <button class="btn-print" onclick="window.print()">
+        <span class="icon">🖨</span>
+        <span>Печать</span>
+      </button>
+    </div>
+
+    <!-- === HEADER === -->
+    <div class="header">
+      <div class="title-block">
+        <div class="title-label">Тип договора</div>
+        <h1>{{ la_type.title }}</h1>
+        <div class="subtitle">
+          Договоров этого типа: {{ la_count }}
+        </div>
+      </div>
+      <div class="tag">Список договоров аренды</div>
+    </div>
+
+    <!-- === TABLE === -->
+    <table>
+      <thead>
+        <tr>
+          <th>Арендодатель</th>
+          <th>Арендатор</th>
+          <th>Номер</th>
+          <th>Дата договора</th>
+          <th>Начало аренды</th>
+          <th>Окончание аренды</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for la in las %}
+          <tr>
+            <td>
+              {% if la.owner %}
+                {{ la.owner.name|default:la.owner }}
+              {% else %}
+                <span class="cell-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if la.tenant %}
+                {{ la.tenant.name|default:la.tenant }}
+              {% else %}
+                <span class="cell-muted">—</span>
+              {% endif %}
+            </td>
+            <td>{{ la.number|default:"" }}</td>
+            <td>{% if la.date %}{{ la.date|date:"d.m.Y" }}{% endif %}</td>
+            <td>{% if la.date_start %}{{ la.date_start|date:"d.m.Y" }}{% endif %}</td>
+            <td>{% if la.date_finish %}{{ la.date_finish|date:"d.m.Y" }}{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr class="empty-row">
+            <td colspan="6">Нет договоров этого типа</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="footer-note" style="margin-top:10px;font-size:11px;color:var(--muted);">
+      Печатная форма для внутреннего использования.  
+      При изменении состава договоров или их условий рекомендуется формировать новую версию списка.
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+<style>
+  html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+  }
+  .content, .container, #content-main {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+  }
+  iframe {
+      display: block;
+      width: 100%;
+      height: calc(100vh - 120px);
+      border: none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>План этажа сука {{ floor.floor_number }} — {{ floor.property }}</h2>
+<iframe src="{{ iframe_url }}"></iframe>
+{% endblock %}

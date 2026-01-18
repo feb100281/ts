@@ -1,0 +1,583 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Аналитика по кабинетам арендаторов</title>
+  <style>
+    :root {
+      --bg:#f5f5f5;
+      --card:#ffffff;
+      --border:#e2e8f0;
+      --accent:#111827;
+      --muted:#6b7280;
+      --accent-main:#2563eb;
+      --accent-soft:#eff4ff;
+    }
+    * { box-sizing:border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin:0;
+      padding:24px 16px;
+      background:var(--bg);
+      display:flex;
+      justify-content:center;
+      color:var(--accent);
+    }
+
+    .page-wrap { width:100%; max-width:1200px; }
+
+    .header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:16px;
+    }
+    .title-block { flex:1 1 auto; }
+
+    .title-label {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    h1 {
+      margin:0;
+      font-size:20px;
+      font-weight:600;
+      color:var(--accent);
+    }
+    .subtitle {
+      margin-top:4px;
+      font-size:12px;
+      color:var(--muted);
+      max-width:520px;
+    }
+
+    .btn-back {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:6px;
+      border:1px solid var(--accent-main);
+      background:#ffffff;
+      color:var(--accent-main);
+      cursor:pointer;
+      font-size:13px;
+      text-decoration:none;
+      white-space:nowrap;
+    }
+    .btn-back:hover { background:var(--accent-soft); }
+
+    .cards-row {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap:12px;
+      margin-bottom:16px;
+    }
+    .card-link {
+      text-decoration:none;
+      color:inherit;
+      display:block;
+    }
+    .card {
+      background:var(--card);
+      border-radius:10px;
+      border:1px solid var(--border);
+      padding:10px 12px 9px;
+      transition:background .12s ease, box-shadow .12s ease, transform .06s ease;
+      cursor:pointer;
+    }
+    .card:hover {
+      background:#f9fafb;
+      box-shadow:0 4px 10px rgba(15,23,42,0.06);
+      transform:translateY(-1px);
+    }
+    .card-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:4px;
+    }
+    .card-label {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+    }
+    .card-badge {
+      font-size:10px;
+      padding:2px 6px;
+      border-radius:6px;
+      border:1px solid var(--border);
+      color:var(--muted);
+      background:#f9fafb;
+    }
+    .card-value {
+      font-size:20px;
+      font-weight:600;
+      margin-top:2px;
+      color:var(--accent);
+    }
+    .card-hint {
+      margin-top:2px;
+      font-size:11px;
+      color:var(--muted);
+    }
+
+    .grid-two {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:8px;
+    }
+    @media (max-width: 900px) {
+      body { padding:16px 8px; }
+      .grid-two { grid-template-columns:1fr; }
+    }
+
+    .section-title {
+      font-size:13px;
+      font-weight:600;
+      margin:0 0 4px;
+    }
+    .section-sub {
+      font-size:11px;
+      color:var(--muted);
+      margin:0 0 8px;
+    }
+
+    table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+      border-radius:8px;
+      overflow:hidden;
+      background:#fff;
+      border:1px solid var(--border);
+    }
+    thead th {
+      background:#f9fafb;
+      padding:6px 8px;
+      border-bottom:1px solid var(--border);
+      font-weight:600;
+      font-size:11px;
+      color:#4b5563;
+      text-align:left;
+    }
+    tbody td {
+      padding:6px 8px;
+      border-bottom:1px solid var(--border);
+      vertical-align:top;
+    }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:hover td { background:#f9fafb; }
+
+    .cell-muted { color:var(--muted); }
+
+    /* таблицы с мини-барчартами */
+    .table-metric .cell-count {
+      text-align:right;
+      white-space:nowrap;
+    }
+
+    .metric-bar {
+      position:relative;
+      height:18px;
+      border-radius:6px;
+      background:var(--accent-soft);
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      padding:0 6px;
+      font-size:11px;
+      white-space:nowrap;
+    }
+
+    .metric-bar-fill {
+      position:absolute;
+      inset:0;
+      right:auto;
+      background:linear-gradient(90deg,#bfdbfe,#60a5fa);
+      opacity:0.9;
+    }
+
+    .metric-bar-label {
+      position:relative;
+      z-index:1;
+    }
+
+    /* полоса активности входов */
+    .activity-bar-wrap {
+      margin-top:4px;
+      margin-bottom:16px;
+    }
+
+    .activity-bar-label {
+      font-size:11px;
+      color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    .activity-bar {
+      display:flex;
+      border-radius:999px;
+      overflow:hidden;
+      border:1px solid var(--border);
+      background:#fff;
+      height:20px;
+      font-size:10px;
+    }
+
+    .activity-segment {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      white-space:nowrap;
+      padding:0 6px;
+      color:#ffffff;
+    }
+
+    .activity-segment.small-text {
+      font-size:9px;
+    }
+
+    .activity-7      { background:#16a34a; }  /* зелёный - активные */
+    .activity-7-30   { background:#22c55e; }
+    .activity-old    { background:#f97316; }
+    .activity-never  { background:#9ca3af; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <div class="header">
+    <div class="title-block">
+      <div class="title-label">Аналитика</div>
+      <h1>Кабинеты арендаторов</h1>
+      <div class="subtitle">
+        Обзор по кабинетам арендаторов: наличие ответственных лиц, активность входа,
+        распределение по группам контрагентов и ответственным менеджерам.
+      </div>
+    </div>
+    <div>
+      <a href="{{ back_url }}" class="btn-back">
+        {{ back_label }}
+      </a>
+    </div>
+  </div>
+
+  <!-- Карточки: общий объём / ответственные лица -->
+  <div class="cards-row">
+
+    <!-- Всего кабинетов: просто весь список -->
+    <a href="{% url 'admin:counterparties_tenant_changelist' %}"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Всего кабинетов</div>
+          <span class="card-badge">Справочник</span>
+        </div>
+        <div class="card-value">{{ total }}</div>
+        <div class="card-hint">Общее количество кабинетов арендаторов.</div>
+      </div>
+    </a>
+
+    <!-- С ответственным лицом -->
+    <a href="{% url 'admin:counterparties_tenant_changelist' %}?tenant_filter=with_user"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">С ответственным лицом</div>
+          <span class="card-badge">Назначены</span>
+        </div>
+        <div class="card-value">{{ with_user }}</div>
+        <div class="card-hint">Кабинеты, где указан пользователь.</div>
+      </div>
+    </a>
+
+    <!-- Без ответственного лица -->
+    <a href="{% url 'admin:counterparties_tenant_changelist' %}?tenant_filter=without_user"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Без ответственного лица</div>
+          <span class="card-badge">Внимание</span>
+        </div>
+        <div class="card-value">{{ without_user }}</div>
+        <div class="card-hint">Кабинеты, которым стоит назначить пользователя.</div>
+      </div>
+    </a>
+
+    <!-- Никогда не заходили -->
+    <a href="{% url 'admin:counterparties_tenant_changelist' %}?tenant_filter=login_never"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Никогда не заходили</div>
+          <span class="card-badge">Не использовались</span>
+        </div>
+        <div class="card-value">{{ login_never }}</div>
+        <div class="card-hint">Пользователи, которым выдавали доступ, но нет входов.</div>
+      </div>
+    </a>
+
+  </div>
+
+  <!-- Карточки: активность входов -->
+  <div class="cards-row">
+
+    <!-- Вход за 7 дней -->
+    <a href="{% url 'admin:counterparties_tenant_changelist' %}?tenant_filter=login_7"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Вход за 7 дней</div>
+          <span class="card-badge">Активные</span>
+        </div>
+        <div class="card-value">{{ login_7 }}</div>
+        <div class="card-hint">Кабинеты с недавней активностью.</div>
+      </div>
+    </a>
+
+    <!-- Вход 7–30 дней назад -->
+    <a href="{% url 'admin:counterparties_tenant_changelist' %}?tenant_filter=login_7_30"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Вход 7–30 дней назад</div>
+          <span class="card-badge">Умеренная активность</span>
+        </div>
+        <div class="card-value">{{ login_7_30 }}</div>
+        <div class="card-hint">Может потребоваться напоминание.</div>
+      </div>
+    </a>
+
+    <!-- Не заходили > 30 дней -->
+    <a href="{% url 'admin:counterparties_tenant_changelist' %}?tenant_filter=login_old"
+       class="card-link">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-label">Не заходили &gt; 30 дней</div>
+          <span class="card-badge">Давно не активны</span>
+        </div>
+        <div class="card-value">{{ login_old }}</div>
+        <div class="card-hint">Кандидаты для обзвона / рассылки.</div>
+      </div>
+    </a>
+
+    <!-- Уникальных пользователей — просто инфо -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-label">Уникальных пользователей</div>
+        <span class="card-badge">Логины</span>
+      </div>
+      <div class="card-value">{{ users_total }}</div>
+      <div class="card-hint">Сколько разных пользователей привязано к кабинетам.</div>
+    </div>
+
+  </div>
+
+  <!-- График: распределение по активности входов -->
+  <div class="activity-bar-wrap">
+    <div class="activity-bar-label">
+      Распределение кабинетов по активности входов (последний логин / отсутствие входа).
+    </div>
+    <div class="activity-bar"
+         data-login-7="{{ login_7 }}"
+         data-login-7-30="{{ login_7_30 }}"
+         data-login-old="{{ login_old }}"
+         data-login-never="{{ login_never }}">
+      <!-- сегменты дорисует JS -->
+    </div>
+  </div>
+
+  <!-- Таблицы: по группам и по ответственным -->
+  <div class="grid-two">
+
+    <div>
+      <p class="section-title">Распределение по группам контрагентов</p>
+      <p class="section-sub">Кабинеты внутри групп (поле «Группа» у контрагента).</p>
+      <table class="table-metric">
+        <thead>
+          <tr>
+            <th>Группа</th>
+            <th>Кабинетов</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in by_group %}
+            {% if row.counterparty__gr__id %}
+              <tr onclick="window.location.href='{% url 'admin:counterparties_tenant_changelist' %}?group_id={{ row.counterparty__gr__id }}'"
+                  style="cursor:pointer;">
+            {% else %}
+              <tr>
+            {% endif %}
+              <td>
+                {% if row.counterparty__gr__name %}
+                  {{ row.counterparty__gr__name }}
+                {% else %}
+                  <span class="cell-muted">Без группы</span>
+                {% endif %}
+              </td>
+              <td class="cell-count" data-value="{{ row.cnt }}">{{ row.cnt }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2" class="cell-muted" style="text-align:center;">Нет данных</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <p class="section-title">Распределение по ответственным лицам</p>
+      <p class="section-sub">Сколько кабинетов закреплено за каждым пользователем.</p>
+      <table class="table-metric">
+        <thead>
+          <tr>
+            <th>Пользователь</th>
+            <th>Кабинетов</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in by_user %}
+            {% if row.user__id %}
+              <tr onclick="window.location.href='{% url 'admin:counterparties_tenant_changelist' %}?user_id={{ row.user__id }}'"
+                  style="cursor:pointer;">
+            {% else %}
+              <tr>
+            {% endif %}
+              <td>
+                {% if row.user__id %}
+                  {% if row.user__first_name or row.user__last_name %}
+                    {{ row.user__first_name }} {{ row.user__last_name }} ({{ row.user__username }})
+                  {% else %}
+                    {{ row.user__username }}
+                  {% endif %}
+                {% else %}
+                  <span class="cell-muted">Не назначен</span>
+                {% endif %}
+              </td>
+              <td class="cell-count" data-value="{{ row.cnt }}">{{ row.cnt }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2" class="cell-muted" style="text-align:center;">Нет данных</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Топ "давно не заходили" -->
+  <div style="margin-top:20px;">
+    <p class="section-title">Кабинеты с самой давней активностью</p>
+    <p class="section-sub">Первые 10 кабинетов по дате последнего входа (или без входов).</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Контрагент</th>
+          <th>Ответственное лицо</th>
+          <th>Последний вход</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in stale_tenants %}
+          <tr onclick="window.location.href='{% url 'admin:counterparties_tenant_change' t.pk %}'"
+              style="cursor:pointer;">
+            <td>{{ t.counterparty.name }}</td>
+            <td>
+              {% if t.user %}
+                {{ t.user.get_full_name|default:t.user.username }}
+              {% else %}
+                <span class="cell-muted">не назначен</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if t.user and t.user.last_login %}
+                {{ t.user.last_login|date:"d.m.Y H:i" }}
+              {% else %}
+                <span class="cell-muted">нет входов</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="3" class="cell-muted" style="text-align:center;">Нет данных</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  // мини-барчарты по количеству кабинетов в таблицах
+  (function () {
+    document.querySelectorAll('table.table-metric').forEach(function (table) {
+      var cells = Array.from(table.querySelectorAll('td.cell-count'));
+      if (!cells.length) return;
+
+      var max = Math.max.apply(null, cells.map(function (c) {
+        return parseFloat(c.dataset.value || '0') || 0;
+      }));
+
+      cells.forEach(function (cell) {
+        var val = parseFloat(cell.dataset.value || '0') || 0;
+        var pct = max ? (val / max) * 100 : 0;
+        var label = cell.textContent.trim();
+
+        cell.innerHTML =
+          '<div class="metric-bar">' +
+            '<div class="metric-bar-fill" style="width:' + pct.toFixed(0) + '%"></div>' +
+            '<span class="metric-bar-label">' + label + '</span>' +
+          '</div>';
+      });
+    });
+  })();
+
+  // stacked-bar по активности входов
+  (function () {
+    var bar = document.querySelector('.activity-bar');
+    if (!bar) return;
+
+    var v7     = parseInt(bar.getAttribute('data-login-7') || '0', 10) || 0;
+    var v730   = parseInt(bar.getAttribute('data-login-7-30') || '0', 10) || 0;
+    var vold   = parseInt(bar.getAttribute('data-login-old') || '0', 10) || 0;
+    var vnever = parseInt(bar.getAttribute('data-login-never') || '0', 10) || 0;
+
+    var total = v7 + v730 + vold + vnever;
+    if (!total) return;
+
+    function makeSegment(value, cls, label) {
+      if (!value) return '';
+      var pct = (value / total) * 100;
+      var text = label + ' – ' + value + ' (' + pct.toFixed(0) + '%)';
+      var small = pct < 12 ? ' small-text' : '';
+      return '<div class="activity-segment ' + cls + small +
+             '" style="width:' + pct + '%;">' + text + '</div>';
+    }
+
+    bar.innerHTML =
+      makeSegment(v7,     'activity-7',      '≤ 7 дней') +
+      makeSegment(v730,   'activity-7-30',   '7–30 дней') +
+      makeSegment(vold,   'activity-old',    '> 30 дней') +
+      makeSegment(vnever, 'activity-never',  'нет входов');
+  })();
+</script>
+
+</body>
+</html>
+
+

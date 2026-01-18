@@ -1,0 +1,167 @@
+{# templates/admin/properties/analytics/_tops.html #}
+{% load l10n %}
+
+<div class="section section-divider" style="margin-top:18px;">
+  <div class="section-title">IV. Топы по стоимости и росту</div>
+  <div class="section-sub">
+    Список объектов с наибольшей последней рыночной стоимостью и максимальным ростом оценки.
+  </div>
+
+  <div class="grid-two">
+
+    {# Объекты по последней оценке #}
+    <div>
+      <p class="section-title">
+        Объекты по последней оценке
+        <a class="section-title-link"
+           href="{% url 'admin:properties_property_changelist' %}">
+          Открыть в списке
+        </a>
+      </p>
+      <p class="section-sub">
+        Объекты с последней рыночной стоимостью.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Объект</th>
+            <th>Кад. №</th>
+            <th>Последняя оценка</th>
+            <th>Дата</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if top_by_valuation %}
+            {% for p in top_by_valuation %}
+              <tr>
+                <td class="cell-name">
+                  <a href="{% url 'admin:properties_property_change' p.pk %}"
+                     class="cell-link">
+                    {% if p.short_name %}
+                      {{ p.short_name }}
+                    {% else %}
+                      {{ p.address }}
+                    {% endif %}
+                  </a>
+                </td>
+                <td class="cell-muted">
+                  {{ p.kadastr_number|default:"—" }}
+                </td>
+                <td>
+                  {% if p.last_valuation_amount %}
+                    <span class="js-currency"
+                          data-value="{{ p.last_valuation_amount|unlocalize }}"></span>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td class="cell-muted">
+                  {% if p.last_valuation_date %}
+                    {{ p.last_valuation_date|date:"d.m.Y" }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            <tr class="row-total">
+              <td class="cell-name">Итого</td>
+              <td></td>
+              <td>
+                {% if top_by_valuation_total %}
+                  <span class="js-currency"
+                        data-value="{{ top_by_valuation_total|unlocalize }}"></span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td></td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="4" class="cell-muted" style="text-align:center;">
+                Нет данных по оценкам.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Рост стоимости #}
+    <div class="grid-two-right">
+      <div>
+        <p class="section-title">
+          Рост стоимости
+        </p>
+        <p class="section-sub">
+          Объекты с максимальным увеличением последней оценки к предыдущей.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Объект</th>
+              <th>Δ, ₽</th>
+              <th>Δ, %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if top_growth %}
+              {% for p in top_growth %}
+                <tr>
+                  <td class="cell-name">
+                    <a href="{% url 'admin:properties_property_change' p.pk %}"
+                       class="cell-link">
+                      {% if p.short_name %}
+                        {{ p.short_name }}
+                      {% else %}
+                        {{ p.address }}
+                      {% endif %}
+                    </a>
+                  </td>
+                  <td class="delta-up">
+                    {% if p.last_diff %}
+                      <span class="js-currency"
+                            data-prefix="▲ "
+                            data-value="{{ p.last_diff|unlocalize }}"></span>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="delta-up">
+                    {% if p.last_diff_pct is not None %}
+                      {{ p.last_diff_pct|floatformat:1 }}%
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+              <tr class="row-total">
+                <td class="cell-name">Итого</td>
+                <td class="delta-up">
+                  {% if top_growth_total %}
+                    <span class="js-currency"
+                          data-prefix="▲ "
+                          data-value="{{ top_growth_total|unlocalize }}"></span>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td></td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="3" class="cell-muted" style="text-align:center;">
+                  Недостаточно данных для анализа роста.
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+

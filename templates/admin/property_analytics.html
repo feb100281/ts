@@ -1,0 +1,38 @@
+{% load static l10n %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Аналитика по объектам недвижимости</title>
+  <link rel="stylesheet" href="{% static 'properties/property_analytics.css' %}">
+</head>
+<body>
+<div class="page-wrap">
+
+  {# I. Шапка и навигация #}
+  {% include "admin/properties/analytics/_header.html" %}
+
+  {# II. Общая сводка по объектам #}
+  {% include "admin/properties/analytics/_summary_cards.html" %}
+
+  {# III. Динамика суммарной оценки по датам #}
+  {% include "admin/properties/analytics/_timeline_total.html" %}
+
+  {# IV. Аналитика по отдельному объекту (оценки + кадастр) #}
+  {% include "admin/properties/analytics/_object_timeline.html" %}
+
+  {# V. Топы по стоимости и росту #}
+  {% include "admin/properties/analytics/_tops.html" %}
+
+</div>
+
+{{ valuations_series|json_script:"valuations-series-data" }}
+{{ kadastr_series|json_script:"kadastr-series-data" }}
+
+{# Plotly для графика РС / КС по объекту #}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+{# общий JS с логикой аналитики и карточек #}
+<script src="{% static 'properties/property_print.js' %}"></script>
+</body>
+</html>

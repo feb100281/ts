@@ -1,0 +1,261 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные breadcrumbs #}
+{% block breadcrumbs %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <link rel="stylesheet" href="{% static 'macro/keyrate_admin.css' %}">
+
+  <style>
+    .ba-pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+  </style>
+{% endblock %}
+
+{% block content_title %}
+  {% with obj=adminform.form.instance %}
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: аватар + инфо #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      <!-- Аватар -->
+      <div style="
+          width:40px;height:40px;border-radius:6px;
+          background:#0f766e;color:#ccfbf1;
+          display:flex;align-items:center;justify-content:center;
+          font-size:18px;font-weight:600;
+          box-shadow:0 0 0 1px rgba(15,23,42,.12);
+      ">
+        {% if obj.pk %}
+          {% if obj.corporate %}
+            {{ obj.corporate.name|slice:":2"|upper }}
+          {% else %}
+            💳
+          {% endif %}
+        {% else %}
+          +
+        {% endif %}
+      </div>
+
+      <!-- Текстовый блок -->
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.06em;
+            color:#6b7280;
+        ">
+          Справочник банковских счетов
+        </span>
+
+        {% if obj.pk %}
+          <span style="font-size:20px;font-weight:600;color:#111827;">
+            {% if obj.corporate %}
+              {{ obj.corporate.name }}
+            {% else %}
+              Банковский счёт
+            {% endif %}
+            {% if obj.account %}
+              · {{ obj.account }}
+            {% endif %}
+          </span>
+        {% else %}
+          <span style="font-size:20px;font-weight:600;color:#111827;">
+            Новый банковский счёт
+          </span>
+        {% endif %}
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+
+          {# Режим #}
+          {% if obj.pk %}
+            <span class="ba-pill" style="background:#dcfce7;color:#166534;">
+              Режим: редактирование
+            </span>
+          {% else %}
+            <span class="ba-pill" style="background:#e0f2fe;color:#0369a1;">
+              Режим: добавление
+            </span>
+          {% endif %}
+
+          {# Собственник #}
+          {% if obj.pk %}
+            {% if obj.corporate %}
+              <span class="ba-pill" style="background:#eff6ff;color:#1d4ed8;">
+                Собственник: {{ obj.corporate.name|truncatechars:30 }}
+              </span>
+            {% else %}
+              <span class="ba-pill" style="background:#fef2f2;color:#b91c1c;">
+                Собственник не указан
+              </span>
+            {% endif %}
+          {% endif %}
+
+          {# Банк #}
+          {% if obj.pk %}
+            {% if obj.bank %}
+              <span class="ba-pill" style="background:#ecfdf5;color:#047857;">
+                Банк: {{ obj.bank.name|truncatechars:30 }}
+              </span>
+            {% elif obj.bik %}
+              <span class="ba-pill" style="background:#fefce8;color:#854d0e;">
+                БИК: {{ obj.bik }}
+              </span>
+            {% endif %}
+          {% endif %}
+
+          {# Валюта #}
+          {% if obj.pk and obj.currency %}
+            <span class="ba-pill" style="background:#eef2ff;color:#4338ca;">
+              Валюта: {{ obj.get_currency_display|default:obj.currency }}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Спейсер #}
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА НАВИГАЦИИ #}
+    <div style="
+        min-width:220px;
+        max-width:260px;
+        border-radius:14px;
+        background:rgba(248,250,252,0.9);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:600;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        <a href="{% url 'admin:corporate_bankaccount_changelist' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:4px 10px;
+             border-radius:6px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+           ">
+          ← Все банковские счета
+        </a>
+
+        {% if obj.pk and obj.corporate %}
+          <a href="{% url 'admin:corporate_owners_change' obj.corporate.pk %}"
+             style="
+               font-size:11px;
+               padding:3px 8px;
+               border-radius:6px;
+               text-decoration:none;
+               background:#f3f4f6;
+               color:#4b5563;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+             ">
+            🏢 Карточка собственника
+          </a>
+        {% endif %}
+
+        {% if obj.pk and obj.bank %}
+          <a href="{% url 'admin:corporate_bank_change' obj.bank.pk %}"
+             style="
+               font-size:11px;
+               padding:3px 8px;
+               border-radius:6px;
+               text-decoration:none;
+               background:#f9fafb;
+               color:#4b5563;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+             ">
+            🏦 Карточка банка
+          </a>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ — как у собственников #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        СПРАВОЧНИКИ
+      </span>
+      <span>›</span>
+      <a href="{% url 'admin:corporate_bankaccount_changelist' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        БАНКОВСКИЕ СЧЕТА
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+        {% if obj.pk %}
+          {{ obj.corporate.name|default:"БАНКОВСКИЙ СЧЁТ" }}
+        {% else %}
+          НОВЫЙ СЧЁТ
+        {% endif %}
+      </span>
+    </nav>
+
+    {% if obj.pk %}
+      <span style="color:#9ca3af;">
+        {% if obj.account %}Счёт: {{ obj.account }} · {% endif %}
+        {% if obj.currency %}Валюта: {{ obj.get_currency_display|default:obj.currency }}{% endif %}
+      </span>
+    {% endif %}
+  </div>
+  {% endwith %}
+{% endblock %}
+
+{% block object-tools %}
+  {{ block.super }}
+{% endblock %}

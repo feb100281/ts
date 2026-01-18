@@ -1,0 +1,469 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block bodyclass %}login{% endblock %}
+
+{% block extrastyle %}
+<style>
+  :root{
+    --bg:#f3f4f6;
+    --card:#ffffff;
+    --text:#111827;
+    --muted:#6b7280;
+    --line:#e5e7eb;
+    --accent:#111827;
+    --accent-hover:#020617;
+    --danger-bg:#fef2f2;
+    --danger-border:#fecaca;
+    --danger-text:#b91c1c;
+  }
+
+  body.login{
+    background:var(--bg);
+  }
+  body.login .main-header,
+  body.login .main-sidebar,
+  body.login .main-footer,
+  body.login .content-header{
+    display:none !important;
+  }
+  body.login .content-wrapper{
+    margin-left:0 !important;
+    padding-top:40px;
+  }
+  body.login .wrapper{
+    background:var(--bg);
+  }
+
+  .auth-layout{
+    max-width:960px;
+    margin:32px auto 40px;
+    display:flex;
+    gap:32px;
+    align-items:stretch;
+  }
+
+  /* --- ЛЕВАЯ ПАНЕЛЬ С ЛОГОТИПОМ И ОПИСАНИЕМ --- */
+  .auth-panel{
+    flex:1 1 0;
+    background:radial-gradient(circle at 20% 10%, #1f2937 0, #020617 60%);
+    color:#e5e7eb;
+    border-radius:12px;
+    padding:28px 28px 22px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    box-shadow:0 20px 45px rgba(15,23,42,.5);
+    position:relative;
+    overflow:hidden;
+  }
+
+  /* подсветка под большим логотипом */
+  .auth-panel::before{
+    content:"";
+    position:absolute;
+    width:420px;
+    height:420px;
+    border-radius:999px;
+    background:radial-gradient(circle, rgba(45,212,191,.45), transparent 70%);
+    bottom:-140px;
+    left:50%;
+    transform:translateX(-50%);
+    opacity:0.65;
+    pointer-events:none;
+  }
+
+  .auth-panel > *{
+    position:relative;
+    z-index:1;
+  }
+
+  .auth-panel-header{
+    margin-bottom:22px;
+  }
+
+  .auth-name{
+    font-size:18px;
+    font-weight:700;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+  }
+  .auth-sub{
+    font-size:13px;
+    color:#cdd3dd;
+    margin-top:4px;
+  }
+
+  .auth-list{
+    list-style:none;
+    padding:0;
+    margin:0 0 14px;
+    font-size:13px;
+    color:#e5e7eb;
+  }
+  .auth-list li{
+    margin-bottom:10px;
+    display:flex;
+    gap:8px;
+  }
+  .auth-list .bullet{
+    font-size:14px;
+    color:#9ca3af;
+    margin-top:-1px;
+  }
+
+  /* БОЛЬШОЙ ЛОГОТИП ПО ЦЕНТРУ */
+  .auth-logo-big-wrap{
+    margin:28px 0 6px;
+    display:flex;
+    justify-content:center;
+  }
+  .auth-logo-big{
+    width:240px;
+    max-width:100%;
+    filter:
+      brightness(1.7)
+      saturate(1.4)
+      drop-shadow(0 0 25px rgba(45,212,191,.9));
+    opacity:0.98;
+  }
+
+  .auth-footer{
+    font-size:11px;
+    color:#a1a1aa;
+    margin-top:6px;
+  }
+  .auth-footer strong{
+    color:#f9fafb;
+    font-weight:600;
+  }
+
+  /* --- ПРАВАЯ КАРТОЧКА — ФОРМА ВХОДА --- */
+  .login-card{
+    flex:0 0 420px;
+    background:var(--card);
+    border:1px solid #e6e7eb;
+    border-radius:12px;
+    padding:30px 28px 24px;
+    box-shadow:0 8px 22px rgba(15,23,42,.06);
+  }
+  .login-title{
+    margin:0 0 6px;
+    font-size:26px;
+    font-weight:700;
+    color:var(--text);
+  }
+  .sub{
+    margin:0 0 18px;
+    color:var(--muted);
+    font-size:14px;
+  }
+
+  .msg{
+    background:var(--danger-bg);
+    color:var(--danger-text);
+    border:1px solid var(--danger-border);
+    padding:8px 10px;
+    border-radius:6px;
+    margin-bottom:10px;
+    font-size:13px;
+  }
+
+  .field{margin-bottom:14px;}
+  .label{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:6px;
+    font-weight:600;
+    font-size:14px;
+    color:var(--text);
+  }
+  .hint{
+    font-size:12px;
+    color:var(--muted);
+  }
+
+  .input-wrap{position:relative;}
+  .input{
+    width:100%;
+    padding:10px 40px 10px 12px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:#f9fafb;
+    font-size:14px;
+    transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .input:focus{
+    outline:none;
+    border-color:var(--accent);
+    background:#ffffff;
+    box-shadow:0 0 0 1px rgba(15,23,42,.12);
+  }
+
+  .roles{
+    display:flex;
+    gap:10px;
+    margin-bottom:16px;
+  }
+
+  .role{
+    flex:1;
+    display:flex;
+    gap:8px;
+    align-items:center;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:8px 12px;
+    background:#ffffff;
+    font-size:14px;
+    cursor:pointer;
+    font-weight:500;
+    transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+
+  .role input{
+    accent-color:var(--accent);
+  }
+  .role:hover{
+    border-color:#cbd5f5;
+    box-shadow:0 0 0 1px rgba(15,23,42,.05);
+  }
+
+  .row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    margin:4px 0 16px;
+    font-size:13px;
+  }
+
+  .btn{
+    width:100%;
+    padding:11px 0;
+    background:linear-gradient(180deg, #111827 0%, #020617 100%);
+    color:#fff;
+    font-weight:600;
+    font-size:15px;
+    border-radius:6px;
+    border:none;
+    cursor:pointer;
+    box-shadow:0 12px 22px rgba(15,23,42,.35);
+    transition:background .12s ease, transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover{
+    transform:translateY(-1px);
+    box-shadow:0 16px 30px rgba(15,23,42,.45);
+  }
+  .btn:active{
+    transform:translateY(0);
+    box-shadow:0 8px 16px rgba(15,23,42,.35);
+  }
+
+  .footer{
+    text-align:center;
+    margin-top:10px;
+    color:var(--muted);
+    font-size:12px;
+  }
+
+  .toggle-pass{
+    position:absolute;
+    right:10px;
+    top:50%;
+    transform:translateY(-50%);
+    border:0;
+    background:transparent;
+    cursor:pointer;
+    padding:6px;
+    border-radius:6px;
+    color:#6b7280;
+  }
+  .toggle-pass:hover{
+    background:rgba(31,41,55,.06);
+    color:#111827;
+  }
+
+  .forgot-wrapper{
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .forgot-label{
+    font-size:12px;
+    color:var(--muted);
+  }
+  .forgot-link{
+    font-size:12px;
+    text-decoration:none;
+    color:var(--accent);
+    padding:3px 10px;
+    border-radius:6px;
+    border:1px solid transparent;
+    transition:all .15s ease;
+  }
+  .forgot-link:hover{
+    border-color:var(--accent);
+    background:#f9fafb;
+  }
+
+  /* --- АДАПТИВ --- */
+  @media (max-width: 900px){
+    .auth-layout{
+      flex-direction:column;
+      max-width:520px;
+      margin:24px auto 32px;
+      padding:0 16px;
+      gap:20px;
+    }
+    .auth-panel{
+      order:-1; /* сначала бренд-блок, потом форма */
+      border-radius:16px;
+    }
+    .login-card{
+      flex:1 1 auto;
+      border-radius:16px;
+    }
+  }
+
+  @media (max-width: 600px){
+    body.login .content-wrapper{
+      padding-top:20px;
+    }
+    .auth-panel{
+      padding:20px 18px 18px;
+      box-shadow:0 12px 30px rgba(15,23,42,.4);
+    }
+    .auth-panel::before{
+      width:320px;
+      height:320px;
+      bottom:-160px;
+    }
+    .login-card{
+      padding:22px 18px 20px;
+      box-shadow:0 8px 20px rgba(15,23,42,.08);
+    }
+    .login-title{
+      font-size:24px;
+    }
+    .auth-name{
+      font-size:16px;
+    }
+  }
+
+  @media (max-width: 480px){
+    .roles{
+      flex-direction:column;
+    }
+    .row{
+      flex-direction:column;
+      align-items:flex-start;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-layout">
+
+  <!-- ЛЕВАЯ ПАНЕЛЬ — БРЕНД + ЛОГО -->
+  <section class="auth-panel">
+    <div>
+      <div class="auth-panel-header">
+        <div class="auth-name">МАНУФАКТУРА ОФИСОВ</div>
+        <div class="auth-sub">Управление арендаторами и объектом недвижимости</div>
+      </div>
+
+      <ul class="auth-list">
+        <li><span class="bullet">•</span>Единый кабинет для арендаторов и управляющей компании.</li>
+        <li><span class="bullet">•</span>Доступ к договорам, начислениям и статусу оплат.</li>
+        <li><span class="bullet">•</span>Оперативная коммуникация и сервисные обращения.</li>
+      </ul>
+    </div>
+
+    <!-- Большой логотип -->
+    <div class="auth-logo-big-wrap">
+      <img class="auth-logo-big" src="{% static 'img/logo-mo.svg' %}" alt="logo big">
+    </div>
+
+    <div class="auth-footer">
+      <strong>Конфиденциальная информация.</strong> Доступ только для уполномоченных пользователей.
+    </div>
+  </section>
+
+  <!-- ПРАВАЯ ПАНЕЛЬ — ФОРМА ВХОДА -->
+  <section class="login-card">
+    <h1 class="login-title">Вход в систему</h1>
+    <p class="sub">Выберите роль и введите учётные данные.</p>
+
+    {% for message in messages %}
+      <div class="msg" role="alert">{{ message }}</div>
+    {% endfor %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="roles">
+        <label class="role">
+          <input type="radio" name="role" value="manager" required>
+          Менеджер УК
+        </label>
+        <label class="role">
+          <input type="radio" name="role" value="tenant" required>
+          Арендатор
+        </label>
+      </div>
+
+      <div class="field">
+        <label class="label">
+          <span>Логин</span>
+        </label>
+        <div class="input-wrap">
+          <input class="input" type="text" name="username" autocomplete="username" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label">
+          <span>Пароль</span>
+        </label>
+        <div class="input-wrap">
+          <input class="input" id="password" type="password" name="password"
+                 autocomplete="current-password" required>
+          <button type="button" class="toggle-pass" id="togglePass">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"
+                    stroke="currentColor" stroke-width="1.6"/>
+              <circle cx="12" cy="12" r="3"
+                      stroke="currentColor" stroke-width="1.6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label><input type="checkbox" name="remember"> Запомнить меня</label>
+        <div class="forgot-wrapper">
+          <span class="forgot-label">Не можете войти?</span>
+          <a href="{% url 'password_reset' %}" class="forgot-link">Восстановить доступ</a>
+        </div>
+      </div>
+
+      <button class="btn" type="submit">Войти</button>
+
+      <div class="footer">
+        Менеджер УК → административный интерфейс • Арендатор → личный кабинет
+      </div>
+
+      <input type="hidden" name="next" value="{{ next|default:'' }}">
+    </form>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% static 'js/login.js' %}"></script>
+{% endblock %}

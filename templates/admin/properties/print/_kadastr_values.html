@@ -1,0 +1,35 @@
+{% comment %} templates/admin/properties/print/_kadastr_values.html {% endcomment %}
+{% if has_kadastr_values_amount %}
+<div class="section section-divider">
+  <div class="section-title">IV. Кадастровая стоимость</div>
+  <div class="section-sub">
+    История кадастровой стоимости по объекту (если заполнена).
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Дата применения</th>
+        <th>Кадастровая стоимость, ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for kv in kadastr_values %}
+      {% if kv.kadastr_amount %}
+      <tr>
+        <td>{{ kv.kadastr_date|date:"d.m.Y"|default_if_none:"—" }}</td>
+        <td>
+          <span class="js-currency"
+                data-value="{{ kv.kadastr_amount|floatformat:0|cut:','|cut:' ' }}"></span>
+        </td>
+      </tr>
+      {% endif %}
+      {% empty %}
+      <tr class="empty-row">
+        <td colspan="2">Нет данных о кадастровой стоимости.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

@@ -1,0 +1,33 @@
+{% comment %} templates/admin/properties/print/_floors.html {% endcomment %}
+{% if has_floors_area %}
+<div class="section section-divider">
+  <div class="section-title">V. Этажи</div>
+  <div class="section-sub">
+    Площадь по этажам. Данные берутся из справочника этажей.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Этаж</th>
+        <th>Площадь, м²</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in floors %}
+      <tr>
+        <td>{{ f.floor_number }}</td>
+        <td>
+          {% if f.area %}
+            <span class="js-number"
+                  data-value="{{ f.area|floatformat:0|cut:','|cut:' ' }}"></span>
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

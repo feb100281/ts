@@ -1,0 +1,31 @@
+{# templates/admin/property_print_bulk.html #}
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Печатный отчёт по выбранным объектам</title>
+
+  <link rel="stylesheet" href="{% static 'properties/property_print.css' %}">
+</head>
+
+<body>
+<div class="page-wrap">
+
+  {# I. Общая сводка по выборке #}
+  {% include "admin/properties/print/_summary_bulk.html" %}
+
+  {# II. Карточки объектов — уже готовый HTML #}
+  {% for item in items %}
+    {{ item.card_html|safe }}
+
+    {% if not forloop.last %}
+      <div class="page-break"></div>
+    {% endif %}
+  {% endfor %}
+
+</div>
+
+<script src="{% static 'properties/property_print.js' %}"></script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+/* ===== Бэкдроп и окно модалки ===== */
+
+.group-avg-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.group-avg-modal-backdrop.is-visible {
+    display: flex;
+}
+
+.group-avg-modal {
+    background: #1e293b;
+    color: #f9fafb;
+    border-radius: 12px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.65);
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-size: 13px;
+}
+
+.group-avg-modal-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+}
+
+.group-avg-modal-title {
+    font-size: 13px;
+}
+
+.group-avg-modal-close {
+    border: none;
+    background: transparent;
+    color: #e5e7eb;
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+
+.group-avg-modal-close:hover {
+    color: #f97316;
+}
+
+.group-avg-modal-body {
+    padding: 10px 14px 12px;
+    overflow: auto;
+}
+
+/* ===== Таблицы внутри модалки (для средней цены и для объектов) ===== */
+
+.group-avg-modal-table,
+.group-objects-modal-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.group-avg-modal-table th,
+.group-avg-modal-table td,
+.group-objects-modal-table th,
+.group-objects-modal-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.group-avg-modal-table th,
+.group-objects-modal-table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    color: #cbd5f5;
+}
+
+.group-avg-modal-table td,
+.group-objects-modal-table td {
+    font-size: 12px;
+}
+
+.group-avg-modal-table tbody tr:last-child td,
+.group-objects-modal-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ===== Оформление ячеек с глазиком ===== */
+
+.group-avg-cell,
+.group-obj-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* единый стиль для всех кнопок-глазиков */
+.group-details-trigger,
+.group-avg-details-trigger {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin-left: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.group-details-trigger:focus,
+.group-avg-details-trigger:focus {
+    outline: none !important;
+}
+
+.group-details-trigger:hover,
+.group-avg-details-trigger:hover {
+    transform: scale(1.08);
+}
+
+

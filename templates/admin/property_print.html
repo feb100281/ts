@@ -1,0 +1,31 @@
+{% comment %} templates/admin/property_print.html {% endcomment %}
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Объект {{ property.short_name|default:property.address }} — печать</title>
+
+  {# общий CSS для карточки #}
+  <link rel="stylesheet" href="{% static 'properties/property_print.css' %}">
+</head>
+
+<body>
+<div class="page-wrap">
+
+  {# одна карточка объекта #}
+  {% include "admin/properties/print/_card.html" %}
+
+</div>
+
+{# общий JS для форматирования и «графиков» #}
+<script src="{% static 'properties/property_print.js' %}"></script>
+</body>
+</html>
+
+
+
+
+
+
+

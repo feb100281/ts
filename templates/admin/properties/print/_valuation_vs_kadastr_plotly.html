@@ -1,0 +1,132 @@
+{# templates/admin/properties/print/_valuation_vs_kadastr_plotly.html #}
+
+{% if valuation_vs_kadastr_plot_data %}
+<div class="block block-chart">
+  <h3 class="block-title">
+    Соотношение рыночной и кадастровой стоимости по датам оценок
+  </h3>
+
+  <div id="{{ valuation_vs_kadastr_chart_id }}" class="valuation-kadastr-chart"></div>
+
+  <div class="chart-dual-legend">
+    <div>
+      <span class="legend-box legend-box-valuation"></span>
+      Рыночная стоимость (РС)
+    </div>
+    <div>
+      <span class="legend-box legend-box-kadastr"></span>
+      Кадастровая стоимость (КС)
+    </div>
+    <div class="chart-dual-legend-note">
+      Линия с метками «×» показывает отношение РС / КС (вторая вертикальная шкала).
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+<script>
+(function() {
+  const data = {{ valuation_vs_kadastr_plot_data|safe }};
+  if (!data) return;
+
+  const chartId = "{{ valuation_vs_kadastr_chart_id }}";
+  const el = document.getElementById(chartId);
+  if (!el) return;
+
+  const labels    = data.labels || [];
+  const valuation = data.valuation || [];
+  const kadastr   = data.kadastr || [];
+  const ratio     = data.ratio || [];
+
+  // --- стоимости в млн ₽ ---
+  const valuationM = valuation.map(v => (v || 0) / 1e6);
+  const kadastrM   = kadastr.map(v => (v || 0) / 1e6);
+
+  // Функция для "10 281.4" вместо "10281.4"
+  function formatMillion(v) {
+    return v.toLocaleString("ru-RU", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+  }
+
+  const valText = valuationM.map(v => formatMillion(v));
+  const kadText = kadastrM.map(v => formatMillion(v));
+
+
+  const traceVal = {
+    x: labels,
+    y: valuationM,
+    type: "bar",
+    name: "Рыночная стоимость",
+    marker: { color: "#3b82f6" },
+    yaxis: "y1",
+    text: valText,
+    textposition: "inside",
+    insidetextanchor: "end",
+    textfont: { size: 9, color: "#ffffff" },
+  };
+
+  const traceKad = {
+    x: labels,
+    y: kadastrM,
+    type: "bar",
+    name: "Кадастровая стоимость",
+    marker: { color: "#9ca3af" },
+    yaxis: "y1",
+    text: kadText,
+    textposition: "inside",
+    insidetextanchor: "end",
+    textfont: { size: 9, color: "#111827" },
+  };
+
+  const traceRatio = {
+    x: labels,
+    y: ratio,
+    type: "scatter",
+    mode: "lines+markers+text",
+    name: "РС / КС",
+    yaxis: "y2",
+    line: { shape: "spline", color: "#16a34a" },
+    marker: { size: 6, color: "#16a34a" },
+    text: ratio.map(r => (r || 0).toFixed(2) + "×"),
+    textposition: "top center",
+    textfont: { size: 8 },
+    cliponaxis: false,
+  };
+
+  const layout = {
+    barmode: "group",
+    margin: { l: 70, r: 70, t: 10, b: 70 },
+    legend: { orientation: "h", y: -0.3 },
+    yaxis: {
+      title: "Стоимость, млн ₽",
+      tickformat: ",.1f",
+      rangemode: "tozero",
+    },
+    yaxis2: {
+      title: "РС / КС, ×",
+      overlaying: "y",
+      side: "right",
+      rangemode: "tozero",
+    },
+    xaxis: {
+      tickangle: -45,
+    },
+  };
+
+  const config = {
+    displayModeBar: false,
+    responsive: true,
+  };
+
+  Plotly.newPlot(el, [traceVal, traceKad, traceRatio], layout, config);
+})();
+</script>
+{% endif %}
+
+
+
+
+

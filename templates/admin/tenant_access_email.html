@@ -1,0 +1,84 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Доступ в личный кабинет — {{ cp.name }}</title>
+</head>
+<body style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+             background:#f3f4f6;margin:0;padding:24px 0;">
+
+  <table align="center" width="600" cellpadding="0" cellspacing="0"
+         style="background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;
+                padding:20px 24px;">
+
+    <!-- БРЕНД + ЗАГОЛОВОК -->
+    <tr>
+      <td style="font-size:11px;letter-spacing:2px;font-weight:600;color:#6b7280;
+                 padding-bottom:4px;text-transform:uppercase;">
+        {% comment %} МАНУФАКТУРА ОФИСОВ {% endcomment %}
+      </td>
+    </tr>
+    <tr>
+      <td style="font-size:20px;font-weight:700;color:#111827;padding-bottom:4px;">
+        Доступ в личный кабинет арендатора
+      </td>
+    </tr>
+    <tr>
+      <td style="font-size:13px;color:#6b7280;padding-bottom:16px;">
+        {{ cp.name }} &middot; ИНН {{ cp.tax_id }}
+      </td>
+    </tr>
+
+    <!-- ПРИВЕТСТВИЕ -->
+    <tr>
+      <td style="font-size:14px;color:#111827;padding-bottom:12px;">
+        Здравствуйте{% if user.get_full_name %}, {{ user.get_full_name }}{% else %}, {{ user.username }}{% endif %}!
+      </td>
+    </tr>
+
+    <tr>
+      <td style="font-size:14px;color:#111827;padding-bottom:12px;">
+        Ниже указаны параметры доступа в личный кабинет арендатора.
+      </td>
+    </tr>
+
+    <!-- ПАРАМЕТРЫ ВХОДА -->
+    <tr>
+      <td style="padding:12px 14px;margin:0;border-radius:10px;
+                 background:#f9fafb;border:1px solid #e5e7eb;font-size:13px;">
+        <div style="margin-bottom:6px;font-weight:600;">Параметры входа</div>
+        <div><strong>Адрес входа:</strong> <a href="{{ login_url }}">{{ login_url }}</a></div>
+        <div><strong>Логин:</strong> {{ user.username }}</div>
+        <div>
+          <strong>Email:</strong>
+          {% if user.email %}{{ user.email }}{% else %}не указан{% endif %}
+        </div>
+      </td>
+    </tr>
+
+    <!-- ИНСТРУКЦИЯ -->
+    <tr>
+      <td style="font-size:12px;color:#6b7280;padding-top:12px;">
+        По соображениям безопасности пароль не отправляется по электронной почте.
+        Для первого входа или восстановления доступа:
+        <ol style="margin:4px 0 0 18px;padding:0;">
+          <li>Перейдите по адресу входа.</li>
+          <li>Нажмите ссылку «Забыли пароль?». </li>
+          <li>Следуйте инструкциям, отправленным на ваш e-mail.</li>
+        </ol>
+      </td>
+    </tr>
+
+    <!-- ФУТЕР -->
+    <tr>
+      <td style="font-size:11px;color:#9ca3af;padding-top:16px;">
+        Письмо предназначено для внутреннего использования и не подлежит
+        передаче третьим лицам. При смене ответственного лица или e-mail
+        необходимо сообщить управляющей компании.
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

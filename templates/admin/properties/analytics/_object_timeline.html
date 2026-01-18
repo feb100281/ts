@@ -1,0 +1,119 @@
+{# templates/admin/properties/analytics/_object_timeline.html #}
+
+<div class="section section-divider" style="margin-top:18px;">
+  <div class="section-title">
+    III. Аналитика по отдельному объекту
+  </div>
+  <div class="section-sub">
+    История рыночных оценок, кадастровой стоимости и сравнение последней рыночной
+    и кадастровой стоимости по выбранному объекту.
+  </div>
+
+  <div class="object-selector-row">
+    <select id="property-select" class="object-select">
+      <option value="">Выберите объект…</option>
+      {% for s in valuations_series %}
+        <option value="{{ s.id }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+    <div id="property-summary" class="property-summary">
+      <span class="property-summary-placeholder">
+        Пока объект не выбран.
+      </span>
+    </div>
+  </div>
+
+  {# 1. Таймлайн по рыночным оценкам #}
+  <table class="table-timeline" id="object-timeline-table">
+    <thead>
+      <tr>
+        <th>Дата</th>
+        <th>Оценка, ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td colspan="2" class="cell-muted" style="text-align:center;">
+          Выберите объект в списке выше, чтобы увидеть его историю оценок.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# 2. Список оценок (как в карточке объекта) #}
+  <table class="table-timeline" id="object-valuations-table" style="margin-top:12px;">
+    <thead>
+      <tr>
+        <th class="col-date">Дата</th>
+        <th class="col-sum">Сумма оценки</th>
+        <th class="col-fedres">Федресурс</th>
+        <th class="col-report">Отчёт</th>
+        <th class="col-appraiser">Оценщик</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td colspan="5" class="cell-muted" style="text-align:center;">
+          Выберите объект в списке выше, чтобы увидеть список его оценок.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# 3. История кадастровой стоимости #}
+  <table class="table-timeline" id="object-kadastr-table" style="margin-top:12px;">
+    <thead>
+      <tr>
+        <th class="col-date">Дата применения</th>
+        <th class="col-сум">Кадастровая стоимость, ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td colspan="2" class="cell-muted" style="text-align:center;">
+          Выберите объект в списке выше, чтобы увидеть историю кадастровой стоимости.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# 4. Сравнение последней рыночной и кадастровой стоимости #}
+  <div class="section section-divider" id="object-comparison-section" style="margin-top:12px;">
+    <div class="section-title">Сравнение рыночной и кадастровой стоимости</div>
+    <div class="section-sub">
+      Визуальное сравнение последней рыночной оценки и последней кадастровой стоимости для выбранного объекта.
+    </div>
+
+    <table class="table-timeline comparison-table" id="object-comparison-table">
+      <thead>
+        <tr>
+          <th>Показатель</th>
+          <th>Сумма, ₽</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-type="valuation">
+          <td class="cell-muted">Рыночная стоимость</td>
+          <td class="comparison-cell"></td>
+        </tr>
+        <tr data-type="kadastr">
+          <td class="cell-muted">Кадастровая стоимость</td>
+          <td class="comparison-cell"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section-sub" id="object-comparison-note" style="margin-top:4px;">
+      Выберите объект, чтобы увидеть сравнение рыночной и кадастровой стоимости.
+    </div>
+  </div>
+
+  {# 5. График РС / КС по датам оценок выбранного объекта #}
+  <div class="section-divider" style="margin-top:16px;">
+    <div class="section-sub">
+      Динамика рыночной и кадастровой стоимости по датам отчётов об оценке для выбранного объекта:
+    </div>
+    <div id="object-valuation-kadastr-chart" class="valuation-kadastr-chart"></div>
+  </div>
+</div>
+

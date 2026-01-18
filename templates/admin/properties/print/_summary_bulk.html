@@ -1,0 +1,75 @@
+{% comment %} templates/admin/properties/print/_summary_bulk.html {% endcomment %}
+
+{% if summary %}
+  <div class="card summary-card">
+    <div class="toolbar">
+      <a href="{% url 'admin:properties_property_changelist' %}" class="btn-back">
+        ← К списку объектов
+      </a>
+
+      <button class="btn-print" onclick="window.print()">
+        <span class="icon">🖨</span>
+        <span>Печать</span>
+      </button>
+    </div>
+
+    <div class="header">
+      <div class="title-block">
+        <div class="title-label">Отчёт по объектам</div>
+        <h1>Отчёт по выбранным объектам</h1>
+        <div class="subtitle">
+          Отчёт сформирован по {{ summary.count }} объект{{ summary.count|pluralize:"у,ам" }}.
+          <br>
+          Дата формирования отчёта: {% now "d.m.Y H:i" %}
+        </div>
+      </div>
+      <div class="tag">Сводка по выборке</div>
+    </div>
+
+    {% if summary.selected_labels %}
+  <div class="section">
+    <div class="section-title">Выбранные объекты</div>
+    <ul class="summary-selected-list">
+      {% for label in summary.selected_labels %}
+        <li class="summary-selected-item">
+          {{ label }}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+
+
+
+    {% if summary.timeline %}
+      <div class="section">
+        <div class="section-title">Динамика общей рыночной стоимости</div>
+        <div class="section-sub">
+          Сумма оценок по всем выбранным объектам в каждый момент оценки.
+        </div>
+
+        <table class="table-timeline valuation-timeline-table">
+          <thead>
+            <tr>
+              <th>Дата</th>
+              <th>Суммарная оценка, ₽</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for point in summary.timeline %}
+              <tr>
+                <td class="cell-muted">{{ point.date|date:"d.m.Y" }}</td>
+                <td class="timeline-total"
+                    data-value="{{ point.total|floatformat:0|cut:','|cut:' ' }}"></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  {# после сводки — новая страница для карточек объектов #}
+  <div class="page-break"></div>
+{% endif %}

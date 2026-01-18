@@ -1,0 +1,41 @@
+{# templates/admin/properties/analytics/_timeline_total.html #}
+{% load l10n %}
+
+<div class="section section-divider" style="margin-top:18px;">
+  <div class="section-title">
+    II. Динамика суммарной рыночной стоимости по датам
+    <a class="section-title-link"
+       href="{% url 'admin:properties_property_changelist' %}">
+      Перейти к объектам
+    </a>
+  </div>
+  <div class="section-sub">
+    Суммарная рыночная стоимость по всем объектам на каждую дату оценки.
+  </div>
+
+  <table class="table-timeline table-timeline-total valuation-timeline-table">
+    <thead>
+      <tr>
+        <th>Дата</th>
+        <th>Сумма оценок, ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in valuations_timeline %}
+        <tr>
+          <td class="cell-muted">
+            {{ row.valuation_date|date:"d.m.Y" }}
+          </td>
+          <td class="timeline-total" data-value="{{ row.total|unlocalize }}"></td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="2" class="cell-muted" style="text-align:center;">
+            Нет данных по оценкам для построения динамики.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+

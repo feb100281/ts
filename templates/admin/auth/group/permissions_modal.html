@@ -1,0 +1,120 @@
+<div style="font-size:12px; max-height:70vh; overflow-y:auto; padding-right:4px;">
+
+  <div style="margin-bottom:8px;color:#6b7280;">
+    <span style="font-weight:600;">Легенда:</span>
+    <span style="margin-left:6px;">👁 просмотр</span>
+    <span style="margin-left:6px;">➕ добавление</span>
+    <span style="margin-left:6px;">✏ изменение</span>
+    <span style="margin-left:6px;">🗑 удаление</span>
+  </div>
+
+  {% if apps %}
+    {% for app in apps %}
+
+      <details style="margin-bottom:8px; border:1px solid #e5e7eb; border-radius:6px; background:#f9fafb;">
+        <summary style="cursor:pointer; padding:8px; display:flex; justify-content:space-between; align-items:center;">
+
+          <span style="font-weight:600; color:#111827;">
+            {{ app.label }}
+          </span>
+
+          <span style="display:flex; gap:4px; font-size:11px;">
+            {% if app.by_action.view %}
+              <span style="padding:1px 6px; border-radius:999px; background:#dcfce7; color:#166534;">
+                👁 {{ app.by_action.view|length }}
+              </span>
+            {% endif %}
+            {% if app.by_action.add %}
+              <span style="padding:1px 6px; border-radius:999px; background:#dbeafe; color:#1d4ed8;">
+                ➕ {{ app.by_action.add|length }}
+              </span>
+            {% endif %}
+            {% if app.by_action.change %}
+              <span style="padding:1px 6px; border-radius:999px; background:#ffedd5; color:#92400e;">
+                ✏ {{ app.by_action.change|length }}
+              </span>
+            {% endif %}
+            {% if app.by_action.delete %}
+              <span style="padding:1px 6px; border-radius:999px; background:#fee2e2; color:#b91c1c;">
+                🗑 {{ app.by_action.delete|length }}
+              </span>
+            {% endif %}
+            {% if app.by_action.other %}
+              <span style="padding:1px 6px; border-radius:999px; background:#e5e7eb; color:#374151;">
+                ▸ {{ app.by_action.other|length }}
+              </span>
+            {% endif %}
+          </span>
+        </summary>
+
+        <div style="padding:8px 12px;">
+
+          {% if app.by_action.view %}
+            <div style="margin-bottom:4px; font-weight:600; color:#16a34a;">👁 Просмотр</div>
+            <ul style="margin:0 0 8px 18px; padding:0;">
+              {% for perm in app.by_action.view %}
+                <li>
+                  <strong>{{ perm.codename }}</strong>
+                  {% if perm.name %}<span style="color:#6b7280;"> — {{ perm.name }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {% if app.by_action.add %}
+            <div style="margin-bottom:4px; font-weight:600; color:#2563eb;">➕ Добавление</div>
+            <ul style="margin:0 0 8px 18px; padding:0;">
+              {% for perm in app.by_action.add %}
+                <li>
+                  <strong>{{ perm.codename }}</strong>
+                  {% if perm.name %}<span style="color:#6b7280;"> — {{ perm.name }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {% if app.by_action.change %}
+            <div style="margin-bottom:4px; font-weight:600; color:#92400e;">✏ Изменение</div>
+            <ul style="margin:0 0 8px 18px; padding:0;">
+              {% for perm in app.by_action.change %}
+                <li>
+                  <strong>{{ perm.codename }}</strong>
+                  {% if perm.name %}<span style="color:#6b7280;"> — {{ perm.name }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {% if app.by_action.delete %}
+            <div style="margin-bottom:4px; font-weight:600; color:#b91c1c;">🗑 Удаление</div>
+            <ul style="margin:0 0 8px 18px; padding:0;">
+              {% for perm in app.by_action.delete %}
+                <li>
+                  <strong>{{ perm.codename }}</strong>
+                  {% if perm.name %}<span style="color:#6b7280;"> — {{ perm.name }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {% if app.by_action.other %}
+            <div style="margin-bottom:4px; font-weight:600; color:#4b5563;">▸ Прочие</div>
+            <ul style="margin:0 0 4px 18px; padding:0;">
+              {% for perm in app.by_action.other %}
+                <li>
+                  <strong>{{ perm.codename }}</strong>
+                  {% if perm.name %}<span style="color:#6b7280;"> — {{ perm.name }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+        </div>
+      </details>
+
+    {% endfor %}
+  {% else %}
+    <p style="color:#9ca3af;margin:0;">У группы нет назначенных прав.</p>
+  {% endif %}
+</div>
+

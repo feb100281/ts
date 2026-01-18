@@ -1,0 +1,73 @@
+/* ===== Список админки ===== */
+#changelist-search{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:14px;
+}
+
+/* обёртка для позиционирования иконок внутри инпута */
+.admin-search-wrap{
+  position:relative;
+  display:inline-block;
+}
+
+/* поле поиска: место под лупу и крестик */
+#changelist-search input[name="q"]{
+  width:380px;
+  padding-left:30px;  /* под лупу слева */
+  padding-right:30px; /* под крестик справа */
+}
+
+/* скрыть нативный cancel у webkit */
+#changelist-search input[name="q"]::-webkit-search-cancel-button{
+  -webkit-appearance:none;
+  appearance:none;
+}
+
+/* 🔍 лупа слева */
+.admin-search-icon{
+  position:absolute;
+  left:10px;
+  top:50%;
+  transform:translateY(-50%);
+  pointer-events:none;
+  opacity:.85;
+}
+.admin-search-icon svg{
+  stroke:#888;
+  width:16px;
+  height:16px;
+}
+.admin-search-wrap:focus-within .admin-search-icon svg{
+  stroke:#444; /* темнее при фокусе */
+}
+
+/* × крестик справа */
+.admin-clear-btn{
+  position:absolute;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%);
+  font-size:18px;
+  line-height:1;
+  cursor:pointer;
+  color:#777;
+  user-select:none;
+}
+.admin-clear-btn:hover{ color:#333; }
+
+/* таблица — косметика */
+.change-list table#result_list tbody tr{ height:44px; }
+th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
+.change-list .results table thead th{ border-bottom-color:#e5e7eb; }
+
+
+
+
+
+
+
+
+
+

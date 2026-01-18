@@ -1,0 +1,273 @@
+{# templates/admin/la/amendmentstype/change_form.html #}
+{% extends "admin/change_form.html" %}
+{% load admin_urls %}
+
+{# убираем стандартные breadcrumbs #}
+{% block breadcrumbs %}{% endblock %}
+
+{% block content_title %}
+  {% with obj=adminform.form.instance %}
+    <div style="display:flex;flex-direction:column;gap:4px;padding-bottom:6px;">
+
+      {# ВЕРХНИЙ РЯД: ЛЕВАЯ ИНФО + ПРАВАЯ КАРТОЧКА ДЕЙСТВИЙ #}
+      <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+
+        {# ЛЕВАЯ ЧАСТЬ: АВАТАР + ТЕКСТ #}
+        <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+          {# --- АВАТАР ТИПА ДОП. СОГЛАШЕНИЯ --- #}
+          <div style="
+              width:40px;
+              height:40px;
+              border-radius:10px;
+              background:{% if obj.pk %}#111827{% else %}#e5e7eb{% endif %};
+              color:{% if obj.pk %}#f9fafb{% else %}#4b5563{% endif %};
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              font-size:18px;
+              font-weight:600;
+              box-shadow:0 0 0 1px rgba(15,23,42,.12);
+          ">
+            {% if obj.pk %}
+              {% if obj.title %}
+                {{ obj.title|first|upper }}
+              {% else %}
+                A
+              {% endif %}
+            {% else %}
+              +
+            {% endif %}
+          </div>
+
+          {# --- ТЕКСТОВЫЙ БЛОК --- #}
+          <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+            <span style="
+                font-size:11px;
+                text-transform:uppercase;
+                letter-spacing:0.08em;
+                color:#6b7280;
+            ">
+              Тип доп. соглашения
+            </span>
+
+            {# НАЗВАНИЕ / НОВЫЙ ТИП #}
+            {% if obj.pk %}
+              <span style="font-size:19px; font-weight:600; color:#111827;">
+                {{ obj.title|default:"Без названия" }}
+              </span>
+            {% else %}
+              <span style="font-size:19px; font-weight:600; color:#111827;">
+                Новый тип доп. соглашения
+              </span>
+            {% endif %}
+
+            <span style="font-size:12px; color:#4b5563; max-width:520px;">
+              Справочник типов доп. соглашений к договорам аренды.
+              Используется при оформлении и аналитике изменений условий.
+            </span>
+
+            {# РЯД БЕЙДЖЕЙ: РЕЖИМ + КОЛ-ВО ДОПОВ #}
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+
+              {# Режим формы #}
+              {% if obj.pk %}
+                <span style="
+                    font-size:11px;
+                    padding:2px 8px;
+                    border-radius:6px;
+                    background:#dcfce7;
+                    color:#166534;
+                    font-weight:600;
+                ">
+                  Режим: редактирование
+                </span>
+              {% else %}
+                <span style="
+                    font-size:11px;
+                    padding:2px 8px;
+                    border-radius:6px;
+                    background:#e0f2fe;
+                    color:#0369a1;
+                    font-weight:600;
+                ">
+                  Режим: добавление
+                </span>
+              {% endif %}
+
+              {# Сводка: количество доп. соглашений этого типа #}
+              {% if obj.pk %}
+                <span style="
+                    font-size:11px;
+                    padding:2px 8px;
+                    border-radius:6px;
+                    background:#f3f4f6;
+                    color:#4b5563;
+                    font-weight:500;
+                ">
+                  Доп. соглашений этого типа:
+                  <strong>
+                    {% if obj.num_las %}
+                      {{ obj.num_las }}
+                    {% else %}
+                      0
+                    {% endif %}
+                  </strong>
+                </span>
+              {% endif %}
+            </div>
+          </div>
+
+        </div>
+
+        {# СПЕЙСЕР #}
+        <div style="flex:1;"></div>
+
+        {# ПРАВАЯ КАРТОЧКА: НАВИГАЦИЯ И ДЕЙСТВИЯ #}
+        <div style="
+            min-width:260px;
+            max-width:320px;
+            border-radius:14px;
+            background:rgba(248,250,252,0.9);
+            box-shadow:0 18px 40px rgba(15,23,42,0.16);
+            padding:10px 12px 12px;
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+        ">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="
+                font-size:11px;
+                letter-spacing:0.14em;
+                text-transform:uppercase;
+                color:#9ca3af;
+            ">
+              Навигация
+            </span>
+            <span style="font-size:13px;font-weight:600;color:#0f172a;">
+              Действия
+            </span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+            {# Все типы доп. соглашений #}
+            {% url opts|admin_urlname:'changelist' as types_changelist %}
+            <a href="{{ types_changelist }}"
+               class="button"
+               style="
+                 font-size:13px;
+                 padding:4px 10px;
+                 border-radius:6px;
+                 display:inline-flex;
+                 align-items:center;
+                 gap:6px;
+                 justify-content:flex-start;
+               ">
+              ← Все типы доп. соглашений
+            </a>
+
+            {# Список доп. соглашений этого типа (changelist La с фильтром) #}
+            {% if obj.pk and obj.num_las %}
+              <a href="{% url 'admin:la_la_changelist' %}?ammendment_title__id__exact={{ obj.pk }}"
+                 class="button"
+                 style="
+                   font-size:13px;
+                   padding:4px 10px;
+                   border-radius:6px;
+                   display:inline-flex;
+                   align-items:center;
+                   gap:6px;
+                   justify-content:flex-start;
+                 ">
+                📄 Доп. соглашения этого типа
+              </a>
+
+              {# Печатная версия списка доп. соглашений этого типа #}
+              <a href="{% url 'admin:la_amendmentstype_print_las' obj.pk %}?src=change"
+                 class="button"
+                 style="
+                   font-size:13px;
+                   padding:4px 10px;
+                   border-radius:6px;
+                   display:inline-flex;
+                   align-items:center;
+                   gap:6px;
+                   justify-content:flex-start;
+                 ">
+                🖨 Печать списка
+              </a>
+            {% endif %}
+
+            {# К разделу приложения (список моделей app la) #}
+            <a href="{% url 'admin:app_list' opts.app_label %}"
+               class="button"
+               style="
+                 font-size:12px;
+                 padding:3px 10px;
+                 border-radius:6px;
+                 display:inline-flex;
+                 align-items:center;
+                 gap:6px;
+                 justify-content:flex-start;
+               ">
+              🗂 К разделу приложения
+            </a>
+
+            <div style="font-size:11px;color:#6b7280;line-height:1.4;">
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {# НИЖНЯЯ ПАНЕЛЬ: КРОШКИ #}
+      <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-top:4px;
+          padding:6px 2px 0;
+          border-top:1px solid #e5e7eb;
+          color:#6b7280;
+          font-size:11px;
+      ">
+        <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+          <a href="{% url 'admin:index' %}"
+             style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+            НАЧАЛО
+          </a>
+          <span>›</span>
+          <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+            СПРАВОЧНИКИ
+          </span>
+          <span>›</span>
+          <a href="{{ types_changelist }}"
+             style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+            ТИПЫ ДОП. СОГЛАШЕНИЙ
+          </a>
+          <span>›</span>
+          <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+            {% if obj.pk %}
+              {{ obj.title|default:"ТИП" }}
+            {% else %}
+              НОВЫЙ ТИП
+            {% endif %}
+          </span>
+        </nav>
+
+        {% if obj.pk %}
+          <span style="color:#9ca3af;">
+            ID: {{ obj.pk }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  {% endwith %}
+{% endblock %}
+
+{% block object-tools %}
+  {{ block.super }}
+{% endblock %}

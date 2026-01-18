@@ -1,0 +1,63 @@
+{% load plotly_dash %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Кабинет арендатора</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { height:100vh; width:100%; overflow:hidden; }
+
+    /* Кнопка «Выйти» поверх всего */
+    #logout-link{
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 10000;              /* поверх iframe */
+      padding: 8px 12px;
+      border: 1px solid #d0d4da;
+      border-radius: 8px;
+      background: #fff;
+      font: 500 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: #111;
+      text-decoration: none;
+      box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    }
+    #logout-link:hover{ background:#f6f7f9; }
+
+    /* Растягиваем контейнер plotly_dash/iframe на весь экран */
+    body > div{
+      all: unset !important;
+      height:100vh !important; width:100% !important;
+      position: fixed !important; top:0 !important; left:0 !important;
+    }
+    iframe{
+      all: unset !important;
+      height:100vh !important; width:100% !important;
+      position: fixed !important; top:0 !important; left:0 !important;
+      border: none !important;
+    }
+  </style>
+</head>
+<body>
+
+
+<a id="logout-link"
+   href="{% url 'logout' %}?next={% url 'landing' %}"
+   target="_top">
+  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor"
+       stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"
+       style="margin-right:6px;">
+    <path d="M9 6H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+  Выйти
+</a>
+
+
+
+  {% plotly_app name="TenantPortal" %}
+
+</body>
+</html>

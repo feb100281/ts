@@ -1,0 +1,467 @@
+{% load static %}
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>
+    Производственный календарь {{ year_str }} — печать
+  </title>
+
+  <link rel="stylesheet" href="{% static 'macro/keyrate_print.css' %}">
+  <style>
+    body {
+      background:#f3f4f6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page-wrap {
+      max-width: 1120px;
+      margin: 24px auto;
+    }
+
+    .card {
+      background:#ffffff;
+      border-radius:18px;
+      padding:20px 22px 24px;
+      box-shadow:0 18px 40px rgba(15,23,42,0.12);
+    }
+
+    .toolbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:16px;
+      gap:12px;
+    }
+
+    .btn-back {
+      font-size:12px;
+      text-decoration:none;
+      color:#374151;
+      padding:6px 10px;
+      border-radius:6px;
+      border:1px solid #e5e7eb;
+      background:#f9fafb;
+    }
+
+    .btn-back:hover {
+      background:#e5e7eb;
+    }
+
+    .btn-print {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:12px;
+      padding:6px 12px;
+      border-radius:6px;
+      border:none;
+      background:linear-gradient(135deg,#2563eb,#38bdf8);
+      color:#f9fafb;
+      cursor:pointer;
+    }
+
+    .btn-print .icon {
+      font-size:14px;
+    }
+
+    .btn-print:hover {
+      filter:brightness(1.05);
+    }
+
+    .header {
+      display:flex;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:16px;
+      align-items:flex-start;
+    }
+
+    .title-block {
+      display:flex;
+      flex-direction:row;
+      gap:12px;
+      align-items:flex-start;
+    }
+
+    .title-text {
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    .header-icon-wrap {
+      flex-shrink:0;
+      width:40px;
+      height:40px;
+      border-radius:12px;
+      background:linear-gradient(135deg,#2563eb,#38bdf8);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 10px 28px rgba(37,99,235,0.35);
+    }
+
+    .header-icon-wrap svg {
+      width:22px;
+      height:22px;
+      stroke:#eff6ff;
+    }
+
+    .title-label {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:0.12em;
+      color:#9ca3af;
+    }
+
+    .header h1 {
+      font-size:22px;
+      margin:0;
+      color:#111827;
+    }
+
+    .subtitle {
+      font-size:13px;
+      color:#4b5563;
+      margin-top:2px;
+    }
+
+    .tag {
+      align-self:flex-start;
+      font-size:11px;
+      padding:4px 10px;
+      border-radius:6px;
+      background:#eff6ff;
+      color:#1d4ed8;
+      text-transform:uppercase;
+      letter-spacing:0.08em;
+      white-space:nowrap;
+    }
+
+    .summary-grid {
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:10px;
+      margin-top:4px;
+    }
+
+    .summary-item {
+      background:#f9fafb;
+      border-radius:12px;
+      padding:10px 12px;
+      border:1px solid #e5e7eb;
+    }
+
+    .summary-label {
+      font-size:11px;
+      color:#6b7280;
+      margin-bottom:2px;
+    }
+
+    .summary-value {
+      font-size:15px;
+      font-weight:600;
+      color:#111827;
+    }
+
+    .summary-caption {
+      font-size:10px;
+      color:#9ca3af;
+      margin-top:4px;
+    }
+
+    /* ─────────────────────────────
+       Календарь: 3 месяца + саммари по кварталу
+    ───────────────────────────── */
+    .calendar-print-wrapper {
+      margin-top:14px;
+      border-radius:16px;
+      border:1px solid #e5e7eb;
+      background:#f9fafb;
+      padding:14px 14px 10px;
+    }
+
+    .calendar-print-wrapper .quarter-row {
+      display:grid;
+      grid-template-columns: 3fr 1.1fr;
+      gap:14px;
+      margin-bottom:12px;
+      align-items:stretch;
+      page-break-inside: avoid;
+    }
+
+    .calendar-print-wrapper .quarter-months {
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap:10px;
+    }
+
+    .calendar-print-wrapper .month-card {
+      background:#ffffff;
+      border-radius:10px;
+      border:1px solid #e5e7eb;
+      padding:8px 10px;
+      box-shadow:none;
+      font-size:11px;
+      page-break-inside: avoid;
+    }
+
+    .calendar-print-wrapper .month-title {
+      text-align:center;
+      font-size:13px;
+      font-weight:600;
+      margin-bottom:6px;
+      color:#111827;
+    }
+
+    .calendar-print-wrapper .month-table {
+      width:100%;
+      border-collapse:collapse;
+      text-align:center;
+      font-size:10px;
+      table-layout:fixed;
+    }
+
+    .calendar-print-wrapper .month-table th {
+      padding-bottom:2px;
+      font-weight:600;
+      color:#4b5563;
+    }
+
+    .calendar-print-wrapper .month-table td {
+      padding:1px 0;
+      height:16px;
+      border:0.5px solid #e5e7eb;
+    }
+
+    /* ВЫХОДНЫЕ И ИСКЛЮЧЕНИЯ */
+    .calendar-print-wrapper .weekend {
+      color:#e11d48;              /* суббота/воскресенье — красные цифры */
+      font-weight:500;
+    }
+
+    .calendar-print-wrapper td.empty {
+      background:#f3f4f6;
+    }
+
+    .calendar-print-wrapper .workday {
+      background:#ecfdf3;         /* рабочий день-исключение (перенос) */
+    }
+
+    .calendar-print-wrapper .offday {
+      background:#fee2e2;         /* дополнительный выходной / праздник */
+      color:#b91c1c;
+      font-weight:500;
+    }
+
+    .calendar-print-wrapper .today {
+      border: 2px solid #2563eb;
+      border-radius:4px;
+      font-weight:700;
+      background:#dbeafe;
+    }
+
+    /* квартальные карточки справа */
+    .calendar-print-wrapper .quarter-summary {
+      background:#ffffff;
+      border-radius:12px;
+      border:1px solid #dbeafe;
+      padding:10px 12px;
+      font-size:11px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      page-break-inside: avoid;
+    }
+
+    .calendar-print-wrapper .quarter-title {
+      font-size:13px;
+      font-weight:600;
+      color:#0f172a;
+    }
+
+    .calendar-print-wrapper .quarter-list {
+      list-style:none;
+      margin:4px 0 0;
+      padding:0;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    .calendar-print-wrapper .quarter-list li {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:11px;
+      color:#374151;
+    }
+
+    .calendar-print-wrapper .qs-label {
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    .calendar-print-wrapper .qs-value {
+      font-weight:600;
+      color:#111827;
+    }
+
+    .calendar-print-wrapper .qs-icon {
+      width:8px;
+      height:8px;
+      border-radius:50%;
+    }
+
+    .calendar-print-wrapper .qs-total    .qs-icon { background:#9ca3af; }
+    .calendar-print-wrapper .qs-work     .qs-icon { background:#22c55e; }
+    .calendar-print-wrapper .qs-weekend  .qs-icon { background:#fb923c; }
+    .calendar-print-wrapper .qs-holidays .qs-icon { background:#ef4444; }
+
+    .footer-note {
+      margin-top:18px;
+      font-size:10px;
+      color:#9ca3af;
+    }
+
+    /* ─────────────────────────────
+       ПЕЧАТЬ: landscape + цвета
+    ───────────────────────────── */
+    @media print {
+
+  /* Жёстко просим landscape */
+  @page {
+    size: A4 landscape !important; /* или просто landscape, см. ниже */
+    margin: 10mm 12mm;
+  }
+
+  /* Физические размеры страницы под A4 landscape */
+  html, body {
+
+    background:#ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .card {
+    box-shadow:none;
+    border-radius:0;
+    padding:0;
+    border:none;
+  }
+
+  .toolbar {
+    display:none;
+  }
+
+  .page-wrap {
+    margin:0;
+    max-width:none;
+  }
+
+  .calendar-print-wrapper {
+    border:none;
+    padding:0;
+    background:#ffffff;
+  }
+
+  .summary-item,
+  .calendar-print-wrapper .month-card,
+  .calendar-print-wrapper .month-table td,
+  .calendar-print-wrapper .workday,
+  .calendar-print-wrapper .offday,
+  .calendar-print-wrapper td.empty,
+  .calendar-print-wrapper .today,
+  .calendar-print-wrapper .quarter-summary,
+  .calendar-print-wrapper .qs-icon {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+    
+  </style>
+</head>
+
+<body>
+<div class="page-wrap">
+  <div class="card">
+
+    <div class="toolbar">
+      <a href="{% url 'admin:macro_calendarexceptions_changelist' %}?year={{ year_str }}"
+         class="btn-back">
+        ← К календарю
+      </a>
+
+      <button class="btn-print" onclick="window.print()">
+        <span class="icon">🖨</span>
+        <span>Печать</span>
+      </button>
+    </div>
+
+    <div class="header">
+      <div class="title-block">
+        <div class="header-icon-wrap" aria-hidden="true">
+          <!-- Небольшая иконка календаря (SVG) -->
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="4" width="18" height="17" rx="2.5"
+                  stroke="currentColor" stroke-width="1.6"/>
+            <path d="M8 3v3M16 3v3" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round"/>
+            <path d="M4 9.5h16" stroke="currentColor" stroke-width="1.6"/>
+            <rect x="7" y="12" width="3" height="3" rx="0.7" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="title-text">
+          <div class="title-label">Производственный календарь</div>
+          <h1>Календарь и исключения на {{ year_str }} год</h1>
+
+          <div class="subtitle">
+            Годовой производственный календарь с учётом праздничных дней,
+            переносов и дополнительных рабочих дней.
+          </div>
+        </div>
+      </div>
+
+      <div class="tag">Печатная форма</div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="summary-label">Календарных дней</div>
+        <div class="summary-value">{{ totals.days_total }}</div>
+        <div class="summary-caption">Всего дней в году</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Рабочих дней</div>
+        <div class="summary-value">{{ totals.workdays }}</div>
+        <div class="summary-caption">С учётом исключений</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Прочих дней</div>
+        <div class="summary-value">{{ totals.weekends }}</div>
+        <div class="summary-caption">Выходные и праздники</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">Исключений</div>
+        <div class="summary-value">{{ totals.holidays }}</div>
+        <div class="summary-caption">Переносы дней</div>
+      </div>
+    </div>
+
+    <div class="calendar-print-wrapper">
+      {{ calendar_html|safe }}
+    </div>
+
+    <div class="footer-note">
+      Печатная форма производственного календаря для внутреннего пользования.
+      При обновлении исключений рекомендуется формировать новую версию.
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

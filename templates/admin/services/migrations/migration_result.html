@@ -1,0 +1,11 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <h2>{{ title }}</h2>
+
+  <div class="alert alert-info" style="margin:20px 0;">
+    <pre style="background:#f8f9fa;padding:10px;border-radius:6px;white-space:pre-wrap;">{{ result }}</pre>
+  </div>
+
+  <a href="../" class="btn btn-secondary">← Назад</a>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% comment %} /Users/daria/Documents/Projects/ppa/templates/admin/properties/analytics/_header.html {% endcomment %}
+<div class="header">
+  <div class="title-block">
+    <div class="title-label">Аналитика</div>
+    <h1>Объекты недвижимости</h1>
+    <div class="subtitle">
+      Сводная информация по объектам: площади, количество и суммы оценок,
+      динамика роста и топ объектов по рыночной стоимости.
+    </div>
+  </div>
+  <div>
+    <a href="{% url 'admin:properties_property_changelist' %}"
+       class="btn-back">
+      ← К списку объектов
+    </a>
+  </div>
+</div>

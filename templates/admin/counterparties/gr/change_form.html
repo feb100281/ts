@@ -1,0 +1,252 @@
+{# templates/admin/counterparties/gr/change_form.html #}
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные breadcrumbs #}
+{% block breadcrumbs %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+{% endblock %}
+
+{% block content_title %}
+{% with obj=adminform.form.instance %}
+  <div style="
+      display:flex;
+      align-items:flex-start;
+      gap:16px;
+      flex-wrap:wrap;
+      padding-bottom:6px;
+  ">
+
+    {# ЛЕВАЯ ЧАСТЬ: аватар + текст #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      {# --- АВАТАР ГРУППЫ --- #}
+      <div style="
+          width:40px;
+          height:40px;
+          border-radius:6px;
+          background:{% if obj.pk %}#111827{% else %}#e5e7eb{% endif %};
+          color:{% if obj.pk %}#f9fafb{% else %}#4b5563{% endif %};
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:18px;
+          font-weight:600;
+          box-shadow:0 0 0 1px rgba(15,23,42,.12);
+      ">
+        {% if obj.pk %}
+          {% if obj.name %}
+            {{ obj.name|first|upper }}
+          {% else %}
+            G
+          {% endif %}
+        {% else %}
+          +
+        {% endif %}
+      </div>
+
+      {# --- ТЕКСТОВЫЙ БЛОК --- #}
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.08em;
+            color:#6b7280;
+        ">
+          Группа контрагентов
+        </span>
+
+        {% if obj.pk %}
+          <span style="font-size:19px; font-weight:600; color:#111827;">
+            {{ obj.name|default:"Без названия" }}
+          </span>
+        {% else %}
+          <span style="font-size:19px; font-weight:600; color:#111827;">
+            Новая группа контрагентов
+          </span>
+        {% endif %}
+
+        {# Краткое описание #}
+        {% if obj.description %}
+          <span style="
+              margin-top:3px;
+              font-size:12px;
+              color:#4b5563;
+              max-width:520px;
+              display:-webkit-box;
+              -webkit-line-clamp:2;
+              -webkit-box-orient:vertical;
+              overflow:hidden;
+          ">
+            {{ obj.description }}
+          </span>
+        {% endif %}
+
+        {# Сводка по количеству контрагентов #}
+        {% if obj.pk %}
+          <span style="margin-top:4px; font-size:12px; color:#6b7280;">
+            Контрагентов в группе:
+            <strong>
+              {% if obj.num_counterparties %}
+                {{ obj.num_counterparties }}
+              {% else %}
+                0
+              {% endif %}
+            </strong>
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    {# СПЕЙСЕР #}
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КОМПАКТНАЯ КАРТОЧКА НАВИГАЦИИ / ДЕЙСТВИЙ #}
+    <div style="
+        min-width:260px;
+        max-width:320px;
+        border-radius:14px;
+        background:rgba(248,250,252,0.95);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:600;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {# Все группы #}
+        <a href="{% url 'admin:counterparties_gr_changelist' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:4px 10px;
+             border-radius:6px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+           ">
+          ← Все группы
+        </a>
+
+        {# Контрагенты этой группы #}
+        {% if obj.pk %}
+          <a href="{% url 'admin:counterparties_counterparty_changelist' %}?gr__id__exact={{ obj.pk }}"
+             class="button"
+             style="
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:6px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+             ">
+            👥 Контрагенты группы
+          </a>
+
+          {# Аналитика по группе #}
+          <a href="{% url 'admin:counterparties_gr_analytics' obj.pk %}?src=change"
+             class="button"
+             style="
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:6px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+             ">
+            📊 Аналитика
+          </a>
+
+          {# Печатная версия списка #}
+          <a href="{% url 'admin:counterparties_gr_print_counterparties' obj.pk %}?src=change"
+             class="button"
+             style="
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:6px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+               background:#e0f2fe;
+             ">
+            🖨 Печать списка
+          </a>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        СПРАВОЧНИКИ
+      </span>
+      <span>›</span>
+      <a href="{% url 'admin:counterparties_gr_changelist' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        ГРУППЫ КОНТРАГЕНТОВ
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+        {% if obj.pk %}РЕДАКТИРОВАНИЕ{% else %}НОВАЯ ГРУППА{% endif %}
+      </span>
+    </nav>
+
+    {% if obj.pk %}
+      <span style="color:#9ca3af;">
+        Контрагентов: {% if obj.num_counterparties %}{{ obj.num_counterparties }}{% else %}0{% endif %}
+      </span>
+    {% endif %}
+  </div>
+
+{% endwith %}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}
+
+{% block object-tools %}
+  {{ block.super }}
+{% endblock %}

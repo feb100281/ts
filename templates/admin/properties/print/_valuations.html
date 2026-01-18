@@ -1,0 +1,117 @@
+{% comment %} templates/admin/properties/print/_valuations.html {% endcomment %}
+<div class="section section-divider">
+  <div class="section-title">III. Оценки объекта</div>
+  <div class="section-sub">
+    Все записи об оценке, начиная с последней. На второй строке — изменение к предыдущей оценке.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="col-date">Дата</th>
+        <th class="col-sum">Сумма оценки</th>
+        <th class="col-fedres">Федресурс</th>
+        <th class="col-report">Отчёт</th>
+        <th class="col-appraiser">Оценщик</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in valuations %}
+      <tr>
+        <td class="col-date">{{ v.valuation_date|date:"d.m.Y" }}</td>
+        <td class="col-sum">
+          {% if v.valuation_amount %}
+            <div>
+              <span class="js-currency"
+                    data-value="{{ v.valuation_amount|floatformat:0|cut:','|cut:' ' }}"></span>
+            </div>
+
+            {% if v.prev_amount %}
+              {% if v.diff > 0 %}
+                <div class="delta-up">
+                  ▲ {{ v.diff_compact }}
+                  {% if v.diff_pct is not None %}
+                    ({{ v.diff_pct|floatformat:1 }}%)
+                  {% endif %}
+                </div>
+              {% elif v.diff < 0 %}
+                <div class="delta-down">
+                  ▼ {{ v.diff_compact }}
+                  {% if v.diff_pct is not None %}
+                    ({{ v.diff_pct|floatformat:1 }}%)
+                  {% endif %}
+                </div>
+              {% else %}
+                <div class="delta-flat">
+                  ■ 0 ₽
+                </div>
+              {% endif %}
+            {% endif %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td class="col-fedres">
+          {% if v.rights_description %}
+            <a href="{{ v.rights_description }}" class="fedres-link" target="_blank" rel="noopener">
+              <span class="fedres-icon">⧉</span>
+              <span class="fedres-text">
+                {% if v.share %}
+                  {{ v.share }}
+                {% else %}
+                  Сообщение Федресурса
+                {% endif %}
+              </span>
+            </a>
+          {% else %}
+            {% if v.share %}
+              {{ v.share }}
+            {% else %}
+              —
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="col-report">
+          {% if v.report_number or v.report_date %}
+            №{{ v.report_number|default:"—" }} от {{ v.report_date|date:"d.m.Y"|default_if_none:"—" }}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td class="col-appraiser">{{ v.appraiser|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr class="empty-row">
+        <td colspan="5">Нет сохранённых оценок по объекту.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if valuations %}
+  <div class="section" style="margin-top:12px;">
+    <div class="section-title">График динамики оценки</div>
+    <div class="section-sub">
+      Сумма оценки по датам с визуализацией роста / падения.
+    </div>
+    <table class="table-timeline valuation-timeline-table">
+
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>Сумма оценки, ₽</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in valuations reversed %}
+        <tr>
+          <td class="cell-muted">{{ v.valuation_date|date:"d.m.Y" }}</td>
+          <td class="timeline-total"
+              data-value="{{ v.valuation_amount|floatformat:0|cut:','|cut:' ' }}"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>

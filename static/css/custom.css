@@ -1,0 +1,714 @@
+/* @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@100..900&display=swap'); */
+
+/* Переопределение .text-sm */
+/* .text-sm {     */
+    /* font-family: "Noto Sans", sans-serif; */
+    /* font-optical-sizing: auto; */
+    /* font-weight: 350; Выберите нужный вес (100-900) */
+    /* font-style: normal; */
+/* } */
+
+/* Уменьшение размера шрифта для навбара */
+.navbar {
+
+    font-size: 12px !important;
+}
+
+.navbar-brand {
+
+    font-size: 12px !important;
+}
+
+.navbar .nav-link {
+
+    font-size: 12px !important;
+}
+
+/* Уменьшение размера шрифта для сайдбара */
+.sidebar {
+
+    font-size: 12px !important;
+}
+
+.sidebar .nav-sidebar .nav-link {
+
+    font-size: 12px !important;
+}
+
+/* Уменьшение размера шрифта для футера */
+.main-footer {
+
+    font-size: 12px !important;
+}
+
+.main-footer .footer-text {
+
+    font-size: 12px !important;
+}
+
+
+.modal-dialog {
+    max-width: 95% !important;
+    width: 95% !important;
+}
+
+
+
+
+#logout-link{
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 10000;
+  padding: 7px 14px;
+  border: 1px solid #b8bcc3;
+  border-radius: 0;
+  background: #ffffff;
+  font: 500 13px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  color: #222;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+#logout-link:hover{
+  background:#f2f3f5;
+  border-color:#888;
+}
+
+
+/* ================================
+   Карточка одной оценки
+   ================================ */
+
+.valuation-inline__details {
+    display: block;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    background: #ffffff;
+    padding: 0;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+    transition:
+        box-shadow 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.08s ease;
+}
+
+.valuation-inline__details:hover {
+    border-color: rgba(15, 23, 42, 0.18);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+}
+
+/* ================================
+   Шапка карточки
+   ================================ */
+
+.valuation-inline__summary {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    list-style: none;
+    white-space: nowrap;
+    background: #f9fafb;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.valuation-inline__summary::-webkit-details-marker {
+    display: none;
+}
+
+.valuation-inline__title {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #111827;
+}
+
+/* стрелочка перед заголовком */
+.valuation-inline__title::before {
+    content: "▾ ";
+    display: inline-block;
+    transition: transform 0.15s ease;
+    margin-right: 2px;
+    color: #6b7280;
+}
+
+/* поворот стрелки при сворачивании/разворачивании */
+.valuation-inline__details[open] .valuation-inline__title::before {
+    transform: rotate(0deg);
+}
+
+.valuation-inline__details:not([open]) .valuation-inline__title::before {
+    transform: rotate(-90deg);
+}
+
+/* при узком экране разрешаем перенос */
+@media (max-width: 640px) {
+    .valuation-inline__summary {
+        flex-wrap: wrap;
+        white-space: normal;
+    }
+}
+
+/* ================================
+   Бейджи и ошибки
+   ================================ */
+
+.valuation-inline__badge {
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    line-height: 1.3;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.valuation-inline__badge--error {
+    background: #dc3545;
+    color: #ffffff;
+}
+
+/* ================================
+   Блок "Удалить"
+   ================================ */
+
+.valuation-inline__delete {
+    margin-left: auto;
+    font-size: 11px;
+    color: #dc3545;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.valuation-inline__delete input[type="checkbox"] {
+    margin: 0;
+}
+
+/* ================================
+   Тело карточки
+   ================================ */
+
+.valuation-inline__body {
+    padding: 10px 12px 12px;
+    background: #ffffff;
+}
+
+/* чуть деликатнее ошибки внутри карточки */
+.valuation-inline__body .errors {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+/* Заголовок блока "Оценки объекта" */
+.inline-group h2 {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    padding: 0 0 6px 0 !important;
+    margin: 0 0 14px 0 !important;
+    color: #1f2937 !important;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.valuation-inline__meta {
+    color: #6b7280;
+    font-weight: 500;
+    margin-left: 4px;
+    white-space: nowrap;
+    font-size: 12px;
+}
+
+
+
+
+
+/* Будущие элементы таймлайна */
+.timeline-future .mantine-Timeline-itemLine {
+    border-left-style: dashed;
+    opacity: 0.7;
+}
+
+.timeline-future .mantine-Timeline-itemBody {
+    opacity: 0.8;
+}
+
+.timeline-future .mantine-Text-root {
+    font-style: italic;
+}
+
+/* Текущий договор — мягкий подсвет */
+.timeline-current .mantine-Timeline-itemBullet {
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.22);
+}
+
+/* Прошлые договоры — просто более спокойный текст */
+.timeline-past .mantine-Timeline-itemBody .mantine-Text-root:first-of-type {
+    color: var(--mantine-color-gray-7);
+}
+
+
+
+
+
+
+/* === ДИЗАЙН-СИСТЕМА ДЛЯ АДМИНКИ === */
+
+:root {
+    /* Фон и текст */
+    --sidebar-bg: #1F2933;          /* тёмный серо-синий */
+    --sidebar-text: #E5E7EB;        /* светло-серый */
+    --sidebar-text-muted: #9CA3AF;  /* приглушённый текст */
+
+    /* Фирменный акцент (для активного пункта) */
+    --accent: #EC4899;              /* малиновый */
+
+    /* Цвета групп (основная дифференциация по приложениям) */
+    --color-realestate:      #3B82F6;  /* синий: объекты, площади */
+    --color-deals:           #22C55E;  /* зелёный: договоры / сделки */
+    --color-counterparties:  #8B5CF6;  /* фиолетовый: арендаторы / контрагенты */
+    --color-owners:          #F97316;  /* тёплый оранжевый: собственники */
+    --color-macro:           #F59E0B;  /* amber: макро / ставки / курсы */
+    --color-system:          #9CA3AF;  /* серый: служебные / системные */
+    --color-bot:             #0EA5E9;  /* cyan: Телеграм-бот и околоботовое */
+
+    /* Фон для active / hover */
+    --sidebar-active-bg: rgba(236, 72, 153, 0.16);  /* акцент с прозрачностью */
+    --sidebar-hover-bg:  rgba(148, 163, 184, 0.16); /* мягкий серый hover */
+}
+
+/* === САЙДБАР В ЦЕЛОМ === */
+
+.main-sidebar {
+    background-color: var(--sidebar-bg) !important;
+}
+
+/* Ссылки в левом меню */
+.main-sidebar .nav-sidebar .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--sidebar-text-muted);
+    padding: 0.45rem 0.85rem;
+    border-radius: 6px;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease,
+        transform 0.1s ease;
+    font-size: 0.92rem;
+}
+
+/* Иконки по умолчанию чуть приглушённые */
+.main-sidebar .nav-sidebar .nav-link i {
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+/* Hover по пункту меню */
+.main-sidebar .nav-sidebar .nav-link:hover {
+    background: var(--sidebar-hover-bg);
+    color: var(--sidebar-text);
+}
+
+.main-sidebar .nav-sidebar .nav-link:hover i {
+    color: inherit;
+    transform: translateX(2px);
+}
+
+/* ==== Переопределяем синий фон активного пункта AdminLTE ==== */
+
+.sidebar-dark-primary .nav-sidebar > .nav-item > .nav-link.active,
+.sidebar-dark-primary .nav-sidebar > .nav-item.menu-open > .nav-link {
+    background: var(--sidebar-active-bg) !important;
+    color: var(--accent) !important;
+    font-weight: 500;
+}
+
+/* Для всех активных ссылок (про запас) */
+.main-sidebar .nav-sidebar .nav-link.active,
+.main-sidebar .nav-sidebar .menu-open > .nav-link {
+    background: var(--sidebar-active-bg);
+    color: var(--accent);
+    font-weight: 500;
+}
+
+/* Иконки в активном пункте */
+.main-sidebar .nav-sidebar .nav-link.active i,
+.main-sidebar .nav-sidebar .menu-open > .nav-link i {
+    opacity: 1;
+}
+
+/* === ЦВЕТА ГРУПП ИКОНОК ПО СМЫСЛУ === */
+
+/* 1. Недвижимость: объекты, помещения, планы, документы, фото, стоимости */
+.fa-city,
+.fa-building,
+.fa-door-open,
+.fa-vector-square,
+.fa-stairs,
+.fa-project-diagram,
+.fa-th-large,
+.fa-layer-group,
+.fa-tags,
+.fa-circle-check,
+.fa-file-alt,
+.fa-image,
+.fa-search-dollar,
+.fa-basket-shopping,
+.fa-balance-scale {
+    color: var(--color-realestate) !important;
+}
+
+/* 2. Договоры аренды / сделки */
+.fa-handshake,
+.fa-file-signature {
+    color: var(--color-deals) !important;
+}
+
+/* Все пункты меню, ведущие в /admin/la/... — договорный блок (зелёный) */
+.main-sidebar .nav-sidebar a[href^="/admin/la/"] i {
+    color: var(--color-deals) !important;
+}
+
+/* 3. Контрагенты / арендаторы (фиолетовый) */
+.fa-address-book,
+.fa-user-tie,
+.fa-handshake-simple,
+.fa-handshake,
+.fa-people-group {
+    color: var(--color-counterparties) !important;
+}
+
+/* 4. Собственники (отдельный тёплый цвет) */
+.fa-building-user,
+.fa-building-circle-check {
+    color: var(--color-owners) !important;
+}
+
+/* 5. Макро / финансы / банки / налоги */
+.fa-landmark,
+.fa-credit-card,
+.fa-chart-line,
+.fa-percent,
+.fa-arrow-trend-up,
+.fa-calendar-days,
+.fa-money-bill-trend-up,
+.fa-coins,
+.fa-file-invoice-dollar {
+    color: var(--color-macro) !important;
+}
+
+/* 6. Системные разделы / пользователи / служебные */
+.fa-users,
+.fa-user,
+.fa-users-gear,
+.fa-gear,
+.fa-code-branch,
+.fa-gauge,
+.fa-folder-tree,
+.fa-file-lines {
+    color: var(--color-system) !important;
+}
+
+/* 7. Телеграм-бот (весь бот-блок в отдельном цвете) */
+.fa-telegram,
+.fa-robot,
+.fa-database,
+.fa-terminal,
+.fa-circle-user,
+.fa-list-check {
+    color: var(--color-bot) !important;
+}
+
+#app-botconfig i {
+    color: var(--color-bot) !important;
+}
+
+/* === ЛОГИЧЕСКИЕ РАЗДЕЛИТЕЛИ В МЕНЮ === */
+
+/* Небольшие визуальные отступы между основными блоками */
+#app-macro,
+#app-la,
+#app-counterparties,
+#app-corporate,
+#app-auth,
+#app-services {
+    margin-top: 0.25rem;
+}
+
+/* Технические приложения — чуть отделяем сверху линией */
+#app-services,
+#app-botconfig,
+#app-django_plotly_dash {
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.3);
+    padding-top: 0.5rem;
+}
+
+/* === АНИМАЦИЯ СТРЕЛОЧКИ У ПОДМЕНЮ === */
+
+.main-sidebar .nav-sidebar .nav-link .right {
+    transition: transform 0.15s ease;
+}
+
+/* Когда раздел раскрыт (menu-open), поворачиваем стрелку */
+.main-sidebar .nav-sidebar .menu-open > .nav-link .right {
+    transform: rotate(-90deg);
+}
+
+/* === КОНТЕНТНАЯ ОБЛАСТЬ / ДАШБОРД === */
+
+/* Фон рабочей области — чуть светлее и «дороже» */
+.content-wrapper {
+    background: #f3f6fb;
+}
+
+/* Карточки на дашборде (тот самый лист) */
+.content .card {
+    border-radius: 12px;
+    border: 1px solid #e2e6f0;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    margin-bottom: 1.5rem;
+}
+
+/* Верх карточки – немного акцента */
+.content .card-header {
+    background: linear-gradient(90deg, #ffffff 0%, #f7fbff 100%);
+    border-bottom: 1px solid #e2e6f0;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    font-size: 0.78rem;
+}
+
+/* Таблицы внутри карточек – более минималистичные */
+.content .card .table {
+    margin-bottom: 0;
+}
+
+.content .card .table td,
+.content .card .table th {
+    border-top: none;
+    padding: 0.4rem 0;
+}
+
+.content .card .table tr:not(:last-child) td {
+    border-bottom: 1px solid #edf0f7;
+}
+
+/* Кнопки "Добавить" / "Изменить" – современные pill-buttons */
+.content .card .btn {
+    border-radius: 999px;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.8rem;
+}
+
+/* зелёная "Добавить" смотрится мягче */
+.content .card .btn-success {
+    box-shadow: 0 4px 10px rgba(40, 167, 69, 0.25);
+}
+
+/* голубая "Изменить" – акцентная */
+.content .card .btn-outline-info {
+    border-width: 1px;
+}
+
+/* Колонка "Последние действия" – визуально отделяем */
+.content .col-lg-3 .card {
+    border-radius: 12px;
+    background: #ffffff;
+}
+
+/* Элементы истории / логов (базово) */
+.content .timeline-item,
+.content .card .list-group-item {
+    border: none;
+    border-bottom: 1px solid #eef1f7;
+    padding: 0.6rem 0.75rem;
+}
+
+/* Мелкий текст логов чуть приглушенный */
+.content .timeline-body,
+.content .card .list-group-item small {
+    color: #6c757d;
+}
+
+/* === ХЕДЕР СТРАНИЦЫ И ХЛЕБНЫЕ КРОШКИ === */
+
+.content-header {
+    padding-top: 0.8rem;
+    padding-bottom: 0.9rem;
+    margin-bottom: 1.4rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+/* Большой заголовок страницы */
+.content-header h1 {
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #1F2937;
+    margin-bottom: 0.25rem;
+}
+
+/* Автоматический подзаголовок под h1 */
+.content-header h1::after {
+    content: "Сводка по управлению аренды";
+    display: block;
+    font-size: 0.9rem;
+    color: #6B7280;
+    font-weight: 400;
+    margin-top: 0.15rem;
+}
+
+/* сама "дорожка" */
+.content-header .breadcrumb {
+    background: transparent;
+    padding: 0;
+    margin-bottom: 0;
+    font-size: 0.8rem;
+    margin-top: 0.4rem;
+}
+
+/* элементы крошек */
+.content-header .breadcrumb-item {
+    color: #9CA3AF;
+}
+
+/* разделитель между крошками – стрелка, а не / */
+.content-header .breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+    color: #CBD5E1;
+    font-weight: 400;
+}
+
+/* ссылки в крошках */
+.content-header .breadcrumb-item a {
+    color: #6B7280;
+    text-decoration: none;
+}
+
+.content-header .breadcrumb-item a:hover {
+    color: #4B5563;
+    text-decoration: underline;
+}
+
+/* текущая страница – небольшой pill с акцентом */
+.content-header .breadcrumb-item.active {
+    color: var(--accent);
+    font-weight: 500;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(236, 72, 153, 0.06);
+}
+
+/* === БЛОК "ПОСЛЕДНИЕ ДЕЙСТВИЯ" (расширенный таймлайн) === */
+
+/* ограничиваем высоту и включаем аккуратный скролл */
+.content .col-lg-3 .card:has(.timeline),
+.content .col-lg-3 .card:has(.list-group) {
+    max-height: 560px;
+    overflow-y: auto;
+}
+
+/* шапка карточки "Последние действия" чуть ярче */
+.content .col-lg-3 .card .card-header {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 600;
+}
+
+/* сама "линия времени" */
+.content .timeline {
+    position: relative;
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+/* вертикальная линия слева */
+.content .timeline::before {
+    content: "";
+    position: absolute;
+    left: 0.32rem;
+    top: 0.4rem;
+    bottom: 0.4rem;
+    width: 2px;
+    border-radius: 999px;
+    background: linear-gradient(
+        to bottom,
+        rgba(148, 163, 184, 0.6),
+        rgba(209, 213, 219, 0.2)
+    );
+}
+
+/* отдельное действие */
+.content .timeline-item {
+    position: relative;
+    margin: 0.3rem 0 0.8rem;
+    padding: 0.55rem 0.75rem 0.55rem 0.9rem;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+/* точка на линии */
+.content .timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -0.42rem;
+    top: 0.95rem;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.16);
+}
+
+/* заголовок действия (название контрагента) */
+.content .timeline-header a {
+    font-weight: 600;
+    font-size: 0.83rem;
+}
+
+/* время – в виде маленького бейджа */
+.content .timeline .time {
+    font-size: 0.7rem;
+    color: #6b7280;
+    background: #e5e7eb;
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-left: auto;
+}
+
+/* текст действия чуть тише и компактнее */
+.content .timeline-body {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    line-height: 1.3;
+    color: #4b5563;
+}
+
+/* жирные фрагменты внутри тела */
+.content .timeline-body b,
+.content .timeline-body strong {
+    font-weight: 600;
+    color: #111827;
+}
+
+/* ==== Вернуть нормальный шрифт в таблицах админки ==== */
+table td,
+table th {
+    font-size: 0.88rem !important;
+}

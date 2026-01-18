@@ -1,0 +1,80 @@
+{% comment %} templates/admin/properties/print/_summary.html {% endcomment %}
+{# I. Сводка по объекту #}
+<div class="section">
+  <div class="section-title">I. Сводка по объекту</div>
+  <div class="summary-grid">
+
+    {% if last_valuation %}
+    <div class="summary-item">
+      <div class="summary-label">Рыночная стоимость (последняя оценка)</div>
+      <div class="summary-value">
+        <span class="js-currency"
+              data-value="{{ last_valuation.valuation_amount|floatformat:0|cut:','|cut:' ' }}"></span>
+      </div>
+      <div style="font-size:11px; color:#6b7280; margin-top:2px;">
+        от {{ last_valuation.valuation_date|date:"d.m.Y" }}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if last_kadastr %}
+    <div class="summary-item">
+      <div class="summary-label">Кадастровая стоимость (последняя)</div>
+      <div class="summary-value">
+        <span class="js-currency"
+              data-value="{{ last_kadastr.kadastr_amount|floatformat:0|cut:','|cut:' ' }}"></span>
+      </div>
+      <div style="font-size:11px; color:#6b7280; margin-top:2px;">
+        на {{ last_kadastr.kadastr_date|date:"d.m.Y" }}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if valuation_vs_kadastr_ratio %}
+    <div class="summary-item">
+      <div class="summary-label">Соотношение рыночной и кадастровой</div>
+      <div class="summary-value">
+        {{ valuation_vs_kadastr_ratio|floatformat:2 }} ×
+      </div>
+      <div style="font-size:11px; color:#6b7280; margin-top:2px;">
+        Для внутреннего анализа, не для налоговых расчётов
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="summary-item">
+      <div class="summary-label">Площадь</div>
+      <div class="summary-value">
+        {% if property.area %}
+          <span class="js-number"
+                data-value="{{ property.area|floatformat:0|cut:','|cut:' ' }}"></span> м²
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-label">Этажей</div>
+      <div class="summary-value">
+        {{ floors_display_count }}
+      </div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-label">Отчётов об оценке</div>
+      <div class="summary-value">
+        {{ valuations|length }}
+      </div>
+    </div>
+
+    {% if has_kadastr_values_amount %}
+    <div class="summary-item">
+      <div class="summary-label">Записей кадастровой стоимости</div>
+      <div class="summary-value">
+        {{ kadastr_values|length }}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>

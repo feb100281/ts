@@ -1,0 +1,129 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+<style>
+  html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+  }
+
+  .content, .container, #content-main {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+  }
+
+  iframe {
+      display: block;
+      width: 100%;
+      height: calc(100vh - 120px);
+      border: none;
+  }
+
+  /* ===========================
+     МОДАЛКА АДМИНСКАЯ
+     =========================== */
+
+  .premises-admin-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+  }
+
+  .premises-admin-modal--hidden {
+      display: none !important;
+  }
+
+  .premises-admin-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+  }
+
+  .premises-admin-modal__dialog {
+      position: relative;
+      z-index: 2;
+      background: #fff;
+      border-radius: 6px;
+      width: 80%;
+      height: 80%;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+  }
+
+  .premises-admin-modal__iframe {
+      border: none;
+      width: 100%;
+      height: 100%;
+  }
+
+  .premises-admin-modal__close {
+      position: absolute;
+      top: 6px;
+      right: 10px;
+      font-size: 22px;
+      font-weight: 600;
+      color: #333;
+      text-decoration: none;
+      z-index: 3;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+  <!-- основное iframe с Dash -->
+  <iframe id="premises-iframe" src="{{ iframe_url }}"></iframe>
+
+  <!-- модалка с админкой -->
+  <div id="premises-admin-modal" class="premises-admin-modal premises-admin-modal--hidden">
+    <div class="premises-admin-modal__backdrop"></div>
+
+    <div class="premises-admin-modal__dialog">
+      <a href="#" id="premises-admin-modal-close" class="premises-admin-modal__close">✕</a>
+      <iframe
+        id="premises-admin-modal-iframe"
+        class="premises-admin-modal__iframe"
+        src=""
+      ></iframe>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const modal = document.getElementById("premises-admin-modal");
+      const iframe = document.getElementById("premises-admin-modal-iframe");
+      const closeBtn = document.getElementById("premises-admin-modal-close");
+
+      function openPremisesAdminModal(url) {
+          iframe.src = url;
+          modal.classList.remove("premises-admin-modal--hidden");
+      }
+
+      function closePremisesAdminModal() {
+          modal.classList.add("premises-admin-modal--hidden");
+          iframe.src = "";
+      }
+
+      if (closeBtn) {
+          closeBtn.addEventListener("click", function(e) {
+              e.preventDefault();
+              closePremisesAdminModal();
+          });
+      }
+
+      // API для Dash (из iframe)
+      window.openPremisesAdminModal = openPremisesAdminModal;
+      window.closePremisesAdminModal = closePremisesAdminModal;
+    })();
+  </script>
+
+{% endblock %}
+

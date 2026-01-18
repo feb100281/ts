@@ -1,0 +1,553 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные крошки и зелёную кнопку #}
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{# ШАПКА ПАНЕЛИ #}
+{% block content_title %}
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: заголовок и описание #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      {# Аватар бота #}
+      <div style="
+          width:44px;
+          height:44px;
+          border-radius:12px;
+          background:radial-gradient(circle at 0 0, #22c55e 0, #16a34a 40%, #064e3b 100%);
+          color:#ecfdf5;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:24px;
+          font-weight:600;
+          box-shadow:0 0 0 1px rgba(15,23,42,.20), 0 18px 40px rgba(15,23,42,0.45);
+      ">
+        🤖
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.08em;
+            color:#6b7280;
+        ">
+          Telegram-интеграция
+        </span>
+
+        <span style="font-size:20px; font-weight:600; color:#0f172a;">
+          Панель управления Telegram-ботом
+        </span>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+
+          {# Статус (пока статичный текст) #}
+          <span style="
+              font-size:11px;
+              padding:3px 9px;
+              border-radius:6px;
+              background:#ecfdf3;
+              color:#15803d;
+              font-weight:600;
+              border:1px solid rgba(22,163,74,0.40);
+              display:inline-flex;
+              align-items:center;
+              gap:6px;
+          ">
+            <span style="width:7px;height:7px;border-radius:6px;background:#22c55e;"></span>
+            Бот подключён на стороне приложения
+          </span>
+
+          <span style="
+              font-size:11px;
+              padding:3px 9px;
+              border-radius:6px;
+              background:#eff6ff;
+              color:#1d4ed8;
+              font-weight:500;
+              border:1px solid rgba(59,130,246,0.35);
+          ">
+            Управление правами происходит через пользователей бота и команды
+          </span>
+
+          {# Чип: пользователи #}
+          <span style="
+              font-size:11px;
+              padding:3px 9px;
+              border-radius:6px;
+              background:#ecfeff;
+              color:#0e7490;
+              font-weight:600;
+              border:1px solid rgba(8,145,178,0.35);
+          ">
+            Пользователи: {{ allowed_users|default:"0" }}/{{ total_users|default:"0" }} с доступом
+          </span>
+
+          {# Чип: команды #}
+          <span style="
+              font-size:11px;
+              padding:3px 9px;
+              border-radius:6px;
+              background:#f5f3ff;
+              color:#6d28d9;
+              font-weight:600;
+              border:1px solid rgba(124,58,237,0.35);
+          ">
+            Команды: {{ active_commands|default:"0" }}/{{ total_commands|default:"0" }} активны
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {# Спейсер #}
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: быстрые действия #}
+    <div style="
+        min-width:260px;
+        max-width:320px;
+        border-radius:16px;
+        background:rgba(248,250,252,0.98);
+        box-shadow:0 18px 40px rgba(15,23,42,0.18);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Быстрые действия
+        </span>
+        <span style="font-size:13px;font-weight:600;color:#0f172a;">
+          Управление
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {# Проверить настройки / статус #}
+        <a href="{% url 'admin:bot_check_status' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:5px 10px;
+             border-radius:8px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+             background:#e0f2fe;
+           ">
+          🔍 Проверить настройки и статус
+        </a>
+
+        {# Перезапустить бота #}
+        <a href="{% url 'admin:bot_restart' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:5px 10px;
+             border-radius:8px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+             background:#fef3c7;
+           ">
+          🔄 Перезапустить бота
+        </a>
+
+        {# Пользователи бота #}
+        <a href="{% url 'admin:botconfig_botuser_changelist' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:5px 10px;
+             border-radius:8px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+           ">
+          👤 Пользователи бота
+        </a>
+
+        {# Команды бота #}
+        <a href="{% url 'admin:botconfig_botcommand_changelist' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:5px 10px;
+             border-radius:8px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+           ">
+          💬 Команды бота
+        </a>
+
+        {# Источники данных #}
+        <a href="{% url 'admin:botconfig_botdatasource_changelist' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:5px 10px;
+             border-radius:8px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+           ">
+          📊 Источники данных
+        </a>
+      </div>
+
+      <div style="
+          margin-top:6px;
+          padding:6px 8px;
+          border-radius:10px;
+          background:linear-gradient(to right, rgba(15,23,42,0.02), rgba(15,23,42,0.06));
+          border:1px dashed rgba(148,163,184,0.7);
+          font-size:11px;
+          color:#4b5563;
+          display:flex;
+          gap:6px;
+          align-items:flex-start;
+      ">
+        <span style="font-size:13px;line-height:1;">ℹ️</span>
+        <span>
+          Изменения в командах и источниках данных автоматически
+          отражаются в логике Telegram-бота (после перезагрузки приложения или воркера).
+        </span>
+      </div>
+
+      {# Результаты последней проверки / перезапуска #}
+      {% if status_info or restart_info %}
+        <div style="
+            margin-top:6px;
+            padding:6px 8px;
+            border-radius:10px;
+            background:#f9fafb;
+            border:1px solid #e5e7eb;
+            font-size:11px;
+            color:#4b5563;
+            display:flex;
+            flex-direction:column;
+            gap:4px;
+        ">
+          {% if status_info %}
+            <div>
+              <strong>Последняя проверка:</strong><br>
+              {{ status_info.summary }}<br>
+            </div>
+          {% endif %}
+          {% if restart_info %}
+            <div>
+              <strong>Перезапуск:</strong><br>
+              {{ restart_info.summary }}
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ (кастомные «крошки») #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}" style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        ИНТЕГРАЦИИ
+      </span>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+        TELEGRAM-БОТ
+      </span>
+    </nav>
+
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="color:#9ca3af;">
+        Управляйте пользователями, командами и источниками данных через разделы выше
+      </span>
+    </div>
+  </div>
+{% endblock %}
+
+
+{# ОСНОВНОЕ СОДЕРЖИМОЕ ПАНЕЛИ #}
+{% block result_list %}
+  {# ПЕРВАЯ СТРОКА: объяснение + чек-лист #}
+  <div style="margin-top:18px; display:grid; grid-template-columns: minmax(0,2fr) minmax(0,1.4fr); gap:18px; align-items:flex-start;">
+
+    {# ЛЕВАЯ КОЛОНКА: объяснение и схема #}
+    <section style="
+        border-radius:14px;
+        background:white;
+        box-shadow:0 14px 30px rgba(15,23,42,0.08);
+        padding:14px 16px 16px;
+        border:1px solid #e5e7eb;
+        font-size:13px;
+        color:#374151;
+    ">
+      <h2 style="font-size:14px;font-weight:600;margin:0 0 8px;color:#111827;">
+        Как устроена конфигурация Telegram-бота
+      </h2>
+      <p style="margin:0 0 8px;">
+        Эта панель объединяет все сущности, которые используются для работы Telegram-бота
+        в приложении. Основные разделы:
+      </p>
+
+      <ul style="margin:0 0 8px 18px;padding:0;list-style:disc;">
+        <li style="margin-bottom:4px;">
+          <strong>Пользователи бота</strong> — привязка Telegram-пользователей к Django-пользователям
+          и управление доступом к боту.
+        </li>
+        <li style="margin-bottom:4px;">
+          <strong>Команды бота</strong> — список доступных команд, их названия и привязка к источникам данных.
+        </li>
+        <li style="margin-bottom:4px;">
+          <strong>Источники данных</strong> — откуда бот получает информацию для ответов (модели, лимиты, фильтры).
+        </li>
+      </ul>
+
+      <p style="margin:0 0 10px;">
+        Технические изменения (логика бота, обработчики, вебхуки) вносятся в коде проекта,
+        а эта панель помогает админам настроить поведение без изменений кода.
+      </p>
+
+      <div style="
+          margin-top:10px;
+          padding:10px 12px;
+          border-radius:12px;
+          background:linear-gradient(to right, #0f172a, #111827);
+          color:#e5e7eb;
+          font-size:12px;
+          display:flex;
+          gap:10px;
+          align-items:flex-start;
+      ">
+        <div style="
+            width:28px;
+            height:28px;
+            border-radius:6px;
+            background:rgba(15,23,42,0.85);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:15px;
+        ">
+          🧩
+        </div>
+        <div>
+          <div style="font-weight:600;margin-bottom:3px;">Связи между сущностями</div>
+          <div>
+            <strong>Команда</strong> → использует <strong>источник данных</strong> → доступна только тем
+            <strong>пользователям бота</strong>, которым вы разрешили доступ.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {# ПРАВАЯ КОЛОНКА: подсказки и чек-лист #}
+    <aside style="
+        border-radius:14px;
+        background:white;
+        box-shadow:0 14px 30px rgba(15,23,42,0.06);
+        padding:14px 16px 16px;
+        border:1px solid #e5e7eb;
+        font-size:12px;
+        color:#4b5563;
+    ">
+      <h3 style="font-size:13px;font-weight:600;margin:0 0 8px;color:#111827;">
+        Чек-лист перед запуском / обновлением бота
+      </h3>
+
+      <ol style="margin:0 0 8px 18px;padding:0;list-style:decimal;">
+        <li style="margin-bottom:4px;">
+          Убедитесь, что <strong>источники данных</strong> корректно настроены и ссылаются
+          на актуальные модели и приложения.
+        </li>
+        <li style="margin-bottom:4px;">
+          Проверьте <strong>команды бота</strong> — включены ли нужные и правильно ли описаны.
+        </li>
+        <li style="margin-bottom:4px;">
+          Выдайте доступ только тем <strong>пользователям бота</strong>, которые могут работать
+          с данными.
+        </li>
+        <li style="margin-bottom:4px;">
+          При необходимости выполните <strong>перезапуск сервиса бота</strong> на сервере.
+        </li>
+      </ol>
+
+      <div style="
+          margin-top:8px;
+          padding:8px 10px;
+          border-radius:10px;
+          background:#eff6ff;
+          border:1px solid rgba(59,130,246,0.35);
+          color:#1d4ed8;
+          display:flex;
+          align-items:flex-start;
+          gap:6px;
+      ">
+        <span style="font-size:13px;">⚙️</span>
+        <span>
+          Для быстрой проверки конфигурации используйте кнопку
+          <strong>«Проверить настройки и статус»</strong> в правой панели.
+        </span>
+      </div>
+    </aside>
+  </div>
+
+  {# ВТОРАЯ СТРОКА: статистика за 24 часа + последние события #}
+  <div style="margin-top:16px; display:grid; grid-template-columns: minmax(0,1.4fr) minmax(0,2fr); gap:18px; align-items:flex-start;">
+
+    {# Статистика за 24 часа #}
+    <section style="
+        border-radius:14px;
+        background:white;
+        box-shadow:0 14px 30px rgba(15,23,42,0.06);
+        padding:14px 16px 16px;
+        border:1px solid #e5e7eb;
+        font-size:12px;
+        color:#374151;
+    ">
+      <h3 style="font-size:13px;font-weight:600;margin:0 0 8px;color:#111827;">
+        Активность за последние 24 часа
+      </h3>
+
+      <ul style="margin:0 0 10px 16px;padding:0;list-style:disc;">
+        <li>Событий: <strong>{{ events_count_24h|default:"0" }}</strong></li>
+        <li>Уникальных пользователей: <strong>{{ unique_users_24h|default:"0" }}</strong></li>
+        <li>Ошибок:
+          <strong{% if errors_24h %} style="color:#b91c1c;"{% endif %}>
+            {{ errors_24h|default:"0" }}
+          </strong>
+        </li>
+      </ul>
+
+      <h4 style="font-size:12px;font-weight:600;margin:0 0 6px;color:#111827;">
+        Топ команд
+      </h4>
+      {% if top_commands %}
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="border-bottom:1px solid #e5e7eb;">
+              <th style="text-align:left;padding:4px 4px;">Команда</th>
+              <th style="text-align:right;padding:4px 4px;">За 24 часа</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in top_commands %}
+              <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:4px 4px;">{{ row.command|default:"(без команды)" }}</td>
+                <td style="padding:4px 4px;text-align:right;">{{ row.cnt }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p style="margin:4px 0 0;color:#9ca3af;">За последние 24 часа не было событий.</p>
+      {% endif %}
+    </section>
+
+    {# Последние события + ошибки #}
+    <section style="
+        border-radius:14px;
+        background:white;
+        box-shadow:0 14px 30px rgba(15,23,42,0.06);
+        padding:14px 16px 16px;
+        border:1px solid #e5e7eb;
+        font-size:12px;
+        color:#374151;
+    ">
+      <h3 style="font-size:13px;font-weight:600;margin:0 0 8px;color:#111827;">
+        Последние обращения к боту
+      </h3>
+
+      {% if recent_events %}
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="border-bottom:1px solid #e5e7eb;">
+              <th style="text-align:left;padding:4px 4px;">Время</th>
+              <th style="text-align:left;padding:4px 4px;">Пользователь</th>
+              <th style="text-align:left;padding:4px 4px;">Команда</th>
+              <th style="text-align:right;padding:4px 4px;">Статус</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ev in recent_events %}
+              <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:4px 4px;white-space:nowrap;">{{ ev.created_at|date:"d.m H:i" }}</td>
+                <td style="padding:4px 4px;">
+                  {% if ev.user %}
+                    {{ ev.user.get_full_name|default:ev.user.username }}
+                  {% else %}
+                    {{ ev.telegram_username|default:ev.telegram_id }}
+                  {% endif %}
+                </td>
+                <td style="padding:4px 4px;">{{ ev.command|default:"(без команды)" }}</td>
+                <td style="padding:4px 4px;text-align:right;">
+                  {% if ev.status == "error" %}
+                    <span style="color:#b91c1c;">Ошибка</span>
+                  {% else %}
+                    <span style="color:#16a34a;">Ок</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p style="margin:0;color:#9ca3af;">Событий пока нет.</p>
+      {% endif %}
+
+      {% if last_errors %}
+        <h4 style="font-size:12px;font-weight:600;margin:10px 0 4px;color:#b91c1c;">
+          Последние ошибки
+        </h4>
+        <ul style="margin:0 0 0 16px;padding:0;list-style:disc;">
+          {% for ev in last_errors %}
+            <li style="margin-bottom:2px;">
+              {{ ev.created_at|date:"d.m H:i" }} — {{ ev.command|default:"(без команды)" }}:
+              {{ ev.error_message|default:"Ошибка без описания" }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

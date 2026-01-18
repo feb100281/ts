@@ -1,0 +1,479 @@
+/* static/properties/property_print.css */
+:root {
+  --bg:#f3f4f6;
+  --card:#ffffff;
+  --border:#e5e7eb;
+  --accent:#0f172a;
+  --muted:#6b7280;
+  --header-bg:#f9fafb;
+}
+
+* { box-sizing:border-box; }
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin:0;
+  padding:24px 16px;
+  background:var(--bg);
+  display:flex;
+  justify-content:center;
+}
+
+.page-wrap {
+  width:100%;
+  max-width:960px;
+}
+
+.card {
+  background:var(--card);
+  border-radius:16px;
+  border:1px solid var(--border);
+  padding:20px 20px 18px;
+  box-shadow:0 18px 45px rgba(15,23,42,.10);
+}
+
+.toolbar {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  margin-bottom:14px;
+}
+
+.btn-back {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 12px;
+  border-radius:6px;
+  border:1px solid #cbd5e1;
+  background:#ffffff;
+  color:#111827;
+  cursor:pointer;
+  font-size:13px;
+  text-decoration:none;
+}
+.btn-back:hover { background:#e5e7eb; }
+
+.btn-print {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 12px;
+  border-radius:6px;
+  border:1px solid #111827;
+  background:#111827;
+  color:#ffffff;
+  cursor:pointer;
+  font-size:13px;
+}
+.btn-print span.icon { font-size:14px; }
+.btn-print:hover { background:#020617; }
+
+.header {
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:8px;
+}
+
+.title-block { flex:1 1 auto; }
+
+.title-label {
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+
+h1 {
+  margin:0;
+  font-size:20px;
+  font-weight:700;
+  color:var(--accent);
+}
+
+.subtitle {
+  color:var(--muted);
+  margin-top:4px;
+  font-size:13px;
+}
+
+.tag {
+  padding:3px 10px;
+  border-radius:6px;
+  border:1px solid #d1d5db;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:#374151;
+  white-space:nowrap;
+}
+
+.section {
+  margin-top:18px;
+}
+
+.section-title {
+  font-size:14px;
+  font-weight:600;
+  margin-bottom:6px;
+  color:#111827;
+}
+
+.section-sub {
+  font-size:12px;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+
+.section-divider {
+  margin-top:18px;
+  border-top:1px solid #e5e7eb;
+  padding-top:12px;
+}
+
+.summary-grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap:8px;
+  margin-top:6px;
+}
+
+.summary-item {
+  padding:6px 8px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:#f9fafb;
+  font-size:12px;
+}
+
+.summary-label {
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#6b7280;
+  margin-bottom:2px;
+}
+
+.summary-value {
+  font-size:13px;
+  font-weight:600;
+  color:#111827;
+}
+
+table {
+  border-collapse:collapse;
+  width:100%;
+  margin-top:8px;
+  border-radius:10px;
+  overflow:hidden;
+  table-layout:fixed;
+}
+
+thead th {
+  background:var(--header-bg);
+  border-bottom:1px solid var(--border);
+  padding:6px 8px;
+  font-size:12px;
+  font-weight:600;
+  color:#4b5563;
+  text-align:left;
+  white-space:nowrap;
+}
+
+tbody td {
+  border-bottom:1px solid var(--border);
+  padding:6px 8px;
+  font-size:13px;
+  vertical-align:top;
+}
+
+tbody tr:last-child td {
+  border-bottom:none;
+}
+
+tbody tr:nth-child(even) td {
+  background:#f9fafb33;
+}
+
+.empty-row td {
+  text-align:center;
+  color:#6b7280;
+  font-size:13px;
+  padding:10px 8px;
+}
+
+.footer-note {
+  margin-top:10px;
+  font-size:11px;
+  color:#6b7280;
+}
+
+th.col-date      { width: 15%; }
+th.col-sum       { width: 25%; }
+th.col-fedres    { width: 20%; }
+th.col-report    { width: 20%; }
+th.col-appraiser { width: 20%; }
+
+td.col-fedres {
+  word-break: break-word;
+  white-space:normal;
+}
+
+.delta-up {
+  margin-top:2px;
+  font-size:12px;
+  color:#15803d;
+  font-weight:600;
+}
+
+.delta-down {
+  margin-top:2px;
+  font-size:12px;
+  color:#b91c1c;
+  font-weight:600;
+}
+
+.delta-flat {
+  margin-top:2px;
+  font-size:12px;
+  color:#6b7280;
+}
+
+.cell-muted {
+  color:#6b7280;
+}
+
+table.table-timeline {
+  margin-top:10px;
+}
+
+.metric-bar {
+  position:relative;
+  height:18px;
+  border-radius:6px;
+  background:#eff4ff;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  padding:0 6px;
+  font-size:11px;
+  white-space:nowrap;
+}
+
+.metric-bar-fill {
+  position:absolute;
+  inset:0;
+  right:auto;
+  background:linear-gradient(90deg,#bfdbfe,#60a5fa);
+  opacity:0.9;
+  width:0;
+}
+
+.metric-bar-label {
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.metric-bar-label .metric-main {
+  font-weight:500;
+}
+
+.metric-bar-label .metric-delta {
+  font-size:10px;
+}
+
+/* Ссылка на Федресурс */
+a.fedres-link {
+  color:#2563eb;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-size:13px;
+}
+a.fedres-link:hover {
+  text-decoration:underline;
+}
+.fedres-icon {
+  font-size:12px;
+  opacity:0.9;
+}
+
+/* Список выбранных объектов (в summary bulk) */
+.summary-selected-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.summary-selected-item {
+  font-size: 13px;
+  color: #111827;
+  line-height: 1.5;
+  margin-bottom: 2px;
+}
+
+@media (max-width: 768px) {
+  body { padding:16px 8px; }
+  .card {
+    padding:16px 12px 14px;
+    border-radius:14px;
+  }
+  table { font-size:12px; }
+  thead th, tbody td { padding:5px 6px; }
+}
+
+@media print {
+  @page { margin: 12mm; }
+  body {
+    background:#ffffff !important;
+    padding:0 !important;
+    margin:0 !important;
+    display:block;
+  }
+  .card {
+    box-shadow:none !important;
+    border-radius:0 !important;
+    border:none !important;
+  }
+  .toolbar {
+    display:none !important;
+  }
+
+  .metric-bar,
+  .metric-bar-fill {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Жёсткий разрыв страницы там, где нужно */
+  .page-break {
+    page-break-after: always;
+  }
+}
+
+/* === График соотношения РС / КС по датам оценок === */
+
+.valuation-kadastr-chart {
+  width: 100%;
+  height: 320px;
+}
+
+.chart-dual-legend {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+.legend-box {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.legend-box-valuation {
+  background: #3b82f6;
+}
+
+.legend-box-kadastr {
+  background: #9ca3af;
+}
+
+.chart-dual-legend-note {
+  margin-top: 2px;
+}
+
+
+
+
+/* Блок названия объекта */
+
+
+.group-card .print-table .prop-name {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.group-card .print-table .prop-kadastr {
+  font-size: 0.65rem;
+  color: #666;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+.group-card .print-table .prop-address {
+  font-size: 0.65rem;
+  color: #999;
+  margin-top: 1px;
+  line-height: 1.2;
+}
+
+.group-card .print-table td:first-child {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+
+.page-break {
+  page-break-before: always;
+  margin-top: 40px;
+}
+
+.appendix-toc {
+  margin-top: 10px;
+  padding-left: 25px;
+}
+
+.appendix-toc li {
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
+.block-title {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.block-title .block-subtitle {
+  font-size: 14px;
+  color: #666;
+}
+
+.prop-address {
+  font-size: 12px;
+  color: #666;
+}
+
+.prop-kadastr {
+  font-size: 12px;
+  color: #666;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

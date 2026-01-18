@@ -1,0 +1,224 @@
+{% load static %}
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>
+    Подборка помещений для договоров — печать
+  </title>
+
+  <link rel="stylesheet" href="{% static 'macro/keyrate_print.css' %}">
+</head>
+
+<body>
+<div class="page-wrap">
+
+  <div class="card">
+
+    {# ТУЛБАР #}
+    <div class="toolbar">
+      <a href="{% url 'admin:properties_premisesbasket_changelist' %}" class="btn-back">
+        ← К корзине помещений
+      </a>
+
+      <button class="btn-print" onclick="window.print()">
+        <span class="icon">🖨</span>
+        <span>Печать</span>
+      </button>
+    </div>
+
+    {# ШАПКА #}
+    <div class="header">
+      <div class="title-block">
+        <div class="title-label">Аренда · Помещения</div>
+        <h1>Подборка помещений для подготовки договоров</h1>
+
+        <div class="subtitle">
+          Документ сформирован для передачи в юридический отдел.
+          В выборку включено
+          <strong>{{ total_premises }}</strong>
+          помещений в составе
+          <strong>{{ total_towers }}</strong>
+          объектов (башен) и
+          <strong>{{ total_floors }}</strong>
+          этажей.
+        </div>
+      </div>
+
+      <div class="tag">
+        Внутренний документ{% if doc_id %} · {{ doc_id }}{% endif %}
+      </div>
+    </div>
+
+    {# I. СВОДКА #}
+    <div class="section">
+      <div class="section-title">Сводка по выборке</div>
+      <div class="section-sub">
+        Краткое описание структуры выбранных помещений и ответственного менеджера.
+      </div>
+
+      <div class="summary-grid">
+       
+
+        <div class="summary-item">
+          <div class="summary-label">Количество помещений</div>
+          <div class="summary-value">
+            {{ total_premises }}
+          </div>
+        </div>
+
+        <div class="summary-item">
+          <div class="summary-label">Количество объектов (башен)</div>
+          <div class="summary-value">
+            {{ total_towers }}
+          </div>
+        </div>
+
+        <div class="summary-item">
+          <div class="summary-label">Количество этажей</div>
+          <div class="summary-value">
+            {{ total_floors }}
+          </div>
+        </div>
+
+        <div class="summary-item">
+          <div class="summary-label">Суммарная площадь</div>
+          <div class="summary-value">
+            {% if total_area %}
+              {{ total_area|floatformat:2 }} м²
+            {% else %}
+              —
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# II. НАЗНАЧЕНИЕ ПОДБОРКИ #}
+    <div class="section section-divider">
+      <div class="section-title">Назначение подборки</div>
+      <div class="section-sub">
+        Заполняется менеджером или юристом. Позволяет привязать подборку к конкретному арендатору и запросу.
+      </div>
+
+      <table>
+        <tbody>
+          <tr>
+            <td class="col-date">Арендатор / проект</td>
+            <td class="col-sum">_______________________________________________</td>
+          </tr>
+          <tr>
+            <td class="col-date">Комментарий менеджера</td>
+            <td class="col-sum">_______________________________________________</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# III. СТРУКТУРА ПО БАШНЯМ И ЭТАЖАМ #}
+    <div class="section section-divider">
+      <div class="section-title">Структура помещений</div>
+      <div class="section-sub">
+        Группировка помещений по объектам (башням) и этажам. Номера помещений указаны в сокращённом виде.
+      </div>
+
+      {% if grouped %}
+        {% for tower, floors in grouped.items %}
+          <div class="subsection">
+            <h2 style="font-size:18px; margin-bottom:4px;">
+              Объект (башня): {{ tower }}
+            </h2>
+
+            {% for floor, prem_list in floors.items %}
+              <div style="margin-top:8px; margin-bottom:6px;">
+                <h3 style="font-size:15px; color:#374151; margin-bottom:4px;">
+                  Этаж {{ floor }}
+                </h3>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="col-date">Помещение</th>
+                      <th class="col-sum">Площадь, м²</th>
+                      <th class="col-sum">Тип помещения</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for p in prem_list %}
+                      <tr>
+                        <td class="col-date">
+                          {{ p.number }}{# очищенный номер #}
+                        </td>
+                        <td class="col-sum">
+                          {{ p.area }}
+                        </td>
+                        <td class="col-sum">
+                          {{ p.type|default:"—" }}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endfor %}
+          </div>
+
+          <div class="section-divider" style="margin-top:16px;"></div>
+        {% endfor %}
+      {% else %}
+        <div class="section-sub">
+          В выборке нет помещений. Пожалуйста, вернитесь к корзине и выберите объекты.
+        </div>
+      {% endif %}
+    </div>
+
+    {# IV. ПРИМЕЧАНИЯ ЮРИСТА #}
+    <div class="section section-divider">
+      <div class="section-title">Примечания юриста</div>
+      <div class="section-sub">
+        Для фиксации дополнительных условий, ограничений и комментариев по подготовке договоров.
+      </div>
+
+      <div style="
+          border:1px solid #e5e7eb;
+          border-radius:8px;
+          height:140px;
+          margin-top:8px;
+      "></div>
+    </div>
+
+    {# ПОДВАЛ #}
+    <div class="footer-note" style="margin-top:32px; padding-top:12px; border-top:1px solid #e5e7eb; color:#6b7280; font-size:12px; line-height:1.5;">
+
+
+      <div style="margin-top:2px;">
+        {% if doc_id %}
+          Документ № <strong>{{ doc_id }}</strong>,
+        {% else %}
+          Документ без номера,
+        {% endif %}
+        сформирован: <strong>{{ print_date|date:"d.m.Y H:i" }}</strong>.
+      </div>
+
+      <div>
+        Ответственный:
+        {% if printed_by %}
+          <strong>{{ printed_by.get_full_name|default:printed_by.username }}</strong>.
+        {% else %}
+          <strong>—</strong>.
+        {% endif %}
+      </div>
+
+      <div style="margin-top:6px;">
+        Печатная форма для внутреннего использования.
+        При изменении состава помещений рекомендуется сформировать новую версию документа.
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+</body>
+</html>

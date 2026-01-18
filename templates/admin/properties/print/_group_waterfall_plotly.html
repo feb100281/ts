@@ -1,0 +1,73 @@
+{# templates/admin/properties/print/_group_waterfall_plotly.html #}
+
+{% if waterfall_plot_data %}
+<section class="section">
+  <h2 class="section-title">III. Структура рыночной стоимости по объектам</h2>
+  <div id="{{ waterfall_chart_id }}" class="valuation-kadastr-chart"></div>
+  
+</section>
+
+<script>
+(function() {
+  const data = {{ waterfall_plot_data|safe }};
+  if (!data) return;
+
+  const labels = data.labels || [];
+  const values = data.values || [];
+
+  // Переводим значения в млн ₽
+  const valuesM = values.map(v => v ? v / 1e6 : 0);
+
+  function fm(v) {
+    return (v || 0).toLocaleString("ru-RU", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+  }
+
+  // Для waterfall важен не максимум шага, а максимум кумулятивной суммы
+  let cum = 0;
+  let cumMax = 0;
+  for (let i = 0; i < valuesM.length; i++) {
+    cum += valuesM[i];
+    if (cum > cumMax) {
+      cumMax = cum;
+    }
+  }
+
+  const trace = {
+    type: "waterfall",
+    x: labels,
+    y: valuesM,
+    text: valuesM.map(fm),
+    textposition: "outside",
+    textfont: { size: 9 },
+    connector: { line: { color: "#9ca3af" } },
+    cliponaxis: false
+  };
+
+  const layout = {
+    margin: { l: 70, r: 30, t: 50, b: 80 },
+    yaxis: {
+      title: "Рыночная стоимость, млн ₽",
+      rangemode: "tozero",
+      range: cumMax ? [0, cumMax * 1.15] : undefined  // запас сверху, чтобы подписи не резались
+    },
+    xaxis: {
+      tickangle: -45
+    },
+    showlegend: false
+  };
+
+  const config = {
+    displayModeBar: false,
+    responsive: true
+  };
+
+  const el = document.getElementById("{{ waterfall_chart_id }}");
+  if (!el) return;
+  Plotly.newPlot(el, [trace], layout, config);
+})();
+</script>
+{% endif %}
+

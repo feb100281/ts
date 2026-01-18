@@ -1,0 +1,225 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные breadcrumbs #}
+{% block breadcrumbs %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'macro/keyrate_admin.css' %}">
+{% endblock %}
+
+{% block content_title %}
+{% with obj=adminform.form.instance %}
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: аватар + заголовок #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      {# Аватар группы #}
+      <div style="
+          width:40px;
+          height:40px;
+          border-radius:6px;
+          background:{% if obj.pk %}#111827{% else %}#e5e7eb{% endif %};
+          color:{% if obj.pk %}#f9fafb{% else %}#4b5563{% endif %};
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:18px;
+          font-weight:600;
+          box-shadow:0 0 0 1px rgba(15,23,42,.12);
+      ">
+        {% if obj.pk %}
+          {% if obj.logo_svg %}
+            {{ obj.logo_svg|safe }}
+          {% elif obj.logo %}
+            <span style="font-family:'NotoManu'; font-size:20px; line-height:1;">
+              {{ obj.logo }}
+            </span>
+          {% elif obj.name %}
+            {{ obj.name|first|upper }}
+          {% else %}
+            🏢
+          {% endif %}
+        {% else %}
+          +
+        {% endif %}
+      </div>
+
+      {# Текстовый блок #}
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.06em;
+            color:#6b7280;
+        ">
+          Группа объектов недвижимости
+        </span>
+
+        {% if obj.pk %}
+          <span style="font-size:19px; font-weight:600; color:#111827;">
+            {{ obj.name|default:"Без названия" }}
+          </span>
+
+          <span style="font-size:12px; color:#6b7280;">
+            {% with cnt=obj.properties.count %}
+              {% if cnt %}
+                Объектов в группе: <strong>{{ cnt }}</strong>
+              {% else %}
+                В группе пока нет объектов
+              {% endif %}
+            {% endwith %}
+          </span>
+        {% else %}
+          <span style="font-size:19px; font-weight:600; color:#111827;">
+            Новая группа объектов
+          </span>
+          <span style="font-size:12px; color:#6b7280;">
+            Укажите название бизнес-центра и сохраните форму, чтобы добавлять объекты в группу.
+          </span>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {# СПЕЙСЕР #}
+    <div style="flex:1;"></div>
+
+    {# ПРАВЫЙ КОМПАКТНЫЙ БЛОК НАВИГАЦИИ #}
+    <div style="
+        min-width:240px;
+        max-width:280px;
+        border-radius:14px;
+        background:rgba(248,250,252,0.95);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:600;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {# Все группы #}
+        <a href="{% url 'admin:properties_properygroup_changelist' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:4px 10px;
+             border-radius:6px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+           ">
+          ← Все группы
+        </a>
+
+        {% if obj.pk %}
+          {# Объекты в группе #}
+          <a href="{% url 'admin:properties_property_changelist' %}?group__id__exact={{ obj.pk }}"
+             class="button"
+             style="
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:6px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+             ">
+            🏢 Объекты в группе
+          </a>
+
+          {# Печать карточки группы #}
+          <a href="{% url 'admin:properties_properygroup_print' obj.pk %}"
+             target="_blank"
+             class="button"
+             style="
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:6px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+               background:#e0f2fe;
+             ">
+            🖨 Печать карточки
+          </a>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        СПРАВОЧНИКИ
+      </span>
+      <span>›</span>
+      <a href="{% url 'admin:properties_properygroup_changelist' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        ГРУППЫ ОБЪЕКТОВ
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+        {% if obj.pk %}
+          РЕДАКТИРОВАНИЕ
+        {% else %}
+          НОВАЯ ГРУППА
+        {% endif %}
+      </span>
+    </nav>
+
+    {% if obj.pk %}
+      <span style="color:#9ca3af;">
+        Объектов: {{ obj.properties.count }}
+      </span>
+    {% endif %}
+  </div>
+
+{% endwith %}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}
+
+{% block object-tools %}
+  {{ block.super }}
+{% endblock %}
