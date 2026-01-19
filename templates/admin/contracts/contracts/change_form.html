@@ -1,0 +1,225 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url opts|admin_urlname:'changelist' as changelist_url %}
+  {% url opts|admin_urlname:'add' as add_url %}
+
+  {# Компактная верхняя панель #}
+  <div class="contracts-topbar">
+    <div class="contracts-topbar__left">
+      <div class="contracts-icon">📄</div>
+      <div class="contracts-topbar__titles">
+        <div class="contracts-kicker">Договор</div>
+        <div class="contracts-title">
+          {% if add %}Новый договор{% else %}{{ original }}{% endif %}
+        </div>
+        <div class="contracts-meta">
+          <span class="chip chip-blue">{% if add %}Создание{% else %}Редактирование{% endif %}</span>
+          {% if not add and original.pk %}
+            <span class="chip chip-gray">ID: {{ original.pk }}</span>
+          {% endif %}
+          {% if not add and original.date %}
+            <span class="chip chip-cyan">Дата: {{ original.date }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="contracts-topbar__right">
+      <a class="link-btn" href="{{ changelist_url }}">← К реестру</a>
+
+      {% if has_add_permission %}
+        <a class="primary-btn" href="{{ add_url }}">➕ Новый</a>
+      {% endif %}
+
+      {% if not add and original.pk %}
+        {% if original.pid_id %}
+          <a class="pill-btn" href="../{{ original.pid_id }}/change/">↑ Родитель</a>
+        {% endif %}
+        <a class="pill-btn" href="{{ changelist_url }}?pid__id__exact={{ original.pk }}">Допники</a>
+        <a class="pill-btn" href="#contract-files">Файлы</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Нижняя мини-навигация (очень компактная) #}
+  <div class="contracts-breadcrumbs">
+    <nav class="crumbs">
+      <a href="{% url 'admin:index' %}">НАЧАЛО</a>
+      <span>›</span>
+      <a href="{{ changelist_url }}">ДОГОВОРЫ</a>
+      <span>›</span>
+      <span class="crumbs-current">
+        {% if add %}НОВЫЙ{% else %}{{ original.number|default:"Б/Н" }}{% endif %}
+      </span>
+    </nav>
+
+    <span class="crumbs-note">
+      {% if add %}создание записи{% else %}редактирование записи{% endif %}
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'macro/contracts_admin.css' %}">
+
+  <style>
+    /* ===== Верхняя панель ===== */
+    .contracts-topbar{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      flex-wrap:wrap;
+      padding:6px 0 8px;
+      border-bottom:1px solid #e5e7eb;
+      margin-bottom:10px;
+    }
+    .contracts-topbar__left{
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      min-width:320px;
+    }
+    .contracts-icon{
+      width:38px;height:38px;border-radius:10px;
+      background:#0f172a;color:#e2e8f0;
+      display:flex;align-items:center;justify-content:center;
+      font-size:18px;font-weight:800;
+      box-shadow:0 0 0 1px rgba(15,23,42,.18);
+      flex:0 0 auto;
+    }
+    .contracts-kicker{
+      font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;
+      line-height:1.1;
+      margin-top:1px;
+    }
+    .contracts-title{
+      font-size:18px;font-weight:750;color:#111827;
+      line-height:1.15;
+      margin-top:2px;
+    }
+    .contracts-meta{
+      display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;
+    }
+    .chip{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:6px;
+      font-weight:700;
+      border:1px solid rgba(15,23,42,.10);
+      background:#f8fafc;
+      color:#334155;
+    }
+    .chip-blue{ background:#eff6ff; color:#1d4ed8; border-color:rgba(29,78,216,.12); }
+    .chip-gray{ background:#f3f4f6; color:#4b5563; border-color:rgba(75,85,99,.12); }
+    .chip-cyan{ background:#ecfeff; color:#155e75; border-color:rgba(21,94,117,.12); }
+
+    .contracts-topbar__right{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .link-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:10px;
+      text-decoration:none;
+      background:#eef2ff;
+      color:#3730a3;
+      border:1px solid rgba(55,48,163,.12);
+    }
+    .primary-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:10px;
+      text-decoration:none;
+      background:#e0f2fe;
+      color:#075985;
+      border:1px solid rgba(2,132,199,.18);
+      font-weight:800;
+    }
+    .pill-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:6px;
+      text-decoration:none;
+      background:#f3f4f6;
+      color:#374151;
+      border:1px solid rgba(15,23,42,.10);
+    }
+
+    /* ===== Крошки ===== */
+    .contracts-breadcrumbs{
+      display:flex;align-items:center;justify-content:space-between;
+      gap:10px;flex-wrap:wrap;
+      margin:8px 0 0;
+      padding-top:8px;
+      color:#6b7280;
+      font-size:11px;
+    }
+    .crumbs{ display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
+    .crumbs a{
+      text-transform:uppercase;letter-spacing:.08em;
+      text-decoration:none;color:#9ca3af;
+    }
+    .crumbs-current{
+      text-transform:uppercase;letter-spacing:.08em;
+      color:#4b5563;font-weight:800;
+    }
+    .crumbs-note{ color:#9ca3af; }
+
+    /* ===== Аккуратность формы ===== */
+    #content-main .module { border-radius: 14px; overflow: hidden; }
+    .submit-row { border-radius: 14px; }
+
+    /* Сделаем табы/заголовки fieldset аккуратнее (если у тебя они в виде вкладок) */
+    .tabs, .tablist, .tab-nav, ul.tabs, ul.tab-nav {
+      border-radius: 14px;
+    }
+
+    /* Якорь для файлов */
+    .inline-group { scroll-margin-top: 120px; }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+
+  <script>
+    // Якорь "Файлы": пытаемся найти inline файлов и вставить <a id="contract-files">
+    document.addEventListener('DOMContentLoaded', function () {
+      if (document.getElementById('contract-files')) return;
+
+      // 1) твой старый вариант (если id совпадает)
+      let inline = document.getElementById('contractfiles_set-group');
+
+      // 2) если не нашли — попробуем по тексту заголовка inline (мягкая эвристика)
+      if (!inline) {
+        const groups = document.querySelectorAll('.inline-group');
+        groups.forEach(g => {
+          const h2 = g.querySelector('h2, .inline-related h2, .module h2');
+          const t = (h2 ? h2.textContent : '').toLowerCase();
+          if (t.includes('contract files') || t.includes('files') || t.includes('файл')) {
+            inline = g;
+          }
+        });
+      }
+
+      if (inline) {
+        const a = document.createElement('a');
+        a.id = 'contract-files';
+        inline.prepend(a);
+      }
+    });
+  </script>
+{% endblock %}

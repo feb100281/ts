@@ -352,8 +352,8 @@ JAZZMIN_SETTINGS = {
     "order_with_respect_to": [
         "macro",           # Макропоказатели
         "properties",      # Объекты недвижимости
-        "la",              # Договоры аренды
         "counterparties",  # Контрагенты
+        "contracts",        # Договоры 
         "corporate",       # Собственники/банки
         "botconfig",
         "auth",            # Пользователи и группы
