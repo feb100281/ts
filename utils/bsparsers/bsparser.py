@@ -206,7 +206,7 @@ def make_final_statemens(filepath: str) -> pd.DataFrame:
 
     return df[FIELDS_TO_KEEP]
 
-
+# для экселя
 ls = [wb, bk, sb, sb1]
 
 
