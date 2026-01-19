@@ -4,3 +4,6 @@
 .tenant-glyph-preview[data-glyph="E09E"]::before { content: "\e09e"; }
 .tenant-glyph-preview[data-glyph="E09F"]::before { content: "\e09f"; }
 .tenant-glyph-preview[data-glyph="E0A0"]::before { content: "\e0a0"; }
+.tenant-glyph-preview[data-glyph="E0A1"]::before { content: "\e0a1"; }
+.tenant-glyph-preview[data-glyph="E0A2"]::before { content: "\e0a2"; }
+.tenant-glyph-preview[data-glyph="E0A3"]::before { content: "\e0a3"; }
