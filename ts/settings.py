@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "macro",
     "corporate",
     "counterparties",
+    "contracts",
     "mptt",    
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
@@ -301,8 +302,8 @@ JAZZMIN_SETTINGS = {
         "macro.MarketSnapshot": "fa-solid fa-magnifying-glass-chart",
 
     #     # --- Договоры аренжды ---
-    #     "la": "fa-solid fa-file-signature ",
-    #     "la.La": "fa-solid fa-file-signature",
+        "contracts": "fa-solid fa-file-signature ",
+        "contracts.contracts": "fa-solid fa-file-signature",
     #     "la.Subject": "fa-solid fa-cubes",
     #     "la.LaSubjectConditions": "fa-solid fa-link",
     #     "la.LeaseTermsTypes": "fa-solid fa-percent",
@@ -310,7 +311,7 @@ JAZZMIN_SETTINGS = {
     #     "la.ConditionsTerms": "fa-solid fa-equals",
     #     "la.Indexation": "fa-solid fa-arrow-trend-up",
     #     "la.ProjectsType": "fa-solid fa-diagram-project",
-    #     "la.LaTypes": "fa-solid fa-list-ul",
+        "contracts.ContractsTitle": "fa-solid fa-list-ul",
     #     "la.AmendmentsType": "fa-solid fa-file-pen",
     #     "la.LaFiles": "fa-solid fa-file-upload",
     #     "la.LaEventLog": "fa-solid fa-clipboard-list",
