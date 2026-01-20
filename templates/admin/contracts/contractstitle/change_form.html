@@ -1,0 +1,149 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{# убираем стандартные object-tools #}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url opts|admin_urlname:'changelist' as changelist_url %}
+  {% url opts|admin_urlname:'add' as add_url %}
+
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+      <div style="
+          width:40px;height:40px;border-radius:8px;
+          background:#0f172a;color:#e2e8f0;
+          display:flex;align-items:center;justify-content:center;
+          font-size:20px;font-weight:800;
+          box-shadow:0 0 0 1px rgba(15,23,42,.18);
+      ">📑</div>
+
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+        <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;">
+          Справочник
+        </span>
+
+        <span style="font-size:19px; font-weight:700; color:#111827;">
+          {% if add %}Новый тип договора{% else %}{{ original.title }}{% endif %}
+        </span>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+          <span style="
+              font-size:11px;padding:2px 8px;border-radius:999px;
+              background:#eff6ff;color:#1d4ed8;font-weight:800;
+          ">
+            {% if add %}Создание{% else %}Редактирование{% endif %}
+          </span>
+
+          {% if not add and original.pk %}
+            <span style="
+                font-size:11px;padding:2px 8px;border-radius:999px;
+                background:#f3f4f6;color:#4b5563;font-weight:700;
+            ">
+              ID: {{ original.pk }}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    <div style="
+        min-width:260px; max-width:320px;
+        border-radius:16px;
+        background:rgba(248,250,252,0.9);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;flex-direction:column;gap:8px;
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9ca3af;">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:700;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+        <a href="{{ changelist_url }}"
+           style="
+             font-size:11px;padding:3px 8px;border-radius:8px;text-decoration:none;
+             background:#eef2ff;color:#3730a3;display:inline-flex;align-items:center;gap:6px;
+           ">
+          ← К списку типов
+        </a>
+
+        {% if has_add_permission %}
+          <a href="{{ add_url }}"
+             class="button"
+             style="
+               font-size:13px;padding:4px 10px;border-radius:8px;
+               display:inline-flex;align-items:center;gap:6px;justify-content:flex-start;
+               background:#e0f2fe;border:1px solid rgba(2,132,199,.20);
+             ">
+            ➕ Добавить новый тип
+          </a>
+        {% endif %}
+
+        {# Ссылка на просмотр связанных договоров, если нужно (настроишь URL ниже) #}
+        {% if not add and original.pk %}
+          <a href="{% url 'admin:contracts_contracts_changelist' %}?title__id__exact={{ original.pk }}"
+             style="
+               font-size:11px;padding:3px 8px;border-radius:8px;text-decoration:none;
+               background:#ecfeff;color:#155e75;display:inline-flex;align-items:center;gap:6px;
+             ">
+            📄 Договоры этого типа
+          </a>
+        {% endif %}
+      </div>
+
+      <div style="margin-top:6px;padding-top:8px;border-top:1px dashed rgba(15,23,42,.12);">
+        <div style="font-size:11px;color:#6b7280;line-height:1.35;">
+          <b style="color:#0f172a;">Подсказка:</b> называй типы так, чтобы их легко было искать и использовать в шаблонах/правилах.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="
+      display:flex;justify-content:space-between;align-items:center;
+      margin-top:4px;padding:6px 2px 0;border-top:1px solid #e5e7eb;
+      color:#6b7280;font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <a href="{{ changelist_url }}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        ТИПЫ ДОГОВОРОВ
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:800;">
+        {% if add %}НОВЫЙ{% else %}{{ original.title|upper }}{% endif %}
+      </span>
+    </nav>
+
+    <span style="color:#9ca3af;">
+      {% if add %}создание записи{% else %}редактирование записи{% endif %}
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'macro/contracts_admin.css' %}">
+  <style>
+    /* чуть мягче и дороже ощущение формы */
+    #content-main .module { border-radius: 14px; overflow: hidden; }
+    .submit-row { border-radius: 14px; }
+  </style>
+{% endblock %}

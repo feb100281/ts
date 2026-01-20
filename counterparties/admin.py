@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import urlencode
 
 from django.core.mail import EmailMultiAlternatives
 from django.http import HttpResponseRedirect
@@ -17,7 +18,7 @@ from django.utils.html import strip_tags
 from django.shortcuts import redirect
 
 
-
+from contracts.models import Contracts
 
 
 
@@ -208,6 +209,7 @@ class CounterpartyAdmin(admin.ModelAdmin):
         "name",
         "tax_id",
         "ceo_display",
+        "contracts_count_link", 
         # "website_link",
         "checko_status_column",
         "print_counterparty_link",
@@ -333,6 +335,23 @@ class CounterpartyAdmin(admin.ModelAdmin):
         return "—"
 
     ceo_display.short_description = "👤 Руководитель"
+    
+    
+    
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(_contracts_count=Count("contracts", distinct=True))
+    
+    @admin.display(description="Договоры", ordering="_contracts_count")
+    def contracts_count_link(self, obj):
+        count = getattr(obj, "_contracts_count", 0) or 0
+        if not count:
+            return "—"
+
+        url = reverse("admin:contracts_contracts_changelist")
+        query = urlencode({"cp__id__exact": obj.pk})
+        return format_html('<a href="{}?{}">📄 {}</a>', url, query, count)
     
     
     @admin.display(description="Лого")
