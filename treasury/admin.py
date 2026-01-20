@@ -1,12 +1,15 @@
 from django.contrib import admin, messages
 from django.shortcuts import redirect
-from .models import BankStatements, CfData
+from .models import BankStatements, CfData, CfSplits
 from utils.bsparsers.bsupdater import update_cf_data
 from django.utils.safestring import mark_safe
 
 from django.shortcuts import redirect
 
 
+class CfSplitsInline(admin.StackedInline):
+    model = CfSplits
+    extra = 1
 
 @admin.register(BankStatements)
 class MigrationsAdmin(admin.ModelAdmin):
@@ -61,4 +64,34 @@ class MigrationsAdmin(admin.ModelAdmin):
 
 @admin.register(CfData)
 class CfDataAdmin(admin.ModelAdmin):
-    list_display = ("__str__","date","dt", "cr", "temp", 'cp')
+    list_display = ("date","dt", "cr", "temp", 'cp',"intercompany")
+    inlines = [CfSplitsInline,]
+    
+    
+    fieldsets = (
+        (
+            "Основное",
+            {"fields": ("bs","doc_type",'doc_numner',"doc_date","date","temp","dt","cr")},
+        ),
+        
+        (
+            "Реффересы",
+            {"fields": ("cp_bs_name","cp","cp_final","contract","cfitem")},
+        ),        
+        
+        (
+            "Детали",
+            {
+                "fields": (
+                    "ba",
+                    "tax_id",                   
+                    "payer_account",
+                    "reciver_account",
+                    "vat_rate",                    
+                    "intercompany"
+                    
+                )
+            },
+        )
+    )
+    
