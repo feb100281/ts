@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "corporate",
     "counterparties",
     "contracts",
+    "treasury",
     "mptt",    
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
@@ -289,7 +290,7 @@ JAZZMIN_SETTINGS = {
         "corporate.BankAccount": "fa-solid fa-credit-card",
         
         "corporate.COA": "fa-solid fa-sitemap",
-        "corporate.СfItems": "fa-solid fa-money-bill-transfer",
+        "corporate.CfItems": "fa-solid fa-money-bill-transfer",
 
     #     # --- МАКРОЭКОНОМИКА ---
         "macro": "fa-solid fa-chart-line",
