@@ -24,7 +24,7 @@ class ContractsTitle(models.Model):
         return self.title
     
 class Contracts(models.Model):
-    title = models.ForeignKey(ContractsTitle,on_delete=models.DO_NOTHING)
+    title = models.ForeignKey(ContractsTitle,on_delete=models.DO_NOTHING, verbose_name='Тип документа')
     number = models.CharField(max_length=250,verbose_name='Номер',null=True,blank=True)
     date = models.DateField(verbose_name='Дата договора',null=True,blank=True) 
     owner = models.ForeignKey(Owners,on_delete=models.CASCADE, verbose_name='Компания')

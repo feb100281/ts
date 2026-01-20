@@ -15,9 +15,20 @@
       <div class="contracts-icon">📄</div>
       <div class="contracts-topbar__titles">
         <div class="contracts-kicker">Договор</div>
+
         <div class="contracts-title">
           {% if add %}Новый договор{% else %}{{ original }}{% endif %}
         </div>
+
+        {# Контрагент сверху (и на редактировании, и на создании — обновляется JS-ом) #}
+        <div class="contracts-counterparty" id="cpTitle">
+          {% if not add and original.cp %}
+            {{ original.cp }}
+          {% else %}
+            —
+          {% endif %}
+        </div>
+
         <div class="contracts-meta">
           <span class="chip chip-blue">{% if add %}Создание{% else %}Редактирование{% endif %}</span>
           {% if not add and original.pk %}
@@ -105,6 +116,26 @@
       line-height:1.15;
       margin-top:2px;
     }
+
+    /* ===== Контрагент сверху ===== */
+    .contracts-counterparty{
+      margin-top:6px;
+      font-size:13px;
+      font-weight:800;
+      color:#0f172a;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+    }
+    .contracts-counterparty::before{
+      content:"Контрагент:";
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#6b7280;
+    }
+
     .contracts-meta{
       display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;
     }
@@ -219,6 +250,22 @@
         const a = document.createElement('a');
         a.id = 'contract-files';
         inline.prepend(a);
+      }
+
+      // ===== Контрагент сверху: обновляем по выбору поля cp =====
+      const cpSelect = document.getElementById('id_cp');
+      const cpTitle = document.getElementById('cpTitle');
+
+      function updateCpTitle(){
+        if (!cpSelect || !cpTitle) return;
+        const option = cpSelect.options[cpSelect.selectedIndex];
+        const txt = option ? option.text : '—';
+        cpTitle.textContent = (cpSelect.value ? txt : '—');
+      }
+
+      if (cpSelect) {
+        cpSelect.addEventListener('change', updateCpTitle);
+        updateCpTitle();
       }
     });
   </script>

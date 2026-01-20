@@ -72,16 +72,16 @@ class ContractsAdmin(admin.ModelAdmin):
 
     list_display = ("cp_logo", "cp", "title", "number", "date", "amendment", "files_count")
     list_display_links = ("cp", "number",)   
-    list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid", "defaultcf")
+    list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)
 
     search_fields = ("number", "cp__name", "title__title", "regex")
     search_help_text = "Поиск: номер, контрагент, тип, RegEx"
 
-    list_filter = ("cp", 'title', "owner",  "manager")
+    list_filter = ("cp", 'title', "owner",  "manager", "is_signed")
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
-    autocomplete_fields = ("title", "cp", "manager",  "pid",  "defaultcf")
+    autocomplete_fields = ("title", "cp", "manager",   "defaultcf")
     
     list_per_page = 25
     
@@ -117,6 +117,27 @@ class ContractsAdmin(admin.ModelAdmin):
             _files_count=Count("files", distinct=True),
             _amendments_count=Count("amendments", distinct=True),
         )
+        
+        
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+        if db_field.name == "pid":
+            obj_id = request.resolver_match.kwargs.get("object_id")
+            if obj_id:
+                try:
+                    obj = Contracts.objects.select_related("cp").get(pk=obj_id)
+                    field.queryset = Contracts.objects.filter(cp=obj.cp).order_by("-date")
+                    # если хочешь выбирать только “основные” договоры:
+                    # field.queryset = field.queryset.filter(pid__isnull=True)
+                except Contracts.DoesNotExist:
+                    field.queryset = Contracts.objects.none()
+            else:
+                # форма создания: пока cp не выбран — скрываем варианты
+                field.queryset = Contracts.objects.none()
+
+        return field
         
         
     
