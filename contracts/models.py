@@ -1,5 +1,5 @@
 from django.db import models
-from corporate.models import Owners, СfItems
+from corporate.models import Owners, CfItems
 from counterparties.models import Counterparty
 from django.conf import settings
 import os
@@ -49,7 +49,7 @@ class Contracts(models.Model):
     )
     is_signed = models.BooleanField(verbose_name='Подписан',null=True,blank=True)
     regex =  models.CharField(max_length=250,verbose_name='RegEx',null=True,blank=True)
-    defaultcf = models.ForeignKey(СfItems,on_delete=models.CASCADE, verbose_name='Статья CF по дефолту',null=True,blank=True)
+    defaultcf = models.ForeignKey(CfItems,on_delete=models.CASCADE, verbose_name='Статья CF по дефолту',null=True,blank=True)
     class Meta:
         verbose_name = "Договор"
         verbose_name_plural = "Договоры"        

@@ -9,7 +9,7 @@ from django.utils.html import format_html
 from django.contrib import messages
 from django.shortcuts import redirect
 from django import forms
-from .models import Owners, BankAccount, Bank, COA, СfItems
+from .models import Owners, BankAccount, Bank, COA, CfItems
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.admin import DraggableMPTTAdmin
@@ -293,7 +293,7 @@ class BankAdmin(admin.ModelAdmin):
 
 @admin.register(BankAccount)
 class BankAccountAdmin(admin.ModelAdmin):
-    list_display = ("corporate", "bank_logo", "bank_name",  "account", "currency")
+    list_display = ("corporate", "bank_logo", "bank_name",  "account", "currency","bs_acc")
     list_display_links = ("bank_name",)
     search_fields = ("corporate__name", "bank__name",  "account")
 
@@ -447,7 +447,7 @@ class AccountAdmin(DraggableMPTTAdmin):
 
 # ----- СТАТЬИ ДВИЖЕНИЯ ДЕНЕЖНЫХ СРЕДСТВ ---- #  
 
-@admin.register(СfItems)
+@admin.register(CfItems)
 class CashFlowItemAdmin(DraggableMPTTAdmin):
     mptt_level_indent = 12
 
@@ -553,13 +553,13 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
             path(
                 "print/",
                 self.admin_site.admin_view(self.print_all),
-                name=f"{СfItems._meta.app_label}_{СfItems._meta.model_name}_print_all",
+                name=f"{CfItems._meta.app_label}_{CfItems._meta.model_name}_print_all",
             ),
         ]
         return custom + urls
 
     def print_all(self, request):
-        items = list(СfItems.objects.all().order_by("tree_id", "lft", "code"))
+        items = list(CfItems.objects.all().order_by("tree_id", "lft", "code"))
         for x in items:
             x.indent_px = (getattr(x, "level", 0) or 0) * 16
 

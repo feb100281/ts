@@ -131,61 +131,7 @@ class Bank(models.Model):
 
 
 
-#----- БАНКОВСКИЕ СЧЕТА ----#
-class BankAccount(models.Model):
 
-    corporate = models.ForeignKey(
-        Owners, on_delete=models.CASCADE, verbose_name="Собственник"
-    )
-    bank = models.ForeignKey(
-        Bank,
-        on_delete=models.PROTECT,
-        verbose_name="Банк",
-        related_name="accounts",
-        null=True,
-        blank=True,
-    )
-    # bik = models.CharField(max_length=9, verbose_name="БИК")
-    account = models.CharField(max_length=255, verbose_name="Счет", unique=True)
-    currency = models.CharField(
-        max_length=3, choices=CURRENCY_CHOISE, verbose_name="Валюта", default="RUB"
-    )
-
-    class Meta:
-        verbose_name = "Банковский счет"
-        verbose_name_plural = "Банковские счета"
-
-    def __str__(self):
-        return f"{self.bank} ({self.account})"
-
-    # def _fill_bank_from_bik(self):
-    #     if not self.bik or self.bank_id:
-    #         return
-
-    #     try:
-    #         bank_data = get_bank_data_by_bik(self.bik)
-    #     except (CheckoBankClientError, Exception):
-    #         return
-
-    #     if not bank_data:
-    #         return
-
-    #     bank, _ = Bank.objects.get_or_create(
-    #         bik=bank_data["bik"],
-    #         defaults={
-    #             "name": bank_data["name"],
-    #             "name_eng": bank_data.get("name_eng"),
-    #             "address": bank_data.get("address"),
-    #             "corr_account": bank_data.get("corr_account"),
-    #             "type": bank_data.get("type"),
-    #         },
-    #     )
-    #     self.bank = bank
-
-    # def save(self, *args, **kwargs):
-    #     if self.bik and not self.bank_id:
-    #         self._fill_bank_from_bik()
-    #     super().save(*args, **kwargs)
 
 
 #----- CHART OF ACCOUNTS ----#
@@ -231,7 +177,7 @@ class COA(MPTTModel):
         return f"{self.code} {self.name}"
 
 
-class СfItems(MPTTModel):
+class CfItems(MPTTModel):
     code = models.CharField(
         "Код",
         max_length=6,
@@ -263,3 +209,61 @@ class СfItems(MPTTModel):
 
     def __str__(self):
         return f"{self.code} {self.name}"
+    
+    
+    #----- БАНКОВСКИЕ СЧЕТА ----#
+class BankAccount(models.Model):
+
+    corporate = models.ForeignKey(
+        Owners, on_delete=models.CASCADE, verbose_name="Собственник"
+    )
+    bank = models.ForeignKey(
+        Bank,
+        on_delete=models.PROTECT,
+        verbose_name="Банк",
+        related_name="accounts",
+        null=True,
+        blank=True,
+    )
+    # bik = models.CharField(max_length=9, verbose_name="БИК")
+    account = models.CharField(max_length=255, verbose_name="Счет", unique=True)
+    currency = models.CharField(
+        max_length=3, choices=CURRENCY_CHOISE, verbose_name="Валюта", default="RUB"
+    )
+    bs_acc = models.ForeignKey(COA, verbose_name = "Балансовый счет", on_delete=models.CASCADE,null=True,blank=True)
+
+    class Meta:
+        verbose_name = "Банковский счет"
+        verbose_name_plural = "Банковские счета"
+
+    def __str__(self):
+        return f"{self.bank} ({self.account})"
+
+    # def _fill_bank_from_bik(self):
+    #     if not self.bik or self.bank_id:
+    #         return
+
+    #     try:
+    #         bank_data = get_bank_data_by_bik(self.bik)
+    #     except (CheckoBankClientError, Exception):
+    #         return
+
+    #     if not bank_data:
+    #         return
+
+    #     bank, _ = Bank.objects.get_or_create(
+    #         bik=bank_data["bik"],
+    #         defaults={
+    #             "name": bank_data["name"],
+    #             "name_eng": bank_data.get("name_eng"),
+    #             "address": bank_data.get("address"),
+    #             "corr_account": bank_data.get("corr_account"),
+    #             "type": bank_data.get("type"),
+    #         },
+    #     )
+    #     self.bank = bank
+
+    # def save(self, *args, **kwargs):
+    #     if self.bik and not self.bank_id:
+    #         self._fill_bank_from_bik()
+    #     super().save(*args, **kwargs)
