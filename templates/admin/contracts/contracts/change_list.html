@@ -204,9 +204,42 @@
   </script>
 
   <style>
+
     #result_list tbody tr:hover { background: rgba(2,132,199,0.06); }
-    #changelist #toolbar { border-radius: 14px; overflow: hidden; }
-    #result_list { border-radius: 14px; overflow: hidden; }
+#changelist #toolbar { border-radius: 14px; overflow: hidden; }
+
+/* ✅ скругляем и обрезаем НЕ таблицу, а контейнер вокруг неё */
+#changelist-form .results {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* саму таблицу не делаем overflow-контейнером */
+#result_list {
+  border-radius: 0;
+  overflow: visible;
+}
+
+/* ✅ заморозка заголовков */
+#result_list thead th {
+  position: sticky;
+  top: 0;                 /* если перекрывает верхняя шапка — поставь 48px/56px */
+  z-index: 5;
+  background: var(--body-bg, #fff);
+}
+
+/* чтобы фон был и у ссылок в заголовках */
+#result_list thead th a {
+  background: inherit;
+}
+
+/* легкая линия/тень под шапкой */
+#result_list thead {
+  box-shadow: 0 2px 0 rgba(0,0,0,.06);
+}
+
+
+
   </style>
 {% endblock %}
 

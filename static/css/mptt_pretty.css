@@ -1,0 +1,62 @@
+/* колонка */
+td.field-tree_actions{
+  width:56px;
+  white-space:nowrap;
+}
+
+/* ВАЖНО: у django-mptt классы могут отличаться по версии.
+   Поэтому делаем несколько селекторов сразу. */
+td.field-tree_actions .drag-handle,
+td.field-tree_actions .drag-handler,
+td.field-tree_actions .handle,
+td.field-tree_actions .mptt-draggable,
+td.field-tree_actions a {
+  /* прячем “крест” независимо от того, как он нарисован */
+  background: none !important;
+  background-image: none !important;
+  -webkit-mask: none !important;
+  mask: none !important;
+
+  color: transparent !important;     /* если это шрифтовая иконка */
+  font-size: 0 !important;           /* убирает символ/глиф */
+  line-height: 0 !important;
+  text-shadow: none !important;
+
+  position: relative;
+  cursor: grab;
+}
+
+/* рисуем наш приятный значок */
+td.field-tree_actions .drag-handle::before,
+td.field-tree_actions .drag-handler::before,
+td.field-tree_actions .handle::before,
+td.field-tree_actions .mptt-draggable::before,
+td.field-tree_actions a::before {
+  content: "⠿"; /* можно "☰" */
+  font-size: 18px;
+  line-height: 18px;
+  color: #9ca3af;
+  display: inline-block;
+  transition: color .2s ease, transform .2s ease;
+}
+
+td.field-tree_actions .drag-handle:hover::before,
+td.field-tree_actions .drag-handler:hover::before,
+td.field-tree_actions .handle:hover::before,
+td.field-tree_actions .mptt-draggable:hover::before,
+td.field-tree_actions a:hover::before {
+  color:#4f46e5;
+  transform: translateY(-1px);
+}
+
+td.field-tree_actions .drag-handle:active,
+td.field-tree_actions .drag-handler:active,
+td.field-tree_actions .handle:active,
+td.field-tree_actions .mptt-draggable:active,
+td.field-tree_actions a:active {
+  cursor: grabbing;
+}
+
+
+
+

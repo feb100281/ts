@@ -218,13 +218,21 @@ class UserAdmin(DjangoUserAdmin):
     )
     list_display_links = (column_user_avatar_and_name,)
     search_fields = ("username", "first_name", "last_name", "email")
-    list_filter = ("is_active", "is_staff", "is_superuser", "groups")
+    list_filter = ("is_active", "is_staff",  "groups")
     ordering = ("username",)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # чтобы не плодить запросы к groups
         return qs.annotate(groups_count=Count("groups"))
+    
+    
+    class Media:
+        css = {
+            "all": (
+                "css/admin_overrides.css", 
+            )
+        }
 
 
 # ---------------------- Группы ----------------------
@@ -454,6 +462,13 @@ class GroupAdmin(DjangoGroupAdmin):
             "admin/auth/group/permissions_modal.html",
             context,
         )
+    
+    class Media:
+        css = {
+            "all": (
+                "css/admin_overrides.css", 
+            )
+        }
 
 
 
@@ -479,6 +494,8 @@ class KeyRateAdmin(admin.ModelAdmin):
         )
     print_link.short_description = "Печать"
     print_link.allow_tags = True
+    
+    list_per_page = 10
 
     # ------- кастомные URL: sync + print -------
     def get_urls(self):
@@ -665,12 +682,23 @@ class KeyRateAdmin(admin.ModelAdmin):
             context,
         )
     
+    
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",  
+            )
+        }
+    
 
 #----- ИНФЛЯЦИЯ -----#
 class InflationAdmin(admin.ModelAdmin):
     list_display = ("date", "inflation_rate", 'print_link')
     ordering = ("-date",)
     exclude = ('comment',)
+    
+    list_per_page = 25
     
     
     # ----- колонка "Печать" -----
@@ -818,6 +846,14 @@ class InflationAdmin(admin.ModelAdmin):
             "admin/macro/inflation/print.html",
             context,
         )
+    
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",  
+            )
+        }
 
 
 
@@ -1106,6 +1142,17 @@ class TaxesListAdmin(admin.ModelAdmin):
         extra_context["summary_without"] = summary_without
 
         return super().changelist_view(request, extra_context=extra_context)
+    
+    
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css", 
+            )
+        }
+    
+
 
 
 
@@ -1123,6 +1170,8 @@ class CurrencyRateAdmin(admin.ModelAdmin):
     list_display = ("date", "currency_with_flag", "base_currency", "rate", "source", "print_link")
     list_filter = ("currency",)
     ordering = ("-date", "currency")
+    
+    list_per_page = 25
 
     # ─────────────────────
     #   отображение валюты
@@ -1313,6 +1362,14 @@ class CurrencyRateAdmin(admin.ModelAdmin):
             "admin/macro/currencyrate/print.html",
             context,
         )
+    
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",  
+            )
+        }
 
 
 

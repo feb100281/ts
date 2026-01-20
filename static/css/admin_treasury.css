@@ -1,0 +1,114 @@
+/* Больше воздуха в списке */
+#changelist table#result_list td,
+#changelist table#result_list th {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  vertical-align: top;
+}
+
+/* Период */
+#changelist table#result_list td.field-period {
+  min-width: 180px;
+}
+
+/* Компания */
+#changelist table#result_list td.field-owner {
+  min-width: 180px;
+}
+
+/* Счет (банк + счет серым) */
+#changelist table#result_list td.field-ba_pretty {
+  min-width: 300px;
+}
+
+/* Обороты */
+#changelist table#result_list th.column-turnover,
+#changelist table#result_list td.field-turnover {
+  min-width: 180px;
+  white-space: nowrap;
+}
+
+/* Строк и статус */
+#changelist table#result_list th.column-rows_count,
+#changelist table#result_list td.field-rows_count,
+#changelist table#result_list th.column-status,
+#changelist table#result_list td.field-status {
+  width: 120px;
+  white-space: nowrap;
+}
+
+/* Дата загрузки */
+#changelist table#result_list th.column-uploaded_at,
+#changelist table#result_list td.field-uploaded_at {
+  min-width: 160px;
+}
+
+/* Файл */
+#changelist table#result_list th.column-file_link,
+#changelist table#result_list td.field-file_link {
+  width: 70px;
+  white-space: nowrap;
+}
+
+
+
+
+
+
+
+/* Bootstrap table-responsive + sticky: нужен separate, иначе липкость ломается */
+.card-body.table-responsive {
+  overflow-x: auto;
+}
+
+#changelist table#result_list {
+  border-collapse: separate !important;
+  border-spacing: 0;
+}
+
+/* Sticky header (все заголовки) */
+#changelist table#result_list thead th {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--body-bg, #fff);
+}
+
+/* ===== 1) Sticky checkbox column ===== */
+
+/* header checkbox */
+#changelist table#result_list thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 60;
+  background: var(--body-bg, #fff);
+}
+
+/* body checkbox -> берём фон строки (зебра!) */
+#changelist table#result_list tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 60;
+  background: inherit;
+}
+
+/* ===== 2) Sticky 2nd column ("Период") ===== */
+
+/* header период */
+#changelist table#result_list thead th:nth-child(2) {
+  position: sticky;
+  left: 42px; /* 36/40/42 — подгони под свою ширину */
+  z-index: 55;
+  background: var(--body-bg, #fff);
+  box-shadow: 2px 0 0 rgba(0,0,0,.05);
+}
+
+/* body период -> берём фон строки (зебра!) */
+#changelist table#result_list tbody th:nth-child(2),
+#changelist table#result_list tbody td:nth-child(2) {
+  position: sticky;
+  left: 42px;
+  z-index: 55;
+  background: inherit;
+  box-shadow: 2px 0 0 rgba(0,0,0,.05);
+}
