@@ -85,7 +85,7 @@ class CfData(models.Model):
     payer_account = models.CharField("Счет плательщика",max_length=250,null=True,blank=True)
     reciver_account = models.CharField("Счет получателя",max_length=250,null=True,blank=True)
     vat_rate = models.DecimalField("НДС",max_digits=6,decimal_places=2,null=True,blank=True)
-    cp = models.ForeignKey(Counterparty,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Контрагент",related_name="cp_init" )
+    cp = models.ForeignKey(Counterparty,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Контрагент по ИНН в выписке",related_name="cp_init" )
     cp_final = models.ForeignKey(Counterparty,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Контрагент финальный",related_name="cp_final")
     owner = models.ForeignKey(Owners,on_delete=models.CASCADE,null=True,blank=True, verbose_name="Компания")
     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Договор")
@@ -105,3 +105,18 @@ class CfData(models.Model):
 
     def __str__(self):
         return f"{self.doc_type} № {self.doc_numner} от {self.doc_date} (на сумму {self.dt - self.cr})"
+    
+class CfSplits(models.Model):
+    transaction = models.ForeignKey(CfData,on_delete=models.CASCADE,verbose_name='Транскация')
+    dt = models.DecimalField("Дт",max_digits=12,decimal_places=2,null=True,blank=True)
+    cr = models.DecimalField("Кр",max_digits=12,decimal_places=2,null=True,blank=True)
+    temp = models.TextField("Назначение",null=True,blank=True)
+    vat_rate = models.DecimalField("НДС",max_digits=6,decimal_places=2,null=True,blank=True)
+    contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Договор")
+    cfitem = models.ForeignKey(CfItems,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Статья CF" )
+    class Meta:
+        verbose_name = "Сплит"
+        verbose_name_plural = "Сплиты оплат"   
+    
+    def __str__(self):
+        return f"{self.transaction}"

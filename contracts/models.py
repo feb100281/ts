@@ -49,7 +49,7 @@ class Contracts(models.Model):
     )
     is_signed = models.BooleanField(verbose_name='Подписан',null=True,blank=True)
     regex =  models.CharField(max_length=250,verbose_name='RegEx',null=True,blank=True)
-    defaultcf = models.ForeignKey(CfItems,on_delete=models.CASCADE, verbose_name='Статья CF по дефолту',null=True,blank=True)
+    
     class Meta:
         verbose_name = "Договор"
         verbose_name_plural = "Договоры"        
@@ -109,8 +109,18 @@ class ContractFiles(models.Model):
     description = models.TextField(verbose_name='описание',null=True,blank=True)
     file = models.FileField(upload_to=document_upload_path, verbose_name="Файл документа", null=True, blank=True) 
 
+class CfItemAuto(models.Model):
+    contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,verbose_name='Договор')
+    regex =  models.CharField(max_length=500,verbose_name='RegEx',null=True,blank=True)
+    defaultcfdt = models.ForeignKey(CfItems,on_delete=models.CASCADE, verbose_name='Статья CF по дефолту для Дт',null=True,blank=True,related_name="contracts_default_dt", )
+    defaultcfcr = models.ForeignKey(CfItems,on_delete=models.CASCADE, verbose_name='Статья CF по дефолту для Кт',null=True,blank=True,related_name="contracts_default_cr", )
+    
+    class Meta:
+        verbose_name = "⚙️ Автоматизация"
+        verbose_name_plural = "⚙️ Автоматизация"
 
-
+    def __str__(self):
+        return self.contract
 
     
     

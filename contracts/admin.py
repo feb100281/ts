@@ -8,8 +8,14 @@ from .models import (
     ContractsTitle,
     ContractItems,
     ContractFiles,
+    CfItemAuto,
     
 )
+
+class CfItemAutoInline(admin.TabularInline):
+    model = CfItemAuto
+    
+    
 
 class ContractItemsInline(admin.TabularInline):
     model = ContractItems
@@ -68,7 +74,7 @@ class ContractFilesInline(admin.TabularInline):
 
 @admin.register(Contracts)
 class ContractsAdmin(admin.ModelAdmin):
-    inlines = (ContractFilesInline, ContractItemsInline, ConditionsInline)
+    inlines = (ContractFilesInline, ContractItemsInline, ConditionsInline,CfItemAutoInline)
 
     list_display = ("cp_logo", "cp", "title", "number", "date", "amendment", "files_count")
     list_display_links = ("cp", "number",)   
@@ -81,7 +87,7 @@ class ContractsAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
-    autocomplete_fields = ("title", "cp", "manager",   "defaultcf")
+    autocomplete_fields = ("title", "cp", "manager",)
     
     list_per_page = 25
     
@@ -92,16 +98,16 @@ class ContractsAdmin(admin.ModelAdmin):
         (
             format_html('📄 Карточка'),
             {
-                "fields": ("title", "number", "date", "cp", "owner", "manager", "is_signed")
+                "fields": ("title", "number", "date", "cp", "owner", "manager", "is_signed","regex",)
             },
         ),
-        (
-            format_html('⚙️ Автоматизация'),
-            {
-                "fields": ("regex", "defaultcf"),
-                "classes": ("collapse",),
-            },
-        ),
+        # (
+        #     format_html('⚙️ Автоматизация'),
+        #     {
+        #         "fields": ("regex", "defaultcf", "defaultcfcr"),
+        #         "classes": ("collapse",),
+        #     },
+        # ),
         (
             format_html('🔗 Связи'),
             {
