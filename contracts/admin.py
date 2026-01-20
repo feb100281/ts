@@ -160,7 +160,7 @@ class ContractsAdmin(admin.ModelAdmin):
 
         outer = (
             "display:inline-flex;align-items:center;justify-content:center;"
-            "width:28px;height:28px;border-radius:999px;"
+            "width:28px;height:28px;border-radius:6px;"
             "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
             "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
         )
@@ -186,14 +186,6 @@ class ContractsAdmin(admin.ModelAdmin):
         return getattr(obj, "_files_count", 0) or 0
     
     
-    
-    
-
-
-
-
-
-        
     
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
@@ -230,16 +222,25 @@ class ContractsTitleAdmin(admin.ModelAdmin):
         if n == 0:
             return admin.utils.format_html(
                 '<span style="display:inline-flex;align-items:center;justify-content:center;'
-                'min-width:34px;padding:4px 10px;border-radius:999px;'
+                'min-width:34px;padding:4px 10px;border-radius:6px;'
                 'font-size:12px;font-weight:800;'
                 'background:rgba(148,163,184,.16);color:#475569;'
                 'border:1px solid rgba(148,163,184,.28);">0</span>'
             )
         return admin.utils.format_html(
             '<span style="display:inline-flex;align-items:center;justify-content:center;'
-            'min-width:34px;padding:4px 10px;border-radius:999px;'
+            'min-width:34px;padding:4px 10px;border-radius:6px;'
             'font-size:12px;font-weight:800;'
             'background:rgba(29,78,216,.10);color:#1e3a8a;'
             'border:1px solid rgba(29,78,216,.18);">{}</span>',
             n,
         )
+    
+    
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",  
+            )
+        }

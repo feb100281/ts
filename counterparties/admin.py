@@ -361,7 +361,7 @@ class CounterpartyAdmin(admin.ModelAdmin):
 
         outer = (
             "display:inline-flex;align-items:center;justify-content:center;"
-            "width:28px;height:28px;border-radius:999px;"
+            "width:28px;height:28px;border-radius:6px;"
             "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
             "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
         )
@@ -841,7 +841,7 @@ class TenantAdmin(admin.ModelAdmin):
     autocomplete_fields = ("counterparty", "user")
 
     class Media:
-        css = {"all": ("fonts/glyphs.css",)}
+        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",)}
     
     
     @admin.display(description="Лого", ordering="counterparty__name")
@@ -1195,7 +1195,7 @@ class TenantAdmin(admin.ModelAdmin):
         return render(request, "admin/tenant_stats.html", context)
 
 
-# ---------------------- ГРУППА АРЕНДАТОРОВ ----------------------
+# ---------------------- ГРУППА КОНТРАГЕНТОВ ----------------------
 
 
 class GrAdmin(admin.ModelAdmin):
@@ -1447,7 +1447,7 @@ class GlyphAdmin(admin.ModelAdmin):
     def is_brand_badge(self, obj):
         base = (
             "display:inline-flex;align-items:center;gap:6px;"
-            "padding:4px 10px;border-radius:999px;"
+            "padding:4px 10px;border-radius:6px;"
             "font-size:12px;font-weight:600;line-height:1;"
             "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
             "white-space:nowrap;"
@@ -1464,7 +1464,7 @@ class GlyphAdmin(admin.ModelAdmin):
 
         style = (
             "display:inline-flex;align-items:center;justify-content:center;"
-            "width:28px;height:28px;border-radius:999px;"
+            "width:28px;height:28px;border-radius:6px;"
             "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
             "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
         )
@@ -1521,7 +1521,7 @@ class GlyphAdmin(admin.ModelAdmin):
 
 
     class Media:
-        css = {"all": ("fonts/glyphs.css", "fonts/glyph-map.css")}
+        css = {"all": ("fonts/glyphs.css", "fonts/glyph-map.css", "css/admin_overrides.css",)}
 
 
 

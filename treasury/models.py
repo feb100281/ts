@@ -5,7 +5,7 @@ from counterparties.models import Counterparty
 
 from utils.bsparsers.bsparser import get_bs_details
 
-# Create your models here.
+
 class BankStatements(models.Model):
     
     file = models.FileField(upload_to='migrations/', verbose_name="Файл миграции")

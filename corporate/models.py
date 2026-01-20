@@ -211,7 +211,10 @@ class CfItems(MPTTModel):
         return f"{self.code} {self.name}"
     
     
-    #----- БАНКОВСКИЕ СЧЕТА ----#
+    
+    
+    
+#----- БАНКОВСКИЕ СЧЕТА ----#
 class BankAccount(models.Model):
 
     corporate = models.ForeignKey(

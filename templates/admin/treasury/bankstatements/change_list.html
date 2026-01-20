@@ -1,0 +1,234 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{# убираем стандартные крошки и object-tools #}
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url cl.opts|admin_urlname:'add' as add_url %}
+
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: аватар + текст #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      <!-- Аватар -->
+      <div style="
+          width:40px;
+          height:40px;
+          border-radius:10px;
+          background:linear-gradient(135deg,#0ea5e9,#1d4ed8);
+          color:#e0f2fe;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:20px;
+          font-weight:700;
+          box-shadow:0 10px 26px rgba(2,132,199,.25), 0 0 0 1px rgba(15,23,42,.15);
+      ">
+        🧾
+      </div>
+
+      <!-- Текстовый блок -->
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.06em;
+            color:#6b7280;
+        ">
+          Казначейство
+        </span>
+
+        <span style="font-size:19px; font-weight:700; color:#0f172a;">
+          Выписки
+        </span>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+
+          <!-- Всего выписок -->
+          <span style="
+              font-size:11px;
+              padding:2px 8px;
+              border-radius:6px;
+              background:rgba(59,130,246,.12);
+              color:#1d4ed8;
+              font-weight:700;
+              box-shadow:0 0 0 1px rgba(59,130,246,.18) inset;
+          ">
+            Всего выписок: {{ cl.result_count }}
+          </span>
+
+
+          {% if cl.has_filters %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Спейсер #}
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: навигация / действия #}
+    <div style="
+        min-width:240px;
+        max-width:280px;
+        border-radius:16px;
+        background:rgba(248,250,252,0.92);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        border:1px solid rgba(148,163,184,.22);
+        backdrop-filter: blur(6px);
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:700;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {% if has_add_permission %}
+          <a href="{{ add_url }}"
+             class="button"
+             style="
+               font-size:13px;
+               padding:5px 6px;
+               border-radius:10px;
+               display:inline-flex;
+               align-items:center;
+               gap:8px;
+               justify-content:flex-start;
+               background:rgba(59,130,246,.12);
+               border:1px solid rgba(59,130,246,.18);
+             ">
+            ⬆️ Загрузить выписку
+          </a>
+        {% endif %}
+
+        <a href="{% url 'admin:treasury_cfdata_changelist' %}"
+           style="
+             font-size:11px;
+             padding:4px 8px;
+             border-radius:6px;
+             text-decoration:none;
+             background:#f3f4f6;
+             color:#4b5563;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(148,163,184,.25);
+           ">
+          🧩 CF документы
+        </a>
+
+        <a href="{% url 'admin:corporate_bankaccount_changelist' %}"
+           style="
+             font-size:11px;
+             padding:4px 8px;
+             border-radius:6px;
+             text-decoration:none;
+             background:#f3f4f6;
+             color:#4b5563;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(148,163,184,.25);
+           ">
+          💳 Банковские счета
+        </a>
+
+      </div>
+
+      <div style="
+          margin-top:6px;
+          padding-top:8px;
+          border-top:1px solid rgba(148,163,184,.25);
+          color:#64748b;
+          font-size:11px;
+          line-height:1.35;
+      ">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        КАЗНАЧЕЙСТВО
+      </span>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#475569;font-weight:700;">
+        ВЫПИСКИ
+      </span>
+    </nav>
+
+    <span style="color:#9ca3af;">
+      {{ cl.result_count }} записей
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {# если хочешь — подключай свой css, либо оставь пустым #}
+  {# <link rel="stylesheet" href="{% static 'macro/treasury_admin.css' %}"> #}
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const rows = document.querySelectorAll('#result_list tbody tr');
+
+      rows.forEach(function (row) {
+        const link = row.querySelector('th a');
+        if (!link) return;
+
+        row.style.cursor = 'pointer';
+
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('a')) return;
+          if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
+          if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
+          if (e.target.tagName === 'BUTTON') return;
+
+          window.location.href = link.href;
+        });
+      });
+    });
+  </script>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

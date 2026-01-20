@@ -283,6 +283,8 @@
     --color-macro:           #F59E0B;  /* amber: макро / ставки / курсы */
     --color-system:          #9CA3AF;  /* серый: служебные / системные */
     --color-bot:             #0EA5E9;  /* cyan: Телеграм-бот и околоботовое */
+    --color-treasury:        #1f9c95;
+
 
     /* Фон для active / hover */
     --sidebar-active-bg: rgba(236, 72, 153, 0.16);  /* акцент с прозрачностью */
@@ -416,6 +418,18 @@
 .fa-file-invoice-dollar {
     color: var(--color-macro) !important;
 }
+
+
+/* Казначейство */
+
+.fa-wallet,
+.fa-file-invoice-dollar,
+.fa-receipt {
+    color: var(--color-treasury) !important;
+}
+
+
+
 
 /* 6. Системные разделы / пользователи / служебные */
 .fa-users,

@@ -327,6 +327,13 @@ JAZZMIN_SETTINGS = {
     #     "botconfig.BotControl": "fa-solid fa-robot",
 
     #     "botconfig.BotUser": "fa-solid fa-circle-user",
+    
+    
+    #     # --- КАЗНАЧЕЙСТВО ---
+        "treasury": "fa-solid fa-wallet",
+        "treasury.BankStatements": "fa-solid fa-receipt",
+        "treasury.CfData": "fa-solid fa-file-invoice-dollar",
+    
 
 
 
@@ -352,10 +359,12 @@ JAZZMIN_SETTINGS = {
 
     "order_with_respect_to": [
         "macro",           # Макропоказатели
+        "corporate",       # Собственники/банки
         "properties",      # Объекты недвижимости
         "counterparties",  # Контрагенты
-        "contracts",        # Договоры 
-        "corporate",       # Собственники/банки
+        "contracts",       # Договоры 
+        'treasury',        # Казначейство 
+
         "botconfig",
         "auth",            # Пользователи и группы
         "services",        # Служебные — всегда в конце

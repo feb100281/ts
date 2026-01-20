@@ -1,4 +1,5 @@
 from django.contrib import admin
+
 from django.db.models import Count
 from django.shortcuts import render
 from django.urls import path
@@ -13,6 +14,8 @@ from .models import Owners, BankAccount, Bank, COA, CfItems
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.admin import DraggableMPTTAdmin
+
+from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 
 
 from counterparties.models import Glyph
@@ -82,6 +85,12 @@ class OwnersAdmin(admin.ModelAdmin):
     inlines = [BankAccountInline]
 
     class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css", 
+            )
+        }
         js = ("corporate/js/owners_fill.js",)
 
     fieldsets = (
@@ -220,7 +229,7 @@ class BankAdmin(admin.ModelAdmin):
 
             outer = (
                 "display:inline-flex;align-items:center;justify-content:center;"
-                "width:28px;height:28px;border-radius:999px;"
+                "width:28px;height:28px;border-radius:6px;"
                 "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
                 "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
             )
@@ -235,7 +244,7 @@ class BankAdmin(admin.ModelAdmin):
         css = {
             "all": (
                 "fonts/glyphs.css",
-                "css/admin_overrides.css",  # ← критично, ты уже поймала это 👍
+                "css/admin_overrides.css",  
             )
         }
         js = ("corporate/js/bank_fill.js", "js/glyph_select2.js",)
@@ -292,7 +301,7 @@ class BankAdmin(admin.ModelAdmin):
 
 @admin.register(BankAccount)
 class BankAccountAdmin(admin.ModelAdmin):
-    list_display = ("corporate", "bank_logo", "bank_name",  "account", "currency","bs_acc")
+    list_display = ("corporate", "bank_logo", "bank_name",  "account", "currency_view", "bs_acc_code")
     list_display_links = ("bank_name",)
     search_fields = ("corporate__name", "bank__name",  "account")
 
@@ -307,6 +316,29 @@ class BankAccountAdmin(admin.ModelAdmin):
                 "css/admin_overrides.css",
             )
         }
+        
+    
+    @admin.display(description="Валюта", ordering="currency")
+    def currency_view(self, obj):
+        code = (obj.currency or "").upper()
+        flag = CURRENCY_FLAGS.get(code, "")
+        sym = CURRENCY_SYMBOLS.get(code, "")
+        # показываем: 🇷🇺 ₽ RUB (или просто RUB если нет в словаре)
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">'
+            '<span style="font-size:16px;line-height:1;">{}</span>'
+            '<span style="font-weight:700;">{}</span>'
+            '<span style="opacity:.8;">{}</span>'
+            '</span>',
+            flag, sym, code
+        )
+        
+        
+    @admin.display(description="Балансовый счет", ordering="bs_acc__code")
+    def bs_acc_code(self, obj):
+        if not obj.bs_acc:
+            return "—"
+        return obj.bs_acc.code  # <-- только номер
 
     @admin.display(description="", ordering="bank__name")
     def bank_logo(self, obj):
@@ -315,7 +347,7 @@ class BankAccountAdmin(admin.ModelAdmin):
 
         outer = (
             "display:inline-flex;align-items:center;justify-content:center;"
-            "width:24px;height:24px;border-radius:999px;"
+            "width:24px;height:24px;border-radius:6px;"
             "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
             "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
         )
@@ -336,6 +368,7 @@ def _now_pretty():
 
 
 @admin.register(COA)
+
 class AccountAdmin(DraggableMPTTAdmin):
     mptt_level_indent = 12
     actions = ["print_coa_registry"]
@@ -343,7 +376,7 @@ class AccountAdmin(DraggableMPTTAdmin):
     list_display = ("tree_actions", "indented_title", "active_badge", "children_badge")
     list_display_links = ("indented_title",)
     search_fields = ("code", "name")
-    list_filter = ("is_active",)
+    # list_filter = ("is_active",)
     ordering = ("code",)
     preserve_filters = True
 
@@ -356,7 +389,7 @@ class AccountAdmin(DraggableMPTTAdmin):
         if obj.is_active:
             return format_html(
                 '<span style="display:inline-flex;align-items:center;gap:6px;'
-                'padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;'
+                'padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;'
                 'background:rgba(16,185,129,.12);color:#065f46;'
                 'border:1px solid rgba(16,185,129,.22);'
                 'box-shadow:0 6px 18px rgba(15,23,42,.08);">'
@@ -366,7 +399,7 @@ class AccountAdmin(DraggableMPTTAdmin):
             )
         return format_html(
             '<span style="display:inline-flex;align-items:center;gap:6px;'
-            'padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;'
+            'padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;'
             'background:rgba(239,68,68,.10);color:#7f1d1d;'
             'border:1px solid rgba(239,68,68,.20);'
             'box-shadow:0 6px 18px rgba(15,23,42,.08);">'
@@ -381,15 +414,15 @@ class AccountAdmin(DraggableMPTTAdmin):
         if n == 0:
             return format_html(
                 '<span style="display:inline-flex;align-items:center;justify-content:center;'
-                'min-width:30px;padding:4px 10px;border-radius:999px;'
-                'font-size:12px;font-weight:800;'
+                'min-width:30px;padding:4px 10px;border-radius:6px;'
+                'font-size:10px;font-weight:800;'
                 'background:rgba(148,163,184,.16);color:#475569;'
                 'border:1px solid rgba(148,163,184,.28);">0</span>'
             )
         return format_html(
             '<span style="display:inline-flex;align-items:center;justify-content:center;'
-            'min-width:30px;padding:4px 10px;border-radius:999px;'
-            'font-size:12px;font-weight:800;'
+            'min-width:30px;padding:4px 10px;border-radius:6px;'
+            'font-size:10px;font-weight:800;'
             'background:rgba(59,130,246,.10);color:#1e3a8a;'
             'border:1px solid rgba(59,130,246,.18);">{}</span>',
             n,
@@ -442,11 +475,19 @@ class AccountAdmin(DraggableMPTTAdmin):
         return render(request, "admin/corporate/coa/coa_print.html", context)
     
 
-
+    class Media:
+        css = {
+            "all": (
+              
+                "css/admin_overrides.css",  
+                "css/mptt_pretty.css"
+            )
+        }
 
 # ----- СТАТЬИ ДВИЖЕНИЯ ДЕНЕЖНЫХ СРЕДСТВ ---- #  
 
 @admin.register(CfItems)
+
 class CashFlowItemAdmin(DraggableMPTTAdmin):
     mptt_level_indent = 12
 
@@ -454,7 +495,7 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
     list_display_links = ("indented_title",)
 
     search_fields = ("code", "name")
-    list_filter = ("is_active",)
+    # list_filter = ("is_active",)
     ordering = ("code",)
     preserve_filters = True
     
@@ -472,7 +513,7 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
         if obj.is_active:
             return format_html(
                 '<span style="display:inline-flex;align-items:center;gap:6px;'
-                'padding:4px 10px;border-radius:999px;'
+                'padding:4px 10px;border-radius:6px;'
                 'font-size:12px;font-weight:700;'
                 'background:rgba(16,185,129,.12);color:#065f46;'
                 'border:1px solid rgba(16,185,129,.22);">'
@@ -482,7 +523,7 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
             )
         return format_html(
             '<span style="display:inline-flex;align-items:center;gap:6px;'
-            'padding:4px 10px;border-radius:999px;'
+            'padding:4px 10px;border-radius:6px;'
             'font-size:12px;font-weight:700;'
             'background:rgba(239,68,68,.10);color:#7f1d1d;'
             'border:1px solid rgba(239,68,68,.20);">'
@@ -497,14 +538,14 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
         if n == 0:
             return format_html(
                 '<span style="display:inline-flex;align-items:center;justify-content:center;'
-                'min-width:30px;padding:4px 10px;border-radius:999px;'
+                'min-width:30px;padding:4px 10px;border-radius:6px;'
                 'font-size:12px;font-weight:800;'
                 'background:rgba(148,163,184,.16);color:#475569;'
                 'border:1px solid rgba(148,163,184,.28);">0</span>'
             )
         return format_html(
             '<span style="display:inline-flex;align-items:center;justify-content:center;'
-            'min-width:30px;padding:4px 10px;border-radius:999px;'
+            'min-width:30px;padding:4px 10px;border-radius:6px;'
             'font-size:12px;font-weight:800;'
             'background:rgba(14,165,233,.10);color:#075985;'
             'border:1px solid rgba(14,165,233,.18);">{}</span>',
@@ -572,3 +613,14 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
             "back_url": request.META.get("HTTP_REFERER") or "",
         }
         return render(request, "admin/corporate/cfitems/cfitems_print.html", context)
+    
+    
+    class Media:
+        css = {
+            "all": (
+              
+                "css/admin_overrides.css",  
+                "css/mptt_pretty.css"
+            )
+        }
+
