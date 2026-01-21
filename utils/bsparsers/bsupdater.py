@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.db import connection
 import locale
+
 locale.setlocale(locale.LC_TIME, "ru_RU.UTF-8")
 import pandas as pd
 import numpy as np
@@ -10,7 +11,9 @@ import re
 
 from .bsparser import make_final_statemens, get_bs_details
 from treasury.models import CfData
-from corporate.models import Owners,BankAccount
+from corporate.models import Owners, BankAccount
+from contracts.models import Contracts
+from .exceptions import EXCEPTION_INN
 
 
 # Грузим паттерны для выделения ставки НДС
@@ -19,14 +22,13 @@ from .vat_patterns import NO_VAT, VAT_RATE
 from counterparties.models import Counterparty
 
 
- 
 # --------------------------
-# Это последняя функция которая вставляет данные в модель CfData 
+# Это последняя функция которая вставляет данные в модель CfData
 # --------------------------
 
-def upsert_cf_data(df:pd.DataFrame) -> str:
-    
-    
+
+def upsert_cf_data(df: pd.DataFrame) -> str:
+
     df = df.where(df.notna(), None)
 
     sql = """
@@ -65,20 +67,21 @@ def upsert_cf_data(df:pd.DataFrame) -> str:
 
     with connection.cursor() as cursor:
         cursor.executemany(sql, rows)
-    
+
     return f"Загружено {len(df)} операций"
-    
-    
+
+
 # --------------------------
-# Тут магия и геморой начинается ниже функции для авторазностки выписок 
+# Тут магия и геморой начинается ниже функции для авторазностки выписок
 # --------------------------
-   
-#Находим ставку НДС !!!! НУЖНО ДОДЕЛАТЬ ЭТО ГЕМОР
-def find_vat_rate(df:pd.DataFrame)->pd.DataFrame:
+
+
+# Находим ставку НДС !!!! НУЖНО ДОДЕЛАТЬ ЭТО ГЕМОР через SQL тоже никак 
+def find_vat_rate(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     s = df["temp"].fillna("").str.lower()
-    
-    #Выделяем ставку НДС
+
+    # Выделяем ставку НДС
     df["vat_rate"] = None
 
     # без НДС → 0
@@ -89,17 +92,96 @@ def find_vat_rate(df:pd.DataFrame)->pd.DataFrame:
     rates = s.str.extract(VAT_RATE, flags=re.VERBOSE)[0]
     mask_rate = rates.notna()
     df.loc[mask_rate, "vat_rate"] = rates[mask_rate].astype(int)
-    
+
     return df
 
-def find_contract():
-    pass
+def find_contracts(bs_id):
+    q = """
+    -- 1. Сбрасываем договоры только для нужного bs_id
+    UPDATE treasury_cfdata
+    SET contract_id = NULL
+    WHERE bs_id = %(bs_id)s;
 
-def find_final_cp():
-    pass
+    -- 2. Подбираем договоры только для нужного bs_id
+    WITH contract_patterns AS (
+        SELECT id AS contract_id, regex AS pattern
+        FROM contracts_contracts
+        WHERE regex IS NOT NULL AND regex <> ''
+    ),
+    matched AS (
+        SELECT DISTINCT ON (d.id)
+            d.id AS cf_id,
+            cp.contract_id
+        FROM treasury_cfdata d
+        JOIN contract_patterns cp
+          ON d.temp IS NOT NULL
+         AND d.temp ~* cp.pattern
+        WHERE d.bs_id = %(bs_id)s
+        ORDER BY d.id, length(cp.pattern) DESC, cp.contract_id ASC
+    )
+    UPDATE treasury_cfdata d
+    SET contract_id = m.contract_id
+    FROM matched m
+    WHERE d.id = m.cf_id
+      AND d.bs_id = %(bs_id)s
+    RETURNING d.id;
+    """
+    
+    q_count = """
+    SELECT COUNT(*)
+    FROM treasury_cfdata
+    WHERE bs_id = %(bs_id)s
+      AND contract_id IS NOT NULL;
+    """
 
-def find_cf_item():
-    pass
+    with connection.cursor() as cursor:
+        cursor.execute(q, {"bs_id": bs_id})
+        cursor.execute(q_count, {"bs_id": bs_id})
+        assigned_count = cursor.fetchone()[0]
+
+    return f"✅ назначено {assigned_count} договоров"
+
+# Ищем договор по exceptions и ИНН
+def contracts_exceptions_inn(bs_id):
+    q = """
+        UPDATE treasury_cfdata
+        SET contract_id = %(contract_id)s
+        WHERE bs_id = %(bs_id)s
+          AND tax_id = %(tax_id)s
+          AND temp IS NOT NULL
+          AND temp ~* %(pattern)s
+          AND contract_id IS NULL
+    """
+
+    total = 0
+
+    with connection.cursor() as cursor:
+        for tax_id, (pattern, contract_id) in EXCEPTION_INN.items():
+            cursor.execute(q, {
+                "bs_id": bs_id,
+                "tax_id": tax_id,
+                "pattern": pattern,
+                "contract_id": contract_id,
+            })
+            total += cursor.rowcount
+
+    return f"✅ исключения по ИНН: назначено {total} строк"
+
+# Теперь обновляем конечных контрагентов по договорам
+# ЛЮТЕЙШЕЕ НАРУШЕНИЕ ВСЕХ МЫСЛИМЫХ НФ НО БЛИН ТУТ НЕЧЕГО НЕ ПОДЕЛАЕШЬ
+def find_cp_final(bs_id):
+    q = """
+    UPDATE treasury_cfdata d
+    SET cp_final_id = c.cp_id
+    FROM contracts_contracts c
+    WHERE d.contract_id = c.id
+     AND d.bs_id = %(bs_id)s;
+    
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(q, {"bs_id": bs_id})
+    
+    return "Обновили финальных контрагентов"
 
 
 # --------------------------
@@ -107,22 +189,20 @@ def find_cf_item():
 # --------------------------
 
 
-def update_cf_data(filename,bs_id):
-    
-    bank, start_date,end_date,bb,eb = get_bs_details(filepath=filename)
+def update_cf_data(filename, bs_id):
+
+    bank, start_date, end_date, bb, eb = get_bs_details(filepath=filename)
     account_number = bank
-    df = make_final_statemens(filename)   
-    
-    
+    df = make_final_statemens(filename)
+
     notifications = []
-    
+
     company_name = "не найдено"
     bank_name = "не найдено"
 
     if account_number:
         ba = (
-            BankAccount.objects
-            .select_related("corporate", "bank")
+            BankAccount.objects.select_related("corporate", "bank")
             .filter(account=account_number)
             .first()
         )
@@ -131,36 +211,36 @@ def update_cf_data(filename,bs_id):
             bank_name = ba.bank.name if ba.bank else "—"
             ba_id = ba.id
             owner_id = ba.corporate_id
-    
-    df = find_vat_rate(df).copy(deep=True)
-    
-    
-    df['bs_id'] = int(bs_id)
-    df['ba_id'] = int(ba_id)
-    df['owner_id'] = int(owner_id)
+
+    df['vat_rate'] = None
+
+    df["bs_id"] = int(bs_id)
+    df["ba_id"] = int(ba_id)
+    df["owner_id"] = int(owner_id)
     df['contract_id'] = None
-    
-    #Мапим cp по ИНН
-    cp_map = dict(
-        Counterparty.objects
-        .values_list("tax_id", "id")
-    )
+
+    # Мапим cp по ИНН
+    cp_map = dict(Counterparty.objects.values_list("tax_id", "id"))
     df["cp_id"] = df["tax_id"].map(cp_map).astype("Int64")
     df["cp_id"] = df["cp_id"].where(df["cp_id"].notna(), None)
-    
-    df['cp_final_id'] = None
-    df['cfitem_id'] = None
-    
-    notifications.append(f"Компания: {company_name}; {bank_name} Расчетный счет № ...{account_number[-4:]} ")
+
+    df["cp_final_id"] = None
+    df["cfitem_id"] = None
+
+    notifications.append(
+        f"Компания: {company_name}; {bank_name} Расчетный счет № ...{account_number[-4:]} "
+    )
     notifications.append(f"Период выписки с {start_date.strftime("%d.%m.%Y")} по {end_date.strftime("%d.%m.%Y")}")
     notifications.append(f"Исх остаток {bb:,.2f} рублей; остаток {eb:,.2f}")
-    notifications.append(f"Обороты по dt {df.dt.sum():,.2f}; Обороты по cr {df.cr.sum():,.2f}")
+    notifications.append(
+        f"Обороты по dt {df.dt.sum():,.2f}; Обороты по cr {df.cr.sum():,.2f}"
+    )
     notifications.append(f"Количество операций по выписке: {len(df.index)}")
     notifications.append(upsert_cf_data(df))
-    
-    login_text =  '<br>'.join(notifications)
-    
+    notifications.append(find_contracts(bs_id))
+    notifications.append(contracts_exceptions_inn(bs_id))
+    notifications.append(find_cp_final(bs_id))
+
+    login_text = "<br>".join(notifications)
+
     return login_text
-    
-
-
