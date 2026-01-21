@@ -106,9 +106,14 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.db.models.functions import Coalesce
+
+from datetime import datetime
+from django.contrib.admin import SimpleListFilter
 
 from .models import BankStatements, CfData, CfSplits
 from utils.bsparsers.bsupdater import update_cf_data
+from decimal import Decimal
 
 from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 # ---------- UI helpers ----------
@@ -206,6 +211,25 @@ class CfSplitsInline(admin.TabularInline):
 
 # ---------- BankStatements Admin ----------
 
+
+class InPeriodDateFilter(SimpleListFilter):
+    title = "Дата (внутри выписки)"
+    parameter_name = "in_period_date"   # будет в URL: ?in_period_date=YYYY-MM-DD
+    template = "admin/filters/date_in_period.html"
+
+    def lookups(self, request, model_admin):
+        return ()
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        try:
+            d = datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            return queryset
+        return queryset.filter(start__lte=d, finish__gte=d)
+
 @admin.register(BankStatements)
 class BankStatementsAdmin(admin.ModelAdmin):
     change_form_template = "admin/services/migrations/change_form.html"
@@ -224,8 +248,9 @@ class BankStatementsAdmin(admin.ModelAdmin):
     )
     list_display_links = ("period",)
     search_fields = ("owner__name", "ba__account", "ba__bank__name")
-    list_filter = ("owner", "ba", "uploaded_at")
-    date_hierarchy = "uploaded_at"
+    list_filter = ("owner", "ba", "uploaded_at", InPeriodDateFilter)
+    # date_hierarchy = "uploaded_at"
+  
     ordering = ("-uploaded_at",)
     list_select_related = ("owner", "ba")
 
@@ -256,6 +281,78 @@ class BankStatementsAdmin(admin.ModelAdmin):
                   rows=Count("cfdata", distinct=True),
               )
         )
+        
+        
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+
+        selected_date = None
+        raw = request.GET.get("in_period_date")
+        if raw:
+            try:
+                selected_date = datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                selected_date = None
+
+        extra_context["selected_date"] = selected_date
+
+        if selected_date:
+            # берём выписки, которые покрывают дату + учитываем выбранные фильтры owner/ba
+            bss = (
+                BankStatements.objects
+                .filter(start__lte=selected_date, finish__gte=selected_date)
+                .select_related("owner", "ba")
+            )
+
+            owner_id = request.GET.get("owner__id__exact")
+            ba_id = request.GET.get("ba__id__exact")
+            if owner_id:
+                bss = bss.filter(owner_id=owner_id)
+            if ba_id:
+                bss = bss.filter(ba_id=ba_id)
+
+            blocks = []
+
+            # ИТОГИ
+            total_dt = Decimal("0.00")
+            total_cr = Decimal("0.00")
+            total_eod = Decimal("0.00")
+
+            for bs in bss:
+                agg = (
+                    CfData.objects
+                    .filter(bs=bs, date__lte=selected_date)
+                    .aggregate(
+                        dt=Coalesce(Sum("dt"), Decimal("0.00")),
+                        cr=Coalesce(Sum("cr"), Decimal("0.00")),
+                    )
+                )
+
+                dt_sum = agg["dt"] or Decimal("0.00")
+                cr_sum = agg["cr"] or Decimal("0.00")
+
+                bb = bs.bb if bs.bb is not None else Decimal("0.00")
+                eod = bb + dt_sum - cr_sum
+
+                blocks.append({
+                    "bs": bs,
+                    "dt_sum": dt_sum,
+                    "cr_sum": cr_sum,
+                    "eod": eod,
+                })
+
+                total_dt += dt_sum
+                total_cr += cr_sum
+                total_eod += eod
+
+            extra_context["day_blocks"] = blocks
+
+            # прокидываем в шаблон (чтобы блок "Итого" появился)
+            extra_context["total_dt"] = total_dt
+            extra_context["total_cr"] = total_cr
+            extra_context["total_eod"] = total_eod
+
+        return super().changelist_view(request, extra_context=extra_context)
 
     @admin.display(description="Период", ordering="start")
     def period(self, obj):

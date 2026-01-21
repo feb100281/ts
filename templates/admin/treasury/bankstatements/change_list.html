@@ -47,24 +47,80 @@
           Выписки
         </span>
 
-        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+        {# СТРОКА ИНСТРУМЕНТОВ ПОД ЗАГОЛОВКОМ #}
+        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; align-items:flex-end;">
 
-          <!-- Всего выписок -->
-          <span style="
-              font-size:11px;
-              padding:2px 8px;
-              border-radius:6px;
-              background:rgba(59,130,246,.12);
-              color:#1d4ed8;
-              font-weight:700;
-              box-shadow:0 0 0 1px rgba(59,130,246,.18) inset;
-          ">
-            Всего выписок: {{ cl.result_count }}
-          </span>
+          {# КАЛЕНДАРИК: "Остаток на конец дня" (оставили как у тебя) #}
+          <form method="get" style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin:0; padding:0;">
+            {# сохраняем текущие GET кроме in_period_date #}
+            {% for k,v in request.GET.items %}
+              {% if k != "in_period_date" %}
+                <input type="hidden" name="{{ k }}" value="{{ v }}">
+              {% endif %}
+            {% endfor %}
 
+            <div style="display:flex; flex-direction:column; gap:3px; margin:0; padding:0;">
+              <div style="
+                  font-size:10px;
+                  letter-spacing:.08em;
+                  text-transform:uppercase;
+                  color:#94a3b8;
+                  font-weight:900;
+                  line-height:1;
+              ">
+                Остаток на конец дня
+              </div>
 
-          {% if cl.has_filters %}
-          {% endif %}
+              <div style="display:flex; align-items:center; gap:10px; margin:0; padding:0;">
+                <span style="opacity:.55; font-size:13px; line-height:1;">📅</span>
+
+                <input type="date"
+                       name="in_period_date"
+                       value="{{ request.GET.in_period_date|default:'' }}"
+                       style="
+                         height:28px;
+                         padding:0 6px;
+                         border:1px solid rgba(148,163,184,.35);
+                         background:#fff;
+                         border-radius:0;
+                         font-size:13px;
+                         font-weight:900;
+                         color:#0f172a;
+                         font-variant-numeric: tabular-nums;
+                         outline:none;
+                       ">
+
+                <button type="submit"
+                        style="
+                          height:28px;
+                          padding:0 10px;
+                          border-radius:0;
+                          border:1px solid rgba(59,130,246,.25);
+                          background:rgba(59,130,246,.10);
+                          font-size:12px;
+                          font-weight:900;
+                          color:#1d4ed8;
+                          cursor:pointer;
+                        ">
+                  Показать
+                </button>
+
+                {% if request.GET.in_period_date %}
+                  <a href="?"
+                     style="
+                       font-size:12px;
+                       font-weight:900;
+                       color:#64748b;
+                       text-decoration:none;
+                       padding:0 2px;
+                     ">
+                    Сбросить
+                  </a>
+                {% endif %}
+              </div>
+            </div>
+          </form>
+
         </div>
       </div>
     </div>
@@ -203,8 +259,6 @@
 
 {% block extrahead %}
   {{ block.super }}
-  {# если хочешь — подключай свой css, либо оставь пустым #}
-  {# <link rel="stylesheet" href="{% static 'macro/treasury_admin.css' %}"> #}
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -230,5 +284,119 @@
 {% endblock %}
 
 {% block content %}
+
+  {% if selected_date %}
+    <div style="
+        border-radius:16px;
+        background:rgba(248,250,252,0.92);
+        box-shadow:0 18px 40px rgba(15,23,42,0.10);
+        padding:12px 14px;
+        border:1px solid rgba(148,163,184,.22);
+        margin: 10px 0 14px;
+        backdrop-filter: blur(6px);
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">
+        <div style="font-weight:800;color:#0f172a;">
+          Остаток на конец дня: {{ selected_date|date:"d.m.Y" }}
+        </div>
+        <div style="font-size:11px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;">
+          По выпискам, покрывающим дату
+        </div>
+      </div>
+
+      {% if total_eod is not None %}
+        <div style="
+          margin-top:10px;
+          padding:10px 12px;
+          border-radius:12px;
+          background:rgba(15,23,42,.03);
+          border:1px solid rgba(148,163,184,.18);
+          display:flex;
+          gap:16px;
+          flex-wrap:wrap;
+          align-items:baseline;
+        ">
+          <div style="font-weight:900;color:#0f172a;">
+            Итого:
+          </div>
+
+          <div>
+            <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Остаток</div>
+            <div style="font-weight:900;color:#0f172a;">{{ total_eod|floatformat:2 }}</div>
+          </div>
+
+          <div>
+            <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Дт (поступления)</div>
+            <div style="font-weight:900;color:#065f46;">{{ total_dt|floatformat:2 }}</div>
+          </div>
+
+          <div>
+            <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Кт (списания)</div>
+            <div style="font-weight:900;color:#991b1b;">{{ total_cr|floatformat:2 }}</div>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if day_blocks and day_blocks|length > 0 %}
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
+          {% for b in day_blocks %}
+            <div style="
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                gap:12px;
+                flex-wrap:wrap;
+                padding:8px 10px;
+                border-radius:12px;
+                background:rgba(15,23,42,.03);
+                border:1px solid rgba(148,163,184,.18);
+            ">
+              <div style="min-width:240px;">
+                <div style="font-weight:800;color:#0f172a;line-height:1.2;">
+                  {{ b.bs.owner }}
+                </div>
+                <div style="font-size:12px;color:#64748b;line-height:1.2;">
+                  {{ b.bs.ba }}
+                </div>
+              </div>
+
+              <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;">
+                <div>
+                  <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Остаток</div>
+                  <div style="font-weight:900;color:#0f172a;">{{ b.eod|floatformat:2 }}</div>
+                </div>
+
+                {# Дт зелёным (поступления) #}
+                <div>
+                  <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Дт</div>
+                  <div style="font-weight:800;color:#065f46;">{{ b.dt_sum|floatformat:2 }}</div>
+                </div>
+
+                {# Кт красным (списания) #}
+                <div>
+                  <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Кт</div>
+                  <div style="font-weight:800;color:#991b1b;">{{ b.cr_sum|floatformat:2 }}</div>
+                </div>
+              </div>
+
+              <div style="margin-left:auto;">
+                <a href="{% url 'admin:treasury_bankstatements_change' b.bs.pk %}"
+                   class="button"
+                   style="border-radius:10px;padding:6px 10px;">
+                  ↗ Открыть выписку
+                </a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div style="margin-top:10px;color:#64748b;font-size:13px;">
+          Выписка, покрывающая эту дату, не найдена.
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
   {{ block.super }}
 {% endblock %}
+
