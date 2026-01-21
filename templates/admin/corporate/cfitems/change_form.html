@@ -18,7 +18,7 @@
 
   {# ссылка "добавить дочернюю" — только если редактируем существующий объект #}
   {% if original %}
-    {% url cl.opts|admin_urlname:'add' as add_child_base %}
+    {% url opts|admin_urlname:'add' as add_child_base %}
     {# add/?parent=<id> — MPTT-админ обычно подхватывает parent в форме #}
     {% with add_child_url=add_child_base|add:"?parent="|add:original.pk %}
     {% endwith %}
