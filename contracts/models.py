@@ -120,7 +120,7 @@ class CfItemAuto(models.Model):
         verbose_name_plural = "⚙️ Автоматизация"
 
     def __str__(self):
-        return self.contract
+        return str(self.contract)
 
     
     
