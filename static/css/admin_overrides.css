@@ -142,16 +142,9 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
   box-sizing: border-box;
 }
 
-/* 4) В tabular inline часто помогает фиксированная раскладка таблицы */
-.inline-group .tabular {
-  table-layout: fixed;
-  width: 100%;
-}
 
-.inline-group .tabular td,
-.inline-group .tabular th {
-  overflow: hidden;
-}
+
+
 
 
 
@@ -312,6 +305,89 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 .inline-group .add-row a {
   font-weight: 700;
 }
+
+
+
+
+
+
+
+
+/* 1) Убираем табличную логику и растягиваем строку инлайна */
+#cfitemauto_set-group .inline-related{
+  width: 100% !important;
+  max-width: none !important;
+}
+
+#cfitemauto_set-group .inline-related fieldset,
+#cfitemauto_set-group .inline-related .module,
+#cfitemauto_set-group .inline-related table{
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* 2) Сама строка инлайна (tr) — делаем блочной и широкой */
+#cfitemauto_set-group tr.form-row{
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* 3) td тоже делаем блочными, чтобы не схлопывались */
+#cfitemauto_set-group tr.form-row > td{
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* 4) Прячем "original" ячейку (она часто ломает сетку) */
+#cfitemauto_set-group td.original{
+  display: none !important;
+}
+
+/* 5) И уже внутри td.field-regex / field-defaultcfdt / field-defaultcfcr
+      строим нормальную сетку */
+#cfitemauto_set-group tr.form-row{
+  display: grid !important;
+  grid-template-columns: minmax(280px, 420px) minmax(420px, 1fr);
+  grid-template-areas:
+    "regex dt"
+    "regex cr"
+    "del   del";
+  gap: 14px 22px;
+  padding: 18px;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,.75);
+}
+
+/* зоны */
+#cfitemauto_set-group td.field-regex{ grid-area: regex; }
+#cfitemauto_set-group td.field-defaultcfdt{ grid-area: dt; }
+#cfitemauto_set-group td.field-defaultcfcr{ grid-area: cr; }
+#cfitemauto_set-group td.delete{ grid-area: del; }
+
+/* 6) Растягиваем инпуты/select2 */
+#cfitemauto_set-group input[type="text"],
+#cfitemauto_set-group select{
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box;
+}
+
+#cfitemauto_set-group .select2-container{
+  width: 100% !important;
+  max-width: none !important;
+}
+
+
+
+
+
+
+
+
+
 
 
 
