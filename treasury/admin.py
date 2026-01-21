@@ -214,7 +214,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
     list_display = (
         "period",
-        "owner",
+
         "ba_pretty",
         "bb_pretty",
         "turnover",

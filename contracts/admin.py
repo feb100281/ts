@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.db.models import Count
+from django.contrib.admin import RelatedOnlyFieldListFilter
+from django.db.models import Count, Prefetch
 from django.utils.html import format_html
 
 from .models import (
@@ -12,8 +13,19 @@ from .models import (
     
 )
 
-class CfItemAutoInline(admin.TabularInline):
+# class CfItemAutoInline(admin.TabularInline):
+#     model = CfItemAuto
+#     extra = 0
+
+class CfItemAutoInline(admin.StackedInline):
     model = CfItemAuto
+    extra = 0
+    fields = ("regex", "defaultcfdt", "defaultcfcr")
+    # template = "admin/contracts/inlines/cfitemauto_stacked_inline.html"  # <-- УБРАТЬ
+    verbose_name = "⚙️ Автоматизация"
+    verbose_name_plural = "⚙️ Автоматизация"
+
+
     
     
 
@@ -76,14 +88,14 @@ class ContractFilesInline(admin.TabularInline):
 class ContractsAdmin(admin.ModelAdmin):
     inlines = (ContractFilesInline, ContractItemsInline, ConditionsInline,CfItemAutoInline)
 
-    list_display = ("cp_logo", "cp", "title", "number", "date", "amendment", "files_count")
-    list_display_links = ("cp", "number",)   
+    list_display = ("cp_logo", "cp_with_inn", "title", "number", "date_short", "amendment", "cf_defaults")
+    list_display_links = ("cp_with_inn", "number",)   
     list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)
 
     search_fields = ("number", "cp__name", "title__title", "regex")
     search_help_text = "Поиск: номер, контрагент, тип, RegEx"
 
-    list_filter = ("cp", 'title', "owner",  "manager", "is_signed")
+    list_filter = ( ("cp", RelatedOnlyFieldListFilter), 'title', "owner",  "manager", "is_signed")
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
@@ -117,14 +129,74 @@ class ContractsAdmin(admin.ModelAdmin):
         ),
     )
 
+
+        
+    
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(
+        qs = qs.select_related("title", "cp", "cp__gr", "owner", "manager", "pid").annotate(
             _files_count=Count("files", distinct=True),
             _amendments_count=Count("amendments", distinct=True),
+        ).prefetch_related(
+            Prefetch(
+                "cfitemauto_set",
+                queryset=CfItemAuto.objects.select_related("defaultcfdt", "defaultcfcr"),
+                to_attr="_cf_auto",
+            )
         )
-        
-        
+        return qs
+
+    
+    
+    @admin.display(description="Контрагент", ordering="cp__name")
+    def cp_with_inn(self, obj):
+        cp = obj.cp
+        if not cp:
+            return "—"
+
+        return format_html(
+            '{}<br><span style="font-size:11px; line-height:1.2; color:#94a3b8;">ИНН: {}</span>',
+            cp.name,
+            cp.tax_id,
+        )
+    
+    @admin.display(description="Дата договора", ordering="date")
+    def date_short(self, obj):
+        if not obj.date:
+            return "—"
+
+        months = {
+            1: "янв", 2: "фев", 3: "мар", 4: "апр",
+            5: "май", 6: "июн", 7: "июл", 8: "авг",
+            9: "сент", 10: "окт", 11: "ноя", 12: "дек",
+        }
+
+        d = obj.date
+        return f"{d.day} {months[d.month]} {d.year}"
+    
+    
+    @admin.display(description="CF по умолч.", ordering=None)
+    def cf_defaults(self, obj):
+        # берём первую запись автоматизации (обычно она одна на договор)
+        auto = (getattr(obj, "_cf_auto", None) or [])
+        auto = auto[0] if auto else None
+
+        dt = getattr(auto, "defaultcfdt", None) if auto else None
+        cr = getattr(auto, "defaultcfcr", None) if auto else None
+
+        dt_txt = str(dt) if dt else "—"
+        cr_txt = str(cr) if cr else "—"
+
+        # маленький светло-серый текст, две строки
+        return format_html(
+            '<div style="font-size:11px; line-height:1.25; color:#94a3b8;">'
+            '<div><span style="font-weight:700; color:#cbd5e1;">Дт:</span> {}</div>'
+            '<div><span style="font-weight:700; color:#cbd5e1;">Кт:</span> {}</div>'
+            '</div>',
+            dt_txt,
+            cr_txt,
+        )
+  
     
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         field = super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -172,14 +244,31 @@ class ContractsAdmin(admin.ModelAdmin):
         )
 
 
-    @admin.display(description="Доп.согл.")
+    @admin.display(description="Доп.согл.", ordering="_amendments_count")
     def amendment(self, obj):
+        # если текущая запись — допник
         if obj.pid_id:
-            return "доп.согл."
+            return format_html(
+                '<span style="display:inline-flex;align-items:center;justify-content:center;'
+                'padding:4px 10px;border-radius:999px;'
+                'font-size:11px;font-weight:900;'
+                'background:rgba(148,163,184,.16);color:#475569;'
+                'border:1px solid rgba(148,163,184,.28);">доп.согл.</span>'
+            )
+
         n = getattr(obj, "_amendments_count", 0) or 0
-        if n:
-            return f"Допников: {n}"
-        return "—"
+        if not n:
+            return "—"
+
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;justify-content:center;'
+            'min-width:34px;padding:4px 10px;border-radius:999px;'
+            'font-size:11px;font-weight:900;'
+            'background:rgba(14,165,233,.10);color:#075985;'
+            'border:1px solid rgba(14,165,233,.18);">+{} док.</span>',
+            n
+        )
+
 
     @admin.display(description="Файлы", ordering="_files_count")
     def files_count(self, obj):
@@ -188,7 +277,7 @@ class ContractsAdmin(admin.ModelAdmin):
     
     
     class Media:
-        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
+        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",  )}
       
     
     
