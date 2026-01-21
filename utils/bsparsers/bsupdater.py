@@ -139,7 +139,7 @@ def find_contracts(bs_id):
         cursor.execute(q_count, {"bs_id": bs_id})
         assigned_count = cursor.fetchone()[0]
 
-    return f"✅ назначено {assigned_count} договоров"
+    return assigned_count
 
 # Ищем договор по exceptions и ИНН
 def contracts_exceptions_inn(bs_id):
@@ -165,7 +165,7 @@ def contracts_exceptions_inn(bs_id):
             })
             total += cursor.rowcount
 
-    return f"✅ исключения по ИНН: назначено {total} строк"
+    return total
 
 # Теперь обновляем конечных контрагентов по договорам
 # ЛЮТЕЙШЕЕ НАРУШЕНИЕ ВСЕХ МЫСЛИМЫХ НФ НО БЛИН ТУТ НЕЧЕГО НЕ ПОДЕЛАЕШЬ
@@ -182,6 +182,42 @@ def find_cp_final(bs_id):
         cursor.execute(q, {"bs_id": bs_id})
     
     return "Обновили финальных контрагентов"
+
+
+def find_cfitem(bs_id):
+    q = """
+    with def_cf as (
+    SELECT
+    d.id,
+    d.temp,
+    d.dt,
+    d.cr,
+    CASE WHEN d.dt = 0 then t.defaultcfcr_id else t.defaultcfdt_id end as cf_id
+    from treasury_cfdata as d
+    join contracts_cfitemauto as t on 
+    d.contract_id = t.contract_id AND d.temp ~* t.regex
+    )
+
+    UPDATE treasury_cfdata d
+    SET cfitem_id = c.cf_id
+    FROM def_cf c
+    WHERE d.id = c.id
+    and d.bs_id = %(bs_id)s;
+    """
+    q_count = """
+    SELECT COUNT(*)
+    FROM treasury_cfdata
+    WHERE bs_id = %(bs_id)s
+      AND cfitem_id IS NOT NULL;
+    """
+    
+    with connection.cursor() as cursor:
+        cursor.execute(q, {"bs_id": bs_id})
+        cursor.execute(q_count, {"bs_id": bs_id})
+        assigned_count = cursor.fetchone()[0]
+
+    return assigned_count
+
 
 
 # --------------------------
@@ -235,11 +271,23 @@ def update_cf_data(filename, bs_id):
     notifications.append(
         f"Обороты по dt {df.dt.sum():,.2f}; Обороты по cr {df.cr.sum():,.2f}"
     )
+    
+    total_count = len(df.index)
     notifications.append(f"Количество операций по выписке: {len(df.index)}")
     notifications.append(upsert_cf_data(df))
-    notifications.append(find_contracts(bs_id))
-    notifications.append(contracts_exceptions_inn(bs_id))
+    
+    contracts_count = find_contracts(bs_id)
+    exceptions_count = contracts_exceptions_inn(bs_id)
+    tot_contracts = contracts_count + exceptions_count
+    
+    notifications.append(f"назначены договора на {contracts_count} строк")
+    notifications.append(f"назначены исключения на {exceptions_count} строк")
+    notifications.append(f"📌 Всего назначено договоров на {tot_contracts} строк из {total_count}")
+    
     notifications.append(find_cp_final(bs_id))
+    
+    cfitems_count = find_cfitem(bs_id)
+    notifications.append(f"Добавлено {cfitems_count} строк со статьями затрат")
 
     login_text = "<br>".join(notifications)
 
