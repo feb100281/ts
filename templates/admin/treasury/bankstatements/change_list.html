@@ -50,7 +50,7 @@
         {# СТРОКА ИНСТРУМЕНТОВ ПОД ЗАГОЛОВКОМ #}
         <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; align-items:flex-end;">
 
-          {# КАЛЕНДАРИК: "Остаток на конец дня" (оставили как у тебя) #}
+          {# КАЛЕНДАРИК: "Остаток на конец дня" #}
           <form method="get" style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin:0; padding:0;">
             {# сохраняем текущие GET кроме in_period_date #}
             {% for k,v in request.GET.items %}
@@ -218,8 +218,7 @@
           font-size:11px;
           line-height:1.35;
       ">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
     </div>
 
@@ -260,6 +259,151 @@
 {% block extrahead %}
   {{ block.super }}
 
+  <style>
+    /* ====== EOD BLOCK (аккуратная сетка, мелкий шрифт, левое выравнивание) ====== */
+    .eod-card{
+      border-radius:16px;
+      background:rgba(248,250,252,0.92);
+      box-shadow:0 18px 40px rgba(15,23,42,0.10);
+      padding:12px 14px;
+      border:1px solid rgba(148,163,184,.22);
+      margin: 10px 0 14px;
+      backdrop-filter: blur(6px);
+    }
+
+    .eod-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .eod-head .title{
+      font-weight:900;
+      color:#0f172a;
+      font-size:15px;
+    }
+    .eod-head .hint{
+      font-size:11px;
+      color:#64748b;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+
+    .eod-total{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(15,23,42,.03);
+      border:1px solid rgba(148,163,184,.18);
+      display:flex;
+      gap:18px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+    .eod-total .cap{
+      font-weight:900;
+      color:#0f172a;
+      font-size:14px;
+      margin-right:6px;
+    }
+
+    .eod-metric{
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+      min-width:0;
+    }
+    .eod-metric .lbl{
+      font-size:10px;
+      color:#94a3b8;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      font-weight:900;
+      line-height:1.1;
+    }
+    .eod-metric .val{
+      font-weight:900;
+      font-variant-numeric: tabular-nums;
+      text-align:left;         /* <-- как просила */
+      font-size:14px;          /* меньше, аккуратнее */
+      color:#0f172a;
+      line-height:1.15;
+    }
+    .eod-metric .val.green{ color:#065f46; }
+    .eod-metric .val.red{ color:#991b1b; }
+
+    /* строки банков */
+    .eod-list{
+      margin-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .eod-row{
+      display:grid;
+      grid-template-columns: minmax(360px, 1fr) 140px 140px 140px auto;
+      gap:14px;
+      align-items:center;
+
+      padding:10px 12px;
+      border-radius:14px;
+      background:rgba(15,23,42,.03);
+      border:1px solid rgba(148,163,184,.18);
+    }
+
+    .eod-bank{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    /* верхняя строка — банк + счет (красиво) */
+    .eod-bank .bankline{
+      font-weight:950;
+      color:#0f172a;
+      line-height:1.15;
+      font-size:14px;
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+
+    /* вторая строка — собственник светло-серым */
+    .eod-bank .ownerline{
+      font-size:12px;
+      color:#94a3b8;
+      line-height:1.2;
+      font-weight:800;
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+
+    .eod-action{
+      justify-self:end;
+      white-space:nowrap;
+    }
+    .eod-action .button{
+      border-radius:10px;
+      padding:6px 10px;
+      font-size:12px;
+    }
+
+    /* адаптив: на узких экранах сетка становится 2 колонки */
+    @media (max-width: 980px){
+      .eod-row{
+        grid-template-columns: 1fr 1fr;
+        grid-auto-rows:auto;
+        align-items:start;
+      }
+      .eod-action{
+        grid-column: 1 / -1;
+        justify-self:start;
+      }
+    }
+  </style>
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const rows = document.querySelectorAll('#result_list tbody tr');
@@ -286,106 +430,70 @@
 {% block content %}
 
   {% if selected_date %}
-    <div style="
-        border-radius:16px;
-        background:rgba(248,250,252,0.92);
-        box-shadow:0 18px 40px rgba(15,23,42,0.10);
-        padding:12px 14px;
-        border:1px solid rgba(148,163,184,.22);
-        margin: 10px 0 14px;
-        backdrop-filter: blur(6px);
-    ">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">
-        <div style="font-weight:800;color:#0f172a;">
+    <div class="eod-card">
+      <div class="eod-head">
+        <div class="title">
           Остаток на конец дня: {{ selected_date|date:"d.m.Y" }}
         </div>
-        <div style="font-size:11px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;">
+        <div class="hint">
           По выпискам, покрывающим дату
         </div>
       </div>
 
       {% if total_eod is not None %}
-        <div style="
-          margin-top:10px;
-          padding:10px 12px;
-          border-radius:12px;
-          background:rgba(15,23,42,.03);
-          border:1px solid rgba(148,163,184,.18);
-          display:flex;
-          gap:16px;
-          flex-wrap:wrap;
-          align-items:baseline;
-        ">
-          <div style="font-weight:900;color:#0f172a;">
-            Итого:
+        <div class="eod-total">
+          <div class="cap">Итого:</div>
+
+          <div class="eod-metric">
+            <div class="lbl">Остаток</div>
+            <div class="val">{{ total_eod|floatformat:2 }}</div>
           </div>
 
-          <div>
-            <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Остаток</div>
-            <div style="font-weight:900;color:#0f172a;">{{ total_eod|floatformat:2 }}</div>
+          <div class="eod-metric">
+            <div class="lbl">Дт (поступления)</div>
+            <div class="val green">{{ total_dt|floatformat:2 }}</div>
           </div>
 
-          <div>
-            <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Дт (поступления)</div>
-            <div style="font-weight:900;color:#065f46;">{{ total_dt|floatformat:2 }}</div>
-          </div>
-
-          <div>
-            <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Кт (списания)</div>
-            <div style="font-weight:900;color:#991b1b;">{{ total_cr|floatformat:2 }}</div>
+          <div class="eod-metric">
+            <div class="lbl">Кт (списания)</div>
+            <div class="val red">{{ total_cr|floatformat:2 }}</div>
           </div>
         </div>
       {% endif %}
 
       {% if day_blocks and day_blocks|length > 0 %}
-        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
+        <div class="eod-list">
           {% for b in day_blocks %}
-            <div style="
-                display:flex;
-                justify-content:space-between;
-                align-items:center;
-                gap:12px;
-                flex-wrap:wrap;
-                padding:8px 10px;
-                border-radius:12px;
-                background:rgba(15,23,42,.03);
-                border:1px solid rgba(148,163,184,.18);
-            ">
-              <div style="min-width:240px;">
-                <div style="font-weight:800;color:#0f172a;line-height:1.2;">
-                  {{ b.bs.owner }}
-                </div>
-                <div style="font-size:12px;color:#64748b;line-height:1.2;">
-                  {{ b.bs.ba }}
-                </div>
+            <div class="eod-row">
+
+              {# верх — банк/счет, низ — собственник #}
+              <div class="eod-bank">
+                <div class="bankline">{{ b.bs.ba }}</div>
+                <div class="ownerline">{{ b.bs.owner }}</div>
               </div>
 
-              <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;">
-                <div>
-                  <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Остаток</div>
-                  <div style="font-weight:900;color:#0f172a;">{{ b.eod|floatformat:2 }}</div>
-                </div>
-
-                {# Дт зелёным (поступления) #}
-                <div>
-                  <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Дт</div>
-                  <div style="font-weight:800;color:#065f46;">{{ b.dt_sum|floatformat:2 }}</div>
-                </div>
-
-                {# Кт красным (списания) #}
-                <div>
-                  <div style="font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;">Кт</div>
-                  <div style="font-weight:800;color:#991b1b;">{{ b.cr_sum|floatformat:2 }}</div>
-                </div>
+              <div class="eod-metric">
+                <div class="lbl">Остаток</div>
+                <div class="val">{{ b.eod|floatformat:2 }}</div>
               </div>
 
-              <div style="margin-left:auto;">
+              <div class="eod-metric">
+                <div class="lbl">Дт</div>
+                <div class="val green">{{ b.dt_sum|floatformat:2 }}</div>
+              </div>
+
+              <div class="eod-metric">
+                <div class="lbl">Кт</div>
+                <div class="val red">{{ b.cr_sum|floatformat:2 }}</div>
+              </div>
+
+              <div class="eod-action">
                 <a href="{% url 'admin:treasury_bankstatements_change' b.bs.pk %}"
-                   class="button"
-                   style="border-radius:10px;padding:6px 10px;">
+                   class="button">
                   ↗ Открыть выписку
                 </a>
               </div>
+
             </div>
           {% endfor %}
         </div>
@@ -399,4 +507,3 @@
 
   {{ block.super }}
 {% endblock %}
-

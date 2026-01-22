@@ -109,11 +109,13 @@ from django.utils.safestring import mark_safe
 from django.db.models.functions import Coalesce
 
 from datetime import datetime
+
 from django.contrib.admin import SimpleListFilter
 
 from .models import BankStatements, CfData, CfSplits
 from utils.bsparsers.bsupdater import update_cf_data
 from decimal import Decimal
+
 
 from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 # ---------- UI helpers ----------
@@ -141,6 +143,13 @@ def badge(text, tone="slate"):
         'box-shadow:0 0 0 1px rgba(148,163,184,.20) inset;">{}</span>',
         bg, fg, text
     )
+    
+
+RU_MONTHS_SHORT = {
+    1: "янв",  2: "фев",  3: "мар",  4: "апр",
+    5: "май",  6: "июн",  7: "июл",  8: "авг",
+    9: "сен", 10: "окт", 11: "ноя", 12: "дек",
+}
 
 
 # ---------- Inlines ----------
@@ -243,7 +252,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         "bb_pretty",
         "turnover",
         "eb_pretty",
-        "uploaded_at",
+        "uploaded_at_short",
         "file_link",
     )
     list_display_links = ("period",)
@@ -474,6 +483,16 @@ class BankStatementsAdmin(admin.ModelAdmin):
         if not obj.file:
             return "—"
         return format_html('<a href="{}" target="_blank">файл</a>', obj.file.url)
+    
+    
+    @admin.display(description="Дата загрузки", ordering="uploaded_at")
+    def uploaded_at_short(self, obj):
+        if not obj.uploaded_at:
+            return "—"
+
+        dt = obj.uploaded_at  
+        month = RU_MONTHS_SHORT.get(dt.month, str(dt.month))
+        return f"{dt.day:02d} {month} {dt.year} г. {dt:%H:%M}"
 
     # кнопка "apply_migration"
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
