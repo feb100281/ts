@@ -173,6 +173,9 @@ LANGUAGES = [
     ("ru", "Русский"),
 ]
 
+
+
+
 ru_formats.DECIMAL_SEPARATOR = "."
 ru_formats.THOUSAND_SEPARATOR = ","
 USE_THOUSAND_SEPARATOR = True
