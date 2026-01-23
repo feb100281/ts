@@ -224,9 +224,34 @@ class CounterpartyAdmin(admin.ModelAdmin):
         "adress",
         "region",
     )
+    
+    
+    class HasContractFilter(admin.SimpleListFilter):
+        title = "Договоры"
+        parameter_name = "has_contract"
+
+        def lookups(self, request, model_admin):
+            return (
+                ("1", "Есть договоры"),
+                ("0", "Нет договоров"),
+            )
+
+        def queryset(self, request, queryset):
+            val = self.value()
+            if val not in ("0", "1"):
+                return queryset
+
+            # у тебя уже contracts аннотируется в get_queryset,
+            # но здесь queryset может быть "сырой", поэтому безопасно переаннотируем
+            queryset = queryset.annotate(_contracts_cnt=Count("contracts", distinct=True))
+
+            if val == "1":
+                return queryset.filter(_contracts_cnt__gt=0)
+            return queryset.filter(_contracts_cnt=0)
 
     list_filter = (
         ("gr", admin.RelatedOnlyFieldListFilter),
+        HasContractFilter,
         "name",
         CounterpartyRiskLevelFilter,
         CounterpartyCheckoUpdatedFilter,
@@ -433,6 +458,11 @@ class CounterpartyAdmin(admin.ModelAdmin):
 
     checko_status_column.short_description = "ФНС"
     checko_status_column.admin_order_field = "checko_updated_at"
+    
+    
+    
+
+
 
     # ---------- кнопка печати карточки контрагента ----------
 

@@ -322,6 +322,7 @@ JAZZMIN_SETTINGS = {
         "treasury": "fa-solid fa-wallet",
         "treasury.BankStatements": "fa-solid fa-receipt",
         "treasury.CfData": "fa-solid fa-arrows-rotate",
+        "treasury.ContractsRexex": "fa-solid fa-robot",
     
 
 

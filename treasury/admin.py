@@ -657,16 +657,88 @@ class CfDataAdmin(admin.ModelAdmin):
         finish = obj.bs.finish.strftime("%d.%m.%Y") if obj.bs.finish else "—"
         return format_html('<a href="{}">↗ {}–{}</a>', url, start, finish)
 
+
+
 @admin.register(ContractsRexex)
 class ContractsRexexAdmin(admin.ModelAdmin):
-    
+    list_per_page = 50
+    change_list_template = "admin/treasury/contractsrexex/change_list.html"  
+
+
+    autocomplete_fields = ("cp", "contract")
+
+    list_select_related = ("cp", "contract")
+
+    # колонки
     list_display = (
-        "cp",
-        "contract",        
+        "cp_logo",
+        "cp_link",
+        "contract_id_col",
+        "contract_link",
+        "regex_short",
     )
-    # list_display_links = ("period",)
-    search_fields = ("cp__tax_id", "contract__number","contract__id")
-    list_filter = ("cp", "contract")
-    # date_hierarchy = "uploaded_at"
-    # ordering = ("-uploaded_at",)
-    # list_select_related = ("owner", "ba")
+    list_display_links = ("cp_link", "contract_link", "regex_short")
+
+    search_fields = (
+        "cp__tax_id",
+        "cp__name",
+        "contract__number",
+        "contract__id",
+        "regex",
+    )
+
+  
+    list_filter = (
+        ("cp", admin.RelatedOnlyFieldListFilter),
+    )
+
+    ordering = ("cp__name", "contract__id")
+
+    class Media:
+        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
+
+    # ---------- колонки ----------
+
+    @admin.display(description="Лого", ordering="cp__name")
+    def cp_logo(self, obj):
+        cp = obj.cp
+        if not cp or not getattr(cp, "logo", None):
+            return "—"
+
+        outer = (
+            "display:inline-flex;align-items:center;justify-content:center;"
+            "width:28px;height:28px;border-radius:6px;"
+            "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+        )
+        inner = "font-family:NotoManu;font-size:20px;line-height:1;"
+        return format_html('<span style="{}"><span style="{}">{}</span></span>', outer, inner, cp.logo)
+
+    @admin.display(description="Контрагент", ordering="cp__name")
+    def cp_link(self, obj):
+        cp = obj.cp
+        if not cp:
+            return "—"
+        url = reverse("admin:counterparties_counterparty_change", args=[cp.pk])
+        #  имя, без ИНН 
+        return format_html('<a href="{}"><b>{}</b></a>', url, cp.name)
+
+    @admin.display(description="ID договора", ordering="contract__id")
+    def contract_id_col(self, obj):
+        return obj.contract_id or "—"
+
+    @admin.display(description="№ договора", ordering="contract__number")
+    def contract_link(self, obj):
+        c = obj.contract
+        if not c:
+            return "—"
+        url = reverse("admin:contracts_contracts_change", args=[c.pk])
+        label = getattr(c, "number", None) or f"{c.pk}"
+        return format_html('<a href="{}">{}</a>', url, label)
+
+    @admin.display(description="RegEx")
+    def regex_short(self, obj):
+        s = (obj.regex or "").strip()
+        return (s[:80] + "…") if len(s) > 80 else (s or "—")
+
+  

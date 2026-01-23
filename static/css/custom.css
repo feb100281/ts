@@ -424,6 +424,7 @@
 
 .fa-wallet,
 .fa-arrows-rotate,
+.fa-robot,
 .fa-receipt {
     color: var(--color-treasury) !important;
 }
@@ -445,7 +446,7 @@
 
 /* 7. Телеграм-бот (весь бот-блок в отдельном цвете) */
 .fa-telegram,
-.fa-robot,
+
 .fa-database,
 .fa-terminal,
 .fa-circle-user,

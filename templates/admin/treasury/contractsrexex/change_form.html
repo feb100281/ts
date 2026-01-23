@@ -1,0 +1,329 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url opts|admin_urlname:'changelist' as changelist_url %}
+  {% url opts|admin_urlname:'add' as add_url %}
+
+  <div class="auto-topbar">
+    <div class="auto-topbar__left">
+      <div class="auto-icon">🤖</div>
+
+      <div class="auto-titles">
+        <div class="auto-kicker">Казначейство</div>
+
+        <div class="auto-title">
+          Автоматизация <span class="auto-title__muted">(RegEx → Договор)</span>
+        </div>
+
+        <div class="auto-sub">
+          <span class="auto-sub__label">Контрагент:</span>
+          <span class="auto-sub__val" id="autoCpTitle">
+            {% if not add and original.cp %}{{ original.cp }}{% else %}—{% endif %}
+          </span>
+
+          <span class="auto-sub__sep">•</span>
+
+          <span class="auto-sub__label">Договор:</span>
+          <span class="auto-sub__val" id="autoContractTitle">
+            {% if not add and original.contract %}{{ original.contract }}{% else %}—{% endif %}
+          </span>
+
+          <span class="auto-sub__sep">•</span>
+
+          <span class="auto-sub__label">RegEx:</span>
+          <span class="auto-sub__val auto-sub__mono" id="autoRegexTitle">
+            {% if not add and original.regex %}{{ original.regex }}{% else %}—{% endif %}
+          </span>
+        </div>
+
+        <div class="auto-meta">
+          <span class="chip chip-violet">{% if add %}Создание правила{% else %}Редактирование правила{% endif %}</span>
+          {% if not add and original.pk %}
+            <span class="chip chip-gray">ID: {{ original.pk }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="auto-topbar__right">
+      <a class="link-btn" href="{{ changelist_url }}">← К списку</a>
+
+      {% if has_add_permission %}
+        <a class="primary-btn" href="{{ add_url }}">➕ Новое правило</a>
+      {% endif %}
+
+      <a class="pill-btn" href="{% url 'admin:treasury_cfdata_changelist' %}">🧾 CF документы</a>
+      <a class="pill-btn" href="{% url 'admin:treasury_bankstatements_changelist' %}">🧾 Выписки</a>
+    </div>
+  </div>
+
+  <div class="auto-breadcrumbs">
+    <nav class="crumbs">
+      <a href="{% url 'admin:index' %}">НАЧАЛО</a>
+      <span>›</span>
+      <a href="{{ changelist_url }}">АВТОМАТИЗАЦИЯ</a>
+      <span>›</span>
+      <span class="crumbs-current">
+        {% if add %}НОВОЕ ПРАВИЛО{% else %}ПРАВИЛО #{{ original.pk }}{% endif %}
+      </span>
+    </nav>
+
+    <span class="crumbs-note">
+      <span class="hint">
+        Важно: не делай <code>^.*$</code> без причины.
+      </span>
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+    /* ===== Topbar ===== */
+    .auto-topbar{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      flex-wrap:wrap;
+      padding:6px 0 8px;
+      border-bottom:1px solid #e5e7eb;
+      margin-bottom:10px;
+    }
+    .auto-topbar__left{
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      min-width:320px;
+      flex: 1 1 520px;
+    }
+    .auto-icon{
+      width:38px;height:38px;border-radius:10px;
+      background:linear-gradient(135deg,#a855f7,#3b82f6);
+      color:#f5f3ff;
+      display:flex;align-items:center;justify-content:center;
+      font-size:18px;font-weight:900;
+      box-shadow:0 10px 26px rgba(59,130,246,.22), 0 0 0 1px rgba(15,23,42,.15);
+      flex:0 0 auto;
+    }
+    .auto-kicker{
+      font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;
+      line-height:1.1;
+      margin-top:1px;
+    }
+    .auto-title{
+      font-size:18px;font-weight:850;color:#111827;
+      line-height:1.15;
+      margin-top:2px;
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:baseline;
+    }
+    .auto-title__muted{ color:#64748b; font-weight:750; }
+
+    .auto-sub{
+      margin-top:6px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      font-size:12px;
+      color:#0f172a;
+    }
+    .auto-sub__label{
+      font-size:11px;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#6b7280;
+    }
+    .auto-sub__val{
+      font-weight:850;
+      color:#0f172a;
+      max-width:560px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .auto-sub__mono{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-weight:800;
+      background:#fff8db;
+      border:1px solid rgba(253, 230, 138, .75);
+      padding:2px 6px;
+      border-radius:8px;
+    }
+    .auto-sub__sep{ color:#cbd5e1; }
+
+    .auto-meta{
+      display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;
+    }
+    .chip{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:6px;
+      font-weight:800;
+      border:1px solid rgba(15,23,42,.10);
+      background:#f8fafc;
+      color:#334155;
+    }
+    .chip-violet{ background:#f5f3ff; color:#6d28d9; border-color:rgba(109,40,217,.12); }
+    .chip-gray{ background:#f3f4f6; color:#4b5563; border-color:rgba(75,85,99,.12); }
+
+    .auto-topbar__right{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+      flex: 0 1 auto;
+    }
+    .link-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:10px;
+      text-decoration:none;
+      background:#eef2ff;
+      color:#3730a3;
+      border:1px solid rgba(55,48,163,.12);
+      font-weight:800;
+    }
+    .primary-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:10px;
+      text-decoration:none;
+      background:#e0f2fe;
+      color:#075985;
+      border:1px solid rgba(2,132,199,.18);
+      font-weight:900;
+    }
+    .pill-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:10px;
+      text-decoration:none;
+      background:#f3f4f6;
+      color:#374151;
+      border:1px solid rgba(15,23,42,.10);
+      font-weight:800;
+    }
+
+    /* ===== Breadcrumbs ===== */
+    .auto-breadcrumbs{
+      display:flex;align-items:center;justify-content:space-between;
+      gap:10px;flex-wrap:wrap;
+      margin:8px 0 0;
+      padding-top:8px;
+      color:#6b7280;
+      font-size:11px;
+    }
+    .crumbs{ display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
+    .crumbs a{
+      text-transform:uppercase;letter-spacing:.08em;
+      text-decoration:none;color:#9ca3af;
+      font-weight:800;
+    }
+    .crumbs-current{
+      text-transform:uppercase;letter-spacing:.08em;
+      color:#4b5563;font-weight:900;
+    }
+    .crumbs-note{ color:#9ca3af; }
+    .hint code{
+      background:#fff7ed;
+      border:1px solid rgba(251,191,36,.25);
+      padding:1px 6px;
+      border-radius:6px;
+      font-weight:900;
+      color:#9a3412;
+    }
+
+    /* ===== Form niceness ===== */
+    #content-main .module { border-radius: 14px; overflow: hidden; }
+    .submit-row { border-radius: 14px; }
+
+    /* Подсветим поле RegEx в форме */
+    .form-row.field-regex textarea,
+    .form-row.field-regex input[type="text"]{
+      background:#fffdf2 !important;
+      border-color: rgba(251,191,36,.35) !important;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+
+      const elCpTitle = document.getElementById('autoCpTitle');
+      const elContractTitle = document.getElementById('autoContractTitle');
+      const elRegexTitle = document.getElementById('autoRegexTitle');
+
+      const cpInput = document.getElementById('id_cp');
+      const contractInput = document.getElementById('id_contract');
+      const regexInput = document.getElementById('id_regex');
+
+      function txtOrDash(v){
+        const s = (v || '').toString().trim();
+        return s ? s : '—';
+      }
+
+      // 1) Обычный select: текст берём из выбранного option
+      function getSelectText(sel){
+        if (!sel) return '';
+        if (sel.tagName === 'SELECT') {
+          const opt = sel.options[sel.selectedIndex];
+          return opt ? opt.text : '';
+        }
+        return '';
+      }
+
+      // 2) Select2 (autocomplete_fields): берём из контейнера select2-rendered
+      function getSelect2Text(fieldId){
+        const rendered = document.querySelector('#select2-' + fieldId + '-container');
+        if (!rendered) return '';
+        const t = (rendered.textContent || '').trim();
+        // В select2 часто "---------"
+        if (!t || t === '---------' || t === '---------') return '';
+        return t;
+      }
+
+      function updateTitles(){
+        // CP
+        let cpTxt = getSelectText(cpInput) || getSelect2Text('id_cp');
+        elCpTitle.textContent = txtOrDash(cpTxt);
+
+        // Contract
+        let cTxt = getSelectText(contractInput) || getSelect2Text('id_contract');
+        elContractTitle.textContent = txtOrDash(cTxt);
+
+        // RegEx
+        elRegexTitle.textContent = txtOrDash(regexInput ? regexInput.value : '');
+      }
+
+      // события
+      if (cpInput) cpInput.addEventListener('change', updateTitles);
+      if (contractInput) contractInput.addEventListener('change', updateTitles);
+      if (regexInput) regexInput.addEventListener('input', updateTitles);
+
+      // select2 выбирает значение без change иногда — подстрахуемся
+      document.body.addEventListener('click', function(e){
+        if (e.target.closest('.select2-container')) {
+          setTimeout(updateTitles, 0);
+          setTimeout(updateTitles, 150);
+        }
+      });
+
+      updateTitles();
+    });
+  </script>
+{% endblock %}

@@ -1,24 +1,8 @@
-"""
-URL configuration for ts project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
-
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path
-from ts.views import admin_today
+
+from .views import fx_status, cp_issues_status, treasury_status
 
 login_view = auth_views.LoginView.as_view(
     template_name="admin/landing.html",
@@ -26,15 +10,14 @@ login_view = auth_views.LoginView.as_view(
 )
 
 urlpatterns = [
+    path("admin/fx-status/", fx_status, name="fx_status"),
+    path("admin/cp-issues-status/", cp_issues_status, name="cp_issues_status"),
+    path("admin/treasury-status/", treasury_status, name="treasury_status"),
+
     path("admin/", admin.site.urls),
-    path("admin/today/", admin_today, name="admin_today"),
 
-    # '/' — это landing (чтобы {% url 'landing' %} работал)
     path("", login_view, name="landing"),
-
-    # алиас /login/ (чтобы было имя login, если где-то потребуется)
     path("login/", login_view, name="login"),
-
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
 
     path(
@@ -49,3 +32,4 @@ urlpatterns = [
     path("reset/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
     path("reset/done/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),
 ]
+
