@@ -217,7 +217,6 @@ class ContractsAdmin(admin.ModelAdmin):
 
         return field
         
-        
     
     @admin.display(description="Лого")
     def cp_logo(self, obj):
