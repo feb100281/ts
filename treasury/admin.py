@@ -172,7 +172,6 @@ class InPeriodDateFilter(SimpleListFilter):
     
 
 
-
 @admin.register(BankStatements)
 class BankStatementsAdmin(admin.ModelAdmin):
     change_form_template = "admin/services/migrations/change_form.html"
@@ -883,7 +882,7 @@ class CfDataAdmin(admin.ModelAdmin):
 
 
 
-
+# ---------- REGEX ----------
 
 @admin.register(ContractsRexex)
 class ContractsRexexAdmin(admin.ModelAdmin):
@@ -891,7 +890,31 @@ class ContractsRexexAdmin(admin.ModelAdmin):
     change_list_template = "admin/treasury/contractsrexex/change_list.html"  
 
 
-    autocomplete_fields = ("cp", "contract")
+    autocomplete_fields = ("cp",)
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+        if db_field.name == "contract":
+            # 1) при редактировании — берём cp из текущего объекта
+            obj_id = request.resolver_match.kwargs.get("object_id")
+            cp_id = None
+            if obj_id:
+                try:
+                    obj = ContractsRexex.objects.select_related("cp").get(pk=obj_id)
+                    cp_id = obj.cp_id
+                except ContractsRexex.DoesNotExist:
+                    cp_id = None
+
+            # 2) при создании — пробуем взять cp из формы (POST/GET)
+            cp_id = cp_id or request.POST.get("cp") or request.GET.get("cp")
+
+            if cp_id:
+                field.queryset = Contracts.objects.filter(cp_id=cp_id).order_by("-date")
+            else:
+                field.queryset = Contracts.objects.none()
+
+        return field
 
     list_select_related = ("cp", "contract")
 
