@@ -59,7 +59,7 @@ class Contracts(models.Model):
         number = 'без номера' if not self.number else self.number
         date = 'без даты' if not self.date else self.date
         
-        return f"{self.title} № {number} от {date}"
+        return f"{self.title} № {number} от {date} (id {self.id})"
     
     @property
     def is_amendment(self):

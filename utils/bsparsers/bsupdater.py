@@ -10,10 +10,9 @@ import numpy as np
 import re
 
 from .bsparser import make_final_statemens, get_bs_details
-from treasury.models import CfData
+from treasury.models import CfData, ContractsRexex
 from corporate.models import Owners, BankAccount
 from contracts.models import Contracts
-from .exceptions import EXCEPTION_INN
 
 
 # Грузим паттерны для выделения ставки НДС
@@ -142,12 +141,12 @@ def find_contracts(bs_id):
     return assigned_count
 
 # Ищем договор по exceptions и ИНН
-def contracts_exceptions_inn(bs_id):
+def contracts_exceptions_cp(bs_id):
     q = """
         UPDATE treasury_cfdata
         SET contract_id = %(contract_id)s
         WHERE bs_id = %(bs_id)s
-          AND tax_id = %(tax_id)s
+          AND cp_id = %(cp_id)s
           AND temp IS NOT NULL
           AND temp ~* %(pattern)s
           AND contract_id IS NULL
@@ -155,13 +154,15 @@ def contracts_exceptions_inn(bs_id):
 
     total = 0
 
+    qs = ContractsRexex.objects.values("cp_id", "regex", "contract_id")
+
     with connection.cursor() as cursor:
-        for tax_id, (pattern, contract_id) in EXCEPTION_INN.items():
+        for row in qs:
             cursor.execute(q, {
                 "bs_id": bs_id,
-                "tax_id": tax_id,
-                "pattern": pattern,
-                "contract_id": contract_id,
+                "cp_id": row["cp_id"],
+                "pattern": row["regex"],
+                "contract_id": row["contract_id"],
             })
             total += cursor.rowcount
 
@@ -277,7 +278,7 @@ def update_cf_data(filename, bs_id):
     notifications.append(upsert_cf_data(df))
     
     contracts_count = find_contracts(bs_id)
-    exceptions_count = contracts_exceptions_inn(bs_id)
+    exceptions_count = contracts_exceptions_cp(bs_id)
     tot_contracts = contracts_count + exceptions_count
     
     notifications.append(f"назначены договора на {contracts_count} строк")
