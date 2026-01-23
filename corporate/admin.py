@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.shortcuts import render
 from django.urls import path
 from django.utils import timezone
@@ -14,6 +14,8 @@ from .models import Owners, BankAccount, Bank, COA, CfItems
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.admin import DraggableMPTTAdmin
+
+from treasury.models import BankStatements
 
 from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 
@@ -301,13 +303,18 @@ class BankAdmin(admin.ModelAdmin):
 
 @admin.register(BankAccount)
 class BankAccountAdmin(admin.ModelAdmin):
-    list_display = ("corporate", "bank_logo", "bank_name",  "account", "currency_view", "bs_acc_code")
+    list_display = ( "bank_logo", "bank_name",  "account", "currency_view", "bs_acc_code", 'last_statement_day')
     list_display_links = ("bank_name",)
     search_fields = ("corporate__name", "bank__name",  "account")
+    list_filter = ("corporate__name",) 
+
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.select_related("bank", "corporate")
+        return (
+            qs.select_related("bank", "corporate")
+            .annotate(_last_bs_day=Max("bankstatements__finish"))
+        )
     
     class Media:
         css = {
@@ -316,6 +323,17 @@ class BankAccountAdmin(admin.ModelAdmin):
                 "css/admin_overrides.css",
             )
         }
+        
+    @admin.display(description="Последняя выписка", ordering="_last_bs_day")
+    def last_statement_day(self, obj):
+        d = getattr(obj, "_last_bs_day", None)
+        if not d:
+            return format_html('<span style="color:#94a3b8;font-weight:800;">—</span>')
+        return format_html(
+            '<span style="font-weight:900;color:#0f172a;font-variant-numeric:tabular-nums;">{}</span>',
+            d.strftime("%d.%m.%Y"),
+        )
+
         
     
     @admin.display(description="Валюта", ordering="currency")

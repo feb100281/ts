@@ -8,7 +8,7 @@ from django.core.validators import RegexValidator
 
 #----- СОБСТВЕННИКИ ----#
 class Owners(models.Model):
-    name = models.CharField(max_length=255, verbose_name="Наименование", unique=True)
+    name = models.CharField(max_length=255, verbose_name="Наименование собственника", unique=True)
     inn = models.CharField(max_length=255, verbose_name="ИНН", unique=True)
     kpp = models.CharField(max_length=255, verbose_name="КПП", null=True, blank=True)
     ogrn = models.CharField(max_length=255, verbose_name="ОГРН", null=True, blank=True)

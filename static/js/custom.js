@@ -1,27 +1,3 @@
-// document.addEventListener("click", function (event) {
-//     // ищем клик по шапке карточки оценки или по кнопке-стрелочке
-//     const header = event.target.closest(".valuation-inline__header");
-//     if (!header) {
-//         return;
-//     }
-
-//     const box = header.closest(".valuation-inline");
-//     if (!box) {
-//         return;
-//     }
-
-//     // переключаем состояние
-//     if (box.classList.contains("is-collapsed")) {
-//         box.classList.remove("is-collapsed");
-//         box.classList.add("is-open");
-//     } else {
-//         box.classList.add("is-collapsed");
-//         box.classList.remove("is-open");
-//     }
-// });
-
-
-
 // =============================
 // custom.js (Jazzmin / AdminLTE)
 // =============================
@@ -92,8 +68,9 @@ document.addEventListener("click", function (event) {
     "Курсы Валют": "fa-solid fa-chart-line",
     Календарь: "fa-solid fa-calendar-days",
     Контрагенты: "fa-solid fa-handshake",
-    "Объекты Недвижимости": "fa-solid fa-building",
-    "Корзина Помещений": "fa-solid fa-basket-shopping",
+    Договоры: "fa-solid fa-file-signature",
+    Выписки: "fa-solid fa-receipt",
+   
   };
 
   function enhanceTopMenu() {
@@ -505,6 +482,26 @@ document.addEventListener("click", function (event) {
         </a>
 
         <div class="jm-today-divider"></div>
+
+
+        <div class="jm-today-divider"></div>
+
+<div class="jm-today-section">
+  <div class="jm-today-section__title">Курсы валют</div>
+</div>
+
+<a class="jm-today-item" data-tone="danger" id="jmFxMissing" href="#">
+  <span class="jm-dot jm-dot-blue"></span>
+  <span class="jm-today-item__label">
+    Нет курса валют на сегодня
+    <span class="jm-today-item__sub">Нужно обновить курс в базе</span>
+  </span>
+  <span class="jm-today-item__count" data-key="fx_missing_today">0</span>
+</a>
+
+
+    <div class="jm-today-divider"></div>
+
 
         <div class="jm-today-section">
           <div class="jm-today-section__title">Договоры</div>

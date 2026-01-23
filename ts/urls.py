@@ -18,6 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path
+from ts.views import admin_today
 
 login_view = auth_views.LoginView.as_view(
     template_name="admin/landing.html",
@@ -26,6 +27,7 @@ login_view = auth_views.LoginView.as_view(
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("admin/today/", admin_today, name="admin_today"),
 
     # '/' — это landing (чтобы {% url 'landing' %} работал)
     path("", login_view, name="landing"),

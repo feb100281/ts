@@ -6,6 +6,8 @@
 {% block breadcrumbs %}{% endblock %}
 {% block object-tools %}{% endblock %}
 
+{% block title %}Глифы{% endblock %}
+
 {% block content_title %}
   {% url cl.opts|admin_urlname:'add' as add_url %}
   {% url 'admin:counterparties_glyph_generate_css' as generate_css_url %}

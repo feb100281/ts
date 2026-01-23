@@ -207,38 +207,34 @@ JAZZMIN_SETTINGS = {
 
     "site_title": "ТРЕНДСЕТТЕР",
     "site_header": "ТРЕНДСЕТТЕР header",
-    # "site_logo": "/img/logo_short.png",
     "site_brand": "Админпанель",
-    # "site_favicon": "/img/logo_short.png",
     "welcome_sign": "Добро пожаловать в панель управления",
     "show_ui_builder": True,
     "navigation_expanded": False,
-    "search_model": "auth.User",
     "custom_css": "css/custom.css",
+    "site_logo": "/img/logo_short.png",
+    "site_favicon": "/img/logo_short.png",
+    "custom_css": "css/custom.css",
+    "custom_js": "js/custom.js",
 
 
 
     #"hide_apps": ['scr'],
     # "hide_models": ['rr.cart'],
     "topmenu_links": [
-
-        # Url that gets reversed (Permissions can be added)
-        {"name": "Home",  "url": "admin:index", "permissions": ["auth.view_user"]},
-
-        # model admin to link to (Permissions checked against model)
+        {"name": "Home", },
         {"model": "auth.User"},
+        {"model": "macro.CurrencyRate"}, 
+        {"model": "macro.CalendarExceptions"},
+        {"model": "counterparties.Counterparty"},
+        {"model": "contracts.Contracts"},
+         {"model": "treasury.BankStatements"},
 
-        # # App with dropdown menu to all its models pages (Permissions checked against models)
-        # #{"app": "rr"},
-        #  {"model": "rr.cart"},
-
-        # external url that opens in a new window (Permissions can be added)
-        {"name": "Помощь", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
-        #{"name": "Migrations", "url": "/upload-form", "new_window": True},
+        
+        # {"name": "Помощь", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
 
     ],
 
-    #"custom_js": None,
     "show_collapse": True,
 
 
@@ -296,7 +292,7 @@ JAZZMIN_SETTINGS = {
         "macro.MarketSnapshot": "fa-solid fa-magnifying-glass-chart",
 
     #     # --- Договоры аренжды ---
-        "contracts": "fa-solid fa-file-signature ",
+        "contracts": "fa-solid fa-file-signature",
         "contracts.contracts": "fa-solid fa-file-signature",
     #     "la.Subject": "fa-solid fa-cubes",
     #     "la.LaSubjectConditions": "fa-solid fa-link",
@@ -325,7 +321,7 @@ JAZZMIN_SETTINGS = {
     #     # --- КАЗНАЧЕЙСТВО ---
         "treasury": "fa-solid fa-wallet",
         "treasury.BankStatements": "fa-solid fa-receipt",
-        "treasury.CfData": "fa-solid fa-file-invoice-dollar",
+        "treasury.CfData": "fa-solid fa-arrows-rotate",
     
 
 
@@ -379,7 +375,6 @@ JAZZMIN_UI_TWEAKS = {
 
     # логотип можно оставить мелким
     "brand_small_text": True,
-
     "brand_colour": "navbar-secondary",
     "accent": "accent-info",
     "navbar": "navbar-secondary navbar-dark",
@@ -401,7 +396,6 @@ JAZZMIN_UI_TWEAKS = {
     "sidebar_disable_expand": False,
     "sidebar_nav_child_indent": True,
 
-    # я бы отключил legacy-стиль и включил flat-стиль
     "sidebar_nav_compact_style": True,
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": True,
