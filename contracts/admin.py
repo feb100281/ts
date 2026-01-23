@@ -77,7 +77,7 @@ class ContractsAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
-    autocomplete_fields = ("title", "cp", "manager",)
+    autocomplete_fields = ("title", "cp", "manager", )
     
     list_per_page = 25
     
@@ -108,7 +108,6 @@ class ContractsAdmin(admin.ModelAdmin):
     )
 
 
-        
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -125,15 +124,17 @@ class ContractsAdmin(admin.ModelAdmin):
         return qs
 
     
+
+    
     @admin.display(description="№ договора", ordering="number")
     def number_with_id(self, obj):
         number = obj.number or "без номера"
         return format_html(
-            '{}<br>'
-            '<span style="font-size:11px; color:#94a3b8;">id: {}</span>',
+            '{}<br><span style="font-size:11px; color:#94a3b8;">id: {}</span>',
             number,
             obj.id,
-    )
+        )
+
 
     
     @admin.display(description="Контрагент", ordering="cp__name")

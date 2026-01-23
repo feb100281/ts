@@ -2,6 +2,7 @@ from django.db import models
 from corporate.models import BankAccount,Owners, CfItems
 from contracts.models import Contracts
 from counterparties.models import Counterparty
+from django.core.exceptions import ValidationError
 
 from utils.bsparsers.bsparser import get_bs_details
 
@@ -133,3 +134,31 @@ class ContractsRexex(models.Model):
     
     def __str__(self):
         return f"{self.cp} - {self.contract}"
+    
+    def clean(self):
+        """
+        Валидация: contract должен принадлежать cp.
+        """
+        if not self.cp_id or not self.contract_id:
+            return
+
+        # ВАРИАНТ A: если в Contracts поле называется `cp`
+        contract_cp_id = getattr(self.contract, "cp_id", None)
+
+        # ВАРИАНТ B: если в Contracts поле называется `contragent`
+        # contract_cp_id = getattr(self.contract, "contragent_id", None)
+
+        if contract_cp_id is None:
+            raise ValidationError({
+                "contract": "Не удалось проверить принадлежность: в Contracts нет поля cp_id/contragent_id."
+            })
+
+        if contract_cp_id != self.cp_id:
+            raise ValidationError({
+                "contract": "Нельзя сохранить: выбранный договор не принадлежит выбранному контрагенту."
+            })
+
+    def save(self, *args, **kwargs):
+        # чтобы валидация срабатывала и в админке, и при save() из кода
+        self.full_clean()
+        return super().save(*args, **kwargs)

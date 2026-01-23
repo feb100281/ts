@@ -1,6 +1,7 @@
 
 # treasury/admin.py
 
+from django.http import JsonResponse
 from django.urls import path
 from django.http import HttpResponse
 from django.contrib import admin, messages
@@ -46,7 +47,7 @@ def badge(text, tone="slate"):
     fg, bg = tones.get(tone, tones["slate"])
     return format_html(
         '<span style="display:inline-flex;align-items:center;gap:6px;'
-        'padding:2px 8px;border-radius:999px;'
+        'padding:2px 8px;border-radius:6px;'
         'background:{};color:{};font-weight:700;font-size:12px;'
         'box-shadow:0 0 0 1px rgba(148,163,184,.20) inset;">{}</span>',
         bg, fg, text
@@ -886,36 +887,19 @@ class CfDataAdmin(admin.ModelAdmin):
 
 @admin.register(ContractsRexex)
 class ContractsRexexAdmin(admin.ModelAdmin):
+
     list_per_page = 50
     change_list_template = "admin/treasury/contractsrexex/change_list.html"  
 
 
-    autocomplete_fields = ("cp",)
+    autocomplete_fields = ("cp", )
     
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+    class Media:
+        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
+        js = ("js/contractsrexex_contract_ajax.js",)
 
-        if db_field.name == "contract":
-            # 1) при редактировании — берём cp из текущего объекта
-            obj_id = request.resolver_match.kwargs.get("object_id")
-            cp_id = None
-            if obj_id:
-                try:
-                    obj = ContractsRexex.objects.select_related("cp").get(pk=obj_id)
-                    cp_id = obj.cp_id
-                except ContractsRexex.DoesNotExist:
-                    cp_id = None
 
-            # 2) при создании — пробуем взять cp из формы (POST/GET)
-            cp_id = cp_id or request.POST.get("cp") or request.GET.get("cp")
-
-            if cp_id:
-                field.queryset = Contracts.objects.filter(cp_id=cp_id).order_by("-date")
-            else:
-                field.queryset = Contracts.objects.none()
-
-        return field
-
+    
     list_select_related = ("cp", "contract")
 
     # колонки
@@ -934,6 +918,7 @@ class ContractsRexexAdmin(admin.ModelAdmin):
         "contract__number",
         "contract__id",
         "regex",
+        'contract__cp'
     )
 
   
@@ -943,8 +928,7 @@ class ContractsRexexAdmin(admin.ModelAdmin):
 
     ordering = ("cp__name", "contract__id")
 
-    class Media:
-        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
+
 
     # ---------- колонки ----------
 
