@@ -107,7 +107,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from .models import BankStatements, CfData, CfSplits
+from .models import BankStatements, CfData, CfSplits,ContractsRexex
 from utils.bsparsers.bsupdater import update_cf_data
 
 from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
@@ -488,3 +488,17 @@ class CfDataAdmin(admin.ModelAdmin):
         start = obj.bs.start.strftime("%d.%m.%Y") if obj.bs.start else "—"
         finish = obj.bs.finish.strftime("%d.%m.%Y") if obj.bs.finish else "—"
         return format_html('<a href="{}">↗ {}–{}</a>', url, start, finish)
+
+@admin.register(ContractsRexex)
+class ContractsRexexAdmin(admin.ModelAdmin):
+    
+    list_display = (
+        "cp",
+        "contract",        
+    )
+    # list_display_links = ("period",)
+    search_fields = ("cp__tax_id", "contract__number","contract__id")
+    list_filter = ("cp", "contract")
+    # date_hierarchy = "uploaded_at"
+    # ordering = ("-uploaded_at",)
+    # list_select_related = ("owner", "ba")

@@ -120,3 +120,16 @@ class CfSplits(models.Model):
     
     def __str__(self):
         return f"{self.transaction}"
+    
+class ContractsRexex(models.Model):
+    cp = models.ForeignKey(Counterparty,on_delete=models.CASCADE,verbose_name='Контрагент')
+    regex = models.CharField(max_length=500,verbose_name='RegEx',default=r"^.*$")
+    contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,verbose_name='Договор')
+    comments = models.TextField('Комментарии')
+    
+    class Meta:
+        verbose_name = "Автоматизация"
+        verbose_name_plural = "Автоматизация"   
+    
+    def __str__(self):
+        return f"{self.cp} - {self.contract}"
