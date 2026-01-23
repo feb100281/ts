@@ -661,8 +661,8 @@ class CfDataAdmin(admin.ModelAdmin):
     list_select_related = ("cp_final", "contract", "cfitem", "bs", "owner", "ba")
 
     fieldsets = (
-        ("🧾 Основное", {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date", "temp", "dt", "cr")}),
-        ("🔗 Связи", {"fields": ("cp_bs_name", "cp", "cp_final", "contract", "cfitem")}),
+        ("🧾 Основное", {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
+        ("🔗 Связи", {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
         ("🏦 Детали", {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
 
