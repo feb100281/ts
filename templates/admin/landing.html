@@ -11,11 +11,18 @@
     --text:#111827;
     --muted:#6b7280;
     --line:#e5e7eb;
-    --accent:#111827;
-    --accent-hover:#020617;
+
+    /* новый фирменный акцент под стиль иллюстрации */
+    --accent:#4f46e5;        /* indigo-600 */
+    --accent-hover:#4338ca;  /* indigo-700 */
+    --accent-soft:#eef2ff;   /* indigo-50 */
+
     --danger-bg:#fef2f2;
     --danger-border:#fecaca;
     --danger-text:#b91c1c;
+
+    --panel-1:#0b1220;
+    --panel-2:#020617;
   }
 
   body.login{
@@ -36,68 +43,66 @@
   }
 
   .auth-layout{
-    max-width:960px;
+    max-width:1020px;
     margin:32px auto 40px;
     display:flex;
     gap:32px;
     align-items:stretch;
+    padding:0 16px;
   }
 
-  /* --- ЛЕВАЯ ПАНЕЛЬ С ЛОГОТИПОМ И ОПИСАНИЕМ --- */
+  /* --- ЛЕВАЯ ПАНЕЛЬ --- */
   .auth-panel{
     flex:1 1 0;
-    background:radial-gradient(circle at 20% 10%, #1f2937 0, #020617 60%);
+    background:
+      radial-gradient(circle at 20% 10%, rgba(79,70,229,.24) 0, transparent 55%),
+      radial-gradient(circle at 80% 0%, rgba(45,212,191,.14) 0, transparent 55%),
+      linear-gradient(180deg, var(--panel-1) 0%, var(--panel-2) 100%);
     color:#e5e7eb;
-    border-radius:12px;
+    border-radius:16px;
     padding:28px 28px 22px;
     display:flex;
     flex-direction:column;
     justify-content:space-between;
-    box-shadow:0 20px 45px rgba(15,23,42,.5);
+    box-shadow:0 20px 55px rgba(15,23,42,.45);
     position:relative;
     overflow:hidden;
   }
 
-  /* подсветка под большим логотипом */
   .auth-panel::before{
     content:"";
     position:absolute;
-    width:420px;
-    height:420px;
-    border-radius:999px;
-    background:radial-gradient(circle, rgba(45,212,191,.45), transparent 70%);
-    bottom:-140px;
+    width:520px;
+    height:520px;
+    border-radius:6px;
+    background:radial-gradient(circle, rgba(79,70,229,.35), transparent 70%);
+    bottom:-230px;
     left:50%;
     transform:translateX(-50%);
-    opacity:0.65;
+    opacity:0.9;
     pointer-events:none;
   }
 
-  .auth-panel > *{
-    position:relative;
-    z-index:1;
-  }
+  .auth-panel > *{ position:relative; z-index:1; }
 
-  .auth-panel-header{
-    margin-bottom:22px;
-  }
-
+  .auth-panel-header{ margin-bottom:16px; }
   .auth-name{
     font-size:18px;
-    font-weight:700;
+    font-weight:800;
     letter-spacing:.08em;
     text-transform:uppercase;
   }
   .auth-sub{
     font-size:13px;
     color:#cdd3dd;
-    margin-top:4px;
+    margin-top:6px;
+    line-height:1.35;
   }
 
   .auth-list{
     list-style:none;
     padding:0;
-    margin:0 0 14px;
+    margin:14px 0 10px;
     font-size:13px;
     color:#e5e7eb;
   }
@@ -108,50 +113,59 @@
   }
   .auth-list .bullet{
     font-size:14px;
-    color:#9ca3af;
+    color:#a5b4fc; /* мягкий индиго */
     margin-top:-1px;
   }
 
-  /* БОЛЬШОЙ ЛОГОТИП ПО ЦЕНТРУ */
+  /* Иллюстрация */
   .auth-logo-big-wrap{
-    margin:28px 0 6px;
+    margin:18px 0 10px;
     display:flex;
     justify-content:center;
   }
+  .auth-illustration{
+    width:min(460px, 100%);
+    border-radius:18px;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(79,70,229,.18) 0, transparent 55%),
+      linear-gradient(180deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,.06) 100%);
+    border:1px solid rgba(255,255,255,.16);
+    box-shadow:
+      0 0 22px rgba(79,70,229,.14),
+      0 22px 55px rgba(0,0,0,.35);
+    padding:14px 14px 10px;
+    backdrop-filter: blur(6px);
+  }
   .auth-logo-big{
-    width:240px;
-    max-width:100%;
-    filter:
-      brightness(1.7)
-      saturate(1.4)
-      drop-shadow(0 0 25px rgba(45,212,191,.9));
+    width:100%;
+    height:auto;
+    display:block;
     opacity:0.98;
+    filter:none; /* светлая картинка — без “выжигания” */
   }
 
   .auth-footer{
     font-size:11px;
     color:#a1a1aa;
-    margin-top:6px;
+    margin-top:8px;
   }
-  .auth-footer strong{
-    color:#f9fafb;
-    font-weight:600;
-  }
+  .auth-footer strong{ color:#f9fafb; font-weight:700; }
 
-  /* --- ПРАВАЯ КАРТОЧКА — ФОРМА ВХОДА --- */
+  /* --- ПРАВАЯ КАРТОЧКА: ФОРМА --- */
   .login-card{
-    flex:0 0 420px;
+    flex:0 0 460px;
     background:var(--card);
     border:1px solid #e6e7eb;
-    border-radius:12px;
-    padding:30px 28px 24px;
-    box-shadow:0 8px 22px rgba(15,23,42,.06);
+    border-radius:16px;
+    padding:32px 30px 26px;
+    box-shadow:0 12px 28px rgba(15,23,42,.08);
   }
   .login-title{
     margin:0 0 6px;
-    font-size:26px;
-    font-weight:700;
+    font-size:30px;
+    font-weight:900;
     color:var(--text);
+    letter-spacing:-.02em;
   }
   .sub{
     margin:0 0 18px;
@@ -163,32 +177,28 @@
     background:var(--danger-bg);
     color:var(--danger-text);
     border:1px solid var(--danger-border);
-    padding:8px 10px;
-    border-radius:6px;
-    margin-bottom:10px;
+    padding:10px 12px;
+    border-radius:10px;
+    margin-bottom:12px;
     font-size:13px;
   }
 
-  .field{margin-bottom:14px;}
+  .field{ margin-bottom:14px; }
   .label{
     display:flex;
     align-items:center;
     justify-content:space-between;
-    margin-bottom:6px;
-    font-weight:600;
+    margin-bottom:8px;
+    font-weight:800;
     font-size:14px;
     color:var(--text);
   }
-  .hint{
-    font-size:12px;
-    color:var(--muted);
-  }
 
-  .input-wrap{position:relative;}
+  .input-wrap{ position:relative; }
   .input{
     width:100%;
-    padding:10px 40px 10px 12px;
-    border-radius:8px;
+    padding:12px 44px 12px 12px;
+    border-radius:12px;
     border:1px solid var(--line);
     background:#f9fafb;
     font-size:14px;
@@ -196,76 +206,57 @@
   }
   .input:focus{
     outline:none;
-    border-color:var(--accent);
+    border-color:rgba(79,70,229,.55);
     background:#ffffff;
-    box-shadow:0 0 0 1px rgba(15,23,42,.12);
+    box-shadow:0 0 0 4px rgba(79,70,229,.12);
   }
 
   .roles{
     display:flex;
-    gap:10px;
-    margin-bottom:16px;
+    gap:12px;
+    margin-bottom:18px;
   }
 
   .role{
     flex:1;
     display:flex;
-    gap:8px;
+    gap:10px;
     align-items:center;
+    justify-content:center;
     border:1px solid var(--line);
-    border-radius:6px;
-    padding:8px 12px;
+    border-radius:14px;
+    padding:12px 12px;
     background:#ffffff;
-    font-size:14px;
+    font-size:15px;
     cursor:pointer;
-    font-weight:500;
-    transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
+    font-weight:800;
+    transition:background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .12s ease;
+    user-select:none;
   }
 
   .role input{
     accent-color:var(--accent);
   }
   .role:hover{
-    border-color:#cbd5f5;
-    box-shadow:0 0 0 1px rgba(15,23,42,.05);
+    border-color:rgba(79,70,229,.35);
+    box-shadow:0 0 0 3px rgba(79,70,229,.08);
+    transform:translateY(-1px);
+  }
+
+  /* легкая подсветка выбранной роли (CSS-only) */
+  .role:has(input:checked){
+    background:var(--accent-soft);
+    border-color:rgba(79,70,229,.35);
   }
 
   .row{
     display:flex;
     align-items:center;
     justify-content:space-between;
-    gap:8px;
-    margin:4px 0 16px;
+    gap:10px;
+    margin:6px 0 18px;
     font-size:13px;
-  }
-
-  .btn{
-    width:100%;
-    padding:11px 0;
-    background:linear-gradient(180deg, #111827 0%, #020617 100%);
-    color:#fff;
-    font-weight:600;
-    font-size:15px;
-    border-radius:6px;
-    border:none;
-    cursor:pointer;
-    box-shadow:0 12px 22px rgba(15,23,42,.35);
-    transition:background .12s ease, transform .12s ease, box-shadow .12s ease;
-  }
-  .btn:hover{
-    transform:translateY(-1px);
-    box-shadow:0 16px 30px rgba(15,23,42,.45);
-  }
-  .btn:active{
-    transform:translateY(0);
-    box-shadow:0 8px 16px rgba(15,23,42,.35);
-  }
-
-  .footer{
-    text-align:center;
-    margin-top:10px;
     color:var(--muted);
-    font-size:12px;
   }
 
   .toggle-pass{
@@ -276,19 +267,19 @@
     border:0;
     background:transparent;
     cursor:pointer;
-    padding:6px;
-    border-radius:6px;
-    color:#6b7280;
+    padding:8px;
+    border-radius:10px;
+    color:#64748b;
   }
   .toggle-pass:hover{
-    background:rgba(31,41,55,.06);
-    color:#111827;
+    background:rgba(79,70,229,.08);
+    color:var(--accent);
   }
 
   .forgot-wrapper{
     display:flex;
     align-items:center;
-    gap:6px;
+    gap:10px;
   }
   .forgot-label{
     font-size:12px;
@@ -298,84 +289,68 @@
     font-size:12px;
     text-decoration:none;
     color:var(--accent);
-    padding:3px 10px;
-    border-radius:6px;
+    padding:5px 10px;
+    border-radius:10px;
     border:1px solid transparent;
     transition:all .15s ease;
+    font-weight:800;
   }
   .forgot-link:hover{
-    border-color:var(--accent);
-    background:#f9fafb;
+    border-color:rgba(79,70,229,.35);
+    background:rgba(79,70,229,.06);
   }
 
-  .login-card .btn {
-    color: #ffffff;
+  /* КНОПКА ВХОДА: не чёрная, а фирменная */
+  .btn{
+    width:100%;
+    padding:12px 0;
+    background:linear-gradient(180deg, var(--accent) 0%, #3730a3 100%);
+    color:#fff;
+    font-weight:900;
+    font-size:16px;
+    border-radius:14px;
+    border:none;
+    cursor:pointer;
+    box-shadow:0 14px 26px rgba(79,70,229,.28);
+    transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
   }
-  .login-card .btn:focus,
-  .login-card .btn:active {
-    color: #ffffff;
+  .btn:hover{
+    transform:translateY(-1px);
+    box-shadow:0 18px 34px rgba(79,70,229,.34);
+    filter:saturate(1.03);
+  }
+  .btn:active{
+    transform:translateY(0);
+    box-shadow:0 12px 22px rgba(79,70,229,.24);
   }
 
-
-
-
-
-
-
-
+  .footer{
+    text-align:center;
+    margin-top:12px;
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.35;
+  }
 
   /* --- АДАПТИВ --- */
-  @media (max-width: 900px){
+  @media (max-width: 980px){
     .auth-layout{
       flex-direction:column;
-      max-width:520px;
+      max-width:720px;
       margin:24px auto 32px;
-      padding:0 16px;
-      gap:20px;
+      gap:18px;
     }
-    .auth-panel{
-      order:-1; /* сначала бренд-блок, потом форма */
-      border-radius:16px;
-    }
-    .login-card{
-      flex:1 1 auto;
-      border-radius:16px;
-    }
+    .auth-panel{ order:-1; }
+    .login-card{ flex:1 1 auto; }
   }
 
-  @media (max-width: 600px){
-    body.login .content-wrapper{
-      padding-top:20px;
-    }
-    .auth-panel{
-      padding:20px 18px 18px;
-      box-shadow:0 12px 30px rgba(15,23,42,.4);
-    }
-    .auth-panel::before{
-      width:320px;
-      height:320px;
-      bottom:-160px;
-    }
-    .login-card{
-      padding:22px 18px 20px;
-      box-shadow:0 8px 20px rgba(15,23,42,.08);
-    }
-    .login-title{
-      font-size:24px;
-    }
-    .auth-name{
-      font-size:16px;
-    }
-  }
-
-  @media (max-width: 480px){
-    .roles{
-      flex-direction:column;
-    }
-    .row{
-      flex-direction:column;
-      align-items:flex-start;
-    }
+  @media (max-width: 560px){
+    body.login .content-wrapper{ padding-top:18px; }
+    .auth-panel{ padding:20px 18px 18px; }
+    .login-card{ padding:22px 18px 20px; }
+    .login-title{ font-size:26px; }
+    .roles{ flex-direction:column; }
+    .row{ flex-direction:column; align-items:flex-start; }
   }
 </style>
 {% endblock %}
@@ -383,24 +358,25 @@
 {% block content %}
 <div class="auth-layout">
 
-  <!-- ЛЕВАЯ ПАНЕЛЬ — БРЕНД + ЛОГО -->
+  <!-- ЛЕВАЯ ПАНЕЛЬ — БРЕНД + ИЛЛЮСТРАЦИЯ -->
   <section class="auth-panel">
     <div>
       <div class="auth-panel-header">
-        <div class="auth-name">МАНУФАКТУРА ОФИСОВ</div>
-        <div class="auth-sub">Управление арендаторами и объектом недвижимости</div>
+        <div class="auth-name">ООО «ТРЕНДСЕТТЕР»</div>
+        <div class="auth-sub">Внутренняя система управления и аналитики</div>
       </div>
 
       <ul class="auth-list">
-        <li><span class="bullet">•</span>Единый кабинет для арендаторов и управляющей компании.</li>
-        <li><span class="bullet">•</span>Доступ к договорам, начислениям и статусу оплат.</li>
-        <li><span class="bullet">•</span>Оперативная коммуникация и сервисные обращения.</li>
+        <li><span class="bullet">•</span>Единый доступ к данным компании и ключевым показателям.</li>
+        <li><span class="bullet">•</span>Управление контрагентами, договорами и финансами.</li>
+        <li><span class="bullet">•</span>Быстрый поиск, отчёты и контроль исполнения.</li>
       </ul>
     </div>
 
-    <!-- Большой логотип -->
     <div class="auth-logo-big-wrap">
-      <img class="auth-logo-big" src="{% static 'img/logo-mo.svg' %}" alt="logo big">
+      <div class="auth-illustration">
+        <img class="auth-logo-big" src="{% static 'img/login-illustration.svg' %}" alt="Trendsetter login illustration">
+      </div>
     </div>
 
     <div class="auth-footer">
@@ -422,32 +398,27 @@
 
       <div class="roles">
         <label class="role">
-          <input type="radio" name="role" value="manager" required>
-          Менеджер УК
+          <input type="radio" name="role" value="admin" required>
+          Администратор
         </label>
         <label class="role">
-          <input type="radio" name="role" value="tenant" required>
-          Арендатор
+          <input type="radio" name="role" value="user" required>
+          Пользователь
         </label>
       </div>
 
       <div class="field">
-        <label class="label">
-          <span>Логин</span>
-        </label>
+        <label class="label"><span>Логин</span></label>
         <div class="input-wrap">
           <input class="input" type="text" name="username" autocomplete="username" required>
         </div>
       </div>
 
       <div class="field">
-        <label class="label">
-          <span>Пароль</span>
-        </label>
+        <label class="label"><span>Пароль</span></label>
         <div class="input-wrap">
-          <input class="input" id="password" type="password" name="password"
-                 autocomplete="current-password" required>
-          <button type="button" class="toggle-pass" id="togglePass">
+          <input class="input" id="password" type="password" name="password" autocomplete="current-password" required>
+          <button type="button" class="toggle-pass" id="togglePass" aria-label="Показать пароль">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"
                     stroke="currentColor" stroke-width="1.6"/>
@@ -469,7 +440,7 @@
       <button class="btn" type="submit">Войти</button>
 
       <div class="footer">
-        Менеджер УК → административный интерфейс • Арендатор → личный кабинет
+        После входа вы будете перенаправлены в административный интерфейс.
       </div>
 
       <input type="hidden" name="next" value="{{ next|default:'' }}">
@@ -483,3 +454,4 @@
 {{ block.super }}
 <script src="{% static 'js/login.js' %}"></script>
 {% endblock %}
+

@@ -36,3 +36,15 @@ pip freeze > requirements.txt
 touch .env
 в файл записываем инфу из телеги
 ```
+
+
+
+
+Вход на серверную версию
+ssh daria@62.109.2.166
+ПАРОЛЬ
+
+cd ts
+source venv/bin/activate
+
+python manage.py runserver 62.109.2.166:8092

@@ -1,6 +1,7 @@
 {% extends "admin/change_list.html" %}
 {% load static %}
 {% load admin_urls %}
+{% load humanize %}
 
 {# убираем стандартные крошки и object-tools #}
 {% block breadcrumbs %}{% endblock %}
@@ -47,24 +48,80 @@
           Выписки
         </span>
 
-        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+        {# СТРОКА ИНСТРУМЕНТОВ ПОД ЗАГОЛОВКОМ #}
+        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; align-items:flex-end;">
 
-          <!-- Всего выписок -->
-          <span style="
-              font-size:11px;
-              padding:2px 8px;
-              border-radius:6px;
-              background:rgba(59,130,246,.12);
-              color:#1d4ed8;
-              font-weight:700;
-              box-shadow:0 0 0 1px rgba(59,130,246,.18) inset;
-          ">
-            Всего выписок: {{ cl.result_count }}
-          </span>
+          {# КАЛЕНДАРИК: "Остаток на конец дня" #}
+          <form method="get" style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin:0; padding:0;">
+            {# сохраняем текущие GET кроме in_period_date #}
+            {% for k,v in request.GET.items %}
+              {% if k != "in_period_date" %}
+                <input type="hidden" name="{{ k }}" value="{{ v }}">
+              {% endif %}
+            {% endfor %}
 
+            <div style="display:flex; flex-direction:column; gap:3px; margin:0; padding:0;">
+              <div style="
+                  font-size:10px;
+                  letter-spacing:.08em;
+                  text-transform:uppercase;
+                  color:#94a3b8;
+                  font-weight:900;
+                  line-height:1;
+              ">
+                Остаток на конец дня
+              </div>
 
-          {% if cl.has_filters %}
-          {% endif %}
+              <div style="display:flex; align-items:center; gap:10px; margin:0; padding:0;">
+                <span style="opacity:.55; font-size:13px; line-height:1;">📅</span>
+
+                <input type="date"
+                       name="in_period_date"
+                       value="{{ request.GET.in_period_date|default:'' }}"
+                       style="
+                         height:28px;
+                         padding:0 6px;
+                         border:1px solid rgba(148,163,184,.35);
+                         background:#fff;
+                         border-radius:0;
+                         font-size:13px;
+                         font-weight:900;
+                         color:#0f172a;
+                         font-variant-numeric: tabular-nums;
+                         outline:none;
+                       ">
+
+                <button type="submit"
+                        style="
+                          height:28px;
+                          padding:0 10px;
+                          border-radius:0;
+                          border:1px solid rgba(59,130,246,.25);
+                          background:rgba(59,130,246,.10);
+                          font-size:12px;
+                          font-weight:900;
+                          color:#1d4ed8;
+                          cursor:pointer;
+                        ">
+                  Показать
+                </button>
+
+                {% if request.GET.in_period_date %}
+                  <a href="?"
+                     style="
+                       font-size:12px;
+                       font-weight:900;
+                       color:#64748b;
+                       text-decoration:none;
+                       padding:0 2px;
+                     ">
+                    Сбросить
+                  </a>
+                {% endif %}
+              </div>
+            </div>
+          </form>
+
         </div>
       </div>
     </div>
@@ -162,8 +219,7 @@
           font-size:11px;
           line-height:1.35;
       ">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
     </div>
 
@@ -203,8 +259,298 @@
 
 {% block extrahead %}
   {{ block.super }}
-  {# если хочешь — подключай свой css, либо оставь пустым #}
-  {# <link rel="stylesheet" href="{% static 'macro/treasury_admin.css' %}"> #}
+
+  <style>
+    /* ====== EOD BLOCK (компактнее, аккуратнее) ====== */
+    .eod-card{
+      border-radius:14px;
+      background:rgba(248,250,252,0.92);
+      box-shadow:0 18px 40px rgba(15,23,42,0.10);
+      padding:10px 12px;
+      border:1px solid rgba(148,163,184,.22);
+      margin: 10px 0 12px;
+      backdrop-filter: blur(6px);
+    }
+
+    .eod-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .eod-head .title{
+      font-weight:900;
+      color:#0f172a;
+      font-size:15px;
+    }
+    .eod-head .hint{
+      font-size:11px;
+      color:#64748b;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+
+    /* правая зона в шапке (hint + excel) */
+    .eod-head-right{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    /* ИТОГО: без отдельной карточки/фона */
+    .eod-total{
+      margin-top:8px;
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+    .eod-total .cap{
+      font-weight:900;
+      color:#0f172a;
+      font-size:13px;
+      padding-top:6px;
+      margin-right:2px;
+    }
+
+    .eod-metric{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      min-width:0;
+    }
+    .eod-metric .lbl{
+      font-size:9px;
+      color:#94a3b8;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      font-weight:900;
+      line-height:1.1;
+    }
+    .eod-metric .val{
+      font-weight:900;
+      font-variant-numeric: tabular-nums;
+      text-align:left;
+      font-size:13px;
+      color:#0f172a;
+      line-height:1.15;
+    }
+    .eod-metric .val.green{ color:#065f46; }
+    .eod-metric .val.red{ color:#991b1b; }
+
+    /* строки банков */
+    .eod-list{
+      margin-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .eod-row{
+      display:grid;
+      grid-template-columns: minmax(320px, 1fr) 120px 120px 120px auto;
+      gap:10px;
+      align-items:center;
+
+      padding:8px 10px;
+      border-radius:12px;
+      background:rgba(15,23,42,.03);
+      border:1px solid rgba(148,163,184,.18);
+    }
+
+    .eod-bank{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+    }
+
+    /* ====== ВАЖНО: bankline -> GRID (валюта слева, банк по центру, р/сч справа) ====== */
+    .eod-bank .bankline{
+      display:grid;
+      grid-template-columns: auto minmax(0,1fr) auto;
+      column-gap:10px;
+      row-gap:4px;
+      align-items:baseline;
+
+      font-weight:950;
+      color:#0f172a;
+      line-height:1.15;
+      font-size:13px;
+    }
+
+    .eod-bank .bankline .bankname{
+      min-width:0;
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+
+    .eod-bank .bankline .acc{
+      font-size:12px;
+      font-weight:900;
+      color:#64748b;
+      letter-spacing:.02em;
+      white-space:nowrap;
+    }
+
+    /* на узких экранах — р/сч переносим на 2 строку, чтобы не сжимать банк */
+    @media (max-width: 520px){
+      .eod-bank .bankline{
+        grid-template-columns: auto minmax(0,1fr);
+      }
+      .eod-bank .bankline .acc{
+        grid-column: 1 / -1;
+        justify-self:start;
+      }
+    }
+
+    /* вторая строка — собственник */
+    .eod-bank .ownerline{
+      font-size:12px;
+      color:#94a3b8;
+      line-height:1.2;
+      font-weight:800;
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+
+    /* действия справа: маленькие иконки */
+    .eod-actions{
+      justify-self:end;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      white-space:nowrap;
+    }
+    .eod-icon-btn{
+      width:32px;height:32px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:10px;
+      border:1px solid rgba(148,163,184,.25);
+      background:rgba(15,23,42,.03);
+      text-decoration:none;
+      font-weight:900;
+      color:#0f172a;
+      line-height:1;
+    }
+    .eod-icon-btn:hover{
+      background:rgba(59,130,246,.10);
+      border-color:rgba(59,130,246,.25);
+      color:#1d4ed8;
+    }
+
+    .eod-xlsx-btn{
+      width:auto;
+      padding:0 10px;
+      gap:8px;
+      border-radius:10px;
+      display:inline-flex;
+      align-items:center;
+      height:32px; /* в шапке компактнее */
+    }
+
+    .eod-xlsx-btn .xlsx-txt{
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.02em;
+      color:#0f172a;
+    }
+
+    .eod-xlsx-btn:hover .xlsx-txt{
+      color:#1d4ed8;
+    }
+
+    .eod-xlsx-btn .xlsx-ico{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* бейдж валюты */
+    .ccy-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:2px 8px;
+      border-radius:6px;
+      border:1px solid rgba(148,163,184,.25);
+      background:rgba(15,23,42,.02);
+      color:#475569;
+      font-weight:900;
+      font-size:11px;
+      white-space:nowrap;
+    }
+    .ccy-badge .flag{ font-size:13px; line-height:1; opacity:.95; }
+    .ccy-badge .sym{ opacity:.85; }
+    .ccy-badge .code{ opacity:.85; }
+
+    /* ИТОГО по валютам: строки */
+    .totals-rows{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:flex-start;
+      width:100%;
+    }
+
+    .total-row{
+      display:flex;
+      align-items:flex-start;
+      gap:14px;
+      flex-wrap:wrap;
+      padding:8px 10px;
+      border-radius:12px;
+      background:rgba(15,23,42,.03);
+      border:1px solid rgba(148,163,184,.18);
+      width:100%;
+    }
+
+    .total-row.multi{
+      width:auto;
+      min-width:320px;
+      flex: 1 1 320px;
+    }
+
+    .total-row .left-ccy{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+
+    .total-row .meta{
+      font-size:11px;
+      color:#94a3b8;
+      font-weight:900;
+      white-space:nowrap;
+      margin-left:auto;
+    }
+
+    .total-row .metrics{
+      display:flex;
+      gap:14px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+
+    /* адаптив */
+    @media (max-width: 980px){
+      .eod-row{
+        grid-template-columns: 1fr 1fr;
+        grid-auto-rows:auto;
+        align-items:start;
+      }
+      .eod-actions{
+        grid-column: 1 / -1;
+        justify-self:start;
+      }
+    }
+  </style>
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -230,5 +576,163 @@
 {% endblock %}
 
 {% block content %}
+
+  {% if selected_date %}
+    <div class="eod-card">
+      <div class="eod-head">
+        <div class="title">
+          Остаток на конец дня: {{ selected_date|date:"d.m.Y" }}
+        </div>
+
+        <div class="eod-head-right">
+          <div class="hint">
+            По выпискам, покрывающим дату
+          </div>
+
+          {# Excel в шапке блока #}
+          <a href="{% url 'admin:treasury_bankstatements_export_eod_xlsx' %}?{{ request.GET.urlencode }}"
+             class="eod-icon-btn eod-xlsx-btn"
+             title="Скачать Excel">
+            <span class="xlsx-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" role="img" focusable="false">
+                <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7l-5-5z" fill="#E5E7EB"/>
+                <path d="M14 2v5h5" fill="#CBD5E1"/>
+                <rect x="3.2" y="8" width="9.2" height="10.6" rx="1.6" fill="#107C41"/>
+                <path d="M5.2 10.2h1.5l1.1 2 1.1-2h1.5l-1.8 3 1.9 3.2H8.9l-1.2-2.2-1.2 2.2H5l1.9-3.2-1.7-3z" fill="#fff"/>
+                <path d="M13.5 9.2h6.2v9.6h-6.2z" fill="#D1FAE5" opacity=".9"/>
+                <path d="M13.5 12.4h6.2M13.5 15.6h6.2M16.6 9.2v9.6" stroke="#10B981" stroke-width=".8" opacity=".9"/>
+              </svg>
+            </span>
+            <span class="xlsx-txt">Excel</span>
+          </a>
+        </div>
+      </div>
+
+      {# ===== ИТОГО: без карточки; валюта -> затем цифры ===== #}
+      {% if totals_by_ccy and totals_by_ccy|length > 0 %}
+        <div class="eod-total">
+          <div class="cap">Итого:</div>
+
+          <div class="totals-rows">
+            {% if totals_by_ccy|length == 1 %}
+              {% with t=totals_by_ccy.0 %}
+                <div class="total-row">
+                  <div class="left-ccy">
+                    <span class="ccy-badge">
+                      <span class="flag">{{ t.currency_flag }}</span>
+                      <span class="sym">{{ t.currency_symbol }}</span>
+                      <span class="code">{{ t.currency_code }}</span>
+                    </span>
+                  </div>
+
+                  <div class="metrics">
+                    <div class="eod-metric">
+                      <div class="lbl">Остаток</div>
+                      <div class="val">{{ t.eod|floatformat:2|intcomma }}</div>
+                    </div>
+
+                    <div class="eod-metric">
+                      <div class="lbl">Дт (поступления)</div>
+                      <div class="val green">{{ t.dt|floatformat:2|intcomma }}</div>
+                    </div>
+
+                    <div class="eod-metric">
+                      <div class="lbl">Кт (списания)</div>
+                      <div class="val red">{{ t.cr|floatformat:2|intcomma }}</div>
+                    </div>
+                  </div>
+
+                  <div class="meta">счетов: {{ t.cnt }}</div>
+                </div>
+              {% endwith %}
+            {% else %}
+              {% for t in totals_by_ccy %}
+                <div class="total-row multi">
+                  <div class="left-ccy">
+                    <span class="ccy-badge">
+                      <span class="flag">{{ t.currency_flag }}</span>
+                      <span class="sym">{{ t.currency_symbol }}</span>
+                      <span class="code">{{ t.currency_code }}</span>
+                    </span>
+                  </div>
+
+                  <div class="metrics">
+                    <div class="eod-metric">
+                      <div class="lbl">Остаток</div>
+                      <div class="val">{{ t.eod|floatformat:2|intcomma }}</div>
+                    </div>
+
+                    <div class="eod-metric">
+                      <div class="lbl">Дт</div>
+                      <div class="val green">{{ t.dt|floatformat:2|intcomma }}</div>
+                    </div>
+
+                    <div class="eod-metric">
+                      <div class="lbl">Кт</div>
+                      <div class="val red">{{ t.cr|floatformat:2|intcomma }}</div>
+                    </div>
+                  </div>
+
+                  <div class="meta">счетов: {{ t.cnt }}</div>
+                </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if day_blocks and day_blocks|length > 0 %}
+        <div class="eod-list">
+          {% for b in day_blocks %}
+            <div class="eod-row">
+
+              <div class="eod-bank">
+                <div class="bankline">
+                  {# валюта ВСЕГДА слева #}
+                  <span class="ccy-badge" title="Валюта счета">
+                    <span class="flag">{{ b.currency_flag }}</span>
+                    <span class="sym">{{ b.currency_symbol }}</span>
+                    <span class="code">{{ b.currency_code }}</span>
+                  </span>
+
+                  <span class="bankname">{{ b.bank_name }}</span>
+
+                  <span class="acc">р/сч {{ b.account }}</span>
+                </div>
+
+                <div class="ownerline">{{ b.owner_name }}</div>
+              </div>
+
+              <div class="eod-metric">
+                <div class="lbl">Остаток</div>
+                <div class="val">{{ b.eod|floatformat:2|intcomma }}</div>
+              </div>
+
+              <div class="eod-metric">
+                <div class="lbl">Дт</div>
+                <div class="val green">{{ b.dt_sum|floatformat:2|intcomma }}</div>
+              </div>
+
+              <div class="eod-metric">
+                <div class="lbl">Кт</div>
+                <div class="val red">{{ b.cr_sum|floatformat:2|intcomma }}</div>
+              </div>
+
+              <div class="eod-actions">
+                <a href="{{ b.open_url }}" class="eod-icon-btn" title="Открыть выписку">↗</a>
+              </div>
+
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div style="margin-top:10px;color:#64748b;font-size:13px;">
+          Выписка, покрывающая эту дату, не найдена.
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
   {{ block.super }}
 {% endblock %}
+

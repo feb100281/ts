@@ -83,17 +83,7 @@ INSTALLED_APPS = [
 # FRED_API_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 
-MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django_plotly_dash.middleware.BaseMiddleware",
-    "django_plotly_dash.middleware.ExternalRedirectionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-]
+
 # INSTALLED_APPS += ['dpd_static_support']
 # MIDDLEWARE += ['whitenoise.middleware.WhiteNoiseMiddleware']
 
@@ -182,6 +172,9 @@ LANGUAGES = [
     ("en", "English"),
     ("ru", "Русский"),
 ]
+
+
+
 
 ru_formats.DECIMAL_SEPARATOR = "."
 ru_formats.THOUSAND_SEPARATOR = ","
@@ -448,23 +441,21 @@ JAZZMIN_UI_TWEAKS = {
 
 
 # TEMPLATES[0]['DIRS'] = [BASE_DIR / "templates"]
-# LOGIN_URL = "/"                 # у тебя лендинг = экран входа
-# LOGOUT_REDIRECT_URL = "/"
+LOGIN_URL = "/"                 # у тебя лендинг = экран входа
+LOGIN_REDIRECT_URL = "/admin/"
+LOGOUT_REDIRECT_URL = "/"
 # REMEMBER_ME_AGE = 60 * 60 * 24 * 30
 
 # # Чтобы "Забыли пароль?"
-# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BCC = ["manunotify@yandex.ru"]
+EMAIL_HOST = "smtp.yandex.ru"
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
 
-# EMAIL_BCC = ["manunotify@yandex.ru"]
-
-# EMAIL_HOST = "smtp.yandex.ru"
-# EMAIL_PORT = 465
-# EMAIL_USE_SSL = True
-
-# EMAIL_HOST_USER = "manunotify@yandex.ru"
-# EMAIL_HOST_PASSWORD = "ntnmbmvvmqcchowo"
-
-# DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+EMAIL_HOST_USER = "manunotify@yandex.ru"
+EMAIL_HOST_PASSWORD = "ntnmbmvvmqcchowo"
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 
 
