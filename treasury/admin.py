@@ -699,20 +699,18 @@ class CfDataAdmin(admin.ModelAdmin):
         LEVELS = 3
 
         header = [
-            "date", "dt", "cr", "flow", "amount",
+            "date", "dt", "cr", "amount",
             "cp_final_name",
             "contract_number",
-            "cfitem_code", "cfitem_name",
-            "cfitem_path_codes", "cfitem_path_names",
+            "cfitem_name",
+            "cfitem_path_names",
         ]
         for i in range(1, LEVELS + 1):
-            header += [f"cfitem_lvl{i}_code", f"cfitem_lvl{i}_name"]
+            header += [f"cfitem_lvl{i}_name"]
 
         header += [
             "temp", "tax_id",
             "owner_name",
-            "ba_account",
-            "ba_bank_name",
             "ba_currency",
             "ba_bank_account",
             "bs_start", "bs_finish",
@@ -726,18 +724,15 @@ class CfDataAdmin(admin.ModelAdmin):
             bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
             bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
 
-            # --- dt/cr + flow/amount ---
+            # --- dt/cr -> amount (+/-) ---
             dt_val = obj.dt or Decimal("0")
             cr_val = obj.cr or Decimal("0")
 
             if dt_val > 0:
-                flow = "DT"
                 amount = dt_val
             elif cr_val > 0:
-                flow = "CR"
                 amount = -cr_val
             else:
-                flow = ""
                 amount = Decimal("0")
 
             # --- договор ---
@@ -748,16 +743,12 @@ class CfDataAdmin(admin.ModelAdmin):
             # --- CF item и иерархия ---
             it = obj.cfitem
             if it:
-                ancestors = list(it.get_ancestors(include_self=True))
-                path_codes = " / ".join(a.code for a in ancestors)
+                ancestors = list(it.get_ancestors(include_self=True))  # [root, ..., self]
                 path_names = " / ".join(a.name for a in ancestors)
-                it_code = it.code
                 it_name = it.name
             else:
                 ancestors = []
-                path_codes = ""
                 path_names = ""
-                it_code = ""
                 it_name = ""
 
             # --- банк / счет / валюта ---
@@ -770,29 +761,24 @@ class CfDataAdmin(admin.ModelAdmin):
                 date_txt,
                 (str(dt_val) if dt_val else ""),
                 (str(cr_val) if cr_val else ""),
-                flow,
                 str(amount),
                 (obj.cp_final.name if obj.cp_final else ""),
                 contract_txt,
-                it_code,
                 it_name,
-                path_codes,
                 path_names,
             ]
 
+            # lvl1..lvlN: строго "сверху вниз" (root -> ...)
             for idx in range(LEVELS):
                 if idx < len(ancestors):
-                    a = ancestors[idx]
-                    row += [a.code, a.name]
+                    row += [ancestors[idx].name]
                 else:
-                    row += ["", ""]
+                    row += [""]
 
             row += [
                 (obj.temp or "").replace("\n", " ").strip(),
                 obj.tax_id or "",
                 (obj.owner.name if obj.owner else ""),
-                ba_account,
-                ba_bank_name,
                 ba_currency,
                 ba_bank_account,
                 bs_start,
@@ -802,7 +788,6 @@ class CfDataAdmin(admin.ModelAdmin):
             writer.writerow(row)
 
         return response
-
 
         
     
