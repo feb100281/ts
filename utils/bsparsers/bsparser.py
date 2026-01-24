@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+from .xls_parser import adjust_df
 
 
 # Поля выписок
@@ -182,8 +183,11 @@ def bs_to_dict(filepath: str) -> pd.DataFrame:
 
     return pd.DataFrame(init_dic_list), get_bank_account(lines), get_start_date(lines), get_end_date(lines),get_bb(lines),get_eb(lines)
 
-def get_bs_details(filepath):
-    df, bank, start_date,end_date,bb,eb = bs_to_dict(filepath)
+def get_bs_details(filepath:str):
+    if filepath.endswith('xlsx'):
+       df, bank, start_date,end_date,bb,eb = adjust_df(filepath) 
+    else:
+        df, bank, start_date,end_date,bb,eb = bs_to_dict(filepath)
     return bank, start_date,end_date,bb,eb
     
 
@@ -191,6 +195,9 @@ def get_bs_details(filepath):
 # В дальнейшем подставляем id из связанных моделей. НЕ ЗАБЫТЬ
 def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
     
+    if filepath.endswith('xlsx'):
+       return adjust_df(filepath)[0]
+     
     init_df, account_id, start_date, end_date,bb,eb = bs_to_dict(filepath)
     
     ts_inn = ts_inn if ts_inn else ts_inn_default
