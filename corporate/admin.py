@@ -14,6 +14,8 @@ from .models import Owners, BankAccount, Bank, COA, CfItems
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.admin import DraggableMPTTAdmin
+from django.db.models.functions import Cast
+from django.db.models import IntegerField
 
 from treasury.models import BankStatements
 
@@ -307,8 +309,8 @@ class BankAccountAdmin(admin.ModelAdmin):
     list_display_links = ("bank_name",)
     search_fields = ("corporate__name", "bank__name",  "account")
     list_filter = ("corporate__name",) 
-
-
+    
+    
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return (
@@ -397,6 +399,47 @@ class AccountAdmin(DraggableMPTTAdmin):
     # list_filter = ("is_active",)
     ordering = ("code",)
     preserve_filters = True
+    
+    
+    def get_changeform_initial_data(self, request):
+        """
+        Автоподстановка code при 'Добавить дочернюю' (MPTT передаёт ?parent=<id>).
+        Шаг: 100
+        """
+        initial = super().get_changeform_initial_data(request)
+
+        parent_id = request.GET.get("parent") or request.GET.get("parent_id")
+        if not parent_id:
+            return initial
+
+        try:
+            parent_id = int(parent_id)
+        except ValueError:
+            return initial
+
+        # пусть parent в форме будет сразу выставлен
+        initial["parent"] = parent_id
+
+        # максимум среди прямых детей
+        max_code = (
+            COA.objects
+            .filter(parent_id=parent_id)
+            .annotate(code_int=Cast("code", IntegerField()))
+            .aggregate(m=Max("code_int"))
+            .get("m")
+        )
+
+        if max_code is None:
+            parent_code = COA.objects.filter(pk=parent_id).values_list("code", flat=True).first()
+            if parent_code and parent_code.isdigit():
+                suggested = int(parent_code) + 100
+            else:
+                suggested = 100000
+        else:
+            suggested = max_code + 100
+
+        initial["code"] = f"{suggested:06d}"
+        return initial
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -519,6 +562,54 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
     
     change_list_template = "admin/corporate/cfitems/change_list.html"
     change_form_template = "admin/corporate/cfitems/change_form.html"
+    
+    
+    
+    
+    def get_changeform_initial_data(self, request):
+        """
+        Когда открываем /add/?parent=<id> (кнопка 'Добавить дочернюю'),
+        подставляем следующий code внутри ветки этого parent.
+        """
+        initial = super().get_changeform_initial_data(request)
+
+        parent_id = request.GET.get("parent") or request.GET.get("parent_id")
+        if not parent_id:
+            return initial
+
+        try:
+            parent_id = int(parent_id)
+        except ValueError:
+            return initial
+
+        # Если parent уже будет проставлен MPTT — ок, но мы продублируем.
+        initial["parent"] = parent_id
+
+        # Ищем максимум среди детей этого parent (только прямые дети)
+        # code хранится как строка, поэтому приводим к int для Max
+        max_code = (
+            CfItems.objects
+            .filter(parent_id=parent_id)
+            .annotate(code_int=Cast("code", IntegerField()))
+            .aggregate(m=Max("code_int"))
+            .get("m")
+        )
+
+        if max_code is None:
+            # если детей нет — можно начать с "код_родителя + 01" (или +001)
+            parent_code = CfItems.objects.filter(pk=parent_id).values_list("code", flat=True).first()
+            if parent_code and parent_code.isdigit():
+                # пример логики: 123000 -> 123100 (первый ребенок сотней)
+                # можно выбрать любую логику, ниже типовая "следующая сотня"
+                base = int(parent_code)
+                suggested = base + 100
+            else:
+                suggested = 100000
+        else:
+            suggested = max_code + 100  # твоя логика шага (100)
+
+        initial["code"] = f"{suggested:06d}"
+        return initial
 
 
 
