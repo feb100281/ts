@@ -53,29 +53,7 @@ class ContractFilesInline(admin.TabularInline):
     verbose_name_plural = "📎 Файлы"
     show_change_link = True
 
-# @admin.register(Contracts)
-# class ContractsAdmin(admin.ModelAdmin):
-#     list_display = ("title", "number", "date", "cp")
-#     inlines = [ContractItemsInline,ConditionsInline,ContractFilesInline]
-    
-#     fieldsets = (
-#         (
-#             "Основное",
-#             {"fields": ("title","number","date","owner","cp","pid","date_signed","is_signed")},
-#         ),
-#         (
-#             "Прочее",
-#             {
-#                 "fields": (
-#                     "manager",
-#                     "regex",
-#                     "defaultcf",
-                    
-#                 )
-#             },
-#         ),
-        
-#     )
+
 
 
 
@@ -88,8 +66,8 @@ class ContractFilesInline(admin.TabularInline):
 class ContractsAdmin(admin.ModelAdmin):
     inlines = (ContractFilesInline, ContractItemsInline, ConditionsInline,CfItemAutoInline)
 
-    list_display = ("cp_logo", "cp_with_inn", "title", "number", "date_short", "amendment", "cf_defaults")
-    list_display_links = ("cp_with_inn", "number",)   
+    list_display = ("cp_logo", "cp_with_inn", "title", "number_with_id", "date_short", "amendment", "cf_defaults")
+    list_display_links = ("cp_with_inn", "number_with_id",)   
     list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)
 
     search_fields = ("number", "cp__name", "title__title", "regex")
@@ -99,7 +77,7 @@ class ContractsAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
-    autocomplete_fields = ("title", "cp", "manager",)
+    autocomplete_fields = ("title", "cp", "manager", )
     
     list_per_page = 25
     
@@ -130,7 +108,6 @@ class ContractsAdmin(admin.ModelAdmin):
     )
 
 
-        
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -147,6 +124,18 @@ class ContractsAdmin(admin.ModelAdmin):
         return qs
 
     
+
+    
+    @admin.display(description="№ договора", ordering="number")
+    def number_with_id(self, obj):
+        number = obj.number or "без номера"
+        return format_html(
+            '{}<br><span style="font-size:11px; color:#94a3b8;">id: {}</span>',
+            number,
+            obj.id,
+        )
+
+
     
     @admin.display(description="Контрагент", ordering="cp__name")
     def cp_with_inn(self, obj):
@@ -216,7 +205,6 @@ class ContractsAdmin(admin.ModelAdmin):
                 field.queryset = Contracts.objects.none()
 
         return field
-        
         
     
     @admin.display(description="Лого")

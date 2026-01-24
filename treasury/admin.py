@@ -1,105 +1,7 @@
-# from django.contrib import admin, messages
-# from django.shortcuts import redirect
-# from .models import BankStatements, CfData, CfSplits
-# from utils.bsparsers.bsupdater import update_cf_data
-# from django.utils.safestring import mark_safe
-
-# from django.shortcuts import redirect
-
-
-# class CfSplitsInline(admin.StackedInline):
-#     model = CfSplits
-#     extra = 1
-
-# @admin.register(BankStatements)
-# class MigrationsAdmin(admin.ModelAdmin):
-#     list_display = ("__str__","bb", "eb", "uploaded_at", 'file')
-#     change_form_template = "admin/services/migrations/change_form.html"
-#     file_path = None
-    
-#     fieldsets = (
-#         (
-#             "Файл выписки",
-#             {"fields": ("file",)},
-#         ),
-#         (
-#             "Информация",
-#             {
-#                 "fields": (
-#                     "owner",
-#                     "ba",
-#                     "start",
-#                     "finish",
-#                     "bb",
-#                     "eb"
-                    
-#                 )
-#             },
-#         )
-        
-#     )
-    
-    
-
-#     def render_change_form(self, request, context, *args, **kwargs):
-#         obj = context.get('original')
-#         if obj and obj.file:
-#             self.file_path = obj.file.path
-#         return super().render_change_form(request, context, *args, **kwargs)
-
-#     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
-#         if request.method == "POST" and "apply_migration" in request.POST:
-#             obj = self.get_object(request, object_id)
-
-#             if obj and obj.file:
-#                 result = update_cf_data(obj.file.path, obj.pk)   # или object_id
-#                 messages.success(request, mark_safe(result))
-#             else:
-#                 messages.error(request, "Файл не найден")
-
-#             return redirect(request.path)
-
-#         return super().changeform_view(request, object_id, form_url, extra_context)
-
-
-# @admin.register(CfData)
-# class CfDataAdmin(admin.ModelAdmin):
-#     list_display = ("date","dt", "cr", "temp", 'cp',"intercompany")
-#     inlines = [CfSplitsInline,]
-    
-    
-#     fieldsets = (
-#         (
-#             "Основное",
-#             {"fields": ("bs","doc_type",'doc_numner',"doc_date","date","temp","dt","cr")},
-#         ),
-        
-#         (
-#             "Реффересы",
-#             {"fields": ("cp_bs_name","cp","cp_final","contract","cfitem")},
-#         ),        
-        
-#         (
-#             "Детали",
-#             {
-#                 "fields": (
-#                     "ba",
-#                     "tax_id",                   
-#                     "payer_account",
-#                     "reciver_account",
-#                     "vat_rate",                    
-#                     "intercompany"
-                    
-#                 )
-#             },
-#         )
-#     )
-
-
-
 
 # treasury/admin.py
 
+from django.http import JsonResponse
 from django.urls import path
 from django.http import HttpResponse
 from django.contrib import admin, messages
@@ -111,9 +13,10 @@ from django.utils.safestring import mark_safe
 from django.db.models.functions import Coalesce
 
 from datetime import datetime
-
+from django.db.models import Q
 from django.contrib.admin import SimpleListFilter
-
+from django import forms
+from contracts.models import Contracts
 from .models import BankStatements, CfData, CfSplits,ContractsRexex
 from utils.bsparsers.bsupdater import update_cf_data
 from decimal import Decimal
@@ -144,12 +47,13 @@ def badge(text, tone="slate"):
     fg, bg = tones.get(tone, tones["slate"])
     return format_html(
         '<span style="display:inline-flex;align-items:center;gap:6px;'
-        'padding:2px 8px;border-radius:999px;'
+        'padding:2px 8px;border-radius:6px;'
         'background:{};color:{};font-weight:700;font-size:12px;'
         'box-shadow:0 0 0 1px rgba(148,163,184,.20) inset;">{}</span>',
         bg, fg, text
     )
     
+
 
 RU_MONTHS_SHORT = {
     1: "янв",  2: "фев",  3: "мар",  4: "апр",
@@ -224,6 +128,28 @@ class CfSplitsInline(admin.TabularInline):
         return badge(money(abs(val)), tone)
 
 
+class ByInnBadgeFilter(SimpleListFilter):
+    title = "Определение контрагента"
+    parameter_name = "by_inn"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "по ИНН"),
+            ("no", "не по ИНН"),
+        )
+
+    def queryset(self, request, queryset):
+        v = self.value()
+        if v == "yes":
+            # ровно как бейдж: cp есть, а cp_final нет
+            return queryset.filter(cp__isnull=False, cp_final__isnull=True)
+
+        if v == "no":
+            # всё остальное: либо cp_final есть, либо cp нет
+            return queryset.filter(Q(cp_final__isnull=False) | Q(cp__isnull=True))
+
+        return queryset
+
 # ---------- BankStatements Admin ----------
 
 
@@ -244,6 +170,8 @@ class InPeriodDateFilter(SimpleListFilter):
         except ValueError:
             return queryset
         return queryset.filter(start__lte=d, finish__gte=d)
+    
+
 
 @admin.register(BankStatements)
 class BankStatementsAdmin(admin.ModelAdmin):
@@ -287,9 +215,26 @@ class BankStatementsAdmin(admin.ModelAdmin):
         }
     
     
+    # def get_urls(self):
+    #     urls = super().get_urls()
+    #     custom_urls = [
+    #         path(
+    #             "export-eod-xlsx/",
+    #             self.admin_site.admin_view(export_eod_xlsx),
+    #             name="treasury_bankstatements_export_eod_xlsx",
+    #         ),
+    #     ]
+    #     return custom_urls + urls
+    
+    
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
+            path(
+                "process-selected/",
+                self.admin_site.admin_view(self.process_selected_view),
+                name="treasury_bankstatements_process_selected",
+            ),
             path(
                 "export-eod-xlsx/",
                 self.admin_site.admin_view(export_eod_xlsx),
@@ -297,6 +242,55 @@ class BankStatementsAdmin(admin.ModelAdmin):
             ),
         ]
         return custom_urls + urls
+    
+    
+    def process_selected_view(self, request):
+        """
+        POST принимает ids выбранных выписок.
+        Мы будем передавать их как:
+          - statement_ids: "1,2,3"
+        """
+        if request.method != "POST":
+            return redirect("..")
+
+        raw = (request.POST.get("statement_ids") or "").strip()
+        if not raw:
+            messages.warning(request, "Выберите выписку чекбоксом.")
+            return redirect(request.META.get("HTTP_REFERER", ".."))
+
+        ids = []
+        for x in raw.split(","):
+            x = x.strip()
+            if x.isdigit():
+                ids.append(int(x))
+
+        if not ids:
+            messages.warning(request, "Не удалось прочитать выбранные id.")
+            return redirect(request.META.get("HTTP_REFERER", ".."))
+
+        qs = BankStatements.objects.filter(pk__in=ids).select_related("ba", "owner")
+
+        ok = 0
+        bad = 0
+        for obj in qs:
+            try:
+                if not obj.file:
+                    bad += 1
+                    continue
+                result = update_cf_data(obj.file.path, obj.pk)
+                # можно либо копить результаты, либо показывать кратко
+                ok += 1
+            except Exception as e:
+                bad += 1
+
+        if ok:
+            messages.success(request, f"Обработано выписок: {ok}")
+        if bad:
+            messages.error(request, f"Ошибок/пропусков: {bad} (нет файла или ошибка обработки).")
+
+        # вернуть обратно на changelist с теми же фильтрами
+        return redirect(request.META.get("HTTP_REFERER", ".."))
+
 
     
     
@@ -314,81 +308,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
         )
         
         
-    # def changelist_view(self, request, extra_context=None):
-    #     extra_context = extra_context or {}
-
-    #     selected_date = None
-    #     raw = request.GET.get("in_period_date")
-    #     if raw:
-    #         try:
-    #             selected_date = datetime.strptime(raw, "%Y-%m-%d").date()
-    #         except ValueError:
-    #             selected_date = None
-
-    #     extra_context["selected_date"] = selected_date
-
-    #     if selected_date:
-    #         # берём выписки, которые покрывают дату + учитываем выбранные фильтры owner/ba
-    #         bss = (
-    #             BankStatements.objects
-    #             .filter(start__lte=selected_date, finish__gte=selected_date)
-    #             .select_related("owner", "ba")
-    #         )
-
-    #         owner_id = request.GET.get("owner__id__exact")
-    #         ba_id = request.GET.get("ba__id__exact")
-    #         if owner_id:
-    #             bss = bss.filter(owner_id=owner_id)
-    #         if ba_id:
-    #             bss = bss.filter(ba_id=ba_id)
-
-    #         blocks = []
-
-    #         # ИТОГИ
-    #         total_dt = Decimal("0.00")
-    #         total_cr = Decimal("0.00")
-    #         total_eod = Decimal("0.00")
-
-    #         for bs in bss:
-    #             agg = (
-    #                 CfData.objects
-    #                 .filter(bs=bs, date__lte=selected_date)
-    #                 .aggregate(
-    #                     dt=Coalesce(Sum("dt"), Decimal("0.00")),
-    #                     cr=Coalesce(Sum("cr"), Decimal("0.00")),
-    #                 )
-    #             )
-
-    #             dt_sum = agg["dt"] or Decimal("0.00")
-    #             cr_sum = agg["cr"] or Decimal("0.00")
-
-    #             bb = bs.bb if bs.bb is not None else Decimal("0.00")
-    #             eod = bb + dt_sum - cr_sum
-
-    #             blocks.append({
-    #                 "bs": bs,
-    #                 "dt_sum": dt_sum,
-    #                 "cr_sum": cr_sum,
-    #                 "eod": eod,
-    #             })
-
-    #             total_dt += dt_sum
-    #             total_cr += cr_sum
-    #             total_eod += eod
-
-    #         extra_context["day_blocks"] = blocks
-
-    #         # прокидываем в шаблон (чтобы блок "Итого" появился)
-    #         extra_context["total_dt"] = total_dt
-    #         extra_context["total_cr"] = total_cr
-    #         extra_context["total_eod"] = total_eod
-
-    #     return super().changelist_view(request, extra_context=extra_context)
-    
-    
-    
-
-
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
 
@@ -671,22 +590,49 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
 # ---------- CfData Admin ----------
 
+class CfDataAdminForm(forms.ModelForm):
+    class Meta:
+        model = CfData
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        cp = None
+        # приоритет: финальный контрагент
+        if self.instance and getattr(self.instance, "cp_final_id", None):
+            cp = self.instance.cp_final
+        elif self.instance and getattr(self.instance, "cp_id", None):
+            cp = self.instance.cp
+
+        if cp:
+            self.fields["contract"].queryset = Contracts.objects.filter(cp=cp).order_by("-date")
+        else:
+            # если контрагент не определён — ничего не показываем
+            self.fields["contract"].queryset = Contracts.objects.none()
+
+
+# ---------- CfData Admin ----------
+
 @admin.register(CfData)
 class CfDataAdmin(admin.ModelAdmin):
     inlines = [CfSplitsInline]
+    form = CfDataAdminForm
+    list_per_page = 25
+    change_list_template = "admin/treasury/cfdata/change_list.html"
 
     list_display = (
-        "date",
-        "flow_amount",
-        "cp_block",
-        "contract",
-        "cfitem",
+        "date_short",
+        "dt_amount",
+        "cr_amount",
+        "cp_short",
+        "contract_block",
+        "cfitem_block",
         "vat_badge",
-        "intercompany_badge",
         "temp_short",
         "bs_link",
     )
-    list_display_links = ("date", "flow_amount")
+    list_display_links = ("date_short", "dt_amount", "cr_amount")
 
     search_fields = (
         "temp",
@@ -698,46 +644,213 @@ class CfDataAdmin(admin.ModelAdmin):
         "cp_final__name",
         "contract__number",
     )
-    list_filter = ("intercompany", "owner", "ba", "cfitem", "contract", "bs")
+    list_filter = ( ByInnBadgeFilter, 'cp', "intercompany", "owner", "ba", "cfitem", "contract", "bs")
     date_hierarchy = "date"
     ordering = ("-date", "-id")
 
-    autocomplete_fields = ("cp", "cp_final", "contract", "cfitem", "bs", "ba")
+    autocomplete_fields = ("cp", "cp_final", "cfitem", "bs", "ba")
     list_select_related = ("cp_final", "contract", "cfitem", "bs", "owner", "ba")
 
     fieldsets = (
-        ("🧾 Основное", {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date", "temp", "dt", "cr")}),
-        ("🔗 Связи", {"fields": ("cp_bs_name", "cp", "cp_final", "contract", "cfitem")}),
+        ("🧾 Основное", {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
+        ("🔗 Связи", {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
         ("🏦 Детали", {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
 
-    @admin.display(description="Поток / сумма")
-    def flow_amount(self, obj):
-        if (obj.dt or 0) > 0:
-            return format_html("{} {}", badge("Дт", "red"), badge(money(obj.dt), "red"))
-        if (obj.cr or 0) > 0:
-            return format_html("{} {}", badge("Кт", "green"), badge(money(obj.cr), "green"))
-        return "—"
+    # -------------------- Колонки списка --------------------
+    def _currency_code(self, obj) -> str:
+        ba = getattr(obj, "ba", None) or getattr(getattr(obj, "bs", None), "ba", None)
+        return (getattr(ba, "currency", None) or "").upper()
+
+
+    @admin.display(description="Дата платежа", ordering="date")
+    def date_short(self, obj):
+        if not obj.date:
+            return "—"
+        d = obj.date
+        return f"{d.day:02d} {RU_MONTHS_SHORT.get(d.month, d.month)} {d.year}"
+
+    @admin.display(description="Дт (поступление)", ordering="dt")
+    def dt_amount(self, obj):
+        if not obj.dt:
+            return "—"
+
+        code = self._currency_code(obj)
+        ccy = format_html(
+            '<div style="font-size:11px;color:#94a3b8;line-height:1;margin-top:2px;">{}</div>',
+            code or "—",
+        )
+
+        return format_html(
+            '<div style="display:flex;flex-direction:column;line-height:1.1;">'
+                '<div style="color:#16a34a;font-weight:700;">{}</div>'
+                '{}'
+            '</div>',
+            money(obj.dt),
+            ccy,
+        )
+
+
+    @admin.display(description="Кт (списание)", ordering="cr")
+    def cr_amount(self, obj):
+        if not obj.cr:
+            return "—"
+
+        code = self._currency_code(obj)
+        ccy = format_html(
+            '<div style="font-size:11px;color:#94a3b8;line-height:1;margin-top:2px;">{}</div>',
+            code or "—",
+        )
+
+        return format_html(
+            '<div style="display:flex;flex-direction:column;line-height:1.1;">'
+                '<div style="color:#dc2626;font-weight:700;">{}</div>'
+                '{}'
+            '</div>',
+            money(obj.cr),
+            ccy,
+        )
+
 
     @admin.display(description="Контрагент")
-    def cp_block(self, obj):
+    def cp_short(self, obj):
+        # 1) финальный контрагент
         if obj.cp_final:
-            return format_html("<b>{}</b>", obj.cp_final)
+            name = getattr(obj.cp_final, "name", None) or str(obj.cp_final)
+            return format_html("<b>{}</b>", name)
+
+        # 2) контрагент определён по ИНН (cp есть, но cp_final нет)
         if obj.cp:
-            return format_html("{} {}", badge("по ИНН", "blue"), obj.cp)
+            name = getattr(obj.cp, "name", None) or str(obj.cp)
+
+            inn_tag = format_html(
+                '<span style="display:inline-flex;align-items:center;gap:6px;'
+                'padding:2px 8px;border-radius:6px;'
+                'background:rgba(59,130,246,.14);'
+                'border:1px solid rgba(59,130,246,.28);'
+                'color:#1d4ed8;font-weight:900;font-size:11px;'
+                'box-shadow:0 8px 20px rgba(59,130,246,.12);'
+                'margin-top:4px;">'
+                '🧾 по ИНН'
+                '</span>'
+            )
+
+            return format_html(
+                '<div style="line-height:1.15;">'
+                '<div style="font-weight:900;">{}</div>'
+                '{}'
+                '</div>',
+                name,
+                inn_tag
+            )
+
+        # 3) только имя из выписки (не матчится на контрагента)
         if obj.cp_bs_name:
-            return format_html("{} {}", badge("из выписки", "amber"), obj.cp_bs_name)
+            bs_tag = format_html(
+                '<span style="display:inline-flex;align-items:center;gap:6px;'
+                'padding:2px 8px;border-radius:999px;'
+                'background:rgba(148,163,184,.16);'
+                'border:1px solid rgba(148,163,184,.30);'
+                'color:#475569;font-weight:800;font-size:11px;'
+                'margin-top:4px;">'
+                'из выписки'
+                '</span>'
+            )
+
+            return format_html(
+                '<div style="line-height:1.15;">'
+                '<div style="font-weight:900;">{}</div>'
+                '{}'
+                '</div>',
+                obj.cp_bs_name,
+                bs_tag
+            )
+
         return "—"
 
+
+
+    @admin.display(description="Статья CF", ordering="cfitem__code")
+    def cfitem_block(self, obj):
+        it = getattr(obj, "cfitem", None)
+        if not it:
+            return "—"
+
+        code = getattr(it, "code", None) or getattr(it, "number", None) or getattr(it, "id", None) or "—"
+        name = getattr(it, "name", None) or str(it)
+
+        code_style = (
+            "display:inline-block;"
+            "padding:1px 6px;"
+            "border-radius:4px;"
+            "font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;"
+            "font-size:12px;"
+            "font-weight:700;"
+            "background:rgba(15,23,42,.06);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35) inset;"
+            "margin-right:8px;"
+            "white-space:nowrap;"
+        )
+        name_style = "font-size:13px;line-height:1.15;"
+
+        return format_html(
+            '<span style="{}">{}</span><span style="{}">{}</span>',
+            code_style, code, name_style, name
+        )
+
+    @admin.display(description="Договор", ordering="contract__number")
+    def contract_block(self, obj):
+        c = getattr(obj, "contract", None)
+        if not c:
+            return "—"
+
+        # 1) тип договора
+        title = getattr(getattr(c, "title", None), "title", "") or "Договор"
+
+        # 2) номер договора
+        number = c.number or "б/н"
+
+        # 3) дата договора (русский формат)
+        if c.date:
+            months = {
+                1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+                5: "мая", 6: "июня", 7: "июля", 8: "августа",
+                9: "сентября", 10: "октября", 11: "ноября", 12: "декабря",
+            }
+            d = c.date
+            date_txt = f"{d.day} {months[d.month]} {d.year}"
+        else:
+            date_txt = "без даты"
+
+        # Идея: дата НЕ отдельным цветом, а тем же «вторичным» стилем, что и id
+        secondary = "#6b7280"  # аккуратный нейтральный серый (не синий)
+
+        return format_html(
+            '<div style="line-height:1.25;max-width:520px;">'
+                # 1 строка — тип договора
+                '<div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{}</div>'
+                # 2 строка — номер
+                '<div style="font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">№ {}</div>'
+                # 3 строка — дата (вторичный стиль, без «синевы»)
+                '<div style="font-size:12px;color:%s;font-weight:500;">от {}</div>'
+                # 4 строка — id (тот же стиль)
+                '<div style="font-size:11px;color:%s;">id: {}</div>'
+            '</div>' % (secondary, secondary),
+            title,
+            number,
+            date_txt,
+            c.id,
+        )
+
+
+    # --------------------  --------------------
     @admin.display(description="НДС")
     def vat_badge(self, obj):
         if obj.vat_rate is None:
             return "—"
         return badge(f"{obj.vat_rate}%", "pink")
 
-    @admin.display(description="Группа")
-    def intercompany_badge(self, obj):
-        return badge("IG", "blue") if obj.intercompany else "—"
+
 
     @admin.display(description="Назначение")
     def temp_short(self, obj):
@@ -751,21 +864,105 @@ class CfDataAdmin(admin.ModelAdmin):
         if not obj.bs_id:
             return "—"
         url = reverse("admin:treasury_bankstatements_change", args=[obj.bs_id])
-        # выводим аккуратно: период в одну строку
         start = obj.bs.start.strftime("%d.%m.%Y") if obj.bs.start else "—"
         finish = obj.bs.finish.strftime("%d.%m.%Y") if obj.bs.finish else "—"
         return format_html('<a href="{}">↗ {}–{}</a>', url, start, finish)
 
+    class Media:
+        css = {"all": ("css/admin_overrides.css", "css/admin_treasury.css", "fonts/glyphs.css")}
+
+
+
+
+# ---------- REGEX ----------
+
 @admin.register(ContractsRexex)
 class ContractsRexexAdmin(admin.ModelAdmin):
+
+    list_per_page = 50
+    change_list_template = "admin/treasury/contractsrexex/change_list.html"  
+
+
+    autocomplete_fields = ("cp", )
     
+    class Media:
+        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
+        js = ("js/contractsrexex_contract_ajax.js",)
+
+
+    
+    list_select_related = ("cp", "contract")
+
+    # колонки
     list_display = (
-        "cp",
-        "contract",        
+        "cp_logo",
+        "cp_link",
+        "contract_id_col",
+        "contract_link",
+        "regex_short",
     )
-    # list_display_links = ("period",)
-    search_fields = ("cp__tax_id", "contract__number","contract__id")
-    list_filter = ("cp", "contract")
-    # date_hierarchy = "uploaded_at"
-    # ordering = ("-uploaded_at",)
-    # list_select_related = ("owner", "ba")
+    list_display_links = ("cp_link", "contract_link", "regex_short")
+
+    search_fields = (
+        "cp__tax_id",
+        "cp__name",
+        "contract__number",
+        "contract__id",
+        "regex",
+        'contract__cp'
+    )
+
+  
+    list_filter = (
+        ("cp", admin.RelatedOnlyFieldListFilter),
+    )
+
+    ordering = ("cp__name", "contract__id")
+
+
+
+    # ---------- колонки ----------
+
+    @admin.display(description="Лого", ordering="cp__name")
+    def cp_logo(self, obj):
+        cp = obj.cp
+        if not cp or not getattr(cp, "logo", None):
+            return "—"
+
+        outer = (
+            "display:inline-flex;align-items:center;justify-content:center;"
+            "width:28px;height:28px;border-radius:6px;"
+            "background:linear-gradient(135deg,#f8fafc,#f1f5f9);"
+            "box-shadow:0 0 0 1px rgba(148,163,184,.35);"
+        )
+        inner = "font-family:NotoManu;font-size:20px;line-height:1;"
+        return format_html('<span style="{}"><span style="{}">{}</span></span>', outer, inner, cp.logo)
+
+    @admin.display(description="Контрагент", ordering="cp__name")
+    def cp_link(self, obj):
+        cp = obj.cp
+        if not cp:
+            return "—"
+        url = reverse("admin:counterparties_counterparty_change", args=[cp.pk])
+        #  имя, без ИНН 
+        return format_html('<a href="{}"><b>{}</b></a>', url, cp.name)
+
+    @admin.display(description="ID договора", ordering="contract__id")
+    def contract_id_col(self, obj):
+        return obj.contract_id or "—"
+
+    @admin.display(description="№ договора", ordering="contract__number")
+    def contract_link(self, obj):
+        c = obj.contract
+        if not c:
+            return "—"
+        url = reverse("admin:contracts_contracts_change", args=[c.pk])
+        label = getattr(c, "number", None) or f"{c.pk}"
+        return format_html('<a href="{}">{}</a>', url, label)
+
+    @admin.display(description="RegEx")
+    def regex_short(self, obj):
+        s = (obj.regex or "").strip()
+        return (s[:80] + "…") if len(s) > 80 else (s or "—")
+
+  

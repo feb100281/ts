@@ -1,0 +1,283 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+{% load admin_list %}
+
+{# убираем стандартные крошки и object-tools #}
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block title %}Казначейство | Автоматизация{% endblock %}
+
+{% block content_title %}
+  {% url cl.opts|admin_urlname:'add' as add_url %}
+
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      {# Иконка (робот) #}
+      <div style="
+          width:40px;
+          height:40px;
+          border-radius:10px;
+          background:linear-gradient(135deg,#a855f7,#3b82f6);
+          color:#f5f3ff;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:20px;
+          font-weight:700;
+          box-shadow:0 10px 26px rgba(59,130,246,.22), 0 0 0 1px rgba(15,23,42,.15);
+      ">
+        🤖
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3; min-width:0;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.06em;
+            color:#6b7280;
+        ">
+          Казначейство
+        </span>
+
+        <span style="font-size:19px; font-weight:800; color:#0f172a;">
+          Автоматизация
+        </span>
+
+
+      </div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: действия #}
+    <div style="
+        min-width:240px;
+        max-width:320px;
+        border-radius:16px;
+        background:rgba(248,250,252,0.92);
+        box-shadow:0 18px 40px rgba(15,23,42,0.16);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        border:1px solid rgba(148,163,184,.22);
+        backdrop-filter: blur(6px);
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="
+            font-size:11px;
+            letter-spacing:0.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:800;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+
+        {% if has_add_permission %}
+          <a href="{{ add_url }}"
+             class="button"
+             style="
+               font-size:13px;
+               padding:6px 8px;
+               border-radius:10px;
+               display:inline-flex;
+               align-items:center;
+               gap:8px;
+               justify-content:flex-start;
+               background:rgba(59,130,246,.12);
+               border:1px solid rgba(59,130,246,.18);
+             ">
+            ➕ Добавить правило
+          </a>
+        {% endif %}
+
+        <a href="{% url 'admin:treasury_cfdata_changelist' %}"
+           style="
+             font-size:11px;
+             padding:5px 8px;
+             border-radius:8px;
+             text-decoration:none;
+             background:#f3f4f6;
+             color:#4b5563;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(148,163,184,.25);
+           ">
+          🧾 CF документы
+        </a>
+
+        <a href="{% url 'admin:treasury_bankstatements_changelist' %}"
+           style="
+             font-size:11px;
+             padding:5px 8px;
+             border-radius:8px;
+             text-decoration:none;
+             background:#f3f4f6;
+             color:#4b5563;
+             display:inline-flex;
+             align-items:center;
+             gap:8px;
+             border:1px solid rgba(148,163,184,.25);
+           ">
+          🧾 Выписки
+        </a>
+
+      </div>
+
+      <div style="
+          margin-top:6px;
+          padding-top:8px;
+          border-top:1px solid rgba(148,163,184,.25);
+          color:#64748b;
+          font-size:11px;
+          line-height:1.35;
+      ">
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div><b>Важно:</b> не делай <code>^.*$</code> без причины.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ (всегда снизу) #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        КАЗНАЧЕЙСТВО
+      </span>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#475569;font-weight:800;">
+        АВТОМАТИЗАЦИЯ
+      </span>
+    </nav>
+
+    <span style="color:#9ca3af;">
+      {{ cl.result_count }} записей
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+    /* === СТИЛИЗУЕМ стандартный Django поиск (но не ломаем его) === */
+    #changelist-search{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin:0 !important;
+      padding:0 !important;
+    }
+
+    #changelist-search label{
+      display:none; /* слово "Поиск:" скрываем */
+    }
+
+    #changelist-search input[type="text"]{
+      height:28px;
+      padding:0 10px;
+      border:1px solid rgba(148,163,184,.35);
+      background:#fff;
+      border-radius:10px;
+      font-size:13px;
+      font-weight:800;
+      color:#0f172a;
+      outline:none;
+      min-width:260px;
+    }
+
+    #changelist-search input[type="submit"]{
+      height:28px;
+      padding:0 12px;
+      border-radius:10px;
+      border:1px solid rgba(59,130,246,.25);
+      background:rgba(59,130,246,.10);
+      font-size:12px;
+      font-weight:900;
+      color:#1d4ed8;
+      cursor:pointer;
+    }
+
+    /* убираем дефолтную подпись quiet */
+    #changelist-search .quiet{
+      display:none;
+    }
+
+    /* кликабельная строка таблицы */
+    #result_list tbody tr{ cursor:pointer; }
+
+
+   /* ====== Подсветка колонки RegEx (метод regex_short) ====== */
+#result_list td.field-regex_short,
+#result_list th.column-regex_short {
+  background: #fff8db !important;     /* светло-жёлтый */
+  border-left: 3px solid #fde68a !important;
+}
+
+/* при наведении строку не ломаем, но regex чуть ярче */
+#result_list tbody tr:hover td.field-regex_short {
+  background: #fff3c4 !important;
+}
+
+#result_list td.field-regex_short {
+  font-weight: 600;
+}
+
+
+
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const rows = document.querySelectorAll('#result_list tbody tr');
+
+      rows.forEach(function (row) {
+        // Ссылка на change-страницу обычно в первой колонке (th a)
+        const link = row.querySelector('th a') || row.querySelector('td a');
+        if (!link) return;
+
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('a')) return;
+          if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
+          if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
+          if (e.target.tagName === 'BUTTON') return;
+
+          window.location.href = link.href;
+        });
+      });
+    });
+  </script>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

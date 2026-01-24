@@ -47,4 +47,6 @@ ssh daria@62.109.2.166
 cd ts
 source venv/bin/activate
 
+git pull ...
+
 python manage.py runserver 62.109.2.166:8092

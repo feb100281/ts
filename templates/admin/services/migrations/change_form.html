@@ -127,7 +127,7 @@
              gap:6px;
              justify-content:flex-start;
            ">
-          ← Все миграции
+          ← Все выписки
         </a>
 
         {% if obj.pk and obj.file %}
@@ -172,7 +172,7 @@
           "
           onmouseover="this.style.background='#d3f9d1'"
           onmouseout="this.style.background='#e9fce8'">
-    ⚙️ Применить миграцию
+    ⚙️ Обработать выписку
   </button>
 </form>
 
@@ -206,7 +206,7 @@
       <span>›</span>
       <a href="{% url 'admin:treasury_bankstatements_changelist' %}"
          style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
-        МИГРАЦИИ
+        ВЫПИСКИ
       </a>
       <span>›</span>
 

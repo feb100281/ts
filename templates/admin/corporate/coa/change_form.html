@@ -154,6 +154,14 @@
             </a>
           {% endif %}
 
+          {# ✅ ДОБАВИТЬ ДОЧЕРНЮЮ (parent проставится, code подставится админкой) #}
+          {% if obj.pk and has_add_permission %}
+            <a href="{{ add_url }}?parent={{ obj.pk }}"
+               style="font-size:11px;padding:3px 8px;border-radius:6px;text-decoration:none;background:#eff6ff;color:#1d4ed8;display:inline-flex;align-items:center;gap:6px;">
+              🌿 Добавить дочернюю
+            </a>
+          {% endif %}
+
           <a href="{% url 'admin:index' %}"
              style="font-size:11px;padding:3px 8px;border-radius:6px;text-decoration:none;background:#f3f4f6;color:#4b5563;display:inline-flex;align-items:center;gap:6px;">
             🏠 Админка
@@ -220,4 +228,3 @@
 {% block object-tools %}
   {{ block.super }}
 {% endblock %}
-
