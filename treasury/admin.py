@@ -177,7 +177,7 @@ class InPeriodDateFilter(SimpleListFilter):
 class BankStatementsAdmin(admin.ModelAdmin):
     change_form_template = "admin/services/migrations/change_form.html"
     change_list_template = "admin/treasury/bankstatements/change_list.html"
-    inlines = [CfDataInline]
+    # inlines = [CfDataInline]
 
     list_display = (
         "period",
