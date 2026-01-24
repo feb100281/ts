@@ -678,10 +678,12 @@ class CfDataAdmin(admin.ModelAdmin):
             ]
             return custom + urls
         
+        
+    
     def export_csv_view(self, request):
         cl = self.get_changelist_instance(request)
         qs = cl.get_queryset(request).select_related(
-            "cp_final", "contract", "cfitem", "owner", "ba", "bs"
+            "cp_final", "contract", "cfitem", "owner", "ba", "ba__bank", "bs"
         )
 
         response = HttpResponse(content_type="text/csv; charset=utf-8")
@@ -694,7 +696,7 @@ class CfDataAdmin(admin.ModelAdmin):
             quoting=csv.QUOTE_MINIMAL,
         )
 
-        LEVELS = 3  # сколько уровней CF выводим отдельными колонками
+        LEVELS = 3
 
         header = [
             "date", "dt", "cr", "flow", "amount",
@@ -710,6 +712,9 @@ class CfDataAdmin(admin.ModelAdmin):
             "temp", "tax_id",
             "owner_name",
             "ba_account",
+            "ba_bank_name",
+            "ba_currency",
+            "ba_bank_account",
             "bs_start", "bs_finish",
         ]
 
@@ -735,7 +740,7 @@ class CfDataAdmin(admin.ModelAdmin):
                 flow = ""
                 amount = Decimal("0")
 
-            # --- договор: "Дог. № ..." ---
+            # --- договор ---
             contract_txt = ""
             if obj.contract and obj.contract.number:
                 contract_txt = f"Дог. № {obj.contract.number}"
@@ -755,6 +760,12 @@ class CfDataAdmin(admin.ModelAdmin):
                 it_code = ""
                 it_name = ""
 
+            # --- банк / счет / валюта ---
+            ba_account = obj.ba.account if obj.ba else ""
+            ba_bank_name = obj.ba.bank.name if (obj.ba and obj.ba.bank) else ""
+            ba_currency = obj.ba.currency if obj.ba else ""
+            ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
+
             row = [
                 date_txt,
                 (str(dt_val) if dt_val else ""),
@@ -769,7 +780,6 @@ class CfDataAdmin(admin.ModelAdmin):
                 path_names,
             ]
 
-            # уровни: lvl1 — корень, lvl2 — следующий и т.д.
             for idx in range(LEVELS):
                 if idx < len(ancestors):
                     a = ancestors[idx]
@@ -781,7 +791,10 @@ class CfDataAdmin(admin.ModelAdmin):
                 (obj.temp or "").replace("\n", " ").strip(),
                 obj.tax_id or "",
                 (obj.owner.name if obj.owner else ""),
-                (obj.ba.account if obj.ba else ""),
+                ba_account,
+                ba_bank_name,
+                ba_currency,
+                ba_bank_account,
                 bs_start,
                 bs_finish,
             ]
@@ -789,6 +802,11 @@ class CfDataAdmin(admin.ModelAdmin):
             writer.writerow(row)
 
         return response
+
+
+        
+    
+    
     
     @admin.display(description="Дата платежа", ordering="date")
     def date_short(self, obj):
