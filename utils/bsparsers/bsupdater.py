@@ -226,10 +226,11 @@ def find_cfitem(bs_id):
 # --------------------------
 
 
-def update_cf_data(filename, bs_id):
+def update_cf_data(filename:str, bs_id):
 
     bank, start_date, end_date, bb, eb = get_bs_details(filepath=filename)
-    account_number = bank
+    account_number = bank    
+    
     df = make_final_statemens(filename)
 
     notifications = []
@@ -256,6 +257,11 @@ def update_cf_data(filename, bs_id):
     df["owner_id"] = int(owner_id)
     df['contract_id'] = None
 
+    if filename.endswith('xlsx'):
+       name_map = dict(Counterparty.objects.values_list("name","tax_id")) 
+       df['tax_id'] = df['cp_bs_name'].map(name_map)
+    
+    
     # Мапим cp по ИНН
     cp_map = dict(Counterparty.objects.values_list("tax_id", "id"))
     df["cp_id"] = df["tax_id"].map(cp_map).astype("Int64")
