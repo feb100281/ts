@@ -390,7 +390,7 @@ def _now_pretty():
 @admin.register(COA)
 
 class AccountAdmin(DraggableMPTTAdmin):
-    mptt_level_indent = 12
+    mptt_level_indent = 32
     actions = ["print_coa_registry"]
 
     list_display = ("tree_actions", "indented_title", "active_badge", "children_badge")
@@ -401,10 +401,28 @@ class AccountAdmin(DraggableMPTTAdmin):
     preserve_filters = True
     
     
+    def _step_for_parent(self, parent_level: int) -> int:
+        """
+        Шаг для детей в зависимости от уровня родителя.
+        Под 6-значные коды:
+        level 0: 100000 -> дети 110000/120000... (шаг 10000)
+        level 1: 310000 -> дети 311000/312000... (шаг 1000)
+        level 2: 321000 -> дети 321100/321200... (шаг 100)
+        """
+        mapping = {
+            0: 10_000,
+            1: 1_000,
+            2: 100,
+            3: 10,
+            4: 1,
+        }
+        return mapping.get(parent_level, 1)
+    
+    
     def get_changeform_initial_data(self, request):
         """
         Автоподстановка code при 'Добавить дочернюю' (MPTT передаёт ?parent=<id>).
-        Шаг: 100
+        Шаг зависит от уровня parent.
         """
         initial = super().get_changeform_initial_data(request)
 
@@ -417,26 +435,27 @@ class AccountAdmin(DraggableMPTTAdmin):
         except ValueError:
             return initial
 
-        # пусть parent в форме будет сразу выставлен
+        parent = COA.objects.filter(pk=parent_id).only("id", "code", "level").first()
+        if not parent or not (parent.code and parent.code.isdigit()):
+            return initial
+
+        # сразу выставляем parent в форме
         initial["parent"] = parent_id
 
-        # максимум среди прямых детей
+        step = self._step_for_parent(getattr(parent, "level", 0) or 0)
+
         max_code = (
             COA.objects
-            .filter(parent_id=parent_id)
+            .filter(parent_id=parent_id)              # только прямые дети
             .annotate(code_int=Cast("code", IntegerField()))
             .aggregate(m=Max("code_int"))
             .get("m")
         )
 
         if max_code is None:
-            parent_code = COA.objects.filter(pk=parent_id).values_list("code", flat=True).first()
-            if parent_code and parent_code.isdigit():
-                suggested = int(parent_code) + 100
-            else:
-                suggested = 100000
+            suggested = int(parent.code) + step
         else:
-            suggested = max_code + 100
+            suggested = max_code + step
 
         initial["code"] = f"{suggested:06d}"
         return initial
@@ -550,7 +569,7 @@ class AccountAdmin(DraggableMPTTAdmin):
 @admin.register(CfItems)
 
 class CashFlowItemAdmin(DraggableMPTTAdmin):
-    mptt_level_indent = 12
+    mptt_level_indent = 32
 
     list_display = ("tree_actions", "indented_title",  "active_badge", "children_badge")
     list_display_links = ("indented_title",)
@@ -565,12 +584,26 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
     
     
     
+    def _step_for_parent(self, parent_level: int) -> int:
+        """
+        Шаг для детей в зависимости от уровня родителя.
+        level 0: 100000 -> дети 110000/120000... (шаг 10000)
+        level 1: 310000 -> дети 311000/312000... (шаг 1000)
+        level 2: 321000 -> дети 321100/321200... (шаг 100)
+        """
+        mapping = {
+            0: 10_000,
+            1: 1_000,
+            2: 100,
+            3: 10,
+            4: 1,
+        }
+        return mapping.get(parent_level, 1)
+    
+    
+    
     
     def get_changeform_initial_data(self, request):
-        """
-        Когда открываем /add/?parent=<id> (кнопка 'Добавить дочернюю'),
-        подставляем следующий code внутри ветки этого parent.
-        """
         initial = super().get_changeform_initial_data(request)
 
         parent_id = request.GET.get("parent") or request.GET.get("parent_id")
@@ -582,11 +615,14 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
         except ValueError:
             return initial
 
-        # Если parent уже будет проставлен MPTT — ок, но мы продублируем.
+        parent = CfItems.objects.filter(pk=parent_id).only("id", "code", "level").first()
+        if not parent or not (parent.code and parent.code.isdigit()):
+            return initial
+
         initial["parent"] = parent_id
 
-        # Ищем максимум среди детей этого parent (только прямые дети)
-        # code хранится как строка, поэтому приводим к int для Max
+        step = self._step_for_parent(getattr(parent, "level", 0) or 0)
+
         max_code = (
             CfItems.objects
             .filter(parent_id=parent_id)
@@ -596,21 +632,12 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
         )
 
         if max_code is None:
-            # если детей нет — можно начать с "код_родителя + 01" (или +001)
-            parent_code = CfItems.objects.filter(pk=parent_id).values_list("code", flat=True).first()
-            if parent_code and parent_code.isdigit():
-                # пример логики: 123000 -> 123100 (первый ребенок сотней)
-                # можно выбрать любую логику, ниже типовая "следующая сотня"
-                base = int(parent_code)
-                suggested = base + 100
-            else:
-                suggested = 100000
+            suggested = int(parent.code) + step
         else:
-            suggested = max_code + 100  # твоя логика шага (100)
+            suggested = max_code + step
 
         initial["code"] = f"{suggested:06d}"
         return initial
-
 
 
     def get_queryset(self, request):

@@ -2,6 +2,8 @@
 {% load static %}
 {% load admin_urls %}
 
+
+
 {# убираем стандартные крошки и object-tools #}
 {% block breadcrumbs %}{% endblock %}
 {% block object-tools %}{% endblock %}
@@ -239,6 +241,11 @@
   {{ block.super }}
   <link rel="stylesheet" href="{% static 'macro/keyrate_admin.css' %}">
 
+
+
+
+
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const rows = document.querySelectorAll('#result_list tbody tr');
@@ -280,3 +287,6 @@
 {% block content %}
   {{ block.super }}
 {% endblock %}
+
+
+
