@@ -324,6 +324,8 @@
     box-shadow:0 12px 22px rgba(79,70,229,.24);
   }
 
+
+
   .footer{
     text-align:center;
     margin-top:12px;
@@ -331,6 +333,25 @@
     font-size:12px;
     line-height:1.35;
   }
+
+
+  /* Убираем отступы AdminLTE/Jazzmin под фиксированный navbar на странице логина */
+body.login.layout-navbar-fixed,
+body.login.layout-navbar-fixed .wrapper{
+  padding-top: 0 !important;
+}
+
+body.login.layout-navbar-fixed .content-wrapper,
+body.login .content-wrapper{
+  padding-top: 0 !important;   /* было 40px */
+  margin-top: 0 !important;
+}
+
+/* если хочется чуть воздуха, оставь небольшое значение */
+body.login .auth-layout{
+  margin-top: 16px;  /* было 32px */
+}
+
 
   /* --- АДАПТИВ --- */
   @media (max-width: 980px){

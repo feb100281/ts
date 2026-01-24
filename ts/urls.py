@@ -6,7 +6,7 @@ from .views import fx_status, cp_issues_status, treasury_status
 
 login_view = auth_views.LoginView.as_view(
     template_name="admin/landing.html",
-    redirect_authenticated_user=True,
+    redirect_authenticated_user=False,
 )
 
 urlpatterns = [

@@ -215,9 +215,26 @@ class BankStatementsAdmin(admin.ModelAdmin):
         }
     
     
+    # def get_urls(self):
+    #     urls = super().get_urls()
+    #     custom_urls = [
+    #         path(
+    #             "export-eod-xlsx/",
+    #             self.admin_site.admin_view(export_eod_xlsx),
+    #             name="treasury_bankstatements_export_eod_xlsx",
+    #         ),
+    #     ]
+    #     return custom_urls + urls
+    
+    
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
+            path(
+                "process-selected/",
+                self.admin_site.admin_view(self.process_selected_view),
+                name="treasury_bankstatements_process_selected",
+            ),
             path(
                 "export-eod-xlsx/",
                 self.admin_site.admin_view(export_eod_xlsx),
@@ -225,6 +242,55 @@ class BankStatementsAdmin(admin.ModelAdmin):
             ),
         ]
         return custom_urls + urls
+    
+    
+    def process_selected_view(self, request):
+        """
+        POST принимает ids выбранных выписок.
+        Мы будем передавать их как:
+          - statement_ids: "1,2,3"
+        """
+        if request.method != "POST":
+            return redirect("..")
+
+        raw = (request.POST.get("statement_ids") or "").strip()
+        if not raw:
+            messages.warning(request, "Выберите выписку чекбоксом.")
+            return redirect(request.META.get("HTTP_REFERER", ".."))
+
+        ids = []
+        for x in raw.split(","):
+            x = x.strip()
+            if x.isdigit():
+                ids.append(int(x))
+
+        if not ids:
+            messages.warning(request, "Не удалось прочитать выбранные id.")
+            return redirect(request.META.get("HTTP_REFERER", ".."))
+
+        qs = BankStatements.objects.filter(pk__in=ids).select_related("ba", "owner")
+
+        ok = 0
+        bad = 0
+        for obj in qs:
+            try:
+                if not obj.file:
+                    bad += 1
+                    continue
+                result = update_cf_data(obj.file.path, obj.pk)
+                # можно либо копить результаты, либо показывать кратко
+                ok += 1
+            except Exception as e:
+                bad += 1
+
+        if ok:
+            messages.success(request, f"Обработано выписок: {ok}")
+        if bad:
+            messages.error(request, f"Ошибок/пропусков: {bad} (нет файла или ошибка обработки).")
+
+        # вернуть обратно на changelist с теми же фильтрами
+        return redirect(request.META.get("HTTP_REFERER", ".."))
+
 
     
     
@@ -242,81 +308,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
         )
         
         
-    # def changelist_view(self, request, extra_context=None):
-    #     extra_context = extra_context or {}
-
-    #     selected_date = None
-    #     raw = request.GET.get("in_period_date")
-    #     if raw:
-    #         try:
-    #             selected_date = datetime.strptime(raw, "%Y-%m-%d").date()
-    #         except ValueError:
-    #             selected_date = None
-
-    #     extra_context["selected_date"] = selected_date
-
-    #     if selected_date:
-    #         # берём выписки, которые покрывают дату + учитываем выбранные фильтры owner/ba
-    #         bss = (
-    #             BankStatements.objects
-    #             .filter(start__lte=selected_date, finish__gte=selected_date)
-    #             .select_related("owner", "ba")
-    #         )
-
-    #         owner_id = request.GET.get("owner__id__exact")
-    #         ba_id = request.GET.get("ba__id__exact")
-    #         if owner_id:
-    #             bss = bss.filter(owner_id=owner_id)
-    #         if ba_id:
-    #             bss = bss.filter(ba_id=ba_id)
-
-    #         blocks = []
-
-    #         # ИТОГИ
-    #         total_dt = Decimal("0.00")
-    #         total_cr = Decimal("0.00")
-    #         total_eod = Decimal("0.00")
-
-    #         for bs in bss:
-    #             agg = (
-    #                 CfData.objects
-    #                 .filter(bs=bs, date__lte=selected_date)
-    #                 .aggregate(
-    #                     dt=Coalesce(Sum("dt"), Decimal("0.00")),
-    #                     cr=Coalesce(Sum("cr"), Decimal("0.00")),
-    #                 )
-    #             )
-
-    #             dt_sum = agg["dt"] or Decimal("0.00")
-    #             cr_sum = agg["cr"] or Decimal("0.00")
-
-    #             bb = bs.bb if bs.bb is not None else Decimal("0.00")
-    #             eod = bb + dt_sum - cr_sum
-
-    #             blocks.append({
-    #                 "bs": bs,
-    #                 "dt_sum": dt_sum,
-    #                 "cr_sum": cr_sum,
-    #                 "eod": eod,
-    #             })
-
-    #             total_dt += dt_sum
-    #             total_cr += cr_sum
-    #             total_eod += eod
-
-    #         extra_context["day_blocks"] = blocks
-
-    #         # прокидываем в шаблон (чтобы блок "Итого" появился)
-    #         extra_context["total_dt"] = total_dt
-    #         extra_context["total_cr"] = total_cr
-    #         extra_context["total_eod"] = total_eod
-
-    #     return super().changelist_view(request, extra_context=extra_context)
-    
-    
-    
-
-
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
 

@@ -212,8 +212,9 @@ JAZZMIN_SETTINGS = {
     "show_ui_builder": True,
     "navigation_expanded": False,
     "custom_css": "css/custom.css",
-    "site_logo": "/img/logo_short.png",
-    "site_favicon": "/img/logo_short.png",
+    # "site_logo": "/img/logo_short.png",
+    "site_logo": None,
+    # "site_favicon": "/img/logo_short.png",
     "custom_css": "css/custom.css",
     "custom_js": "js/custom.js",
 
@@ -439,6 +440,9 @@ JAZZMIN_UI_TWEAKS = {
 LOGIN_URL = "/"                 # у тебя лендинг = экран входа
 LOGIN_REDIRECT_URL = "/admin/"
 LOGOUT_REDIRECT_URL = "/"
+
+# SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# SESSION_COOKIE_AGE = 0
 # REMEMBER_ME_AGE = 60 * 60 * 24 * 30
 
 # # Чтобы "Забыли пароль?"
