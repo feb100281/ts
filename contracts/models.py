@@ -48,7 +48,7 @@ class Contracts(models.Model):
         # limit_choices_to={'groups__name': 'Подразделение'}
     )
     is_signed = models.BooleanField(verbose_name='Подписан',null=True,blank=True)
-    regex =  models.CharField(max_length=250,verbose_name='RegEx',null=True,blank=True)
+    regex =  models.TextField(verbose_name='RegEx',null=True,blank=True)
     
     class Meta:
         verbose_name = "Договор"
