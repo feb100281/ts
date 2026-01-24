@@ -3,6 +3,7 @@
 
 from django.http import JsonResponse
 from django.urls import path
+import csv
 from django.http import HttpResponse
 from django.contrib import admin, messages
 from django.db.models import Sum, Count
@@ -179,6 +180,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
     change_list_template = "admin/treasury/bankstatements/change_list.html"
     # inlines = [CfDataInline]
 
+
     list_display = (
         "period",
 
@@ -199,11 +201,21 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("📄 Файл выписки", {"fields": ("file",)}),
-        ("🧾 Период и реквизиты", {"fields": ("owner", "ba", "start", "finish")}),
-        ("💰 Остатки", {"fields": ("bb", "eb")}),
+        (
+        "🧾 Период и реквизиты",
+        {
+            "fields": (
+                "owner",
+                "ba",
+                ("start", "finish"),  
+            )
+        },
+            ),
+        
+        ("💰 Остатки", {"fields": ("bb", "eb")}), 
         ("🕒 Система", {"fields": ("uploaded_at",)}),
     )
-    readonly_fields = ("uploaded_at",)
+    readonly_fields = ("uploaded_at", "owner", "ba", "start", "finish", "bb", "eb")
 
     class Media:
         css = {
@@ -213,18 +225,9 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 "fonts/glyphs.css", 
             )
         }
+        
     
-    
-    # def get_urls(self):
-    #     urls = super().get_urls()
-    #     custom_urls = [
-    #         path(
-    #             "export-eod-xlsx/",
-    #             self.admin_site.admin_view(export_eod_xlsx),
-    #             name="treasury_bankstatements_export_eod_xlsx",
-    #         ),
-    #     ]
-    #     return custom_urls + urls
+
     
     
     def get_urls(self):
@@ -663,6 +666,143 @@ class CfDataAdmin(admin.ModelAdmin):
         return (getattr(ba, "currency", None) or "").upper()
 
 
+
+    def get_urls(self):
+            urls = super().get_urls()
+            custom = [
+                path(
+                    "export-csv/",
+                    self.admin_site.admin_view(self.export_csv_view),
+                    name="treasury_cfdata_export_csv",
+                )
+            ]
+            return custom + urls
+        
+        
+    
+    def export_csv_view(self, request):
+        cl = self.get_changelist_instance(request)
+        qs = cl.get_queryset(request).select_related(
+            "cp_final", "contract", "cfitem", "owner", "ba", "ba__bank", "bs"
+        )
+
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="cf_data.csv"'
+        response.write("\ufeff")  # UTF-8 BOM для Excel
+
+        writer = csv.writer(
+            response,
+            delimiter="|",
+            quoting=csv.QUOTE_MINIMAL,
+        )
+
+        LEVELS = 4
+
+        header = [
+            "date", "dt", "cr", "amount",
+            "cp_final_name",
+            "contract_number",
+            "cfitem_name",
+            "cfitem_path_names",
+        ]
+        for i in range(1, LEVELS + 1):
+            header += [f"cfitem_lvl{i}_name"]
+
+        header += [
+            "temp", "tax_id",
+            "owner_name",
+            "ba_currency",
+            "ba_bank_account",
+            "bs_start", "bs_finish",
+        ]
+
+        writer.writerow(header)
+
+        for obj in qs:
+            # --- даты операции (YYYY-MM-DD) ---
+            op_date_txt = obj.date.isoformat() if obj.date else ""
+            bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
+            bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
+
+            # --- dt/cr -> amount (+/-) ---
+            dt_val = obj.dt or Decimal("0")
+            cr_val = obj.cr or Decimal("0")
+
+            if dt_val > 0:
+                amount = dt_val
+            elif cr_val > 0:
+                amount = -cr_val
+            else:
+                amount = Decimal("0")
+
+            # --- договор: дата договора в формате DD.MM.YYYY ---
+            contract_txt = ""
+            if obj.contract:
+                title = getattr(getattr(obj.contract, "title", None), "title", "") or ""
+                num = (obj.contract.number or "").strip() or "б/н"
+
+                contract_date_part = ""
+                if obj.contract.date:
+                    contract_date_txt = obj.contract.date.strftime("%d.%m.%Y")
+                    contract_date_part = f" от {contract_date_txt}"
+
+                if title:
+                    contract_txt = f"{title} № {num}{contract_date_part}"
+                else:
+                    contract_txt = f"{num}{contract_date_part}"
+
+            # --- CF item и иерархия ---
+            it = obj.cfitem
+            if it:
+                ancestors = list(it.get_ancestors(include_self=True))  # [root, ..., self]
+                path_names = " / ".join(a.name for a in ancestors)
+                it_name = it.name
+            else:
+                ancestors = []
+                path_names = ""
+                it_name = ""
+
+            # --- банк / счет / валюта ---
+            ba_account = obj.ba.account if obj.ba else ""
+            ba_bank_name = obj.ba.bank.name if (obj.ba and obj.ba.bank) else ""
+            ba_currency = obj.ba.currency if obj.ba else ""
+            ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
+
+            row = [
+                op_date_txt,  # <-- теперь здесь всегда дата операции ISO
+                (str(dt_val) if dt_val else ""),
+                (str(cr_val) if cr_val else ""),
+                str(amount),
+                (obj.cp_final.name if obj.cp_final else ""),
+                contract_txt,
+                it_name,
+                path_names,
+            ]
+
+            # lvl1..lvlN: root -> ...
+            for idx in range(LEVELS):
+                if idx < len(ancestors):
+                    row += [ancestors[idx].name]
+                else:
+                    row += [""]
+
+            row += [
+                (obj.temp or "").replace("\n", " ").strip(),
+                obj.tax_id or "",
+                (obj.owner.name if obj.owner else ""),
+                ba_currency,
+                ba_bank_account,
+                bs_start,
+                bs_finish,
+            ]
+
+            writer.writerow(row)
+
+        return response
+
+    
+    
+    
     @admin.display(description="Дата платежа", ordering="date")
     def date_short(self, obj):
         if not obj.date:
