@@ -189,7 +189,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         "turnover",
         "eb_pretty",
         "uploaded_at_short",
-        "file_link",
+        "quality_badge",
     )
     list_display_links = ("period",)
     search_fields = ("owner__name", "ba__account", "ba__bank__name")
@@ -452,6 +452,66 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 status_txt,
             )
         return badge("Не распознано", "amber")
+
+    @admin.display(description="Качество", ordering="missing_cnt")
+    def quality_badge(self, obj):
+        """
+        ✅ если в выписке НЕТ строк CfData, у которых отсутствует:
+        - contract
+        - cfitem
+        - cp_final
+        ⚠️ иначе предупреждение + расшифровка.
+        """
+
+        # Если выписка ещё не обработана (нет строк)
+        rows = getattr(obj, "rows", None)
+        if rows is not None and rows == 0:
+            return badge("⏳ не обработано", "amber")
+
+        # Считаем «плохие» строки (хотя бы одно из полей пустое)
+        base = CfData.objects.filter(bs_id=obj.pk)
+
+        missing_contract = base.filter(contract__isnull=True).count()
+        missing_cfitem = base.filter(cfitem__isnull=True).count()
+        missing_cp_final = base.filter(cp_final__isnull=True).count()
+
+        missing_any = base.filter(
+            Q(contract__isnull=True) | Q(cfitem__isnull=True) | Q(cp_final__isnull=True)
+        ).count()
+
+        if missing_any == 0 and base.exists():
+            return format_html(
+                '<div style="display:inline-flex;align-items:center;gap:8px;">'
+                '{}'
+                '</div>',
+                badge("✅ OK", "green"),
+            )
+
+        # если вообще нет строк (на всякий)
+        if not base.exists():
+            return badge("— нет строк", "amber")
+
+        # расшифровка чего не хватает
+        parts = []
+        if missing_cp_final:
+            parts.append(f"контрагент: {missing_cp_final}")
+        if missing_contract:
+            parts.append(f"договор: {missing_contract}")
+        if missing_cfitem:
+            parts.append(f"статья CF: {missing_cfitem}")
+
+        detail = "; ".join(parts) if parts else "есть незаполненные поля"
+
+        return format_html(
+            '<div style="display:flex;flex-direction:column;gap:2px;line-height:1.15;">'
+            '<div>{}</div>'
+            '<div style="opacity:.65;font-size:12px;">{}</div>'
+            '</div>',
+            badge("⚠️ проверить", "amber"),
+            detail,
+            missing_any,
+        )
+
 
     @admin.display(description="Счет")
     def ba_pretty(self, obj):
