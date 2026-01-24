@@ -737,8 +737,21 @@ class CfDataAdmin(admin.ModelAdmin):
 
             # --- договор ---
             contract_txt = ""
-            if obj.contract and obj.contract.number:
-                contract_txt = f"Дог. № {obj.contract.number}"
+            if obj.contract:
+                title = getattr(getattr(obj.contract, "title", None), "title", "") or ""
+                num = (obj.contract.number or "").strip() or "б/н"
+
+                if obj.contract.date:
+                    date_txt = obj.contract.date.strftime("%d.%m.%Y")
+                    date_part = f" от {date_txt}"
+                else:
+                    date_part = ""
+
+                if title:
+                    contract_txt = f"{title} № {num}{date_part}"
+                else:
+                    contract_txt = f"{num}{date_part}"
+
 
             # --- CF item и иерархия ---
             it = obj.cfitem
