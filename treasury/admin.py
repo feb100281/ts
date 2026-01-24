@@ -719,8 +719,8 @@ class CfDataAdmin(admin.ModelAdmin):
         writer.writerow(header)
 
         for obj in qs:
-            # --- даты (YYYY-MM-DD) ---
-            date_txt = obj.date.isoformat() if obj.date else ""
+            # --- даты операции (YYYY-MM-DD) ---
+            op_date_txt = obj.date.isoformat() if obj.date else ""
             bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
             bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
 
@@ -735,23 +735,21 @@ class CfDataAdmin(admin.ModelAdmin):
             else:
                 amount = Decimal("0")
 
-            # --- договор ---
+            # --- договор: дата договора в формате DD.MM.YYYY ---
             contract_txt = ""
             if obj.contract:
                 title = getattr(getattr(obj.contract, "title", None), "title", "") or ""
                 num = (obj.contract.number or "").strip() or "б/н"
 
+                contract_date_part = ""
                 if obj.contract.date:
-                    date_txt = obj.contract.date.strftime("%d.%m.%Y")
-                    date_part = f" от {date_txt}"
-                else:
-                    date_part = ""
+                    contract_date_txt = obj.contract.date.strftime("%d.%m.%Y")
+                    contract_date_part = f" от {contract_date_txt}"
 
                 if title:
-                    contract_txt = f"{title} № {num}{date_part}"
+                    contract_txt = f"{title} № {num}{contract_date_part}"
                 else:
-                    contract_txt = f"{num}{date_part}"
-
+                    contract_txt = f"{num}{contract_date_part}"
 
             # --- CF item и иерархия ---
             it = obj.cfitem
@@ -771,7 +769,7 @@ class CfDataAdmin(admin.ModelAdmin):
             ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
 
             row = [
-                date_txt,
+                op_date_txt,  # <-- теперь здесь всегда дата операции ISO
                 (str(dt_val) if dt_val else ""),
                 (str(cr_val) if cr_val else ""),
                 str(amount),
@@ -781,7 +779,7 @@ class CfDataAdmin(admin.ModelAdmin):
                 path_names,
             ]
 
-            # lvl1..lvlN: строго "сверху вниз" (root -> ...)
+            # lvl1..lvlN: root -> ...
             for idx in range(LEVELS):
                 if idx < len(ancestors):
                     row += [ancestors[idx].name]
@@ -802,7 +800,6 @@ class CfDataAdmin(admin.ModelAdmin):
 
         return response
 
-        
     
     
     
