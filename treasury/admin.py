@@ -696,7 +696,7 @@ class CfDataAdmin(admin.ModelAdmin):
             quoting=csv.QUOTE_MINIMAL,
         )
 
-        LEVELS = 3
+        LEVELS = 4
 
         header = [
             "date", "dt", "cr", "amount",
