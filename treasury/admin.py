@@ -179,6 +179,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
     change_list_template = "admin/treasury/bankstatements/change_list.html"
     inlines = [CfDataInline]
 
+
     list_display = (
         "period",
 
@@ -213,6 +214,9 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 "fonts/glyphs.css", 
             )
         }
+        
+    
+
     
     
     # def get_urls(self):
