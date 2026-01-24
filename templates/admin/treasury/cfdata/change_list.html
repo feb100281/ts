@@ -90,6 +90,17 @@
            ">
           🤖 Автоматизация (RegEx)
         </a>
+
+
+        <a href="{% url 'admin:treasury_cfdata_export_csv' %}?{{ request.GET.urlencode }}"
+            style="
+              font-size:11px;padding:5px 8px;border-radius:8px;text-decoration:none;
+              background:rgba(14,165,233,.10);color:#075985;display:inline-flex;align-items:center;gap:8px;
+              border:1px solid rgba(14,165,233,.22);
+            ">
+            ⬇️ Скачать CSV
+</a>
+
       </div>
 
       <div style="

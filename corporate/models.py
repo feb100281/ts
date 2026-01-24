@@ -1,3 +1,5 @@
+# corporate/models.py
+
 from django.db import models
 from utils.choises import CURRENCY_CHOISE
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError

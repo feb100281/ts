@@ -3,6 +3,7 @@
 
 from django.http import JsonResponse
 from django.urls import path
+import csv
 from django.http import HttpResponse
 from django.contrib import admin, messages
 from django.db.models import Sum, Count
@@ -200,11 +201,21 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("📄 Файл выписки", {"fields": ("file",)}),
-        ("🧾 Период и реквизиты", {"fields": ("owner", "ba", "start", "finish")}),
-        ("💰 Остатки", {"fields": ("bb", "eb")}),
+        (
+        "🧾 Период и реквизиты",
+        {
+            "fields": (
+                "owner",
+                "ba",
+                ("start", "finish"),  
+            )
+        },
+            ),
+        
+        ("💰 Остатки", {"fields": ("bb", "eb")}), 
         ("🕒 Система", {"fields": ("uploaded_at",)}),
     )
-    readonly_fields = ("uploaded_at",)
+    readonly_fields = ("uploaded_at", "owner", "ba", "start", "finish", "bb", "eb")
 
     class Media:
         css = {
@@ -217,18 +228,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
         
     
 
-    
-    
-    # def get_urls(self):
-    #     urls = super().get_urls()
-    #     custom_urls = [
-    #         path(
-    #             "export-eod-xlsx/",
-    #             self.admin_site.admin_view(export_eod_xlsx),
-    #             name="treasury_bankstatements_export_eod_xlsx",
-    #         ),
-    #     ]
-    #     return custom_urls + urls
     
     
     def get_urls(self):
@@ -667,6 +666,130 @@ class CfDataAdmin(admin.ModelAdmin):
         return (getattr(ba, "currency", None) or "").upper()
 
 
+
+    def get_urls(self):
+            urls = super().get_urls()
+            custom = [
+                path(
+                    "export-csv/",
+                    self.admin_site.admin_view(self.export_csv_view),
+                    name="treasury_cfdata_export_csv",
+                )
+            ]
+            return custom + urls
+        
+    def export_csv_view(self, request):
+        cl = self.get_changelist_instance(request)
+        qs = cl.get_queryset(request).select_related(
+            "cp_final", "contract", "cfitem", "owner", "ba", "bs"
+        )
+
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="cf_data.csv"'
+        response.write("\ufeff")  # UTF-8 BOM для Excel
+
+        writer = csv.writer(
+            response,
+            delimiter="|",
+            quoting=csv.QUOTE_MINIMAL,
+        )
+
+        LEVELS = 3  # сколько уровней CF выводим отдельными колонками
+
+        header = [
+            "date", "dt", "cr", "flow", "amount",
+            "cp_final_name",
+            "contract_number",
+            "cfitem_code", "cfitem_name",
+            "cfitem_path_codes", "cfitem_path_names",
+        ]
+        for i in range(1, LEVELS + 1):
+            header += [f"cfitem_lvl{i}_code", f"cfitem_lvl{i}_name"]
+
+        header += [
+            "temp", "tax_id",
+            "owner_name",
+            "ba_account",
+            "bs_start", "bs_finish",
+        ]
+
+        writer.writerow(header)
+
+        for obj in qs:
+            # --- даты (YYYY-MM-DD) ---
+            date_txt = obj.date.isoformat() if obj.date else ""
+            bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
+            bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
+
+            # --- dt/cr + flow/amount ---
+            dt_val = obj.dt or Decimal("0")
+            cr_val = obj.cr or Decimal("0")
+
+            if dt_val > 0:
+                flow = "DT"
+                amount = dt_val
+            elif cr_val > 0:
+                flow = "CR"
+                amount = -cr_val
+            else:
+                flow = ""
+                amount = Decimal("0")
+
+            # --- договор: "Дог. № ..." ---
+            contract_txt = ""
+            if obj.contract and obj.contract.number:
+                contract_txt = f"Дог. № {obj.contract.number}"
+
+            # --- CF item и иерархия ---
+            it = obj.cfitem
+            if it:
+                ancestors = list(it.get_ancestors(include_self=True))
+                path_codes = " / ".join(a.code for a in ancestors)
+                path_names = " / ".join(a.name for a in ancestors)
+                it_code = it.code
+                it_name = it.name
+            else:
+                ancestors = []
+                path_codes = ""
+                path_names = ""
+                it_code = ""
+                it_name = ""
+
+            row = [
+                date_txt,
+                (str(dt_val) if dt_val else ""),
+                (str(cr_val) if cr_val else ""),
+                flow,
+                str(amount),
+                (obj.cp_final.name if obj.cp_final else ""),
+                contract_txt,
+                it_code,
+                it_name,
+                path_codes,
+                path_names,
+            ]
+
+            # уровни: lvl1 — корень, lvl2 — следующий и т.д.
+            for idx in range(LEVELS):
+                if idx < len(ancestors):
+                    a = ancestors[idx]
+                    row += [a.code, a.name]
+                else:
+                    row += ["", ""]
+
+            row += [
+                (obj.temp or "").replace("\n", " ").strip(),
+                obj.tax_id or "",
+                (obj.owner.name if obj.owner else ""),
+                (obj.ba.account if obj.ba else ""),
+                bs_start,
+                bs_finish,
+            ]
+
+            writer.writerow(row)
+
+        return response
+    
     @admin.display(description="Дата платежа", ordering="date")
     def date_short(self, obj):
         if not obj.date:
