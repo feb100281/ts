@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "counterparties",
     "contracts",
     "treasury",
+    "sales",
     "mptt",    
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
