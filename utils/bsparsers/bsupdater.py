@@ -264,7 +264,7 @@ def update_cf_data(filename:str, bs_id):
             bank_name = ba.bank.name if ba.bank else "—"
             ba_id = ba.id
             owner_id = ba.corporate_id
-            owner_id_tax_id = ba.corporate_inn
+            owner_inn = ba.corporate.inn  
             
 
     df['vat_rate'] = None
@@ -299,7 +299,7 @@ def update_cf_data(filename:str, bs_id):
     total_count = len(df.index)
     notifications.append(f"Количество операций по выписке: {len(df.index)}")
     notifications.append(upsert_cf_data(df))
-    owner_id_to_null(bs_id,owner_id_tax_id)
+    owner_id_to_null(bs_id,owner_inn)
     
     contracts_count = find_contracts(bs_id)
     exceptions_count = contracts_exceptions_cp(bs_id)
