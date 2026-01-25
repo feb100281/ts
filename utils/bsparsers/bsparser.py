@@ -190,8 +190,8 @@ def get_bs_details(filepath:str):
         df, bank, start_date,end_date,bb,eb = bs_to_dict(filepath)
     return bank, start_date,end_date,bb,eb
     
-df = bs_to_dict('/Users/pavelustenko/Desktop/Банковские_счета/Вайлдберриз.txt')[0]
-df.to_excel('tr.xlsx')
+# df = bs_to_dict('/Users/pavelustenko/Desktop/Банковские_счета/Вайлдберриз.txt')[0]
+# df.to_excel('tr.xlsx')
 
 # Здесь основная функция которая делает df для дальнейшей загрузки в базу данных
 # В дальнейшем подставляем id из связанных моделей. НЕ ЗАБЫТЬ
