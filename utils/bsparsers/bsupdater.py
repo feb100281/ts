@@ -223,13 +223,12 @@ def owner_id_to_null(bs_id):
     q = """
     UPDATE treasury_cfdata t
     SET cp_id = NULL
-    WHERE t.bs_id = %(bs_id)%
-    AND NOT (
-        t.payer_account IN (SELECT account FROM corporate_bankaccount)
-        AND
-        t.reciver_account IN (SELECT account FROM corporate_bankaccount)
-    );   
-    
+    WHERE t.bs_id = %(bs_id)s
+      AND NOT (
+          t.payer_account IN (SELECT account FROM corporate_bankaccount)
+          AND
+          t.reciver_account IN (SELECT account FROM corporate_bankaccount)
+      );
     """
     with connection.cursor() as cursor:
         cursor.execute(q, {"bs_id": bs_id})
