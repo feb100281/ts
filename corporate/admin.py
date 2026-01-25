@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 
 from django.db.models import Count, Max
 from django.shortcuts import render
@@ -390,7 +391,7 @@ def _now_pretty():
 @admin.register(COA)
 
 class AccountAdmin(DraggableMPTTAdmin):
-    mptt_level_indent = 12
+    mptt_level_indent = 32
     actions = ["print_coa_registry"]
 
     list_display = ("tree_actions", "indented_title", "active_badge", "children_badge")
@@ -401,10 +402,28 @@ class AccountAdmin(DraggableMPTTAdmin):
     preserve_filters = True
     
     
+    def _step_for_parent(self, parent_level: int) -> int:
+        """
+        Шаг для детей в зависимости от уровня родителя.
+        Под 6-значные коды:
+        level 0: 100000 -> дети 110000/120000... (шаг 10000)
+        level 1: 310000 -> дети 311000/312000... (шаг 1000)
+        level 2: 321000 -> дети 321100/321200... (шаг 100)
+        """
+        mapping = {
+            0: 10_000,
+            1: 1_000,
+            2: 100,
+            3: 10,
+            4: 1,
+        }
+        return mapping.get(parent_level, 1)
+    
+    
     def get_changeform_initial_data(self, request):
         """
         Автоподстановка code при 'Добавить дочернюю' (MPTT передаёт ?parent=<id>).
-        Шаг: 100
+        Шаг зависит от уровня parent.
         """
         initial = super().get_changeform_initial_data(request)
 
@@ -417,26 +436,27 @@ class AccountAdmin(DraggableMPTTAdmin):
         except ValueError:
             return initial
 
-        # пусть parent в форме будет сразу выставлен
+        parent = COA.objects.filter(pk=parent_id).only("id", "code", "level").first()
+        if not parent or not (parent.code and parent.code.isdigit()):
+            return initial
+
+        # сразу выставляем parent в форме
         initial["parent"] = parent_id
 
-        # максимум среди прямых детей
+        step = self._step_for_parent(getattr(parent, "level", 0) or 0)
+
         max_code = (
             COA.objects
-            .filter(parent_id=parent_id)
+            .filter(parent_id=parent_id)              # только прямые дети
             .annotate(code_int=Cast("code", IntegerField()))
             .aggregate(m=Max("code_int"))
             .get("m")
         )
 
         if max_code is None:
-            parent_code = COA.objects.filter(pk=parent_id).values_list("code", flat=True).first()
-            if parent_code and parent_code.isdigit():
-                suggested = int(parent_code) + 100
-            else:
-                suggested = 100000
+            suggested = int(parent.code) + step
         else:
-            suggested = max_code + 100
+            suggested = max_code + step
 
         initial["code"] = f"{suggested:06d}"
         return initial
@@ -550,7 +570,7 @@ class AccountAdmin(DraggableMPTTAdmin):
 @admin.register(CfItems)
 
 class CashFlowItemAdmin(DraggableMPTTAdmin):
-    mptt_level_indent = 12
+    mptt_level_indent = 32
 
     list_display = ("tree_actions", "indented_title",  "active_badge", "children_badge")
     list_display_links = ("indented_title",)
@@ -565,12 +585,41 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
     
     
     
-    
+    def _count_trailing_zeros(self, code_int: int) -> int:
+        """
+        Считает количество нулей в конце числа:
+        124000 -> 3
+        123600 -> 2
+        100000 -> 5
+        """
+        s = str(code_int)
+        return len(s) - len(s.rstrip("0"))
+
+    def _step_for_parent(self, parent_code: str) -> int:
+        """
+        Универсальный шаг "по хвостовым нулям", чтобы влезало до 99 детей
+        в рамках диапазона родителя.
+
+        Логика:
+        - Диапазон родителя = base .. base + 10^tz - 1, где tz = trailing zeros
+        Пример: 124000 (tz=3) -> 124000..124999
+        - Хотим до 99 детей -> шаг = 10^(tz-2)
+        Пример: tz=3 -> step=10  -> 124010..124990 (99 детей)
+                tz=2 -> step=1   -> 123601..123699 (99 детей)
+                tz=4 -> step=100 -> 120100..129900 (99 детей)
+
+        Если нулей мало (tz < 2), то шаг = 1.
+        """
+        if not parent_code or not parent_code.isdigit():
+            return 1
+
+        base = int(parent_code)
+        tz = self._count_trailing_zeros(base)
+
+        power = max(tz - 2, 0)   # tz=3 -> 1 (10), tz=2 -> 0 (1), tz=4 -> 2 (100)
+        return 10 ** power
+
     def get_changeform_initial_data(self, request):
-        """
-        Когда открываем /add/?parent=<id> (кнопка 'Добавить дочернюю'),
-        подставляем следующий code внутри ветки этого parent.
-        """
         initial = super().get_changeform_initial_data(request)
 
         parent_id = request.GET.get("parent") or request.GET.get("parent_id")
@@ -582,36 +631,44 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
         except ValueError:
             return initial
 
-        # Если parent уже будет проставлен MPTT — ок, но мы продублируем.
+        parent = CfItems.objects.filter(pk=parent_id).only("id", "code").first()
+        if not parent or not (parent.code and parent.code.isdigit()):
+            return initial
+
         initial["parent"] = parent_id
 
-        # Ищем максимум среди детей этого parent (только прямые дети)
-        # code хранится как строка, поэтому приводим к int для Max
+        base = int(parent.code)
+
+        # границы диапазона родителя (чтобы дети не "убегали" в соседние статьи)
+        tz = self._count_trailing_zeros(base)
+        range_end = base + (10 ** tz) - 1  # напр. 124000..124999
+
+        step = self._step_for_parent(parent.code)
+
+        # берём максимум ТОЛЬКО внутри диапазона родителя
         max_code = (
             CfItems.objects
             .filter(parent_id=parent_id)
             .annotate(code_int=Cast("code", IntegerField()))
+            .filter(code_int__gte=base, code_int__lte=range_end)
             .aggregate(m=Max("code_int"))
             .get("m")
         )
 
         if max_code is None:
-            # если детей нет — можно начать с "код_родителя + 01" (или +001)
-            parent_code = CfItems.objects.filter(pk=parent_id).values_list("code", flat=True).first()
-            if parent_code and parent_code.isdigit():
-                # пример логики: 123000 -> 123100 (первый ребенок сотней)
-                # можно выбрать любую логику, ниже типовая "следующая сотня"
-                base = int(parent_code)
-                suggested = base + 100
-            else:
-                suggested = 100000
+            suggested = base + step
         else:
-            suggested = max_code + 100  # твоя логика шага (100)
+            suggested = max_code + step
+
+        # защита от переполнения диапазона
+        if suggested > range_end:
+            raise ValidationError(
+                f"Достигнут лимит дочерних статей для {parent.code}: "
+                f"следующий код {suggested} выходит за диапазон {base}-{range_end}."
+            )
 
         initial["code"] = f"{suggested:06d}"
         return initial
-
-
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

@@ -7,7 +7,7 @@
 {% block breadcrumbs %}{% endblock %}
 {% block object-tools %}{% endblock %}
 
-{% block title %}Казначейство | Автоматизация{% endblock %}
+{% block title %}Автоматизация{% endblock %}
 
 {% block content_title %}
   {% url cl.opts|admin_urlname:'add' as add_url %}
@@ -34,7 +34,7 @@
         🤖
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3; min-width:0;">
+      <div style="display:flex; flex-direction:column; gap:6px; line-height:1.3; min-width:0;">
 
         <span style="
             font-size:11px;
@@ -49,6 +49,36 @@
           Автоматизация
         </span>
 
+        {# INFO NOTE под заголовком #}
+        <div style="
+            margin-top:2px;
+            display:flex;
+            align-items:flex-start;
+            gap:8px;
+            padding:8px 10px;
+            border-radius:12px;
+            background:rgba(59,130,246,.08);
+            border:1px solid rgba(59,130,246,.18);
+            color:#334155;
+            font-size:11.5px;
+            line-height:1.35;
+            max-width:520px;
+            box-shadow:0 10px 20px rgba(15,23,42,0.06);
+        ">
+          <div style="
+              width:18px;height:18px;flex:0 0 18px;
+              border-radius:6px;
+              background:rgba(59,130,246,.16);
+              display:flex;align-items:center;justify-content:center;
+              font-size:12px;
+          ">ℹ️</div>
+          <div style="min-width:0;">
+              Таблица заполняется только в случае, если
+              <strong>финальный контрагент в выписке СОВПАДАЕТ </strong>
+              с контрагентом, указанным в выписке.
+
+          </div>
+        </div>
 
       </div>
     </div>
@@ -235,25 +265,21 @@
     /* кликабельная строка таблицы */
     #result_list tbody tr{ cursor:pointer; }
 
+    /* ====== Подсветка колонки RegEx (метод regex_short) ====== */
+    #result_list td.field-regex_short,
+    #result_list th.column-regex_short {
+      background: #fff8db !important;     /* светло-жёлтый */
+      border-left: 3px solid #fde68a !important;
+    }
 
-   /* ====== Подсветка колонки RegEx (метод regex_short) ====== */
-#result_list td.field-regex_short,
-#result_list th.column-regex_short {
-  background: #fff8db !important;     /* светло-жёлтый */
-  border-left: 3px solid #fde68a !important;
-}
+    /* при наведении строку не ломаем, но regex чуть ярче */
+    #result_list tbody tr:hover td.field-regex_short {
+      background: #fff3c4 !important;
+    }
 
-/* при наведении строку не ломаем, но regex чуть ярче */
-#result_list tbody tr:hover td.field-regex_short {
-  background: #fff3c4 !important;
-}
-
-#result_list td.field-regex_short {
-  font-weight: 600;
-}
-
-
-
+    #result_list td.field-regex_short {
+      font-weight: 600;
+    }
   </style>
 
   <script>
@@ -281,3 +307,5 @@
 {% block content %}
   {{ block.super }}
 {% endblock %}
+
+
