@@ -195,7 +195,7 @@ def fill_table(limit):
     return res_dict
 
 start = time.perf_counter()
-fill_table(2000)
+fill_table(4000)
 end = time.perf_counter()
 
 print(f"Elapsed: {end - start:.3f} sec")

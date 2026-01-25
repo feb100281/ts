@@ -190,6 +190,8 @@ def get_bs_details(filepath:str):
         df, bank, start_date,end_date,bb,eb = bs_to_dict(filepath)
     return bank, start_date,end_date,bb,eb
     
+df = bs_to_dict('/Users/pavelustenko/Desktop/Банковские_счета/Вайлдберриз.txt')[0]
+df.to_excel('tr.xlsx')
 
 # Здесь основная функция которая делает df для дальнейшей загрузки в базу данных
 # В дальнейшем подставляем id из связанных моделей. НЕ ЗАБЫТЬ
@@ -274,97 +276,3 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
 
     return df[FIELDS_TO_KEEP]
 
-
-# df = make_final_statemens(sb)
-# df.to_excel('tr.xlsx')
-# print(df.columns)
-
-
-# df, bank, start_date,end_date,bb,eb = make_final_statemens(ab)
-
-# print(bank,start_date,end_date,bb,eb)
-# # @property
-#     def from_date(self):
-#         date_start = ''
-#         for line in self.lines:
-#             line = line.strip()  
-#             if 'ДатаНачала' in line:
-#                 part = line.split('=')
-#                 date_start = part[1].strip()
-#                 break
-#         return  datetime.strptime(date_start, "%d.%m.%Y").date()
-    
-#     @property
-#     def to_date(self):
-#         to_date = ''
-#         for line in self.lines:
-#             line = line.strip()  
-#             if 'ДатаКонца' in line:
-#                 part = line.split('=')
-#                 to_date = part[1].strip()
-#                 break
-#         return  datetime.strptime(to_date, "%d.%m.%Y").date()
-    
-#     @property
-#     def begining_ballance(self):
-        # b_ballance = 0.00
-        # for line in self.lines:
-        #     line = line.strip()  
-        #     if 'НачальныйОстаток' in line:
-        #         part = line.split('=')
-        #         try:
-        #             b_ballance = float(part[1].strip())
-        #         except:
-        #             b_ballance = 0.00
-        #         break
-        # return b_ballance
-    
-#     @property
-#     def end_ballance(self):
-#         b_ballance = 0.00
-#         for line in self.lines:
-#             line = line.strip()  
-#             if 'КонечныйОстаток' in line:
-#                 part = line.split('=')
-#                 try:
-#                     b_ballance = float(part[1].strip())
-#                 except:
-#                     b_ballance = 0.00                
-#         return b_ballance
-    
-#     @property
-#     def get_bank_id(self):
-#         bank_account = BankAccounts.objects.filter(account_id=self.account_id).values_list('id', flat=True).first()
-#         return bank_account
-    
-#     @property
-#     def get_company_id(self):
-#         comp_account = BankAccounts.objects.filter(account_id=self.account_id).values_list('company_id', flat=True).first()
-#         return comp_account
-
-
-
-# df, bank_id = make_final_statemens(ab)
-
-
-
-# print(df)
-# print(bank_id)
-
-# df.to_excel("tr.xlsx")
-# для экселя
-# ls = [wb, bk, sb, sb1]
-
-
-# dfs = []
-# for l in ls:
-#     df = make_final_statemens(l)
-#     dfs.append(df)
-
-# dff = pd.concat(dfs)
-
-# n_contr = dff["tax_id"].nunique()
-# print(n_contr)
-
-
-# dff.to_excel("tr.xlsx")
