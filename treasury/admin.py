@@ -678,7 +678,6 @@ class CfDataAdminForm(forms.ModelForm):
             self.fields["contract"].queryset = Contracts.objects.none()
 
 
-# ---------- CfData Admin ----------
 
 @admin.register(CfData)
 class CfDataAdmin(admin.ModelAdmin):
