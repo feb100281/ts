@@ -58,5 +58,54 @@ td.field-tree_actions a:active {
 }
 
 
+/* ====== ПОДСВЕТКА СТРОК ПО УРОВНЯМ ====== */
+
+/* корень */
+tr.level-0 td{
+  background: rgba(59,130,246,.08) !important;
+  font-weight: 800;
+}
+
+/* 1 уровень */
+tr.level-1 td{
+  background: rgba(16,185,129,.08) !important;
+}
+
+/* 2 уровень */
+tr.level-2 td{
+  background: rgba(245,158,11,.08) !important;
+}
+
+/* 3+ уровни */
+tr.level-3 td,
+tr.level-4 td,
+tr.level-5 td{
+  background: rgba(148,163,184,.08) !important;
+}
+
+/* левая полоса уровня */
+tr[class*="level-"] td:first-child{
+  position: relative;
+}
+
+tr[class*="level-"] td:first-child:before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:4px;
+  background: transparent;
+}
+
+/* цвет полосы по уровням */
+tr.level-0 td:first-child:before{ background:#3b82f6; }
+tr.level-1 td:first-child:before{ background:#10b981; }
+tr.level-2 td:first-child:before{ background:#f59e0b; }
+tr.level-3 td:first-child:before{ background:#94a3b8; }
+
+
+
+
 
 

@@ -1,4 +1,3 @@
-
 # treasury/admin.py
 
 from django.http import JsonResponse
@@ -189,7 +188,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         "turnover",
         "eb_pretty",
         "uploaded_at_short",
-        "file_link",
+        "quality_badge",
     )
     list_display_links = ("period",)
     search_fields = ("owner__name", "ba__account", "ba__bank__name")
@@ -243,8 +242,12 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(export_eod_xlsx),
                 name="treasury_bankstatements_export_eod_xlsx",
             ),
+
         ]
         return custom_urls + urls
+    
+
+
     
     
     def process_selected_view(self, request):
@@ -453,6 +456,66 @@ class BankStatementsAdmin(admin.ModelAdmin):
             )
         return badge("Не распознано", "amber")
 
+    @admin.display(description="Качество", ordering="missing_cnt")
+    def quality_badge(self, obj):
+        """
+        ✅ если в выписке НЕТ строк CfData, у которых отсутствует:
+        - contract
+        - cfitem
+        - cp_final
+        ⚠️ иначе предупреждение + расшифровка.
+        """
+
+        # Если выписка ещё не обработана (нет строк)
+        rows = getattr(obj, "rows", None)
+        if rows is not None and rows == 0:
+            return badge("⏳ не обработано", "amber")
+
+        # Считаем «плохие» строки (хотя бы одно из полей пустое)
+        base = CfData.objects.filter(bs_id=obj.pk)
+
+        missing_contract = base.filter(contract__isnull=True).count()
+        missing_cfitem = base.filter(cfitem__isnull=True).count()
+        missing_cp_final = base.filter(cp_final__isnull=True).count()
+
+        missing_any = base.filter(
+            Q(contract__isnull=True) | Q(cfitem__isnull=True) | Q(cp_final__isnull=True)
+        ).count()
+
+        if missing_any == 0 and base.exists():
+            return format_html(
+                '<div style="display:inline-flex;align-items:center;gap:8px;">'
+                '{}'
+                '</div>',
+                badge("✅ OK", "green"),
+            )
+
+        # если вообще нет строк (на всякий)
+        if not base.exists():
+            return badge("— нет строк", "amber")
+
+        # расшифровка чего не хватает
+        parts = []
+        if missing_cp_final:
+            parts.append(f"контрагент: {missing_cp_final}")
+        if missing_contract:
+            parts.append(f"договор: {missing_contract}")
+        if missing_cfitem:
+            parts.append(f"статья CF: {missing_cfitem}")
+
+        detail = "; ".join(parts) if parts else "есть незаполненные поля"
+
+        return format_html(
+            '<div style="display:flex;flex-direction:column;gap:2px;line-height:1.15;">'
+            '<div>{}</div>'
+            '<div style="opacity:.65;font-size:12px;">{}</div>'
+            '</div>',
+            badge("⚠️ проверить", "amber"),
+            detail,
+            missing_any,
+        )
+
+
     @admin.display(description="Счет")
     def ba_pretty(self, obj):
         if not obj.ba_id:
@@ -615,7 +678,6 @@ class CfDataAdminForm(forms.ModelForm):
             self.fields["contract"].queryset = Contracts.objects.none()
 
 
-# ---------- CfData Admin ----------
 
 @admin.register(CfData)
 class CfDataAdmin(admin.ModelAdmin):
@@ -678,12 +740,19 @@ class CfDataAdmin(admin.ModelAdmin):
             ]
             return custom + urls
         
-        
+
     
     def export_csv_view(self, request):
         cl = self.get_changelist_instance(request)
         qs = cl.get_queryset(request).select_related(
-            "cp_final", "contract", "cfitem", "owner", "ba", "ba__bank", "bs"
+            "cp",            # <-- добавили
+            "cp_final",
+            "contract",
+            "cfitem",
+            "owner",
+            "ba",
+            "ba__bank",
+            "bs",
         )
 
         response = HttpResponse(content_type="text/csv; charset=utf-8")
@@ -700,7 +769,9 @@ class CfDataAdmin(admin.ModelAdmin):
 
         header = [
             "date", "dt", "cr", "amount",
+            "cp_inn_name",        # <-- НОВОЕ (перед финальным)
             "cp_final_name",
+            "cp_final_match",     # <-- НОВОЕ (рулевая колонка)
             "contract_number",
             "cfitem_name",
             "cfitem_path_names",
@@ -768,12 +839,29 @@ class CfDataAdmin(admin.ModelAdmin):
             ba_currency = obj.ba.currency if obj.ba else ""
             ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
 
+            # --- контрагент по ИНН (из выписки) / финальный / матч ---
+            cp_inn_name = obj.cp.name if getattr(obj, "cp", None) else ""
+            cp_final_name = obj.cp_final.name if getattr(obj, "cp_final", None) else ""
+
+            if obj.cp_final_id and obj.cp_id:
+                cp_final_match = "MATCH" if obj.cp_final_id == obj.cp_id else "MISMATCH"
+            elif obj.cp_final_id and not obj.cp_id:
+                cp_final_match = "NO_INN_CP"
+            elif obj.cp_id and not obj.cp_final_id:
+                cp_final_match = "NO_FINAL"
+            else:
+                cp_final_match = "EMPTY"
+
             row = [
-                op_date_txt,  # <-- теперь здесь всегда дата операции ISO
+                op_date_txt,  # <-- дата операции ISO
                 (str(dt_val) if dt_val else ""),
                 (str(cr_val) if cr_val else ""),
                 str(amount),
-                (obj.cp_final.name if obj.cp_final else ""),
+
+                cp_inn_name,       # <-- НОВОЕ
+                cp_final_name,     # <-- финальный
+                cp_final_match,    # <-- НОВОЕ (рулевая)
+
                 contract_txt,
                 it_name,
                 path_names,
@@ -799,6 +887,7 @@ class CfDataAdmin(admin.ModelAdmin):
             writer.writerow(row)
 
         return response
+
 
     
     
@@ -1023,11 +1112,11 @@ class ContractsRexexAdmin(admin.ModelAdmin):
     change_list_template = "admin/treasury/contractsrexex/change_list.html"  
 
 
-    autocomplete_fields = ("cp", )
+    # autocomplete_fields = ("cp", )
     
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css")}
-        js = ("js/contractsrexex_contract_ajax.js",)
+
 
 
     
@@ -1043,21 +1132,21 @@ class ContractsRexexAdmin(admin.ModelAdmin):
     )
     list_display_links = ("cp_link", "contract_link", "regex_short")
 
-    search_fields = (
-        "cp__tax_id",
-        "cp__name",
-        "contract__number",
-        "contract__id",
-        "regex",
-        'contract__cp'
-    )
+    # search_fields = (
+    #     "cp__tax_id",
+    #     "cp__name",
+    #     "contract__number",
+    #     "contract__id",
+    #     "regex",
+    #     'contract__cp'
+    # )
 
   
     list_filter = (
         ("cp", admin.RelatedOnlyFieldListFilter),
     )
 
-    ordering = ("cp__name", "contract__id")
+    ordering = ("cp__name", )
 
 
 
@@ -1083,9 +1172,7 @@ class ContractsRexexAdmin(admin.ModelAdmin):
         cp = obj.cp
         if not cp:
             return "—"
-        url = reverse("admin:counterparties_counterparty_change", args=[cp.pk])
-        #  имя, без ИНН 
-        return format_html('<a href="{}"><b>{}</b></a>', url, cp.name)
+        return format_html("<b>{}</b>", cp.name)
 
     @admin.display(description="ID договора", ordering="contract__id")
     def contract_id_col(self, obj):
