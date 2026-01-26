@@ -224,7 +224,7 @@ def owner_id_to_null(bs_id,owner_tax_id):
     UPDATE treasury_cfdata t
     SET 
         cp_id = NULL,
-        intercompany = NULL
+        intercompany = FALSE
     WHERE t.bs_id = %(bs_id)s and t.tax_id = %(owner_tax_id)s
       AND NOT (
           t.payer_account IN (SELECT account FROM corporate_bankaccount)
