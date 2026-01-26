@@ -212,8 +212,6 @@ class CfItems(MPTTModel):
     
     
     
-    
-    
 #----- БАНКОВСКИЕ СЧЕТА ----#
 class BankAccount(models.Model):
 
@@ -243,3 +241,29 @@ class BankAccount(models.Model):
         return f"{self.bank} ({self.account})"
 
     
+class Countries(models.Model):
+    name = models.CharField(verbose_name='Наименование',max_length=100)
+    code = models.CharField(max_length=3,verbose_name='Код старны',null=True,blank=True)
+    emojy_flag = models.CharField(max_length=20,verbose_name='Флаг',null=True,blank=True)
+    currency_code = models.CharField(max_length=3,verbose_name='Код валюты',null=True,blank=True)
+    regex_patterns = models.TextField(verbose_name='Поисковая модель',null=True,blank=True,help_text='RegEx')
+    
+    class Meta:
+        verbose_name = "География"
+        verbose_name_plural = "География"
+
+    def __str__(self): 
+        return self.get_country
+    
+    @property
+    def get_currency(self):
+        if self.currency_code and self.emojy_flag:
+            return f"{self.emojy_flag} {self.currency_code}"
+        return self.name
+
+    @property
+    def get_country(self):
+        if self.code and self.emojy_flag:
+            return f"{self.emojy_flag} {self.code}"
+        return self.name
+           

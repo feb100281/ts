@@ -25,7 +25,10 @@ FIELDS_TO_KEEP = [
 def get_acc(filename):
     df = pd.read_excel(filename, nrows=10,header=None)
     acc:str = df.iloc[5, 0]
-    acc = acc.replace('Отбор: Банковские счета Равно "',"").replace(', АО "Банк БЖФ""','').replace(', Филиал "Корпоративный" ПАО "Совкомбанк""','').strip()
+    parts = acc.split(',')
+    rpl = ','+str(parts[1])
+    print(rpl)
+    acc = acc.replace('Отбор: Банковские счета Равно "',"").replace(', АО "Банк БЖФ""','').replace(', Филиал "Корпоративный" ПАО "Совкомбанк""','').replace(rpl,'').strip()  #replace(', МОРСКОЙ БАНК (АО)"',"").strip() 
     # Отбор: Банковские счета Равно "40702810410000104161, АО "Банк БЖФ""
     return acc
 
@@ -275,3 +278,4 @@ def adjust_df(filename)->pd.DataFrame:
     return df[FIELDS_TO_KEEP],acc_number,df['date'].min(),df['date'].max(),bb,eb
 
 
+''
