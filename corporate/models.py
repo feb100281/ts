@@ -134,8 +134,6 @@ class Bank(models.Model):
 
 
 
-
-
 #----- CHART OF ACCOUNTS ----#
 
 
@@ -244,31 +242,4 @@ class BankAccount(models.Model):
     def __str__(self):
         return f"{self.bank} ({self.account})"
 
-    # def _fill_bank_from_bik(self):
-    #     if not self.bik or self.bank_id:
-    #         return
-
-    #     try:
-    #         bank_data = get_bank_data_by_bik(self.bik)
-    #     except (CheckoBankClientError, Exception):
-    #         return
-
-    #     if not bank_data:
-    #         return
-
-    #     bank, _ = Bank.objects.get_or_create(
-    #         bik=bank_data["bik"],
-    #         defaults={
-    #             "name": bank_data["name"],
-    #             "name_eng": bank_data.get("name_eng"),
-    #             "address": bank_data.get("address"),
-    #             "corr_account": bank_data.get("corr_account"),
-    #             "type": bank_data.get("type"),
-    #         },
-    #     )
-    #     self.bank = bank
-
-    # def save(self, *args, **kwargs):
-    #     if self.bik and not self.bank_id:
-    #         self._fill_bank_from_bik()
-    #     super().save(*args, **kwargs)
+    
