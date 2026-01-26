@@ -134,8 +134,6 @@ class Bank(models.Model):
 
 
 
-
-
 #----- CHART OF ACCOUNTS ----#
 
 
@@ -242,6 +240,7 @@ class BankAccount(models.Model):
     def __str__(self):
         return f"{self.bank} ({self.account})"
 
+    
 class Countries(models.Model):
     name = models.CharField(verbose_name='Наименование',max_length=100)
     code = models.CharField(max_length=3,verbose_name='Код старны',null=True,blank=True)
