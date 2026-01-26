@@ -2,6 +2,7 @@
 
 from django.http import JsonResponse
 from django.urls import path
+from django.db.models import F, Value, DecimalField, ExpressionWrapper
 import csv
 from django.http import HttpResponse
 from django.contrib import admin, messages
@@ -342,6 +343,9 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 bss = bss.filter(ba_id=ba_id)
 
             blocks = []
+            
+            
+            
 
             # --- итоги по валютам ---
             totals_by_ccy = {}  # code -> {"dt": Decimal, "cr": Decimal, "eod": Decimal, "cnt": int}
@@ -437,6 +441,10 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 extra_context["total_eod"] = None
 
         return super().changelist_view(request, extra_context=extra_context)
+    
+    
+
+
 
 
     @admin.display(description="Период", ordering="start")

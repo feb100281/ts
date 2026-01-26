@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.core.exceptions import ValidationError
+import re
+from django.db.models import Q
 
 from django.db.models import Count, Max
 from django.shortcuts import render
@@ -790,6 +792,186 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
             )
         }
 
+
+
+
+# --- ГЕОГРАФИЯ ---
+
+
+# --- Validators ---
+ISO2_RE = re.compile(r"^[A-Z]{2}$")
+CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+
+
+class CountriesForm(forms.ModelForm):
+    class Meta:
+        model = Countries
+        fields = "__all__"
+        widgets = {
+            "regex_patterns": forms.Textarea(
+                attrs={
+                    "rows": 6,
+                    "style": (
+                        "font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "
+                        "'Liberation Mono', monospace;"
+                    ),
+                }
+            ),
+        }
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+        if code and not ISO2_RE.match(code):
+            raise ValidationError(
+                "Код страны должен быть ISO-2: ровно 2 латинские буквы (например, RU, KZ)."
+            )
+        return code or None
+
+    def clean_currency_code(self):
+        c = (self.cleaned_data.get("currency_code") or "").strip().upper()
+        if c and not CURRENCY_RE.match(c):
+            raise ValidationError(
+                "Код валюты должен быть ISO-4217: ровно 3 латинские буквы (например, RUB, EUR)."
+            )
+        return c or None
+
+    def clean_emojy_flag(self):
+        f = (self.cleaned_data.get("emojy_flag") or "").strip()
+        return f or None
+
+    def clean_regex_patterns(self):
+        text = (self.cleaned_data.get("regex_patterns") or "").strip()
+        if not text:
+            return None
+
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        for i, ln in enumerate(lines, start=1):
+            try:
+                re.compile(ln)
+            except re.error as e:
+                raise ValidationError(f"RegEx ошибка в строке {i}: {e}. Паттерн: {ln}")
+        return "\n".join(lines)
+
+
 @admin.register(Countries)
 class CountriesAdmin(admin.ModelAdmin):
-    list_display = ( "name", "code",  "emojy_flag", "currency_code",)
+    form = CountriesForm
+
+    list_display = (
+       "country_name", 
+        "flag_col",   
+        "code_text",
+        "currency_text",
+    )
+    list_display_links = ("country_name",)
+
+    search_fields = ("name", "code", "currency_code")
+    list_filter = ("currency_code",)
+    ordering = ("name",)
+    list_per_page = 50
+
+    fieldsets = (
+        ("🌍 Страна", {
+            "fields": ("name", "code", "emojy_flag"),
+
+        }),
+        ("💱 Валюта", {
+            "fields": ("currency_code",),
+
+        }),
+        ("🔎 Поисковая модель (RegEx)", {
+            "fields": ("regex_patterns",),
+  
+        }),
+    )
+
+    actions = ("normalize_codes", "clear_empty_regex")
+
+    class Media:
+        css = {"all": ("css/admin_overrides.css",)}
+
+    # ---------- UI helpers ----------
+    @admin.display(description="Флаг")
+    def flag_col(self, obj: Countries):
+        flag = (obj.emojy_flag or "").strip()
+        if not flag:
+            return "—"
+        return format_html('<span style="font-size:18px;line-height:1;">{}</span>', flag)
+
+
+    @admin.display(description="Страна", ordering="name")
+    def country_name(self, obj: Countries):
+        name = obj.name or "—"
+        return format_html(
+            '<span style="font-weight:900;color:#0f172a;">{}</span>',
+            name,
+        )
+
+    @admin.display(description="ISO-2", ordering="code")
+    def code_text(self, obj: Countries):
+        v = (obj.code or "").strip()
+        if not v:
+            return "—"
+        return format_html(
+            '<span style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,'
+            '\'Liberation Mono\', monospace; font-weight:700; color:#0f172a;'
+            'font-variant-numeric: tabular-nums;">{}</span>',
+            v,
+        )
+
+    @admin.display(description="Валюта", ordering="currency_code")
+    def currency_text(self, obj: Countries):
+        c = (obj.currency_code or "").strip().upper()
+        if not c:
+            return "—"
+        return format_html(
+            '<span style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,'
+            '\'Liberation Mono\', monospace; font-weight:700; color:#0f172a;'
+            'font-variant-numeric: tabular-nums;">{}</span>',
+            c,
+        )
+
+    # ---------- actions ----------
+    @admin.action(description="🔤 Нормализовать коды (верхний регистр, trim)")
+    def normalize_codes(self, request, queryset):
+        updated = 0
+        for obj in queryset.only("id", "code", "currency_code", "emojy_flag", "regex_patterns"):
+            changed = False
+
+            code = (obj.code or "").strip().upper() or None
+            if code != obj.code:
+                obj.code = code
+                changed = True
+
+            cur = (obj.currency_code or "").strip().upper() or None
+            if cur != obj.currency_code:
+                obj.currency_code = cur
+                changed = True
+
+            flag = (obj.emojy_flag or "").strip() or None
+            if flag != obj.emojy_flag:
+                obj.emojy_flag = flag
+                changed = True
+
+            rp = (obj.regex_patterns or "").strip() or None
+            if rp != obj.regex_patterns:
+                obj.regex_patterns = rp
+                changed = True
+
+            if changed:
+                obj.save(update_fields=["code", "currency_code", "emojy_flag", "regex_patterns"])
+                updated += 1
+
+        self.message_user(request, f"Обновлено записей: {updated}")
+
+    @admin.action(description="🧹 Очистить пустые regex_patterns")
+    def clear_empty_regex(self, request, queryset):
+        # чистим и пустые строки, и строки из пробелов
+        qs = queryset.filter(regex_patterns__isnull=False)
+        updated = 0
+        for obj in qs.only("id", "regex_patterns"):
+            if not (obj.regex_patterns or "").strip():
+                obj.regex_patterns = None
+                obj.save(update_fields=["regex_patterns"])
+                updated += 1
+        self.message_user(request, f"Очищено записей: {updated}")

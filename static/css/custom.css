@@ -398,7 +398,7 @@
 
 /* 4. Собственники (отдельный тёплый цвет) */
 .fa-building-user,
-
+.fa-globe,
 .fa-building-circle-check {
     color: var(--color-owners) !important;
 }
