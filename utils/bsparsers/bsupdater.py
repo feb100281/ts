@@ -222,7 +222,9 @@ def find_cfitem(bs_id):
 def owner_id_to_null(bs_id,owner_tax_id):
     q = """
     UPDATE treasury_cfdata t
-    SET cp_id = NULL
+    SET 
+        cp_id = NULL,
+        intercompany = NULL
     WHERE t.bs_id = %(bs_id)s and t.tax_id = %(owner_tax_id)s
       AND NOT (
           t.payer_account IN (SELECT account FROM corporate_bankaccount)

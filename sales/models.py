@@ -239,6 +239,31 @@ class SalesData(models.Model):
         return f"{self.sale_date} - {self.product} {(self.dt - self.cr):,.2f}"
 
 
+# -------------------------------
+# MV модели
+#--------------------------------
+
+# Дневные продажи
+
+class MVSalesDaily(models.Model): 
+    date = models.DateField(primary_key=True, verbose_name='Дата')
+    amount = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Оборот',null=True,blank=True)
+    revenue = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Выручка',null=True,blank=True)
+    comission = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Проц. комисии',null=True,blank=True)
+    quant = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Количество',null=True,blank=True)
+    sales = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Продажи',null=True,blank=True)
+    rtr = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Возвраты',null=True,blank=True)
+    rtr_ratio = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='К возвратов',null=True,blank=True)
+    
+    class Meta: 
+        managed = False 
+        db_table = "mv_sales_daily"
+        verbose_name = "Дневные продажи"
+        verbose_name_plural = "Дневные продажи"
+        
+       
+    def __str__(self):
+        return self.date.strftime("%d %b-%Y")
 
 #    SELECT 
 #   t.created_date,
