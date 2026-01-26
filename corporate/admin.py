@@ -11,7 +11,7 @@ from django.utils.html import format_html
 from django.contrib import messages
 from django.shortcuts import redirect
 from django import forms
-from .models import Owners, BankAccount, Bank, COA, CfItems
+from .models import Owners, BankAccount, Bank, COA, CfItems,Countries
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.admin import DraggableMPTTAdmin
@@ -790,3 +790,6 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
             )
         }
 
+@admin.register(Countries)
+class CountriesAdmin(admin.ModelAdmin):
+    list_display = ( "name", "code",  "emojy_flag", "currency_code",)

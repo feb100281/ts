@@ -214,8 +214,6 @@ class CfItems(MPTTModel):
     
     
     
-    
-    
 #----- БАНКОВСКИЕ СЧЕТА ----#
 class BankAccount(models.Model):
 
@@ -244,31 +242,29 @@ class BankAccount(models.Model):
     def __str__(self):
         return f"{self.bank} ({self.account})"
 
-    # def _fill_bank_from_bik(self):
-    #     if not self.bik or self.bank_id:
-    #         return
+class Countries(models.Model):
+    name = models.CharField(verbose_name='Наименование',max_length=100)
+    code = models.CharField(max_length=3,verbose_name='Код старны',null=True,blank=True)
+    emojy_flag = models.CharField(max_length=20,verbose_name='Флаг',null=True,blank=True)
+    currency_code = models.CharField(max_length=3,verbose_name='Код валюты',null=True,blank=True)
+    regex_patterns = models.TextField(verbose_name='Поисковая модель',null=True,blank=True,help_text='RegEx')
+    
+    class Meta:
+        verbose_name = "География"
+        verbose_name_plural = "География"
 
-    #     try:
-    #         bank_data = get_bank_data_by_bik(self.bik)
-    #     except (CheckoBankClientError, Exception):
-    #         return
+    def __str__(self): 
+        return self.get_country
+    
+    @property
+    def get_currency(self):
+        if self.currency_code and self.emojy_flag:
+            return f"{self.emojy_flag} {self.currency_code}"
+        return self.name
 
-    #     if not bank_data:
-    #         return
-
-    #     bank, _ = Bank.objects.get_or_create(
-    #         bik=bank_data["bik"],
-    #         defaults={
-    #             "name": bank_data["name"],
-    #             "name_eng": bank_data.get("name_eng"),
-    #             "address": bank_data.get("address"),
-    #             "corr_account": bank_data.get("corr_account"),
-    #             "type": bank_data.get("type"),
-    #         },
-    #     )
-    #     self.bank = bank
-
-    # def save(self, *args, **kwargs):
-    #     if self.bik and not self.bank_id:
-    #         self._fill_bank_from_bik()
-    #     super().save(*args, **kwargs)
+    @property
+    def get_country(self):
+        if self.code and self.emojy_flag:
+            return f"{self.emojy_flag} {self.code}"
+        return self.name
+           
