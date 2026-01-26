@@ -175,3 +175,7 @@ LEFT JOIN sales_order          AS o  ON o.code       = t.order_id
 LEFT JOIN sales_warehouse      AS w  ON w.name       = t.warehouse;
     
 """
+
+# ------------------
+# ОБНОВЛЯЕМ ВСЕ MV VEIW
+#-------------------
