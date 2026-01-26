@@ -1,5 +1,5 @@
 from django.db import models
-
+from corporate.models import Countries
 
 class ProductGroup(models.Model):
     name = models.CharField(max_length=250, unique=True, verbose_name="Группа")
@@ -50,6 +50,40 @@ class Brand(models.Model):
     def __str__(self):
         return self.name
 
+class SellerSKU(models.Model):
+    
+    seller_article = models.CharField(max_length=64, unique=True, db_index=True, verbose_name="Артикул продавца")
+
+    class Meta:
+        verbose_name = "Артикул продавца"
+        verbose_name_plural = "Артикулы продавца"
+
+    def __str__(self):
+        return self.seller_article
+
+class Barcode(models.Model):
+    
+    barcode = models.CharField(max_length=32, unique=True, db_index=True, verbose_name="Баркод")
+
+    class Meta:
+        verbose_name = "Баркод"
+        verbose_name_plural = "Баркоды"
+
+    def __str__(self):
+        return self.barcode
+
+class Size(models.Model):
+    
+    size = models.CharField(max_length=32, unique=True, db_index=True, verbose_name="Размер")
+
+    class Meta:
+        verbose_name = "Размер"
+        verbose_name_plural = "Размеры"
+
+    def __str__(self):
+        return self.size
+
+
 
 class Product(models.Model):
     wb_article = models.CharField(max_length=64, unique=True, db_index=True, verbose_name="Артикул WB")
@@ -67,7 +101,28 @@ class Product(models.Model):
         blank=True,        
         verbose_name="Бренды",
     )
-
+    
+    barcodes = models.ManyToManyField(
+        "Barcode",
+        related_name="products",
+        blank=True,        
+        verbose_name="Баркод",
+    )
+    
+    sizes = models.ManyToManyField(
+        "Size",
+        related_name="products",
+        blank=True,        
+        verbose_name="Размер",
+    )
+    
+    sellersku = models.ManyToManyField(
+        "SellerSku",
+        related_name="products",
+        blank=True,        
+        verbose_name="Размер",
+    )
+    
     class Meta:
         verbose_name = "Товар (WB)"
         verbose_name_plural = "Товары (WB)"
@@ -81,41 +136,6 @@ class Product(models.Model):
             return self.wb_data.data.get("imt_name")
         except Exception:
             return None
-
-
-class SellerSKU(models.Model):
-    # если seller_article строго один на товар — ставь OneToOne
-    product = models.OneToOneField(
-        Product,
-        on_delete=models.PROTECT,
-        related_name="seller_sku",
-        verbose_name="Товар",
-    )
-    seller_article = models.CharField(max_length=64, unique=True, db_index=True, verbose_name="Артикул продавца")
-
-    class Meta:
-        verbose_name = "Артикул продавца"
-        verbose_name_plural = "Артикулы продавца"
-
-    def __str__(self):
-        return self.seller_article
-
-
-class Barcode(models.Model):
-    product = models.ForeignKey(
-        Product,
-        on_delete=models.PROTECT,
-        related_name="barcodes",
-        verbose_name="Товар",
-    )
-    barcode = models.CharField(max_length=32, unique=True, db_index=True, verbose_name="Баркод")
-
-    class Meta:
-        verbose_name = "Баркод"
-        verbose_name_plural = "Баркоды"
-
-    def __str__(self):
-        return self.barcode
 
 class ProductData(models.Model):
     wb_article = models.OneToOneField(   # <— тут логичнее OneToOne
@@ -172,4 +192,118 @@ class MVSalesProductData(models.Model):
         
     def __str__(self):
         return f"{self.imt_name} ({self.imt_id})"
- 
+
+class Warehouse(models.Model):
+    name = models.CharField(max_length=250,verbose_name='Наименование')
+    
+    class Meta:
+        verbose_name = "Склад"
+        verbose_name_plural = "Склады"
+
+    def __str__(self):
+        return str(self.name)
+
+class Order(models.Model):
+    code = models.CharField(max_length=250,verbose_name='Код заказа')
+    
+    class Meta:
+        verbose_name = "Код заказа"
+        verbose_name_plural = "Коды заказа"
+
+    def __str__(self):
+        return str(self.code)
+
+class SalesData(models.Model):
+    created_date = models.DateTimeField(verbose_name='Дата создания')
+    sale_date = models.DateTimeField(verbose_name='Дата продажи')
+    product = models.ForeignKey(Product,on_delete=models.PROTECT,verbose_name='WB Артикль')
+    barcode = models.ForeignKey(Barcode,on_delete=models.PROTECT,verbose_name='Баркод',null=True,blank=True)
+    brand = models.ForeignKey(Brand,on_delete=models.PROTECT,verbose_name='Бренд',null=True,blank=True)
+    size = models.ForeignKey(Size,on_delete=models.PROTECT,verbose_name='Размер',null=True,blank=True)
+    country = models.ForeignKey(Countries,on_delete=models.PROTECT,verbose_name='Размер',null=True,blank=True)
+    order = models.ForeignKey(Order,on_delete=models.PROTECT,verbose_name='Код заказа',null=True,blank=True)
+    warehouse = models.ForeignKey(Warehouse,on_delete=models.PROTECT,verbose_name='Склад',null=True,blank=True)
+    amount_dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='dt Выручка')
+    amount_cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='cr Выручка')
+    quant_dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='dt Количество')
+    quant_cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='cr Количество')
+    dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Дт')
+    cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Кр')
+    transaction_type = models.CharField(max_length=50,verbose_name='Тип транскации')
+    
+    class Meta:
+        verbose_name = "Данные продаж"
+        verbose_name_plural = "Данные продаж"
+
+    def __str__(self):
+        return f"{self.sale_date} - {self.product} {(self.dt - self.cr):,.2f}"
+
+
+
+#    SELECT 
+#   t.created_date,
+#   t.sale_date,
+#   p.id  AS product_id,
+#   bc.id AS barcode_id,
+#   b.id  AS brand_id,
+#   s.id  AS size_id,
+#   c.id  AS country_id,
+#   o.id  AS order_id,
+#   w.id  AS warehouse_id,
+#   case when t.transaction_type != 'Возврат' then t.amount else 0 end as amount_dt,
+#   case when t.transaction_type = 'Возврат' then t.amount else 0 end as amount_cr,
+#   case when t.transaction_type != 'Возврат' then t.payout_amount else 0 end as dt,
+#   case when t.transaction_type = 'Возврат' then t.payout_amount else 0 end as cr,
+#   t.transaction_type
+# FROM public.fixed_bars AS t
+# LEFT JOIN sales_product        AS p  ON p.wb_article = t.wb_article
+# LEFT JOIN sales_brand          AS b  ON b.name       = t.brand
+# LEFT JOIN sales_barcode        AS bc ON bc.barcode   = t.barcode
+# LEFT JOIN sales_size           AS s  ON s.size       = t.size
+# LEFT JOIN corporate_countries  AS c  ON t.country ~* c.regex_patterns
+# LEFT JOIN sales_order          AS o  ON o.code       = t.order_id
+# LEFT JOIN sales_warehouse      AS w  ON w.name       = t.warehouse;
+
+
+# -- Даты (фильтр/сортировка)
+# CREATE INDEX IF NOT EXISTS salesdata_created_date_idx
+#   ON sales_salesdata (created_date);
+
+# CREATE INDEX IF NOT EXISTS salesdata_sale_date_idx
+#   ON sales_salesdata (sale_date);
+
+# -- FK (частые фильтры/группировки)
+# CREATE INDEX IF NOT EXISTS salesdata_product_id_idx
+#   ON sales_salesdata (product_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_barcode_id_idx
+#   ON sales_salesdata (barcode_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_brand_id_idx
+#   ON sales_salesdata (brand_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_size_id_idx
+#   ON sales_salesdata (size_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_country_id_idx
+#   ON sales_salesdata (country_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_order_id_idx
+#   ON sales_salesdata (order_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_warehouse_id_idx
+#   ON sales_salesdata (warehouse_id);
+
+# -- Композитные под отчёты "по периоду + измерение"
+# CREATE INDEX IF NOT EXISTS salesdata_sale_date_product_idx
+#   ON sales_salesdata (sale_date, product_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_sale_date_brand_idx
+#   ON sales_salesdata (sale_date, brand_id);
+
+# CREATE INDEX IF NOT EXISTS salesdata_sale_date_warehouse_idx
+#   ON sales_salesdata (sale_date, warehouse_id);
+
+# -- Если часто фильтруешь по типу транзакции
+# CREATE INDEX IF NOT EXISTS salesdata_transaction_type_idx
+#   ON sales_salesdata (transaction_type);
