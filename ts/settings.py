@@ -275,6 +275,7 @@ JAZZMIN_SETTINGS = {
     #     # --- СОБСТВЕННИКИ ---
         "corporate": "fa-solid fa-building-user",
         "corporate.Owners": "fa-solid fa-building-circle-check",
+        "corporate.Countries": "fa-solid fa-globe",
 
         # --- БАНКИ ---
         "corporate.Bank": "fa-solid fa-landmark",

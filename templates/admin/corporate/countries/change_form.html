@@ -1,0 +1,354 @@
+{# templates/admin/corporate/countries/change_form.html #}
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/admin_overrides.css' %}">
+
+  <style>
+    .geo-pill{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:6px;
+      font-weight:600;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      white-space:nowrap;
+    }
+    .mono{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .geo-mini-card{
+      border-radius:14px;
+      background:rgba(248,250,252,0.9);
+      box-shadow:0 18px 40px rgba(15,23,42,0.16);
+      padding:10px 12px 12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-width:220px;
+      max-width:280px;
+    }
+    .geo-check{
+      border-radius:10px;
+      background:#f3f4f6;
+      padding:10px 10px 10px;
+    }
+    .geo-check input{
+      width:100%;
+      box-sizing:border-box;
+      padding:6px 8px;
+      border-radius:8px;
+      border:1px solid rgba(148,163,184,.45);
+      background:#fff;
+      outline:none;
+    }
+    .geo-check button{
+      margin-top:8px;
+      font-size:12px;
+      padding:5px 10px;
+      border-radius:8px;
+      border:1px solid rgba(148,163,184,.45);
+      background:#fff;
+      cursor:pointer;
+    }
+    .geo-check .result{
+      margin-top:8px;
+      font-size:12px;
+      color:#0f172a;
+      line-height:1.35;
+      word-break:break-word;
+    }
+    .geo-check .muted{ color:#6b7280; }
+  </style>
+
+  <script>
+    // Лёгкая проверка regex_patterns на примере строки (без бэкенда)
+    document.addEventListener('DOMContentLoaded', function () {
+      const input = document.getElementById('geoTestString');
+      const btn = document.getElementById('geoTestBtn');
+      const out = document.getElementById('geoTestOut');
+      const textarea = document.getElementById('id_regex_patterns');
+
+      if (!input || !btn || !out || !textarea) return;
+
+      const esc = (s) => (s || '').replace(/[&<>"']/g, (m) => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
+
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+
+        const text = (input.value || '').trim();
+        const raw = (textarea.value || '').trim();
+
+        if (!raw) {
+          out.innerHTML = '<span class="muted">Нет RegEx — нечего проверять.</span>';
+          return;
+        }
+        if (!text) {
+          out.innerHTML = '<span class="muted">Введите тестовую строку.</span>';
+          return;
+        }
+
+        const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+
+        let matched = [];
+        let invalid = [];
+
+        lines.forEach((pat, idx) => {
+          try {
+            const re = new RegExp(pat, 'i'); // i — удобнее для текста/платежек
+            if (re.test(text)) matched.push({idx: idx+1, pat});
+          } catch (err) {
+            invalid.push({idx: idx+1, pat, err: String(err)});
+          }
+        });
+
+        let html = '';
+        if (invalid.length) {
+          html += '<div style="margin-bottom:6px;">'
+            + '<span style="display:inline-flex;align-items:center;gap:6px;'
+            + 'padding:2px 8px;border-radius:6px;font-weight:700;'
+            + 'background:rgba(239,68,68,.10);color:#7f1d1d;border:1px solid rgba(239,68,68,.18);">'
+            + 'Ошибки RegEx: ' + invalid.length + '</span></div>';
+          invalid.slice(0, 3).forEach(x => {
+            html += '<div class="mono" style="font-size:11px;color:#7f1d1d;">'
+                 + '#' + x.idx + ': ' + esc(x.pat) + ' — ' + esc(x.err)
+                 + '</div>';
+          });
+          if (invalid.length > 3) {
+            html += '<div class="muted" style="font-size:11px;margin-top:4px;">'
+                 + 'Показаны первые 3 ошибки</div>';
+          }
+        }
+
+        if (matched.length) {
+          html += '<div style="margin-top:6px;">'
+            + '<span style="display:inline-flex;align-items:center;gap:6px;'
+            + 'padding:2px 8px;border-radius:6px;font-weight:700;'
+            + 'background:rgba(16,185,129,.10);color:#065f46;border:1px solid rgba(16,185,129,.18);">'
+            + 'Совпадений: ' + matched.length + '</span></div>';
+
+          matched.slice(0, 5).forEach(x => {
+            html += '<div class="mono" style="font-size:11px;color:#065f46;">'
+                 + '#' + x.idx + ': ' + esc(x.pat)
+                 + '</div>';
+          });
+          if (matched.length > 5) {
+            html += '<div class="muted" style="font-size:11px;margin-top:4px;">'
+                 + 'Показаны первые 5 совпадений</div>';
+          }
+        } else {
+          html += '<div style="margin-top:6px;">'
+            + '<span style="display:inline-flex;align-items:center;gap:6px;'
+            + 'padding:2px 8px;border-radius:6px;font-weight:700;'
+            + 'background:rgba(148,163,184,.16);color:#475569;border:1px solid rgba(148,163,184,.28);">'
+            + 'Совпадений нет</span></div>';
+        }
+
+        out.innerHTML = html;
+      });
+    });
+  </script>
+{% endblock %}
+
+{% block content_title %}
+  {% with obj=adminform.form.instance %}
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
+
+    {# ЛЕВАЯ ЧАСТЬ #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+
+      <!-- Аватар -->
+      <div style="
+          width:40px;height:40px;border-radius:6px;
+          background:#0f766e;color:#ccfbf1;
+          display:flex;align-items:center;justify-content:center;
+          font-size:18px;font-weight:700;
+          box-shadow:0 0 0 1px rgba(15,23,42,.12);
+      ">
+        {% if obj.pk %}
+          {% if obj.emojy_flag %}
+            <span style="font-size:20px;line-height:1;">{{ obj.emojy_flag }}</span>
+          {% else %}
+            🌍
+          {% endif %}
+        {% else %}
+          +
+        {% endif %}
+      </div>
+
+      <!-- Текстовый блок -->
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.06em;
+            color:#6b7280;
+        ">
+          Справочник географии
+        </span>
+
+        {% if obj.pk %}
+          <span style="font-size:20px;font-weight:600;color:#111827;">
+            {{ obj.name|default:"Страна" }}
+            {% if obj.code %}
+              · <span class="mono">{{ obj.code }}</span>
+            {% endif %}
+            {% if obj.currency_code %}
+              · <span class="mono">{{ obj.currency_code }}</span>
+            {% endif %}
+          </span>
+        {% else %}
+          <span style="font-size:20px;font-weight:600;color:#111827;">
+            Новая страна
+          </span>
+        {% endif %}
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
+
+          {% if obj.pk %}
+            <span class="geo-pill" style="background:#dcfce7;color:#166534;">
+              Режим: редактирование
+            </span>
+          {% else %}
+            <span class="geo-pill" style="background:#e0f2fe;color:#0369a1;">
+              Режим: добавление
+            </span>
+          {% endif %}
+
+          {% if obj.pk %}
+            {% if obj.code %}
+              <span class="geo-pill" style="background:#f3f4f6;color:#4b5563;">
+                ISO-2: <span class="mono">{{ obj.code }}</span>
+              </span>
+            {% else %}
+              <span class="geo-pill" style="background:#fef9c3;color:#854d0e;">
+                ISO-2: не задан
+              </span>
+            {% endif %}
+
+            {% if obj.currency_code %}
+              <span class="geo-pill" style="background:#f3f4f6;color:#4b5563;">
+                Валюта: <span class="mono">{{ obj.currency_code }}</span>
+              </span>
+            {% endif %}
+
+            {% if obj.regex_patterns %}
+              <span class="geo-pill" style="background:#ecfeff;color:#0f766e;">
+                RegEx: задан
+              </span>
+            {% else %}
+              <span class="geo-pill" style="background:#f3f4f6;color:#6b7280;">
+                RegEx: нет
+              </span>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: навигация + быстрый тест RegEx #}
+    <div class="geo-mini-card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9ca3af;">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:600;color:#0f172a;">
+          Действия
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+        <a href="{% url 'admin:corporate_countries_changelist' %}"
+           class="button"
+           style="
+             font-size:13px;
+             padding:4px 10px;
+             border-radius:6px;
+             display:inline-flex;
+             align-items:center;
+             gap:6px;
+             justify-content:flex-start;
+           ">
+          ← Вся география
+        </a>
+
+      </div>
+
+      <div class="geo-check">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:11px;letter-spacing:0.10em;text-transform:uppercase;color:#6b7280;">
+            Проверка RegEx
+          </span>
+          <span class="muted" style="font-size:11px;">без сохранения</span>
+        </div>
+
+        <div style="margin-top:6px;">
+          <input id="geoTestString" type="text" placeholder="Напр.: Перевод из Казахстана / KZ / тенге KZT" />
+          <button id="geoTestBtn" type="button">Проверить</button>
+          <div id="geoTestOut" class="result"><span class="muted">Введите строку и нажмите «Проверить».</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {# НИЖНЯЯ ПАНЕЛЬ — хлебные крошки #}
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        НАЧАЛО
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;">
+        СПРАВОЧНИКИ
+      </span>
+      <span>›</span>
+      <a href="{% url 'admin:corporate_countries_changelist' %}"
+         style="text-transform:uppercase;letter-spacing:0.08em;text-decoration:none;color:#9ca3af;">
+        ГЕОГРАФИЯ
+      </a>
+      <span>›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;font-weight:600;">
+        {% if obj.pk %}
+          {{ obj.name|default:"СТРАНА" }}
+        {% else %}
+          НОВАЯ СТРАНА
+        {% endif %}
+      </span>
+    </nav>
+
+    {% if obj.pk %}
+      <span style="color:#9ca3af;">
+        {% if obj.code %}ISO-2: <span class="mono">{{ obj.code }}</span>{% endif %}
+        {% if obj.currency_code %} · Валюта: <span class="mono">{{ obj.currency_code }}</span>{% endif %}
+      </span>
+    {% endif %}
+  </div>
+  {% endwith %}
+{% endblock %}
+
+{% block object-tools %}
+  {{ block.super }}
+{% endblock %}
