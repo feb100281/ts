@@ -1,3 +1,5 @@
+# contracts/models.py
+
 from django.db import models
 from corporate.models import Owners, CfItems
 from counterparties.models import Counterparty

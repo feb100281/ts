@@ -261,6 +261,21 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
 
     # Выделям intercompany trasactions
     df["intercompany"] = np.where(df["tax_id"].isin(ts_inn), True, False)
+    
+    
+    
+    from .intercompany_rules import (
+    INTERCOMPANY_EXCLUDE,
+    INTERCOMPANY_INCLUDE,
+    apply_intercompany_overrides,
+        )
+
+    df = apply_intercompany_overrides(
+        df,
+        exclude=INTERCOMPANY_EXCLUDE,
+        include=INTERCOMPANY_INCLUDE,
+    )
+
 
     # Выделяем контрагента по выписки
     if 'reciver1' in df.columns:

@@ -299,9 +299,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
         return redirect(request.META.get("HTTP_REFERER", ".."))
 
 
-    
-    
-    
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -313,11 +310,155 @@ class BankStatementsAdmin(admin.ModelAdmin):
                   rows=Count("cfdata", distinct=True),
               )
         )
+    
+    
+
+        
+
+
         
         
+    # def changelist_view(self, request, extra_context=None):
+    #     extra_context = extra_context or {}
+
+    #     selected_date = None
+    #     raw = request.GET.get("in_period_date")
+    #     if raw:
+    #         try:
+    #             selected_date = datetime.strptime(raw, "%Y-%m-%d").date()
+    #         except ValueError:
+    #             selected_date = None
+
+    #     extra_context["selected_date"] = selected_date
+        
+        
+
+    #     if selected_date:
+    #         bss = (
+    #             BankStatements.objects
+    #             .filter(start__lte=selected_date, finish__gte=selected_date)
+    #             .select_related("owner", "ba", "ba__bank")
+    #         )
+
+    #         owner_id = request.GET.get("owner__id__exact")
+    #         ba_id = request.GET.get("ba__id__exact")
+    #         if owner_id:
+    #             bss = bss.filter(owner_id=owner_id)
+    #         if ba_id:
+    #             bss = bss.filter(ba_id=ba_id)
+
+    #         blocks = []
+            
+            
+            
+
+    #         # --- итоги по валютам ---
+    #         totals_by_ccy = {}  # code -> {"dt": Decimal, "cr": Decimal, "eod": Decimal, "cnt": int}
+
+    #         for bs in bss:
+    #             agg = (
+    #                 CfData.objects
+    #                 .filter(bs=bs, date__lte=selected_date)
+    #                 .aggregate(
+    #                     dt=Coalesce(Sum("dt"), Decimal("0.00")),
+    #                     cr=Coalesce(Sum("cr"), Decimal("0.00")),
+    #                 )
+    #             )
+
+    #             dt_sum = agg["dt"] or Decimal("0.00")
+    #             cr_sum = agg["cr"] or Decimal("0.00")
+
+    #             bb = bs.bb if bs.bb is not None else Decimal("0.00")
+    #             eod = bb + dt_sum - cr_sum
+
+    #             ba = bs.ba
+    #             bank = getattr(ba, "bank", None) if ba else None
+
+    #             bank_name = (getattr(bank, "name", None) or "").strip()
+    #             account = (getattr(ba, "account", None) or "").strip()
+    #             owner_name = str(bs.owner) if bs.owner else ""
+
+    #             # валюта счета
+    #             code = (getattr(ba, "currency", None) or "").upper() if ba else ""
+    #             sym = CURRENCY_SYMBOLS.get(code, "") if code else ""
+    #             flag = CURRENCY_FLAGS.get(code, "") if code else ""
+
+    #             blocks.append({
+    #                 "bs": bs,
+    #                 "dt_sum": dt_sum,
+    #                 "cr_sum": cr_sum,
+    #                 "eod": eod,
+
+    #                 "bank_name": bank_name,
+    #                 "account": account,
+    #                 "owner_name": owner_name,
+    #                 "open_url": reverse("admin:treasury_bankstatements_change", args=[bs.pk]),
+
+    #                 # валюта для строки
+    #                 "currency_code": code,
+    #                 "currency_symbol": sym,
+    #                 "currency_flag": flag,
+    #             })
+
+    #             # копим итоги по валюте (если валюта пустая — складываем в '—')
+    #             ccy_key = code or "—"
+    #             acc = totals_by_ccy.get(ccy_key)
+    #             if not acc:
+    #                 acc = {"dt": Decimal("0.00"), "cr": Decimal("0.00"), "eod": Decimal("0.00"), "cnt": 0}
+    #                 totals_by_ccy[ccy_key] = acc
+
+    #             acc["dt"] += dt_sum
+    #             acc["cr"] += cr_sum
+    #             acc["eod"] += eod
+    #             acc["cnt"] += 1
+
+    #         extra_context["day_blocks"] = blocks
+
+    #         # список для шаблона: сортировка (сначала нормальные валюты, потом '—')
+    #         totals_list = []
+    #         for code, a in totals_by_ccy.items():
+    #             totals_list.append({
+    #                 "currency_code": code,
+    #                 "currency_symbol": CURRENCY_SYMBOLS.get(code, "") if code != "—" else "",
+    #                 "currency_flag": CURRENCY_FLAGS.get(code, "") if code != "—" else "",
+    #                 "dt": a["dt"],
+    #                 "cr": a["cr"],
+    #                 "eod": a["eod"],
+    #                 "cnt": a["cnt"],
+    #             })
+
+    #         totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
+
+    #         extra_context["totals_by_ccy"] = totals_list
+
+    #         # для обратной совместимости: если валюта одна — оставим total_* как раньше
+    #         if len(totals_list) == 1:
+    #             only = totals_list[0]
+    #             extra_context["total_dt"] = only["dt"]
+    #             extra_context["total_cr"] = only["cr"]
+    #             extra_context["total_eod"] = only["eod"]
+    #             extra_context["total_currency_code"] = only["currency_code"]
+    #             extra_context["total_currency_symbol"] = only["currency_symbol"]
+    #             extra_context["total_currency_flag"] = only["currency_flag"]
+    #         else:
+    #             extra_context["total_dt"] = None
+    #             extra_context["total_cr"] = None
+    #             extra_context["total_eod"] = None
+
+    #     return super().changelist_view(request, extra_context=extra_context)
+    
+    
+    
+    
+    
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
 
+        # ✅ ВСЕГДА объявляем фильтры (иначе UnboundLocalError)
+        owner_id = request.GET.get("owner__id__exact")
+        ba_id = request.GET.get("ba__id__exact")
+
+        # ✅ Дата среза (может быть None)
         selected_date = None
         raw = request.GET.get("in_period_date")
         if raw:
@@ -328,6 +469,39 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
         extra_context["selected_date"] = selected_date
 
+        # =========================================================
+        # ✅ ГЛОБАЛЬНЫЙ КОНТРОЛЬ ВНУТРИГРУППОВЫХ (НЕ в разрезе выписки)
+        #    Показываем всегда на экране "Выписки"
+        #    (опционально учитываем текущие фильтры owner/ba и дату-срез)
+        # =========================================================
+        ic_qs = CfData.objects.filter(intercompany=True)
+
+        # если на странице выбран owner / ba — логично считать в том же контексте
+        if owner_id:
+            ic_qs = ic_qs.filter(owner_id=owner_id)
+        if ba_id:
+            ic_qs = ic_qs.filter(ba_id=ba_id)
+
+        # если выбрана дата — считаем "на дату" (до выбранной даты включительно)
+        if selected_date:
+            ic_qs = ic_qs.filter(date__lte=selected_date)
+
+        ic = ic_qs.aggregate(
+            dt=Coalesce(Sum("dt"), Decimal("0.00")),
+            cr=Coalesce(Sum("cr"), Decimal("0.00")),
+        )
+
+        ic_dt = ic["dt"] or Decimal("0.00")
+        ic_cr = ic["cr"] or Decimal("0.00")
+        ic_net = ic_dt - ic_cr
+
+        extra_context["ic_total_dt"] = ic_dt
+        extra_context["ic_total_cr"] = ic_cr
+        extra_context["ic_total_net"] = ic_net
+
+        # =========================================================
+        # ✅ ТВОЯ ТЕКУЩАЯ ЛОГИКА EOD (только если выбрана дата)
+        # =========================================================
         if selected_date:
             bss = (
                 BankStatements.objects
@@ -335,17 +509,13 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 .select_related("owner", "ba", "ba__bank")
             )
 
-            owner_id = request.GET.get("owner__id__exact")
-            ba_id = request.GET.get("ba__id__exact")
+            # ✅ используем уже прочитанные owner_id / ba_id (не читаем повторно)
             if owner_id:
                 bss = bss.filter(owner_id=owner_id)
             if ba_id:
                 bss = bss.filter(ba_id=ba_id)
 
             blocks = []
-            
-            
-            
 
             # --- итоги по валютам ---
             totals_by_ccy = {}  # code -> {"dt": Decimal, "cr": Decimal, "eod": Decimal, "cnt": int}
@@ -423,7 +593,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 })
 
             totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
-
             extra_context["totals_by_ccy"] = totals_list
 
             # для обратной совместимости: если валюта одна — оставим total_* как раньше
@@ -441,8 +610,13 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 extra_context["total_eod"] = None
 
         return super().changelist_view(request, extra_context=extra_context)
+
     
     
+
+
+
+
 
 
 
@@ -1127,18 +1301,27 @@ class ContractsRexexAdmin(admin.ModelAdmin):
 
 
 
-    
-    list_select_related = ("cp", "contract")
+    list_select_related = ("cp", "contract", "contract__title")
 
     # колонки
     list_display = (
         "cp_logo",
         "cp_link",
         "contract_id_col",
+        "contract_type_col",
         "contract_link",
         "regex_short",
     )
     list_display_links = ("cp_link", "contract_link", "regex_short")
+    
+    
+    @admin.display(description="Тип договора", ordering="contract__title__title")
+    def contract_type_col(self, obj):
+        # contract__title уже подтянут select_related, будет быстро
+        c = obj.contract
+        if not c or not getattr(c, "title_id", None):
+            return "—"
+        return c.title.title  # ContractsTitle.title
 
     # search_fields = (
     #     "cp__tax_id",

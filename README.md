@@ -50,7 +50,7 @@ source venv/bin/activate
 git pull origin ...
 
 
-ПЕРЕЗАГРУЗКА СЕРВАРА 
+ПЕРЕЗАГРУЗКА СЕРВЕРА 
 pkill -HUP -f "ts.wsgi"
 
 
