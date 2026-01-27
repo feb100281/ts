@@ -95,7 +95,7 @@ def apply_intercompany_overrides(
         for p in map(_norm, _as_list(patterns)):
             if not p:
                 continue
-            mask_hit = mask_date & temp_norm.str.contains(p, na=False)
+            mask_hit = mask_date & temp_norm.str.contains(p, na=False, regex=False)
             df.loc[mask_hit, target_col] = False
 
     # INCLUDE -> True (приоритет)
@@ -106,7 +106,7 @@ def apply_intercompany_overrides(
         for p in map(_norm, _as_list(patterns)):
             if not p:
                 continue
-            mask_hit = mask_date & temp_norm.str.contains(p, na=False)
+            mask_hit = mask_date & temp_norm.str.contains(p, na=False, regex=False)
             df.loc[mask_hit, target_col] = True
 
     return df
