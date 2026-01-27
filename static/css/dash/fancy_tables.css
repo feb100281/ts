@@ -1,0 +1,92 @@
+/* Fancy modern table (Dash Mantine / dmc.Table) */
+.fancy-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  line-height: 1.25;
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  overflow: hidden; /* важно для скруглений */
+}
+
+/* header */
+.fancy-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  font-weight: 700;
+  text-align: center;
+  border-bottom: 1px solid #e9ecef;
+  white-space: nowrap;
+}
+
+/* body cells */
+.fancy-table tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #f1f3f5;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* zebra */
+.fancy-table tbody tr:nth-child(even) td {
+  background: #fcfcfd;
+}
+
+/* hover row */
+.fancy-table tbody tr:hover td {
+  background: #f1f3ff;
+}
+
+/* first column (index/labels) */
+.fancy-table thead th:first-child,
+.fancy-table tbody td:first-child,
+.fancy-table tbody td.indexes {
+  text-align: left;
+  font-weight: 600;
+}
+
+/* numeric cells */
+.fancy-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1px;
+}
+
+/* negative highlight */
+.fancy-table td.num.neg {
+  background: #fff0f0 !important;
+  color: #b00020 !important;
+}
+
+/* subtle column borders (optional) */
+.fancy-table th + th,
+.fancy-table td + td {
+  border-left: 1px solid #f1f3f5;
+}
+
+/* compact mode: add class "compact" too */
+.fancy-table.compact thead th { padding: 7px 10px; }
+.fancy-table.compact tbody td { padding: 6px 10px; font-size: 12px; }
+
+/* print-friendly */
+@media print {
+  .fancy-table {
+    border: 1px solid #000;
+    border-radius: 0;
+  }
+  .fancy-table thead th {
+    position: static;
+    background: #fff;
+    border-bottom: 1px solid #000;
+  }
+  .fancy-table tbody td,
+  .fancy-table th + th,
+  .fancy-table td + td {
+    border-color: #000;
+  }
+}

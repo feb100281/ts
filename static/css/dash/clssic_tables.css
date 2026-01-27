@@ -36,7 +36,7 @@
 
 /* Alignment rules */
 .classic-table tbody td.num {
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums; /* ровные цифры */
 }
 
@@ -48,12 +48,12 @@
 }
 
 /* Optional: zebra like LaTeX \rowcolors but subtle */
-.classic-table tbody tr:nth-child(even) td {
+/* .classic-table tbody tr:nth-child(even) td {
   background: #fafafa;
-}
+} */
 
 /* Negative cells */
 .classic-table tbody td.neg {
   color: #900;
-  background: #ffecec;
+  /* background: #ffecec; */
 }

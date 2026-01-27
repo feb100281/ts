@@ -12,8 +12,8 @@ scripts = [
 ]
 styles = [
     "/static/fonts/glyphs.css",
-    "/static/css/dashapps.css",
-    "/static/css/dash/clssic_tables.css"
+    "/static/css/dash/clssic_tables.css",
+    "/static/css/dash/fancy_tables.css",
 ]
 
 app = DjangoDash(
