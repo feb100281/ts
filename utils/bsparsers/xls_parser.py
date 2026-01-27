@@ -377,8 +377,15 @@ def adjust_df(filename)->pd.DataFrame:
         df['cp_name_final'] == 'ТРЕНДСЕТТЕР OOO',True,False
     )
     
-    # ✅ применяем исключения: то что указала — НЕ внутригрупповое
+    # 1) сначала снимаем флаги там, где НЕ внутригрупповое
     df = apply_intercompany_excludes(df, INTERCOMPANY_EXCLUDE)
+
+    # 2) потом принудительно включаем там, где ДОЛЖНО быть внутригрупповое
+    df = apply_intercompany_includes(df, INTERCOMPANY_INCLUDE)
+
+    # 3) чистим служебные колонки один раз
+    df.drop(columns=["_date_key", "_temp_norm"], inplace=True, errors="ignore")
+    
     
     df['payer_account'] = None
     df['reciver_account'] = None
