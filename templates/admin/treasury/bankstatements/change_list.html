@@ -662,6 +662,79 @@ document.addEventListener('DOMContentLoaded', function () {
 
 {% block content %}
 
+
+
+
+{# ===== ВНУТРИГРУППОВЫЕ: контроль (всегда) ===== #}
+  {% if ic_total_dt is not None %}
+    <div class="eod-card" style="margin-top:0;">
+      <div class="eod-head">
+        <div class="title">🤝 Внутригрупповые — контроль</div>
+        <div class="eod-head-right">
+          <div class="hint">
+            {% if selected_date %}
+              по операциям до {{ selected_date|date:"d.m.Y" }}
+            {% else %}
+              по всем операциям
+            {% endif %}
+          </div>
+
+          <a href="{% url 'admin:treasury_cfdata_changelist' %}?intercompany__exact=1"
+             class="eod-icon-btn eod-xlsx-btn"
+             title="Открыть внутригрупповые">
+            <span class="xlsx-txt">Открыть</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="eod-total" style="margin-top:10px;">
+        <div class="cap">Итого:</div>
+
+        <div class="totals-rows">
+          <div class="total-row" style="width:100%;">
+            <div class="metrics">
+              <div class="eod-metric">
+                <div class="lbl">Получили (Дт)</div>
+                <div class="val green">{{ ic_total_dt|floatformat:2|intcomma }}</div>
+              </div>
+
+              <div class="eod-metric">
+                <div class="lbl">Отправили (Кт)</div>
+                <div class="val red">{{ ic_total_cr|floatformat:2|intcomma }}</div>
+              </div>
+
+              <div class="eod-metric">
+                <div class="lbl">Остаток (Дт − Кт)</div>
+                <div class="val {% if ic_total_net == 0 %}green{% else %}red{% endif %}">
+                  {{ ic_total_net|floatformat:2|intcomma }}
+                </div>
+              </div>
+            </div>
+
+            <div class="meta">
+              {% if ic_total_net == 0 %}
+                ✅ OK (схлопнулось)
+              {% else %}
+                ⚠️ деньги “зависли”
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+
+
+
+
+
+
+
+
+
+
+
   {% if selected_date %}
     <div class="eod-card">
       <div class="eod-head">
@@ -816,6 +889,7 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
       {% endif %}
     </div>
+
 
 
 

@@ -150,6 +150,9 @@ def adjust_df(filename)->pd.DataFrame:
         df['_cp_name_cr'], df["cp_name"]
     )
     
+    
+    
+    
     df["cp_name"] = np.where(
     df["_contract_number_cr"].isin(["Прочие налоги и сборы"])
     & df["_cp_name_dt"].isna(),
