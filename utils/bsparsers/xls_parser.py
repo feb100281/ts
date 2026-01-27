@@ -29,25 +29,59 @@ INTERCOMPANY_EXCLUDE = {
 }
 
 
+### ПРИНУДИТЕЛЬНО СЧИТАТЬ ВНУТРИГРУППОВЫМ ---###
+INTERCOMPANY_INCLUDE = {
+    "2025-07-05": "220015++++++5183 Снятие по карте на прочие выдачи ч-з ТУ 00212724\RU\MOSKVA\Alfa Iss по чеку 04.07.25,2E26AM.НДС не обл.",
+    "2025-07-04": '2200+5183 Внес.ср.ООО "ТРЕНДСЕТТЕР" ч-з ТУ 212724(чек 04.07.25 4U88XK) на сч.40702810802430004523 НДС не обл.',
+    '2025-07-03': 'Возврат П/П №247 от 27.06.2025 на сумму 30000.00, ТРЕНДСЕТТЕР.Неверно указана или отсутствует форма собственности',
+}
+
 def _norm(s: str) -> str:
     """Нормализуем текст для устойчивого сравнения."""
     if s is None:
         return ""
     return " ".join(str(s).replace("\xa0", " ").replace("\n", " ").lower().split())
 
-def apply_intercompany_excludes(df: pd.DataFrame, excludes: dict) -> pd.DataFrame:
-    """
-    excludes формат:
-      {"YYYY-MM-DD": "фрагмент назначения" | ["фрагмент1", "фрагмент2", ...]}
+def apply_intercompany_includes(df: pd.DataFrame, includes: dict) -> pd.DataFrame:
 
-    Если дата совпала и temp содержит фрагмент -> intercompany = False
-    """
+    if df.empty or not includes:
+        return df
+
+    # если служебные колонки уже удалены — создадим снова
+    if "_date_key" not in df.columns:
+        df["_date_key"] = df["date"].dt.strftime("%Y-%m-%d")
+    if "_temp_norm" not in df.columns:
+        df["_temp_norm"] = df["temp"].apply(_norm)
+
+    for d, patterns in includes.items():
+        if not patterns:
+            continue
+
+        if isinstance(patterns, str):
+            patterns = [patterns]
+
+        patterns_norm = [_norm(p) for p in patterns if p]
+        if not patterns_norm:
+            continue
+
+        mask_date = df["_date_key"].eq(d)
+
+        for p in patterns_norm:
+            mask_hit = mask_date & df["_temp_norm"].str.contains(p, na=False)
+            df.loc[mask_hit, "intercompany"] = True
+    return df
+
+
+def apply_intercompany_excludes(df: pd.DataFrame, excludes: dict) -> pd.DataFrame:
+
     if df.empty or not excludes:
         return df
 
-    # дата уже должна быть datetime (ты её приводишь ниже)
-    df["_date_key"] = df["date"].dt.strftime("%Y-%m-%d")
-    df["_temp_norm"] = df["temp"].apply(_norm)
+    # создаём служебные колонки только если их ещё нет
+    if "_date_key" not in df.columns:
+        df["_date_key"] = df["date"].dt.strftime("%Y-%m-%d")
+    if "_temp_norm" not in df.columns:
+        df["_temp_norm"] = df["temp"].apply(_norm)
 
     for d, patterns in excludes.items():
         if not patterns:
@@ -63,17 +97,13 @@ def apply_intercompany_excludes(df: pd.DataFrame, excludes: dict) -> pd.DataFram
         mask_date = df["_date_key"].eq(d)
 
         for p in patterns_norm:
-            # contains — чтобы не требовать идеального совпадения текста
             mask_hit = mask_date & df["_temp_norm"].str.contains(p, na=False)
             df.loc[mask_hit, "intercompany"] = False
-
-    df.drop(columns=["_date_key", "_temp_norm"], inplace=True, errors="ignore")
     return df
 
 
 
-
-
+#### ---- ИСКЛЮЧЕНИЕ ЗАКОНЧЕНЫ ----#####
 
 
 
