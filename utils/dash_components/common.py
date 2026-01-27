@@ -24,8 +24,11 @@ class CommonComponents:
         
         return dmc.Title(
                 text,
-                order=2,
+                order=1,
                 c='blue',
+                className='title-accent',
+                px='lg',
+                mt='md',
                 **kwargs
                 
                 # свистоперделки ниже             
@@ -38,8 +41,9 @@ class CommonComponents:
             kwargs["id"] = id
         return dmc.Title(
                 text,
-                order=4,
-                c='teal',
+                order=2,
+                c='indigo',
+                className='title-subtle',
                 **kwargs
                 
                 # свистоперделки ниже          
