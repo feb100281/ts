@@ -1,8 +1,3 @@
-/* тут пишем css для всех dash приложений */
-
-/* ______________________________________ */
-/* Titles */
-/* ______________________________________ */
 .title-accent {
   position: relative;
   margin: 0 0 14px 0;
@@ -64,39 +59,4 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-}
-
-/* Это классы таблички dmc */
-
-.report-table {
-    font-size: 12px;
-    border-collapse: collapse;
-}
-
-.report-table th {
-    font-weight: 600;
-    background: #f8f9fa;
-    text-align: center;           /* базово */
-}
-
-.report-table td {
-    padding: 4px 8px;
-    text-align: center;           /* базово */
-}
-
-/* ПЕРВЫЙ СТОЛБЕЦ — ВЛЕВО */
-.report-table th:first-child,
-.report-table td:first-child {
-    text-align: left;
-}
-
-/* ЧИСЛА — ВПРАВО (перебивает center) */
-.report-table td.num {
-    text-align: right;
-}
-
-/* ОТРИЦАТЕЛЬНЫЕ */
-.report-table td.num.neg {
-    background-color: #ffe6e6;
-    color: #900;
 }

@@ -29,7 +29,7 @@ class MVSalesDailyAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
 
         # если тебе не нужен object_id, можно оставить статикой:
-        extra_context["iframe_url"] = "/apps/app/dailysales_app/"
+        extra_context["iframe_url"] = f"/apps/app/dailysales_app/?object_id={object_id}"
 
         # если нужно фильтровать даш по конкретной записи/дате:
         # extra_context["iframe_url"] = f"/apps/app/dailysales_app/?object_id={object_id}"
