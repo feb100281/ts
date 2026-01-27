@@ -6,7 +6,7 @@ from typing import Literal, Optional
 
 TableClass = Literal[
     "classic-table",
-    "report-table",
+    "fancy-table",
     "booktabs-table",
     "compact-table",
 ]
@@ -47,7 +47,15 @@ def cell_class(v):
     return " ".join(classes)
 
 
-def df_dmc_table(df: pd.DataFrame, formaters: dict={},className: TableClass = "classic-table",):
+def df_dmc_table(df: pd.DataFrame, 
+                 formaters: dict={},
+                 className: TableClass = "classic-table",
+                 withTableBorder = False,
+                 withColumnBorders = False,
+                 striped=False,
+                 highlightOnHover = True,
+                 
+                 ):
 
     head = []
     c = [df.index.name or ""] + list(df.columns)
@@ -73,8 +81,10 @@ def df_dmc_table(df: pd.DataFrame, formaters: dict={},className: TableClass = "c
         body.append(dmc.TableTr(row))
 
     return dmc.Table(
-        withTableBorder=True,
-        withColumnBorders=True,
+        withTableBorder=withTableBorder,
+        withColumnBorders=withColumnBorders,
+        striped=striped,
+	    highlightOnHover=highlightOnHover,
         className=className,
         children=[
             dmc.TableThead(dmc.TableTr(head)),
