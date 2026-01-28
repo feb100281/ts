@@ -4,6 +4,8 @@ from django.http import JsonResponse
 from django.urls import path
 from django.db.models import F, Value, DecimalField, ExpressionWrapper
 import csv
+from django.db.models import OuterRef, Exists
+
 from django.http import HttpResponse
 from django.contrib import admin, messages
 from django.db.models import Sum, Count
@@ -311,16 +313,16 @@ class BankStatementsAdmin(admin.ModelAdmin):
               )
         )
     
+
     
-
-        
-
-
-        
-        
     # def changelist_view(self, request, extra_context=None):
     #     extra_context = extra_context or {}
 
+    #     # ✅ ВСЕГДА объявляем фильтры (иначе UnboundLocalError)
+    #     owner_id = request.GET.get("owner__id__exact")
+    #     ba_id = request.GET.get("ba__id__exact")
+
+    #     # ✅ Дата среза (может быть None)
     #     selected_date = None
     #     raw = request.GET.get("in_period_date")
     #     if raw:
@@ -330,9 +332,40 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             selected_date = None
 
     #     extra_context["selected_date"] = selected_date
-        
-        
 
+    #     # =========================================================
+    #     # ✅ ГЛОБАЛЬНЫЙ КОНТРОЛЬ ВНУТРИГРУППОВЫХ (НЕ в разрезе выписки)
+    #     #    Показываем всегда на экране "Выписки"
+    #     #    (опционально учитываем текущие фильтры owner/ba и дату-срез)
+    #     # =========================================================
+    #     ic_qs = CfData.objects.filter(intercompany=True)
+
+    #     # если на странице выбран owner / ba — логично считать в том же контексте
+    #     if owner_id:
+    #         ic_qs = ic_qs.filter(owner_id=owner_id)
+    #     if ba_id:
+    #         ic_qs = ic_qs.filter(ba_id=ba_id)
+
+    #     # если выбрана дата — считаем "на дату" (до выбранной даты включительно)
+    #     if selected_date:
+    #         ic_qs = ic_qs.filter(date__lte=selected_date)
+
+    #     ic = ic_qs.aggregate(
+    #         dt=Coalesce(Sum("dt"), Decimal("0.00")),
+    #         cr=Coalesce(Sum("cr"), Decimal("0.00")),
+    #     )
+
+    #     ic_dt = ic["dt"] or Decimal("0.00")
+    #     ic_cr = ic["cr"] or Decimal("0.00")
+    #     ic_net = ic_dt - ic_cr
+
+    #     extra_context["ic_total_dt"] = ic_dt
+    #     extra_context["ic_total_cr"] = ic_cr
+    #     extra_context["ic_total_net"] = ic_net
+
+    #     # =========================================================
+    #     # ✅ ТВОЯ ТЕКУЩАЯ ЛОГИКА EOD (только если выбрана дата)
+    #     # =========================================================
     #     if selected_date:
     #         bss = (
     #             BankStatements.objects
@@ -340,17 +373,13 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             .select_related("owner", "ba", "ba__bank")
     #         )
 
-    #         owner_id = request.GET.get("owner__id__exact")
-    #         ba_id = request.GET.get("ba__id__exact")
+    #         # ✅ используем уже прочитанные owner_id / ba_id (не читаем повторно)
     #         if owner_id:
     #             bss = bss.filter(owner_id=owner_id)
     #         if ba_id:
     #             bss = bss.filter(ba_id=ba_id)
 
     #         blocks = []
-            
-            
-            
 
     #         # --- итоги по валютам ---
     #         totals_by_ccy = {}  # code -> {"dt": Decimal, "cr": Decimal, "eod": Decimal, "cnt": int}
@@ -428,7 +457,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             })
 
     #         totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
-
     #         extra_context["totals_by_ccy"] = totals_list
 
     #         # для обратной совместимости: если валюта одна — оставим total_* как раньше
@@ -446,8 +474,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             extra_context["total_eod"] = None
 
     #     return super().changelist_view(request, extra_context=extra_context)
-    
-    
     
     
     
@@ -486,6 +512,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         if selected_date:
             ic_qs = ic_qs.filter(date__lte=selected_date)
 
+        # --- общий итог (как раньше) ---
         ic = ic_qs.aggregate(
             dt=Coalesce(Sum("dt"), Decimal("0.00")),
             cr=Coalesce(Sum("cr"), Decimal("0.00")),
@@ -498,6 +525,47 @@ class BankStatementsAdmin(admin.ModelAdmin):
         extra_context["ic_total_dt"] = ic_dt
         extra_context["ic_total_cr"] = ic_cr
         extra_context["ic_total_net"] = ic_net
+
+        # =========================================================
+        # ✅ ВНУТРИГРУППОВЫЕ: итоги ПО ВАЛЮТАМ (НОВОЕ)
+        # =========================================================
+        ic_by_ccy = (
+            ic_qs
+            .values("ba__currency")
+            .annotate(
+                dt_sum=Coalesce(Sum("dt"), Decimal("0.00")),
+                cr_sum=Coalesce(Sum("cr"), Decimal("0.00")),
+            )
+            .annotate(
+                net=ExpressionWrapper(
+                    F("dt_sum") - F("cr_sum"),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            )
+            .order_by("ba__currency")
+        )
+
+        ic_totals_list = []
+        for row in ic_by_ccy:
+            code = (row["ba__currency"] or "—").upper()
+            ic_totals_list.append({
+                "currency_code": code,
+                "currency_symbol": CURRENCY_SYMBOLS.get(code, "") if code != "—" else "",
+                "currency_flag": CURRENCY_FLAGS.get(code, "") if code != "—" else "",
+                "dt": row["dt_sum"],
+                "cr": row["cr_sum"],
+                "net": row["net"],
+            })
+
+        ic_totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
+        extra_context["ic_totals_by_ccy"] = ic_totals_list
+
+        # (опционально) если валюта одна — можно отдать ещё и её в старые поля
+        if len(ic_totals_list) == 1:
+            only = ic_totals_list[0]
+            extra_context["ic_total_currency_code"] = only["currency_code"]
+            extra_context["ic_total_currency_symbol"] = only["currency_symbol"]
+            extra_context["ic_total_currency_flag"] = only["currency_flag"]
 
         # =========================================================
         # ✅ ТВОЯ ТЕКУЩАЯ ЛОГИКА EOD (только если выбрана дата)
@@ -611,9 +679,11 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
         return super().changelist_view(request, extra_context=extra_context)
 
-    
-    
 
+
+
+    
+    
 
 
 

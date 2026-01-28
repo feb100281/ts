@@ -10,7 +10,13 @@ RulesDict = Dict[str, PatternValue]
 
 # --- правила  ---
 
+# эти слова/фразы исключаем из intercompany ВСЕГДА (любой день)
+INTERCOMPANY_EXCLUDE_ANY = [
+    "конвертация",
+]
+
 INTERCOMPANY_EXCLUDE = {
+"*": ["конвертация"],
 "2024-11-19": 'Перевод средств в связи с окончанием договора N Б/Н от 14.11.2024 ООО "Трендсеттер" по вх.д. 850343 от 19.11.2024',
 '2024-10-02': 'Перевод средств в связи с окончанием договора N Б/Н от 25.09.2024 ООО "Трендсеттер" по вх.д. 788752 от 02.10.2024',
 '2024-05-13': 'Возврат суммы депозита по депозитному договору № БВ-Ю-810/1100-90618308/5-24 от 08.05.24. Без НДС по вх.д. 4507 от 13.05.2024',
@@ -91,7 +97,9 @@ def apply_intercompany_overrides(
     for d, patterns in exclude.items():
         if not patterns:
             continue
-        mask_date = date_key.eq(d)
+        # mask_date = date_key.eq(d)
+        mask_date = pd.Series(True, index=df.index) if d in ("*", "ANY") else date_key.eq(d)
+
         for p in map(_norm, _as_list(patterns)):
             if not p:
                 continue
@@ -102,7 +110,9 @@ def apply_intercompany_overrides(
     for d, patterns in include.items():
         if not patterns:
             continue
-        mask_date = date_key.eq(d)
+        # mask_date = date_key.eq(d)
+        mask_date = pd.Series(True, index=df.index) if d in ("*", "ANY") else date_key.eq(d)
+
         for p in map(_norm, _as_list(patterns)):
             if not p:
                 continue
