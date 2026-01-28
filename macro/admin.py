@@ -484,6 +484,7 @@ class GroupAdmin(DjangoGroupAdmin):
 class KeyRateAdmin(admin.ModelAdmin):
     list_display = ("date", "key_rate", "print_link")
     exclude = ('comment',)
+    date_hierarchy = ('date')
 
     # ------- Кнопка "Печать" в списке -------
     def print_link(self, obj):
@@ -699,6 +700,7 @@ class InflationAdmin(admin.ModelAdmin):
     exclude = ('comment',)
     
     list_per_page = 25
+    date_hierarchy = ('date')
     
     
     # ----- колонка "Печать" -----
@@ -1068,7 +1070,12 @@ class TaxRatesInline(admin.TabularInline):
     verbose_name_plural = "Ставки налога"
     fields = ("date", "rate", )
     ordering = ("-date",)
-
+    verbose_name_plural = mark_safe(
+        "💯 <b>История ставок</b><br>"
+    )
+    
+    
+    
 
 @admin.display(description="Текущая ставка")
 def column_current_rate(obj: TaxesList):
@@ -1123,6 +1130,17 @@ class TaxesListAdmin(admin.ModelAdmin):
     ordering = ("tax_name",)
     exclude = ("description", )
     inlines = [TaxRatesInline]
+    
+    
+    fieldsets = (
+        (
+            mark_safe("📄 <b>Налог</b>"),
+            {
+                "fields": ("tax_name",),
+            },
+        ),
+        
+    )
 
     def changelist_view(self, request, extra_context=None):
         qs = self.get_queryset(request)
@@ -1147,7 +1165,6 @@ class TaxesListAdmin(admin.ModelAdmin):
     class Media:
         css = {
             "all": (
-                "fonts/glyphs.css",
                 "css/admin_overrides.css", 
             )
         }
@@ -1172,6 +1189,7 @@ class CurrencyRateAdmin(admin.ModelAdmin):
     ordering = ("-date", "currency")
     
     list_per_page = 25
+    date_hierarchy = ('date')
 
     # ─────────────────────
     #   отображение валюты

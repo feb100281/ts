@@ -1,11 +1,13 @@
 from django.contrib import admin
 from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, MVSalesDaily
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from django.db.models import Q
 
 
 
 
-# Register your models here.
+### -----ДНЕВНЫЕ ПРОДАЖИ----- ###
 @admin.register(MVSalesDaily)
 class MVSalesDailyAdmin(admin.ModelAdmin):
     list_display = (
@@ -19,8 +21,9 @@ class MVSalesDailyAdmin(admin.ModelAdmin):
         "rtr_ratio"
     )
     search_fields = ("date",)
-    list_filter = ("date", )
+    # list_filter = ("date", )
     list_per_page = 25
+    date_hierarchy = ("date")
     
     class Media:
         css = {"all": ("css/admin_overrides.css",)}
@@ -40,12 +43,12 @@ class MVSalesDailyAdmin(admin.ModelAdmin):
     
 
 
-
+### -----НОМЕНКЛАТУРЫ----- ###
 @admin.register(MVSalesProductData)
 class MVSalesProductDataAdmin(admin.ModelAdmin):
     list_display = (
         "imt_name",
-        "wb_link",          # ← отдельная колонка
+        "wb_link",         
         "imt_id",
         "subj_name",
         "subj_root_name",
@@ -53,9 +56,60 @@ class MVSalesProductDataAdmin(admin.ModelAdmin):
         "contents",
     )
     search_fields = ("imt_name", "subj_name", "subj_root_name")
-    list_filter = ("subj_name", "subj_root_name")
+    list_filter = ("subj_name", "subj_root_name", 'brand_name',)
     list_per_page = 25
     ordering = ("imt_name",)
+    readonly_fields = ("create_date",
+                        "update_date",
+                         "nm_id",
+                        "photo_count",
+                        "supplier_id",
+                        "slug",
+                         "description",
+                        "country",
+                        "sex",
+                        "kit",
+                        "composition",
+                        "nm_colors_names",)
+    
+    
+    
+    # тут считаем мини-метрики по ТЕКУЩЕЙ выборке (учитывает фильтры/поиск)
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+
+        try:
+            cl = response.context_data["cl"]
+            qs = cl.queryset
+
+            brands_cnt = (
+                qs.exclude(Q(brand_name__isnull=True) | Q(brand_name=""))
+                .values("brand_name").distinct().count()
+            )
+            groups_cnt = (
+                qs.exclude(Q(subj_root_name__isnull=True) | Q(subj_root_name=""))
+                .values("subj_root_name").distinct().count()
+            )
+            cats_cnt = (
+                qs.exclude(Q(subj_name__isnull=True) | Q(subj_name=""))
+                .values("subj_name").distinct().count()
+            )
+            wb_links_cnt = (
+                qs.exclude(Q(nm_id__isnull=True) | Q(nm_id=""))
+                .count()
+            )
+
+            response.context_data["mini_metrics"] = {
+                "brands_cnt": brands_cnt,
+                "groups_cnt": groups_cnt,
+                "cats_cnt": cats_cnt,
+                "wb_links_cnt": wb_links_cnt,
+            }
+        except Exception:
+            # чтобы ничего не ломалось даже если где-то ошибка
+            response.context_data["mini_metrics"] = None
+
+        return response
     
     
 
@@ -68,48 +122,53 @@ class MVSalesProductDataAdmin(admin.ModelAdmin):
             'target="_blank" rel="noopener">открыть</a>',
             obj.nm_id,
         )
+
     fieldsets = (
-    (
-        "Описание",
-        {
-            "fields": (
-                "description",
-                "country",
-                "sex",
-                "kit",
-            ),
-        },
-    ),
-    (
-        "Состав и цвета",
-        {
-            "fields": (
-                "composition",
-                "nm_colors_names",
-            ),
-        },
-    ),
-    (
-        "Даты",
-        {
-            "fields": (
-                "create_date",
-                "update_date",
-            ),
-        },
-    ),
-    (
-        "Прочие",
-        {
-            "fields": (
-                "nm_id",
-                "photo_count",
-                "supplier_id",
-                "slug",
-            ),
-        },
-    ),
-)
+        (
+            mark_safe("📝 <b>Описание товара</b>"),
+            {
+                "fields": (
+                    "description",
+                    "country",
+                    "sex",
+                    "kit",
+                ),
+            },
+        ),
+        (
+            mark_safe("🎨 <b>Состав и цвета</b>"),
+            {
+                "fields": (
+                    "composition",
+                    "nm_colors_names",
+                ),
+            },
+        ),
+        (
+            mark_safe("📅 <b>Даты</b>"),
+            {
+                "fields": (
+                    "create_date",
+                    "update_date",
+                ),
+            },
+        ),
+        (
+            mark_safe("⚙️ <b>Служебные поля</b>"),
+            {
+                "fields": (
+                    "nm_id",
+                    "photo_count",
+                    "supplier_id",
+                    "slug",
+                ),
+            },
+        ),
+    )
+
+    
+    class Media:
+        css = {"all": ("css/admin_overrides.css",)}
     
 
 

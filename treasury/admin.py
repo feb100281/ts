@@ -4,7 +4,8 @@ from django.http import JsonResponse
 from django.urls import path
 from django.db.models import F, Value, DecimalField, ExpressionWrapper
 import csv
-from django.db.models import OuterRef, Exists
+import re
+
 
 from django.http import HttpResponse
 from django.contrib import admin, messages
@@ -22,7 +23,7 @@ from django import forms
 from contracts.models import Contracts
 from .models import BankStatements, CfData, CfSplits,ContractsRexex
 from utils.bsparsers.bsupdater import update_cf_data
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 
 
@@ -106,7 +107,6 @@ class CfDataInline(admin.TabularInline):
     def open_link(self, obj):
         url = reverse("admin:treasury_cfdata_change", args=[obj.pk])
         return format_html('<a class="button" href="{}">↗</a>', url)
-
 
 
 class CfSplitsInline(admin.TabularInline):
@@ -195,16 +195,16 @@ class BankStatementsAdmin(admin.ModelAdmin):
     )
     list_display_links = ("period",)
     search_fields = ("owner__name", "ba__account", "ba__bank__name")
-    list_filter = ("owner", "ba", "uploaded_at", InPeriodDateFilter)
+    list_filter = ("owner", "ba",  InPeriodDateFilter)
     # date_hierarchy = "uploaded_at"
   
     ordering = ("-uploaded_at",)
     list_select_related = ("owner", "ba")
 
     fieldsets = (
-        ("📄 Файл выписки", {"fields": ("file",)}),
+        (mark_safe("📄 <b>Файл выписки</b>"), {"fields": ("file",)}),
         (
-        "🧾 Период и реквизиты",
+        mark_safe("🧾 <b>Период и реквизиты</b>"),
         {
             "fields": (
                 "owner",
@@ -214,8 +214,8 @@ class BankStatementsAdmin(admin.ModelAdmin):
         },
             ),
         
-        ("💰 Остатки", {"fields": ("bb", "eb")}), 
-        ("🕒 Система", {"fields": ("uploaded_at",)}),
+        (mark_safe("💰 <b>Остатки</b>"), {"fields": ("bb", "eb")}), 
+        (mark_safe("🕒 <b>Система</b>"), {"fields": ("uploaded_at",)}),
     )
     readonly_fields = ("uploaded_at", "owner", "ba", "start", "finish", "bb", "eb")
 
@@ -223,7 +223,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         css = {
             "all": (
                 "css/admin_overrides.css",
-                "css/admin_treasury.css",
+                # "css/admin_treasury.css",
                 "fonts/glyphs.css", 
             )
         }
@@ -682,15 +682,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
 
 
-    
-    
-
-
-
-
-
-
-
     @admin.display(description="Период", ordering="start")
     def period(self, obj):
         if obj.start and obj.finish:
@@ -866,11 +857,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
             return badge("Загружено", "green")
         return badge("Не обработано", "amber")
 
-    @admin.display(description="Файл")
-    def file_link(self, obj):
-        if not obj.file:
-            return "—"
-        return format_html('<a href="{}" target="_blank">файл</a>', obj.file.url)
     
     
     @admin.display(description="Дата загрузки", ordering="uploaded_at")
@@ -945,11 +931,11 @@ class CfDataAdmin(admin.ModelAdmin):
         "cp_short",
         "contract_block",
         "cfitem_block",
-        "vat_badge",
+        # "vat_badge",
         "temp_short",
-        "bs_link",
+
     )
-    list_display_links = ("date_short", "dt_amount", "cr_amount")
+    list_display_links = ("date_short", "dt_amount", "dt_amount")
 
     search_fields = (
         "temp",
@@ -960,18 +946,58 @@ class CfDataAdmin(admin.ModelAdmin):
         "doc_numner",
         "cp_final__name",
         "contract__number",
+
     )
-    list_filter = ( ByInnBadgeFilter, 'cp', "intercompany", "owner", "ba", "cfitem", "contract", "bs")
+    
+    
+    def get_search_results(self, request, queryset, search_term):
+        raw = (search_term or "").strip()
+        if not raw:
+            return super().get_search_results(request, queryset, search_term)
+
+        # распознаём "сумму": цифры + пробелы + . , (без букв)
+        looks_money = re.fullmatch(r"[0-9\s\xa0.,]+", raw) is not None
+
+        if looks_money:
+            normalized = raw.replace(" ", "").replace("\xa0", "").replace(",", ".")
+            try:
+                amount = Decimal(normalized)
+            except InvalidOperation:
+                return super().get_search_results(request, queryset, search_term)
+
+            # ВАЖНО: ищем ТОЛЬКО по суммам (строгое совпадение)
+            qs = queryset.filter(Q(dt=amount) | Q(cr=amount)).distinct()
+            return qs, False
+
+        # иначе обычный поиск по текстам
+        return super().get_search_results(request, queryset, search_term)
+    
+
+    
+    list_filter = ( 
+                #    ByInnBadgeFilter, 
+                   'cp', 
+                   "intercompany", 
+                #    "owner", 
+                   "ba", 
+                   "cfitem", 
+                   "contract", 
+                #    "bs"
+                   )
     date_hierarchy = "date"
+    
+    
+    
+    
     ordering = ("-date", "-id")
 
     autocomplete_fields = ("cp", "cp_final", "cfitem", "bs", "ba")
     list_select_related = ("cp_final", "contract", "cfitem", "bs", "owner", "ba")
 
     fieldsets = (
-        ("🧾 Основное", {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
-        ("🔗 Связи", {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
-        ("🏦 Детали", {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
+        (mark_safe("🧾 <b>Основное</b>"), {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
+        (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
+        (mark_safe("🏦 <b>Детали</b>"), {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
 
     # -------------------- Колонки списка --------------------
@@ -1021,9 +1047,9 @@ class CfDataAdmin(admin.ModelAdmin):
 
         header = [
             "date", "dt", "cr", "amount",
-            "cp_inn_name",        # <-- НОВОЕ (перед финальным)
+            "cp_inn_name",        
             "cp_final_name",
-            "cp_final_match",     # <-- НОВОЕ (рулевая колонка)
+            "cp_final_match",     
             "contract_number",
             "cfitem_name",
             "cfitem_path_names",
@@ -1340,14 +1366,7 @@ class CfDataAdmin(admin.ModelAdmin):
         s = obj.temp.strip().replace("\n", " ")
         return (s[:90] + "…") if len(s) > 90 else s
 
-    @admin.display(description="Выписка")
-    def bs_link(self, obj):
-        if not obj.bs_id:
-            return "—"
-        url = reverse("admin:treasury_bankstatements_change", args=[obj.bs_id])
-        start = obj.bs.start.strftime("%d.%m.%Y") if obj.bs.start else "—"
-        finish = obj.bs.finish.strftime("%d.%m.%Y") if obj.bs.finish else "—"
-        return format_html('<a href="{}">↗ {}–{}</a>', url, start, finish)
+
 
     class Media:
         css = {"all": ("css/admin_overrides.css", "css/admin_treasury.css", "fonts/glyphs.css")}

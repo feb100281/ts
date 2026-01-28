@@ -33,7 +33,6 @@
         <span style="font-size:19px;font-weight:800;color:#0f172a;">
           CF документы
         </span>
- 
       </div>
     </div>
 
@@ -91,16 +90,14 @@
           🤖 Автоматизация (RegEx)
         </a>
 
-
         <a href="{% url 'admin:treasury_cfdata_export_csv' %}?{{ request.GET.urlencode }}"
-            style="
-              font-size:11px;padding:5px 8px;border-radius:8px;text-decoration:none;
-              background:rgba(14,165,233,.10);color:#075985;display:inline-flex;align-items:center;gap:8px;
-              border:1px solid rgba(14,165,233,.22);
-            ">
-            ⬇️ Скачать CSV
-</a>
-
+           style="
+             font-size:11px;padding:5px 8px;border-radius:8px;text-decoration:none;
+             background:rgba(14,165,233,.10);color:#075985;display:inline-flex;align-items:center;gap:8px;
+             border:1px solid rgba(14,165,233,.22);
+           ">
+          ⬇️ Скачать CSV
+        </a>
       </div>
 
       <div style="
@@ -108,7 +105,6 @@
           border-top:1px solid rgba(148,163,184,.25);
           color:#64748b;font-size:11px;line-height:1.35;
       ">
- 
       </div>
     </div>
   </div>
@@ -144,67 +140,34 @@
 {% block extrahead %}
   {{ block.super }}
 
+
+
+
+
+
+
   <style>
-    /* поиск */
-    #changelist-search{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
-      margin:0 !important;
-      padding:0 !important;
-    }
-    #changelist-search label{ display:none; }
-    #changelist-search input[type="text"]{
-      height:28px;
-      padding:0 10px;
-      border:1px solid rgba(148,163,184,.35);
-      background:#fff;
-      border-radius:10px;
-      font-size:13px;
-      font-weight:800;
-      color:#0f172a;
-      outline:none;
-      min-width:260px;
-    }
-    #changelist-search input[type="submit"]{
-      height:28px;
-      padding:0 12px;
-      border-radius:10px;
-      border:1px solid rgba(14,165,233,.25);
-      background:rgba(14,165,233,.10);
-      font-size:12px;
-      font-weight:900;
-      color:#075985;
-      cursor:pointer;
-    }
-    #changelist-search .quiet{ display:none; }
 
     /* кликабельные строки */
-    #result_list tbody tr{ cursor:pointer; }
-
-
+    #result_list tbody tr { cursor: pointer; }
 
     /* Подсветка колонок Дт/Кт (если хочешь — можно убрать) */
     #result_list td.field-dt_amount { background: rgba(22,163,74,.04); }
     #result_list td.field-cr_amount { background: rgba(220,38,38,.04); }
 
+    /* === Липкая шапка таблицы === */
+    #result_list thead th {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #f8fafc;          /* фон, чтобы не просвечивало */
+      box-shadow: 0 1px 0 #e5e7eb;  /* линия снизу */
+    }
 
-      /* === Липкая шапка таблицы === */
-  #result_list thead th {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-
-    background: #f8fafc;          /* фон, чтобы не просвечивало */
-    box-shadow: 0 1px 0 #e5e7eb;  /* линия снизу */
-  }
-
-  /* если есть чекбокс "выбрать всё" */
-  #result_list thead th.action-checkbox-column {
-    z-index: 30;
-  }
-
+    /* если есть чекбокс "выбрать всё" */
+    #result_list thead th.action-checkbox-column {
+      z-index: 30;
+    }
   </style>
 
   <script>
@@ -228,5 +191,8 @@
 {% endblock %}
 
 {% block content %}
+
   {{ block.super }}
 {% endblock %}
+
+

@@ -6,42 +6,13 @@
   margin-bottom:14px;
 }
 
-/* обёртка для позиционирования иконок внутри инпута */
-.admin-search-wrap{
-  position:relative;
-  display:inline-block;
-}
-
-/* поле поиска: место под лупу и крестик */
-#changelist-search input[name="q"]{
-  width:380px;
-  padding-left:30px;  /* под лупу слева */
-  padding-right:30px; /* под крестик справа */
-}
-
 /* скрыть нативный cancel у webkit */
 #changelist-search input[name="q"]::-webkit-search-cancel-button{
   -webkit-appearance:none;
   appearance:none;
 }
 
-/* 🔍 лупа слева */
-.admin-search-icon{
-  position:absolute;
-  left:10px;
-  top:50%;
-  transform:translateY(-50%);
-  pointer-events:none;
-  opacity:.85;
-}
-.admin-search-icon svg{
-  stroke:#888;
-  width:16px;
-  height:16px;
-}
-.admin-search-wrap:focus-within .admin-search-icon svg{
-  stroke:#444; /* темнее при фокусе */
-}
+
 
 /* × крестик справа */
 .admin-clear-btn{
@@ -182,6 +153,31 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 .change-list #result_list .column-bs_acc {
   min-width: 320px;
 }
+
+/* ===== Фон заголовков таблицы ===== */
+/* .change-list #result_list thead th {
+  background: #ecfdf5;  
+  border-bottom: 1px solid #e5e7eb;
+  border-right: 1px solid rgba(16,185,129,.18);
+  font-weight: 700;
+  color: #065f46;
+
+} */
+
+.change-list #result_list thead th {
+  background: #eff6ff;          
+  border-bottom: 1px solid #dbeafe;
+  border-right: 1px solid rgba(59,130,246,.18);
+
+  font-size: 13px;
+  font-weight: 800;
+  color: #1e3a8a;
+}
+
+
+
+
+
 
 
 
@@ -378,6 +374,52 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 #cfitemauto_set-group .select2-container{
   width: 100% !important;
   max-width: none !important;
+}
+
+
+
+
+/* ===== Django admin: фикс строки поиска и фильтров ===== */
+
+#changelist #toolbar {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;              /* ❗ запрещаем перенос */
+}
+
+#changelist #toolbar > form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;              /* ❗ */
+    width: 100%;
+}
+
+/* Все select и input — фиксированная логика ширины */
+#changelist #toolbar select,
+#changelist #toolbar input[type="text"],
+#changelist #toolbar input[type="search"] {
+    flex: 0 0 auto;
+    min-width: 180px;
+}
+
+/* Поле поиска — растягивается, но не ломает строку */
+#changelist #searchbar {
+    flex: 1 1 auto;                 /* ❗ растягивается */
+    min-width: 220px;
+    max-width: 420px;               /* ❗ ограничение */
+}
+
+/* Кнопка "Найти" — фиксированная */
+#changelist #toolbar input[type="submit"] {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* Убираем внезапные отступы Django */
+#changelist #toolbar br {
+    display: none;
 }
 
 

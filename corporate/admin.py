@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 import re
-from django.db.models import Q
+from django.utils.safestring import mark_safe
+
 
 from django.db.models import Count, Max
 from django.shortcuts import render
@@ -20,7 +21,6 @@ from mptt.admin import DraggableMPTTAdmin
 from django.db.models.functions import Cast
 from django.db.models import IntegerField
 
-from treasury.models import BankStatements
 
 from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 
@@ -91,6 +91,7 @@ class OwnersAdmin(admin.ModelAdmin):
     list_display = ("name", "inn", "ceo_display", "bankaccounts_count_display")
     inlines = [BankAccountInline]
 
+
     class Media:
         css = {
             "all": (
@@ -101,43 +102,46 @@ class OwnersAdmin(admin.ModelAdmin):
         js = ("corporate/js/owners_fill.js",)
 
     fieldsets = (
-        (
-            "Отображение в системе",
-            {"fields": ("name",)},
-        ),
-        (
-            "Юридические реквизиты",
-            {
-                "fields": (
-                    "full_name",
-                    "inn",
-                    "kpp",
-                    "ogrn",
-                )
-            },
-        ),
-        (
-            "Контакты и адрес",
-            {
-                "fields": (
-                    "address",
-                    "phone",
-                    "email",
-                    "website",
-                )
-            },
-        ),
-        (
-            "Руководитель",
-            {
-                "fields": (
-                    "ceo_name",
-                    "ceo_post",
-                    "ceo_record_date",
-                )
-            },
-        ),
-    )
+    (
+        mark_safe("🏷️ <b>Наименование</b>"),
+        {
+            "fields": ("name",),
+        },
+    ),
+    (
+        mark_safe("📄 <b>Реквизиты</b>"),
+        {
+            "fields": (
+                "full_name",
+                "inn",
+                "kpp",
+                "ogrn",
+            ),
+        },
+    ),
+    (
+        mark_safe("📍 <b>Контакты</b>"),
+        {
+            "fields": (
+                "address",
+                "phone",
+                "email",
+                "website",
+            ),
+        },
+    ),
+    (
+        mark_safe("👤 <b>Руководитель</b>"),
+        {
+            "fields": (
+                "ceo_name",
+                "ceo_post",
+                "ceo_record_date",
+            ),
+            "classes": ("collapse",),  
+        },
+    ),
+)
 
     @admin.display(description="Руководитель")
     def ceo_display(self, obj):
@@ -215,17 +219,36 @@ class BankAdmin(admin.ModelAdmin):
     list_display = ( "logo_preview","name", "bik", "corr_account")
     search_fields = ("name", "bik")
     list_display_links = ("name",)
+    readonly_fields = ("type", "address")
+    list_filter = ("bik", "name",)
 
     fieldsets = (
-    ("🏦 Банк", {
-        "fields": ("name", "name_eng", "bik", "corr_account"),
-    }),
-    ("🖼️ Логотип", {
-        "fields": ("logo_glyph", "logo"),  # logo hidden в форме, но пусть будет
-    }),
-    ("📍 Адрес и тип", {
-        "fields": ("type", "address"),
-    }),
+    (
+        mark_safe("🏦 <b>Банк</b>"),
+        {
+            "fields": ("name", "name_eng"),
+        },
+    ),
+    (
+        mark_safe("💳 <b>Платёжные реквизиты</b>"),
+        {
+            "fields": ("bik", "corr_account"),
+        },
+    ),
+    (
+        mark_safe("🖼️ <b>Логотип</b>"),
+        {
+            "fields": ("logo_glyph", "logo"),
+            "classes": ("collapse",),   
+        },
+    ),
+    (
+        mark_safe("📍 <b>Адрес и тип</b>"),
+        {
+            "fields": ("type", "address"),
+            "classes": ("collapse",),
+        },
+    ),
 )
     
     
@@ -871,15 +894,15 @@ class CountriesAdmin(admin.ModelAdmin):
     list_per_page = 50
 
     fieldsets = (
-        ("🌍 Страна", {
+        (mark_safe("🌍 <b>Страна</b>"), {
             "fields": ("name", "code", "emojy_flag"),
 
         }),
-        ("💱 Валюта", {
+        (mark_safe("💱 <b>Валюта</b>"), {
             "fields": ("currency_code",),
 
         }),
-        ("🔎 Поисковая модель (RegEx)", {
+        (mark_safe("🔎 <b>Поисковая модель (RegEx)</b>"), {
             "fields": ("regex_patterns",),
   
         }),

@@ -80,7 +80,7 @@ class Owners(models.Model):
 #----- БАНКИ ----#
 class Bank(models.Model):
     name = models.CharField(max_length=255, verbose_name="Наименование")
-    bik = models.CharField(max_length=9, verbose_name="БИК", unique=True)
+    bik = models.CharField(max_length=9, verbose_name="БИК", unique=True, help_text="9 цифр, без пробелов")
     
     logo = models.CharField(
         max_length=1,

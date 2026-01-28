@@ -284,6 +284,7 @@
     --color-system:          #9CA3AF;  /* серый: служебные / системные */
     --color-bot:             #0EA5E9;  /* cyan: Телеграм-бот и околоботовое */
     --color-treasury:        #1f9c95;
+    --color-sales: #60A5FA;
 
 
     /* Фон для active / hover */
@@ -427,6 +428,15 @@
 .fa-robot,
 .fa-receipt {
     color: var(--color-treasury) !important;
+}
+
+
+/*  Продажи */
+.fa-chart-column,
+.fa-calendar-day,
+.fa-shirt,
+.fa-boxes-stacked {
+    color: var(--color-sales) !important;
 }
 
 
@@ -743,12 +753,12 @@ table th {
    ============================ */
 
 /* Все фильтры и поиск в списках */
-.change-list .form-control,
+/* .change-list .form-control,
 .change-list select,
 .change-list input[type="text"],
 .change-list input[type="search"] {
     font-size: 11px !important;
-}
+} */
 
 /* Placeholder (подсказка в поиске) */
 .change-list input::placeholder {
@@ -756,13 +766,7 @@ table th {
     color: #9CA3AF;
 }
 
-/* Кнопка "Найти" */
-.change-list .btn,
-.change-list .button {
-    font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 6px; /* не pill */
-}
+
 
 
 /* ============================
@@ -874,7 +878,6 @@ table th {
 .content-header {
   padding-top: 18px !important;
 }
-
 
 
 
