@@ -4,6 +4,7 @@ from corporate.models import BankAccount,Owners, CfItems
 from contracts.models import Contracts
 from counterparties.models import Counterparty
 from django.core.exceptions import ValidationError
+from django.utils.safestring import mark_safe
 
 from utils.bsparsers.bsparser import get_bs_details
 
@@ -117,8 +118,8 @@ class CfSplits(models.Model):
     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Договор")
     cfitem = models.ForeignKey(CfItems,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Статья CF" )
     class Meta:
-        verbose_name = "Сплит"
-        verbose_name_plural = "Сплиты оплат"   
+        verbose_name = mark_safe("🧩<b>Сплит оплат</b>")
+        verbose_name_plural = mark_safe("🧩<b>Сплит оплат</b>")
     
     def __str__(self):
         return f"{self.transaction}"

@@ -4,6 +4,9 @@ from django.http import JsonResponse
 from django.urls import path
 from django.db.models import F, Value, DecimalField, ExpressionWrapper
 import csv
+import re
+
+
 from django.http import HttpResponse
 from django.contrib import admin, messages
 from django.db.models import Sum, Count
@@ -20,7 +23,7 @@ from django import forms
 from contracts.models import Contracts
 from .models import BankStatements, CfData, CfSplits,ContractsRexex
 from utils.bsparsers.bsupdater import update_cf_data
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 
 
@@ -104,7 +107,6 @@ class CfDataInline(admin.TabularInline):
     def open_link(self, obj):
         url = reverse("admin:treasury_cfdata_change", args=[obj.pk])
         return format_html('<a class="button" href="{}">↗</a>', url)
-
 
 
 class CfSplitsInline(admin.TabularInline):
@@ -193,16 +195,16 @@ class BankStatementsAdmin(admin.ModelAdmin):
     )
     list_display_links = ("period",)
     search_fields = ("owner__name", "ba__account", "ba__bank__name")
-    list_filter = ("owner", "ba", "uploaded_at", InPeriodDateFilter)
+    list_filter = ("owner", "ba",  InPeriodDateFilter)
     # date_hierarchy = "uploaded_at"
   
     ordering = ("-uploaded_at",)
     list_select_related = ("owner", "ba")
 
     fieldsets = (
-        ("📄 Файл выписки", {"fields": ("file",)}),
+        (mark_safe("📄 <b>Файл выписки</b>"), {"fields": ("file",)}),
         (
-        "🧾 Период и реквизиты",
+        mark_safe("🧾 <b>Период и реквизиты</b>"),
         {
             "fields": (
                 "owner",
@@ -212,8 +214,8 @@ class BankStatementsAdmin(admin.ModelAdmin):
         },
             ),
         
-        ("💰 Остатки", {"fields": ("bb", "eb")}), 
-        ("🕒 Система", {"fields": ("uploaded_at",)}),
+        (mark_safe("💰 <b>Остатки</b>"), {"fields": ("bb", "eb")}), 
+        (mark_safe("🕒 <b>Система</b>"), {"fields": ("uploaded_at",)}),
     )
     readonly_fields = ("uploaded_at", "owner", "ba", "start", "finish", "bb", "eb")
 
@@ -221,7 +223,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         css = {
             "all": (
                 "css/admin_overrides.css",
-                "css/admin_treasury.css",
+                # "css/admin_treasury.css",
                 "fonts/glyphs.css", 
             )
         }
@@ -311,16 +313,16 @@ class BankStatementsAdmin(admin.ModelAdmin):
               )
         )
     
+
     
-
-        
-
-
-        
-        
     # def changelist_view(self, request, extra_context=None):
     #     extra_context = extra_context or {}
 
+    #     # ✅ ВСЕГДА объявляем фильтры (иначе UnboundLocalError)
+    #     owner_id = request.GET.get("owner__id__exact")
+    #     ba_id = request.GET.get("ba__id__exact")
+
+    #     # ✅ Дата среза (может быть None)
     #     selected_date = None
     #     raw = request.GET.get("in_period_date")
     #     if raw:
@@ -330,9 +332,40 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             selected_date = None
 
     #     extra_context["selected_date"] = selected_date
-        
-        
 
+    #     # =========================================================
+    #     # ✅ ГЛОБАЛЬНЫЙ КОНТРОЛЬ ВНУТРИГРУППОВЫХ (НЕ в разрезе выписки)
+    #     #    Показываем всегда на экране "Выписки"
+    #     #    (опционально учитываем текущие фильтры owner/ba и дату-срез)
+    #     # =========================================================
+    #     ic_qs = CfData.objects.filter(intercompany=True)
+
+    #     # если на странице выбран owner / ba — логично считать в том же контексте
+    #     if owner_id:
+    #         ic_qs = ic_qs.filter(owner_id=owner_id)
+    #     if ba_id:
+    #         ic_qs = ic_qs.filter(ba_id=ba_id)
+
+    #     # если выбрана дата — считаем "на дату" (до выбранной даты включительно)
+    #     if selected_date:
+    #         ic_qs = ic_qs.filter(date__lte=selected_date)
+
+    #     ic = ic_qs.aggregate(
+    #         dt=Coalesce(Sum("dt"), Decimal("0.00")),
+    #         cr=Coalesce(Sum("cr"), Decimal("0.00")),
+    #     )
+
+    #     ic_dt = ic["dt"] or Decimal("0.00")
+    #     ic_cr = ic["cr"] or Decimal("0.00")
+    #     ic_net = ic_dt - ic_cr
+
+    #     extra_context["ic_total_dt"] = ic_dt
+    #     extra_context["ic_total_cr"] = ic_cr
+    #     extra_context["ic_total_net"] = ic_net
+
+    #     # =========================================================
+    #     # ✅ ТВОЯ ТЕКУЩАЯ ЛОГИКА EOD (только если выбрана дата)
+    #     # =========================================================
     #     if selected_date:
     #         bss = (
     #             BankStatements.objects
@@ -340,17 +373,13 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             .select_related("owner", "ba", "ba__bank")
     #         )
 
-    #         owner_id = request.GET.get("owner__id__exact")
-    #         ba_id = request.GET.get("ba__id__exact")
+    #         # ✅ используем уже прочитанные owner_id / ba_id (не читаем повторно)
     #         if owner_id:
     #             bss = bss.filter(owner_id=owner_id)
     #         if ba_id:
     #             bss = bss.filter(ba_id=ba_id)
 
     #         blocks = []
-            
-            
-            
 
     #         # --- итоги по валютам ---
     #         totals_by_ccy = {}  # code -> {"dt": Decimal, "cr": Decimal, "eod": Decimal, "cnt": int}
@@ -428,7 +457,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             })
 
     #         totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
-
     #         extra_context["totals_by_ccy"] = totals_list
 
     #         # для обратной совместимости: если валюта одна — оставим total_* как раньше
@@ -446,8 +474,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
     #             extra_context["total_eod"] = None
 
     #     return super().changelist_view(request, extra_context=extra_context)
-    
-    
     
     
     
@@ -486,6 +512,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         if selected_date:
             ic_qs = ic_qs.filter(date__lte=selected_date)
 
+        # --- общий итог (как раньше) ---
         ic = ic_qs.aggregate(
             dt=Coalesce(Sum("dt"), Decimal("0.00")),
             cr=Coalesce(Sum("cr"), Decimal("0.00")),
@@ -498,6 +525,47 @@ class BankStatementsAdmin(admin.ModelAdmin):
         extra_context["ic_total_dt"] = ic_dt
         extra_context["ic_total_cr"] = ic_cr
         extra_context["ic_total_net"] = ic_net
+
+        # =========================================================
+        # ✅ ВНУТРИГРУППОВЫЕ: итоги ПО ВАЛЮТАМ (НОВОЕ)
+        # =========================================================
+        ic_by_ccy = (
+            ic_qs
+            .values("ba__currency")
+            .annotate(
+                dt_sum=Coalesce(Sum("dt"), Decimal("0.00")),
+                cr_sum=Coalesce(Sum("cr"), Decimal("0.00")),
+            )
+            .annotate(
+                net=ExpressionWrapper(
+                    F("dt_sum") - F("cr_sum"),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            )
+            .order_by("ba__currency")
+        )
+
+        ic_totals_list = []
+        for row in ic_by_ccy:
+            code = (row["ba__currency"] or "—").upper()
+            ic_totals_list.append({
+                "currency_code": code,
+                "currency_symbol": CURRENCY_SYMBOLS.get(code, "") if code != "—" else "",
+                "currency_flag": CURRENCY_FLAGS.get(code, "") if code != "—" else "",
+                "dt": row["dt_sum"],
+                "cr": row["cr_sum"],
+                "net": row["net"],
+            })
+
+        ic_totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
+        extra_context["ic_totals_by_ccy"] = ic_totals_list
+
+        # (опционально) если валюта одна — можно отдать ещё и её в старые поля
+        if len(ic_totals_list) == 1:
+            only = ic_totals_list[0]
+            extra_context["ic_total_currency_code"] = only["currency_code"]
+            extra_context["ic_total_currency_symbol"] = only["currency_symbol"]
+            extra_context["ic_total_currency_flag"] = only["currency_flag"]
 
         # =========================================================
         # ✅ ТВОЯ ТЕКУЩАЯ ЛОГИКА EOD (только если выбрана дата)
@@ -610,13 +678,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 extra_context["total_eod"] = None
 
         return super().changelist_view(request, extra_context=extra_context)
-
-    
-    
-
-
-
-
 
 
 
@@ -796,11 +857,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
             return badge("Загружено", "green")
         return badge("Не обработано", "amber")
 
-    @admin.display(description="Файл")
-    def file_link(self, obj):
-        if not obj.file:
-            return "—"
-        return format_html('<a href="{}" target="_blank">файл</a>', obj.file.url)
     
     
     @admin.display(description="Дата загрузки", ordering="uploaded_at")
@@ -875,11 +931,11 @@ class CfDataAdmin(admin.ModelAdmin):
         "cp_short",
         "contract_block",
         "cfitem_block",
-        "vat_badge",
+        # "vat_badge",
         "temp_short",
-        "bs_link",
+
     )
-    list_display_links = ("date_short", "dt_amount", "cr_amount")
+    list_display_links = ("date_short", "dt_amount", "dt_amount")
 
     search_fields = (
         "temp",
@@ -890,18 +946,58 @@ class CfDataAdmin(admin.ModelAdmin):
         "doc_numner",
         "cp_final__name",
         "contract__number",
+
     )
-    list_filter = ( ByInnBadgeFilter, 'cp', "intercompany", "owner", "ba", "cfitem", "contract", "bs")
+    
+    
+    def get_search_results(self, request, queryset, search_term):
+        raw = (search_term or "").strip()
+        if not raw:
+            return super().get_search_results(request, queryset, search_term)
+
+        # распознаём "сумму": цифры + пробелы + . , (без букв)
+        looks_money = re.fullmatch(r"[0-9\s\xa0.,]+", raw) is not None
+
+        if looks_money:
+            normalized = raw.replace(" ", "").replace("\xa0", "").replace(",", ".")
+            try:
+                amount = Decimal(normalized)
+            except InvalidOperation:
+                return super().get_search_results(request, queryset, search_term)
+
+            # ВАЖНО: ищем ТОЛЬКО по суммам (строгое совпадение)
+            qs = queryset.filter(Q(dt=amount) | Q(cr=amount)).distinct()
+            return qs, False
+
+        # иначе обычный поиск по текстам
+        return super().get_search_results(request, queryset, search_term)
+    
+
+    
+    list_filter = ( 
+                #    ByInnBadgeFilter, 
+                   'cp', 
+                   "intercompany", 
+                #    "owner", 
+                   "ba", 
+                   "cfitem", 
+                   "contract", 
+                #    "bs"
+                   )
     date_hierarchy = "date"
+    
+    
+    
+    
     ordering = ("-date", "-id")
 
     autocomplete_fields = ("cp", "cp_final", "cfitem", "bs", "ba")
     list_select_related = ("cp_final", "contract", "cfitem", "bs", "owner", "ba")
 
     fieldsets = (
-        ("🧾 Основное", {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
-        ("🔗 Связи", {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
-        ("🏦 Детали", {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
+        (mark_safe("🧾 <b>Основное</b>"), {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
+        (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
+        (mark_safe("🏦 <b>Детали</b>"), {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
 
     # -------------------- Колонки списка --------------------
@@ -951,9 +1047,9 @@ class CfDataAdmin(admin.ModelAdmin):
 
         header = [
             "date", "dt", "cr", "amount",
-            "cp_inn_name",        # <-- НОВОЕ (перед финальным)
+            "cp_inn_name",        
             "cp_final_name",
-            "cp_final_match",     # <-- НОВОЕ (рулевая колонка)
+            "cp_final_match",     
             "contract_number",
             "cfitem_name",
             "cfitem_path_names",
@@ -1270,14 +1366,7 @@ class CfDataAdmin(admin.ModelAdmin):
         s = obj.temp.strip().replace("\n", " ")
         return (s[:90] + "…") if len(s) > 90 else s
 
-    @admin.display(description="Выписка")
-    def bs_link(self, obj):
-        if not obj.bs_id:
-            return "—"
-        url = reverse("admin:treasury_bankstatements_change", args=[obj.bs_id])
-        start = obj.bs.start.strftime("%d.%m.%Y") if obj.bs.start else "—"
-        finish = obj.bs.finish.strftime("%d.%m.%Y") if obj.bs.finish else "—"
-        return format_html('<a href="{}">↗ {}–{}</a>', url, start, finish)
+
 
     class Media:
         css = {"all": ("css/admin_overrides.css", "css/admin_treasury.css", "fonts/glyphs.css")}

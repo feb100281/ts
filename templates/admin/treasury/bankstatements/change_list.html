@@ -623,6 +623,84 @@ document.addEventListener('DOMContentLoaded', function () {
       align-items:flex-start;
     }
 
+
+    /* === IC NET highlight === */
+.ic-net{
+  display:inline-flex;
+  align-items:baseline;
+  gap:10px;
+}
+
+.ic-net .net-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding:6px 10px;
+  border-radius:12px;
+  font-weight:950;
+  font-variant-numeric: tabular-nums;
+  border:1px solid rgba(148,163,184,.22);
+  background:rgba(15,23,42,.02);
+}
+
+.ic-net .net-pill.ok{
+  border-color: rgba(16,185,129,.25);
+  background: rgba(16,185,129,.08);
+  box-shadow: 0 0 0 1px rgba(16,185,129,.14) inset;
+  color:#065f46;
+}
+
+.ic-net .net-pill.bad{
+  border-color: rgba(245,158,11,.35);
+  background: rgba(245,158,11,.12);
+  box-shadow:
+    0 0 0 1px rgba(245,158,11,.18) inset,
+    0 10px 26px rgba(245,158,11,.18);
+  color:#92400e;
+}
+
+/* усиление именно цифры */
+.ic-net .net-pill.bad .num{
+  color:#991b1b;
+  text-shadow: 0 0 18px rgba(239,68,68,.32);
+}
+
+/* аккуратный пульс только когда есть проблема */
+@keyframes softPulse {
+  0%   { transform: translateY(0);   box-shadow: 0 10px 26px rgba(245,158,11,.16); }
+  50%  { transform: translateY(-1px); box-shadow: 0 16px 34px rgba(245,158,11,.22); }
+  100% { transform: translateY(0);   box-shadow: 0 10px 26px rgba(245,158,11,.16); }
+}
+
+.ic-net .net-pill.bad{
+  animation: softPulse 2.6s ease-in-out infinite;
+}
+
+.ic-net .tag{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:3px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:.02em;
+  white-space:nowrap;
+}
+
+.ic-net .tag.bad{
+  background: rgba(239,68,68,.10);
+  border:1px solid rgba(239,68,68,.20);
+  color:#991b1b;
+}
+
+.ic-net .tag.ok{
+  background: rgba(16,185,129,.10);
+  border:1px solid rgba(16,185,129,.20);
+  color:#065f46;
+}
+
+
     /* адаптив */
     @media (max-width: 980px){
       .eod-row{
@@ -666,31 +744,123 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 {# ===== ВНУТРИГРУППОВЫЕ: контроль (всегда) ===== #}
-  {% if ic_total_dt is not None %}
-    <div class="eod-card" style="margin-top:0;">
-      <div class="eod-head">
-        <div class="title">🤝 Внутригрупповые — контроль</div>
-        <div class="eod-head-right">
-          <div class="hint">
-            {% if selected_date %}
-              по операциям до {{ selected_date|date:"d.m.Y" }}
-            {% else %}
-              по всем операциям
-            {% endif %}
-          </div>
-
-          <a href="{% url 'admin:treasury_cfdata_changelist' %}?intercompany__exact=1"
-             class="eod-icon-btn eod-xlsx-btn"
-             title="Открыть внутригрупповые">
-            <span class="xlsx-txt">Открыть</span>
-          </a>
+{% if ic_total_dt is not None %}
+  <div class="eod-card" style="margin-top:0;">
+    <div class="eod-head">
+      <div class="title">🤝 Внутригрупповые — контроль</div>
+      <div class="eod-head-right">
+        <div class="hint">
+          {% if selected_date %}
+            по операциям до {{ selected_date|date:"d.m.Y" }}
+          {% else %}
+            по всем операциям
+          {% endif %}
         </div>
+
+        <a href="{% url 'admin:treasury_cfdata_changelist' %}?intercompany__exact=1"
+           class="eod-icon-btn eod-xlsx-btn"
+           title="Открыть внутригрупповые">
+          <span class="xlsx-txt">Открыть</span>
+        </a>
       </div>
+    </div>
 
-      <div class="eod-total" style="margin-top:10px;">
-        <div class="cap">Итого:</div>
+    <div class="eod-total" style="margin-top:10px;">
+      <div class="cap">Итого:</div>
 
-        <div class="totals-rows">
+      <div class="totals-rows">
+
+        {# ✅ 1) Если есть разбивка по валютам — показываем её #}
+        {% if ic_totals_by_ccy and ic_totals_by_ccy|length > 0 %}
+
+          {% if ic_totals_by_ccy|length == 1 %}
+            {% with t=ic_totals_by_ccy.0 %}
+              <div class="total-row" style="width:100%;">
+                <div class="left-ccy">
+                  <span class="ccy-badge" title="Валюта счета">
+                    <span class="flag">{{ t.currency_flag }}</span>
+                    <span class="sym">{{ t.currency_symbol }}</span>
+                    <span class="code">{{ t.currency_code }}</span>
+                  </span>
+                </div>
+
+                <div class="metrics">
+                  <div class="eod-metric">
+                    <div class="lbl">Получили (Дт)</div>
+                    <div class="val green">{{ t.dt|floatformat:2|intcomma }}</div>
+                  </div>
+
+                  <div class="eod-metric">
+                    <div class="lbl">Отправили (Кт)</div>
+                    <div class="val red">{{ t.cr|floatformat:2|intcomma }}</div>
+                  </div>
+
+                  <div class="eod-metric">
+                    <div class="lbl">Остаток (Дт − Кт)</div>
+
+                      <div class="val {% if t.net == 0 %}green{% else %}red{% endif %}">
+
+                      {{ t.net|floatformat:2|intcomma }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="meta">
+                  {% if t.net == 0 %}
+                    ✅ OK (схлопнулось)
+                  {% else %}
+                    ⚠️ деньги “зависли”
+                  {% endif %}
+                </div>
+              </div>
+            {% endwith %}
+
+          {% else %}
+            {# несколько валют — показываем карточки по валютам #}
+            {% for t in ic_totals_by_ccy %}
+              <div class="total-row multi">
+                <div class="left-ccy">
+                  <span class="ccy-badge" title="Валюта счета">
+                    <span class="flag">{{ t.currency_flag }}</span>
+                    <span class="sym">{{ t.currency_symbol }}</span>
+                    <span class="code">{{ t.currency_code }}</span>
+                  </span>
+                </div>
+
+                <div class="metrics">
+                  <div class="eod-metric">
+                    <div class="lbl">Дт</div>
+                    <div class="val green">{{ t.dt|floatformat:2|intcomma }}</div>
+                  </div>
+
+                  <div class="eod-metric">
+                    <div class="lbl">Кт</div>
+                    <div class="val red">{{ t.cr|floatformat:2|intcomma }}</div>
+                  </div>
+
+                  <div class="eod-metric">
+                    <div class="lbl">Net</div>
+
+                      <div class="val {% if t.net == 0 %}green{% else %}red{% endif %}">
+
+                      {{ t.net|floatformat:2|intcomma }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="meta">
+                  {% if t.net == 0 %}
+                    ✅ OK
+                  {% else %}
+                    ⚠️ проверить
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          {% endif %}
+
+        {% else %}
+          {# ✅ 2) Фоллбек (если вдруг список не передался) — как раньше без валюты #}
           <div class="total-row" style="width:100%;">
             <div class="metrics">
               <div class="eod-metric">
@@ -704,10 +874,22 @@ document.addEventListener('DOMContentLoaded', function () {
               </div>
 
               <div class="eod-metric">
-                <div class="lbl">Остаток (Дт − Кт)</div>
-                <div class="val {% if ic_total_net == 0 %}green{% else %}red{% endif %}">
-                  {{ ic_total_net|floatformat:2|intcomma }}
-                </div>
+  <div class="lbl">Остаток (Дт − Кт)</div>
+
+<div class="ic-net">
+  <span class="net-pill {% if ic_total_net == 0 %}ok{% else %}bad{% endif %}">
+    <span class="num">{{ ic_total_net|floatformat:2|intcomma }}</span>
+  </span>
+
+  {% if ic_total_net == 0 %}
+    <span class="tag ok">✅ OK</span>
+  {% else %}
+    <span class="tag bad">⚠️ зависло</span>
+  {% endif %}
+</div>
+
+</div>
+
               </div>
             </div>
 
@@ -719,10 +901,13 @@ document.addEventListener('DOMContentLoaded', function () {
               {% endif %}
             </div>
           </div>
-        </div>
+        {% endif %}
+
       </div>
     </div>
-  {% endif %}
+  </div>
+{% endif %}
+
 
 
 

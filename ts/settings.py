@@ -218,6 +218,8 @@ JAZZMIN_SETTINGS = {
     # "site_favicon": "/img/logo_short.png",
     "custom_css": "css/custom.css",
     "custom_js": "js/custom.js",
+    
+    "changeform_format": "horizontal_tabs",
 
 
 
@@ -293,6 +295,11 @@ JAZZMIN_SETTINGS = {
         "macro.TaxesList": "fa-solid fa-file-invoice-dollar",
         "macro.CurrencyRate": "fa-solid fa-coins",
         "macro.MarketSnapshot": "fa-solid fa-magnifying-glass-chart",
+        
+    #     # --- ПРОДАЖИ --- 
+        "sales": "fa-solid fa-chart-column",
+        "sales.MVSalesDaily": "fa-solid fa-calendar-day",
+        "sales.MVSalesProductData": "fa-solid fa-shirt",
 
     #     # --- Договоры аренжды ---
         "contracts": "fa-solid fa-file-signature",
@@ -356,10 +363,12 @@ JAZZMIN_SETTINGS = {
         "properties",      # Объекты недвижимости
         "counterparties",  # Контрагенты
         "contracts",       # Договоры 
+        'sales',           # Продажи 
         'treasury',        # Казначейство 
+        "auth",            # Пользователи и группы
 
         "botconfig",
-        "auth",            # Пользователи и группы
+
         "services",        # Служебные — всегда в конце
     ],
 
@@ -404,7 +413,7 @@ JAZZMIN_UI_TWEAKS = {
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": True,
 
-    "theme": "yeti",
+    "theme": "yeti", 
     "dark_mode_theme": None,
 
     "button_classes": {
