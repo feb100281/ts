@@ -2,8 +2,18 @@
 import numpy as np
 import pandas as pd
 
+from .intercompany_rules import (
+    INTERCOMPANY_EXCLUDE,
+    INTERCOMPANY_INCLUDE,
+    apply_intercompany_overrides,
+)
+
+
+
 file = '/Users/pavelustenko/Desktop/Банковские_счета/БЖФ.xlsx'
 file1 = '/Users/pavelustenko/Desktop/Банковские_счета/Совкомбанк.xlsx'
+
+
 
 FIELDS_TO_KEEP = [
     "doc_type",
@@ -130,6 +140,14 @@ def adjust_df(filename)->pd.DataFrame:
     df["cp_name"]
     )
     
+    
+    
+    
+    
+    
+    
+    
+    
     df["tax_id"] = np.where(
     df["_contract_number_dt"].str.startswith("Конвертация валюты", na=False),
     
@@ -149,6 +167,9 @@ def adjust_df(filename)->pd.DataFrame:
         df["_contract_number_cr"].isin(['Расходы на услуги банков']),
         df['_cp_name_cr'], df["cp_name"]
     )
+    
+    
+    
     
     df["cp_name"] = np.where(
     df["_contract_number_cr"].isin(["Прочие налоги и сборы"])
@@ -262,6 +283,15 @@ def adjust_df(filename)->pd.DataFrame:
     df['intercompany'] = np.where(
         df['cp_name_final'] == 'ТРЕНДСЕТТЕР OOO',True,False
     )
+    
+    df = apply_intercompany_overrides(
+    df,
+    exclude=INTERCOMPANY_EXCLUDE,
+    include=INTERCOMPANY_INCLUDE,
+)
+    
+
+    
     
     df['payer_account'] = None
     df['reciver_account'] = None

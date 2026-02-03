@@ -2,11 +2,26 @@ from django.contrib import admin
 from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, MVSalesDaily,MVDataMartProduct
 from django.utils.html import format_html
 from django.db.models import F
+from django.urls import path, reverse
+from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, MVSalesDaily
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from django.db.models import Q
+
+from django.shortcuts import render, get_object_or_404
+from django.http import Http404
+from datetime import date
+from sales.dash_apps.dailysales.data import get_month_data, get_ytd_data
+from .print_utils import (
+    build_mtd_table,     # -> str (готовый HTML таблицы)
+    build_ytd_table,     # -> str (готовый HTML таблицы)
+
+)
 
 
 
 
-# Register your models here.
+### -----ДНЕВНЫЕ ПРОДАЖИ----- ###
 @admin.register(MVSalesDaily)
 class MVSalesDailyAdmin(admin.ModelAdmin):
     list_display = (
@@ -17,14 +32,76 @@ class MVSalesDailyAdmin(admin.ModelAdmin):
         "quant",
         "sales",
         "rtr",
-        "rtr_ratio"
+        "rtr_ratio",
+        "print_link",
     )
     search_fields = ("date",)
-    list_filter = ("date", )
+    # list_filter = ("date", )
     list_per_page = 25
+    date_hierarchy = "date"
     
     class Media:
         css = {"all": ("css/admin_overrides.css",)}
+        
+        
+    
+    # --- Кнопка печати в списке ---
+    @admin.display(description="Печать")
+    def print_link(self, obj):
+        url = reverse(
+            f"admin:{MVSalesDaily._meta.app_label}_{MVSalesDaily._meta.model_name}_print",
+            args=[obj.pk.isoformat()],
+        )
+        url = f"{url}?src=list"
+        return format_html(
+            '<a href="{}" title="Печать отчёта" style="text-decoration:none;font-size:14px;">🖨</a>',
+            url,
+        )
+
+    # --- Добавляем кастомный url /print/ ---
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                "<slug:pk>/print/",
+                self.admin_site.admin_view(self.print_daily_sales),
+                name=f"{MVSalesDaily._meta.app_label}_{MVSalesDaily._meta.model_name}_print",
+            ),
+        ]
+        return my_urls + urls
+
+    # --- View печати ---
+    def print_daily_sales(self, request, pk: str):
+        # pk приходит как 'YYYY-MM-DD'
+        try:
+            d = date.fromisoformat(pk)
+        except ValueError:
+            raise Http404("Invalid date format. Expected YYYY-MM-DD")
+
+        obj = get_object_or_404(MVSalesDaily, pk=d)
+
+        # сырые данные (как в dash)
+        df_mtd_raw = get_month_data(d)
+        df_ytd_raw = get_ytd_data(d)
+
+        # таблицы (в print_utils делай красивый HTML и стили)
+        table_mtd = build_mtd_table(df_mtd_raw)
+        table_ytd = build_ytd_table(df_ytd_raw)
+
+
+
+
+        context = {
+            "obj": obj,
+            "report_date": d,
+            "table_mtd_html": table_mtd["html"],
+            "table_ytd_html": table_ytd["html"],
+            "src": request.GET.get("src", "list"),
+        }
+        return render(request, "admin/daily_sales_print.html", context)
+    
+    
+    
     
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
@@ -41,13 +118,13 @@ class MVSalesDailyAdmin(admin.ModelAdmin):
     
 
 
-
-@admin.register(MVDataMartProduct)
-class MVDataMartProductAdmin(admin.ModelAdmin):
+### -----НОМЕНКЛАТУРЫ----- ###
+@admin.register(MVSalesProductData)
+class MVSalesProductDataAdmin(admin.ModelAdmin):
     list_display = (
         "imt_name",
-        "wb_link",          # ← отдельная колонка
-        "nm_id",
+        "wb_link",         
+        "imt_id",
         "subj_name",
         "subj_root_name",
         "brand_name",
@@ -71,14 +148,60 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
         "demand_rank_zeros",
     )
     search_fields = ("imt_name", "subj_name", "subj_root_name")
-    list_filter = ("subj_name", "subj_root_name")
+    list_filter = ("subj_name", "subj_root_name", 'brand_name',)
     list_per_page = 25
-    ordering = (
-        F("total_revenue").desc(nulls_last=True),
-    )
+    ordering = ("imt_name",)
+    readonly_fields = ("create_date",
+                        "update_date",
+                         "nm_id",
+                        "photo_count",
+                        "supplier_id",
+                        "slug",
+                         "description",
+                        "country",
+                        "sex",
+                        "kit",
+                        "composition",
+                        "nm_colors_names",)
     
-    class Media:
-        css = {"all": ("css/admin_overrides.css",'css/wide_table.css')}
+    
+    
+    # тут считаем мини-метрики по ТЕКУЩЕЙ выборке (учитывает фильтры/поиск)
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+
+        try:
+            cl = response.context_data["cl"]
+            qs = cl.queryset
+
+            brands_cnt = (
+                qs.exclude(Q(brand_name__isnull=True) | Q(brand_name=""))
+                .values("brand_name").distinct().count()
+            )
+            groups_cnt = (
+                qs.exclude(Q(subj_root_name__isnull=True) | Q(subj_root_name=""))
+                .values("subj_root_name").distinct().count()
+            )
+            cats_cnt = (
+                qs.exclude(Q(subj_name__isnull=True) | Q(subj_name=""))
+                .values("subj_name").distinct().count()
+            )
+            wb_links_cnt = (
+                qs.exclude(Q(nm_id__isnull=True) | Q(nm_id=""))
+                .count()
+            )
+
+            response.context_data["mini_metrics"] = {
+                "brands_cnt": brands_cnt,
+                "groups_cnt": groups_cnt,
+                "cats_cnt": cats_cnt,
+                "wb_links_cnt": wb_links_cnt,
+            }
+        except Exception:
+            # чтобы ничего не ломалось даже если где-то ошибка
+            response.context_data["mini_metrics"] = None
+
+        return response
     
     
 
@@ -91,6 +214,53 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
             'target="_blank" rel="noopener">открыть</a>',
             obj.nm_id,
         )
+
+    fieldsets = (
+        (
+            mark_safe("📝 <b>Описание товара</b>"),
+            {
+                "fields": (
+                    "description",
+                    "country",
+                    "sex",
+                    "kit",
+                ),
+            },
+        ),
+        (
+            mark_safe("🎨 <b>Состав и цвета</b>"),
+            {
+                "fields": (
+                    "composition",
+                    "nm_colors_names",
+                ),
+            },
+        ),
+        (
+            mark_safe("📅 <b>Даты</b>"),
+            {
+                "fields": (
+                    "create_date",
+                    "update_date",
+                ),
+            },
+        ),
+        (
+            mark_safe("⚙️ <b>Служебные поля</b>"),
+            {
+                "fields": (
+                    "nm_id",
+                    "photo_count",
+                    "supplier_id",
+                    "slug",
+                ),
+            },
+        ),
+    )
+
+    
+    class Media:
+        css = {"all": ("css/admin_overrides.css",)}
     
     
     

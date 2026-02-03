@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.admin import RelatedOnlyFieldListFilter
 from django.db.models import Count, Prefetch
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from .models import (
     Contracts,
@@ -22,8 +23,8 @@ class CfItemAutoInline(admin.StackedInline):
     extra = 0
     fields = ("regex", "defaultcfdt", "defaultcfcr")
     # template = "admin/contracts/inlines/cfitemauto_stacked_inline.html"  # <-- УБРАТЬ
-    verbose_name = "⚙️ Автоматизация"
-    verbose_name_plural = "⚙️ Автоматизация"
+    verbose_name = mark_safe("⚙️ <b>Автоматизация</b>")
+    verbose_name_plural = mark_safe("⚙️ <b>Автоматизация</b>")
 
 
     
@@ -33,24 +34,24 @@ class ContractItemsInline(admin.TabularInline):
     model = ContractItems
     extra = 0
     fields = ("item",)
-    verbose_name = "🧾 Предмет"
-    verbose_name_plural = "🧾 Предмет"
+    verbose_name = mark_safe("<b>🧾 Предмет</b>")
+    verbose_name_plural = mark_safe("🧾 <b>Предмет</b>")
     fields = ("item",)
     show_change_link = True
 
 class ConditionsInline(admin.TabularInline):
     model = Conditions
     extra = 1
-    verbose_name = "✅ Условие"
-    verbose_name_plural = "✅ Условия"
+    verbose_name = mark_safe("<b>✅ Условие</b>")
+    verbose_name_plural = mark_safe("✅<b>Условия</b>")
 
 
 
 class ContractFilesInline(admin.TabularInline):
     model = ContractFiles
     extra = 0
-    verbose_name = "📎 Файл"
-    verbose_name_plural = "📎 Файлы"
+    verbose_name = mark_safe("<b>📎 Файл</b>")
+    verbose_name_plural = mark_safe("<b>📎 Файлы</b>")
     show_change_link = True
 
 
@@ -86,20 +87,14 @@ class ContractsAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (
-            format_html('📄 Карточка'),
+            mark_safe('📄 <b>Карточка</b>'),
             {
                 "fields": ("title", "number", "date", "cp", "owner", "manager", "is_signed","regex",)
             },
         ),
-        # (
-        #     format_html('⚙️ Автоматизация'),
-        #     {
-        #         "fields": ("regex", "defaultcf", "defaultcfcr"),
-        #         "classes": ("collapse",),
-        #     },
-        # ),
+
         (
-            format_html('🔗 Связи'),
+            mark_safe('🔗 <b>Связи</b>'),
             {
                 "fields": ("pid",),
                 "classes": ("collapse",),

@@ -80,7 +80,7 @@ class Owners(models.Model):
 #----- БАНКИ ----#
 class Bank(models.Model):
     name = models.CharField(max_length=255, verbose_name="Наименование")
-    bik = models.CharField(max_length=9, verbose_name="БИК", unique=True)
+    bik = models.CharField(max_length=9, verbose_name="БИК", unique=True, help_text="9 цифр, без пробелов")
     
     logo = models.CharField(
         max_length=1,
@@ -130,8 +130,6 @@ class Bank(models.Model):
         if self.bik and not self.name:
             self.fill_from_bik()
         super().save(*args, **kwargs)
-
-
 
 
 
@@ -242,6 +240,7 @@ class BankAccount(models.Model):
     def __str__(self):
         return f"{self.bank} ({self.account})"
 
+    
 class Countries(models.Model):
     name = models.CharField(verbose_name='Наименование',max_length=100)
     code = models.CharField(max_length=3,verbose_name='Код старны',null=True,blank=True)

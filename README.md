@@ -50,8 +50,14 @@ source venv/bin/activate
 git pull origin ...
 
 
-ПЕРЕЗАГРУЗКА СЕРВАРА 
+ПЕРЕЗАГРУЗКА СЕРВЕРА 
 pkill -HUP -f "ts.wsgi"
+
+
+
+
+вот перезагрузка
+nohup gunicorn ts.wsgi:application \   --bind 0.0.0.0:8090 \   --workers 4 \   --threads 2 \   --timeout 60 \   --max-requests 2000 \   --max-requests-jitter 200 \   --access-logfile - \   --error-logfile - \   --log-level info \   > gunicorn.log 2>&1 &
 
 
 python manage.py runserver 62.109.2.166:8092
