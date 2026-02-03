@@ -5,7 +5,7 @@ from django.db.models import F
 
 
 
-
+    
 # Register your models here.
 @admin.register(MVSalesDaily)
 class MVSalesDailyAdmin(admin.ModelAdmin):
