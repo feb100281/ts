@@ -29,7 +29,7 @@ app.layout = MantineProvider(
     withCssVariables=True,
     withGlobalClasses=True,
     children=[
-        dcc.Location(id="url"),           # триггер на загрузку
+        dcc.Location(id="url"),           # триггер на загрузку не пройдет
         Container(id="page",fluid=True),              # сюда отрисуем окно
     ],
 )
