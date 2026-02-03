@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path, reverse
-from .models import ProductGroup, Product, Category, Brand, MVSalesDaily
+from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, MVSalesDaily,MVDataMartProduct
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.db.models import Q
@@ -14,6 +14,9 @@ from .print_utils import (
     build_ytd_table,     # -> str (готовый HTML таблицы)
 
 )
+
+from django.db.models import F
+
 
 
 
@@ -114,5 +117,53 @@ class MVSalesDailyAdmin(admin.ModelAdmin):
         )
     
 
+@admin.register(MVDataMartProduct)
+class MVDataMartProductAdmin(admin.ModelAdmin):
+    list_display = (
+        "imt_name",
+        "wb_link",          # ← отдельная колонка
+        "nm_id",
+        "subj_name",
+        "subj_root_name",
+        "brand_name",
+        "total_revenue",
+        "last_year_revenue",
+        "current_year_revenue",
+        "tot_rating",
+        "lys_rating",
+        "cur_rating",
+        "first_sale",
+        "last_sale",
+        "days_interval",
+        "sales_days",
+        "zeros_days",
+        "percent_zero",
+        "tot_quant",
+        "mean_quant_zeros",
+        "monthly_sales_zero",
+        "st_dev_with_zeros",
+        "cv_zeros",
+        "demand_rank_zeros",
+    )
+    search_fields = ("imt_name", "subj_name", "subj_root_name")
+    list_filter = ("subj_root_name","subj_name", )
+    list_per_page = 25
+    ordering = (
+        F("total_revenue").desc(nulls_last=True),
+    )
     
+    class Media:
+        css = {"all": ("css/admin_overrides.css",'css/wide_table.css')}
+    
+    
+
+    @admin.display(description="WB")
+    def wb_link(self, obj):
+        if not obj.nm_id:
+            return "—"
+        return format_html(
+            '<a href="https://www.wildberries.ru/catalog/{}/detail.aspx" '
+            'target="_blank" rel="noopener">открыть</a>',
+            obj.nm_id,
+        )
 
