@@ -265,6 +265,49 @@ class MVSalesDaily(models.Model):
     def __str__(self):
         return self.date.strftime("%d %b-%Y")
 
+
+class MVDataMartProduct(models.Model):
+    product_id = models.BigIntegerField(primary_key=True)
+    imt_name = models.CharField(max_length=300,verbose_name='Наименование')
+    nm_id = models.CharField(max_length=300,verbose_name='Артикль WB')
+    brand_name = models.CharField(max_length=300,verbose_name='Бренд')
+    subj_root_name = models.CharField(max_length=300,verbose_name='Группа')
+    subj_name = models.CharField(max_length=300,verbose_name='Категория')
+    total_revenue = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Вычка всего')
+    last_year_revenue = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Вычка LY')
+    current_year_revenue = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Вычка YTD')
+    tot_rating = models.CharField(max_length=50,verbose_name='Рейтинг за все время')
+    lys_rating = models.CharField(max_length=50,verbose_name='Рейтинг за LY')
+    cur_rating = models.CharField(max_length=50,verbose_name='Рейтинг по YTD')
+    first_sale = models.DateField(verbose_name='Дата первой продажи')
+    last_sale = models.DateField(verbose_name='Дата последней продажи')
+    days_interval = models.IntegerField(verbose_name='Кол-во дней')
+    sales_days = models.IntegerField(verbose_name='Кол-во дней с продажами')
+    zeros_days = models.IntegerField(verbose_name='Кол-во дней без продаж')
+    percent_zero = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Дней без продаж (%)')
+    tot_quant = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Кол-во продано всего (ед)')
+    mean_quant_zeros = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='μ по дням (ед)')
+    monthly_sales_zero = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Ср кол-во за мес(ед)')
+    st_dev_with_zeros  = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='σ по дням (ед)')
+    cv_zeros = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='cv по дням (ед)')
+    st_dev_quant = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='x̄ по дням (ед)')
+    mean_quant = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='s по дням (ед)')
+    cv = models.DecimalField(max_digits=12,decimal_places=2,verbose_name="cv` по дням (ед)")
+    demand_rank_zeros =  models.CharField(max_length=50,verbose_name='Волотильность по cv')
+    demand_rank = models.CharField(max_length=50,verbose_name='Волотильность по cv`')
+    
+    class Meta: 
+        managed = False 
+        db_table = "mv_datamart_product"
+        verbose_name = "Товар"
+        verbose_name_plural = "Товары"
+        
+       
+    def __str__(self):
+        return f"{self.imt_name} ({self.nm_id})"
+
+
+
 #    SELECT 
 #   t.created_date,
 #   t.sale_date,
