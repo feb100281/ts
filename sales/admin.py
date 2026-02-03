@@ -71,7 +71,7 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
         "demand_rank_zeros",
     )
     search_fields = ("imt_name", "subj_name", "subj_root_name")
-    list_filter = ("subj_name", "subj_root_name")
+    list_filter = ("subj_root_name","subj_name", )
     list_per_page = 25
     ordering = (
         F("total_revenue").desc(nulls_last=True),
