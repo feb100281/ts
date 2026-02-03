@@ -91,6 +91,9 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
             'target="_blank" rel="noopener">открыть</a>',
             obj.nm_id,
         )
+        
+        
+    
     
     
     
