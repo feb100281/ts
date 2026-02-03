@@ -93,8 +93,8 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
             obj.nm_id,
         )
         
-        
-    
+             
+    # fuck
     
     
     
