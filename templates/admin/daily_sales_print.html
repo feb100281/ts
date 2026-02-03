@@ -1,0 +1,192 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Отчёт по продажам — {{ obj.date|date:"d.m.Y" }}</title>
+  <style>
+    :root{
+      --bg:#f3f4f6; --card:#fff; --border:#e5e7eb;
+      --text:#111827; --muted:#6b7280;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; padding:24px 12px; background:var(--bg);
+      font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+      color:var(--text); display:flex; justify-content:center;
+    }
+    .page{width:100%; max-width:980px;}
+    .card{
+      background:var(--card); border:1px solid var(--border);
+      border-radius:16px; box-shadow:0 18px 45px rgba(15,23,42,.10);
+      padding:18px;
+    }
+    .toolbar{
+      display:flex; justify-content:space-between; align-items:center;
+      gap:10px; margin-bottom:12px;
+    }
+    .btn{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:7px 12px; border-radius:8px; font-size:13px;
+      border:1px solid #cbd5e1; background:#fff; color:#111827;
+      text-decoration:none; cursor:pointer; white-space:nowrap;
+    }
+    .btn:hover{background:#eef2f7}
+    .btn-primary{
+      background:#111827; border-color:#111827; color:#fff;
+    }
+    .btn-primary:hover{background:#020617}
+    h1{margin:0; font-size:16px; font-weight:800}
+    .meta{margin:4px 0 14px; color:var(--muted); font-size:12px}
+
+    .section{margin-top:14px}
+    .section-title{
+      font-size:11px; text-transform:uppercase; letter-spacing:.12em;
+      color:var(--muted); font-weight:700; margin:0 0 8px;
+    }
+
+    /* таблица */
+    .tbl{width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums;}
+    .tbl th,.tbl td{padding:7px 10px; border-bottom:1px solid #e5e7eb;}
+    .tbl thead th{background:#f9fafb; text-align:right;}
+    .tbl thead th:first-child{text-align:left;}
+    .tbl td.metric{font-weight:600; text-align:left;}
+    .tbl td.num{text-align:right;}
+    .tbl td.pos{color:#15803d; font-weight:700;}
+    .tbl td.neg{color:#b91c1c; font-weight:700;}
+
+    /* краткая сводка */
+    .summary{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:#fff;
+      padding:10px 12px;
+      margin-top:10px;
+    }
+    .summary-grid{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:10px;
+    }
+    .kpi{
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:10px;
+      background:#fafafa;
+    }
+    .kpi .label{
+      font-size:11px;
+      color:var(--muted);
+      margin-bottom:6px;
+      text-transform:uppercase;
+      letter-spacing:.10em;
+      font-weight:700;
+    }
+    .kpi .value{
+      font-size:14px;
+      font-weight:800;
+      font-variant-numeric:tabular-nums;
+    }
+    .kpi .sub{
+      margin-top:4px;
+      font-size:11px;
+      color:var(--muted);
+      font-variant-numeric:tabular-nums;
+    }
+
+    @media print{
+      @page{margin:12mm;}
+      body{background:#fff !important; padding:0 !important; display:block;}
+      .card{box-shadow:none !important; border:none !important; border-radius:0 !important; padding:0 !important;}
+      .toolbar{display:none !important;}
+      table, tr, td, th{break-inside:avoid;}
+      .summary{break-inside:avoid;}
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="card">
+
+    <div class="toolbar">
+      {% if src == "list" %}
+        <a class="btn" href="{% url 'admin:sales_mvsalesdaily_changelist' %}">← Назад</a>
+      {% else %}
+        <a class="btn" href="{% url 'admin:sales_mvsalesdaily_change' obj.pk %}">← Назад</a>
+      {% endif %}
+      <button class="btn btn-primary" onclick="window.print()">🖨 Печать / PDF</button>
+    </div>
+
+    <h1>Отчёт по продажам</h1>
+    <div class="meta">Дата: {{ obj.date|date:"d.m.Y" }}</div>
+
+    <div class="summary">
+      <div class="section-title">Сводка по дню</div>
+      <div class="summary-grid">
+
+        <div class="kpi">
+          <div class="label">Выручка</div>
+          <div class="value">₽{{ obj.revenue|floatformat:0 }}</div>
+          <div class="sub">поле: revenue</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">Оборот</div>
+          <div class="value">₽{{ obj.amount|floatformat:0 }}</div>
+          <div class="sub">поле: amount</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">Комиссия</div>
+          <div class="value">{{ obj.comission|floatformat:0 }}%</div>
+          <div class="sub">поле: comission</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">Кол-во</div>
+          <div class="value">{{ obj.quant|floatformat:0 }} ед</div>
+          <div class="sub">поле: quant</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">Продажи</div>
+          <div class="value">₽{{ obj.sales|floatformat:0 }}</div>
+          <div class="sub">поле: sales</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">Возвраты</div>
+          <div class="value">₽{{ obj.rtr|floatformat:0 }}</div>
+          <div class="sub">поле: rtr</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">К возвратов</div>
+          <div class="value">{{ obj.rtr_ratio|floatformat:0 }}%</div>
+          <div class="sub">поле: rtr_ratio</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">Дата</div>
+          <div class="value">{{ obj.date|date:"d.m.Y" }}</div>
+          <div class="sub">pk / date</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">MTD (к прошлому году)</div>
+      {{ table_mtd_html|safe }}
+    </div>
+
+    <div class="section">
+      <div class="section-title">YTD (к прошлому году)</div>
+      {{ table_ytd_html|safe }}
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+
