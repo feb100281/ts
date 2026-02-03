@@ -1,4 +1,7 @@
 from django.contrib import admin
+from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, MVSalesDaily,MVDataMartProduct
+from django.utils.html import format_html
+from django.db.models import F
 from django.urls import path, reverse
 from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, MVSalesDaily
 from django.utils.html import format_html
@@ -125,7 +128,24 @@ class MVSalesProductDataAdmin(admin.ModelAdmin):
         "subj_name",
         "subj_root_name",
         "brand_name",
-        "contents",
+        "total_revenue",
+        "last_year_revenue",
+        "current_year_revenue",
+        "tot_rating",
+        "lys_rating",
+        "cur_rating",
+        "first_sale",
+        "last_sale",
+        "days_interval",
+        "sales_days",
+        "zeros_days",
+        "percent_zero",
+        "tot_quant",
+        "mean_quant_zeros",
+        "monthly_sales_zero",
+        "st_dev_with_zeros",
+        "cv_zeros",
+        "demand_rank_zeros",
     )
     search_fields = ("imt_name", "subj_name", "subj_root_name")
     list_filter = ("subj_name", "subj_root_name", 'brand_name',)
@@ -242,36 +262,6 @@ class MVSalesProductDataAdmin(admin.ModelAdmin):
     class Media:
         css = {"all": ("css/admin_overrides.css",)}
     
-
-
-# @admin.register(Category)
-# class CategoryAdmin(admin.ModelAdmin):
-#     list_display = ("name", "group")
-#     search_fields = ("name", "group__name",)
-#     list_per_page = 25
-#     ordering = ("name",)
     
-# @admin.register(Product)
-# class ProductAdmin(admin.ModelAdmin):
-#     list_display = ("wb_article", "imt_name_preview", "categories_preview", "brands_preview")
-#     search_fields = ("wb_article", "wb_data__data__imt_name", "categories__name", "brands__name")
-#     list_per_page = 25
-#     def get_queryset(self, request):
-#         qs = super().get_queryset(request)
-#         return qs.prefetch_related("categories__group", "brands")
-
-#     @admin.display(description="Категории")
-#     def categories_preview(self, obj):
-#         cats = obj.categories.all()[:2]
-#         return ", ".join(str(c) for c in cats)
-
-#     @admin.display(description="Бренды")
-#     def brands_preview(self, obj):
-#         br = obj.brands.all()[:2]
-#         return ", ".join(b.name for b in br)
     
-#     @admin.display(description="Название WB")
-#     def imt_name_preview(self, obj):
-#         return getattr(obj.wb_data, "data", {}).get("imt_name", "—")
     
-
