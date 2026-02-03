@@ -194,50 +194,9 @@ class MVSalesProductDataAdmin(admin.ModelAdmin):
             'target="_blank" rel="noopener">открыть</a>',
             obj.nm_id,
         )
-
-    fieldsets = (
-        (
-            mark_safe("📝 <b>Описание товара</b>"),
-            {
-                "fields": (
-                    "description",
-                    "country",
-                    "sex",
-                    "kit",
-                ),
-            },
-        ),
-        (
-            mark_safe("🎨 <b>Состав и цвета</b>"),
-            {
-                "fields": (
-                    "composition",
-                    "nm_colors_names",
-                ),
-            },
-        ),
-        (
-            mark_safe("📅 <b>Даты</b>"),
-            {
-                "fields": (
-                    "create_date",
-                    "update_date",
-                ),
-            },
-        ),
-        (
-            mark_safe("⚙️ <b>Служебные поля</b>"),
-            {
-                "fields": (
-                    "nm_id",
-                    "photo_count",
-                    "supplier_id",
-                    "slug",
-                ),
-            },
-        ),
-    )
-
+        
+        
+    
     
     class Media:
         css = {"all": ("css/admin_overrides.css",)}
