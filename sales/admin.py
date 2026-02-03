@@ -22,7 +22,7 @@ class MVSalesDailyAdmin(admin.ModelAdmin):
     search_fields = ("date",)
     list_filter = ("date", )
     list_per_page = 25
-    
+           
     class Media:
         css = {"all": ("css/admin_overrides.css",)}
     
