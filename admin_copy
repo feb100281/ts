@@ -94,7 +94,7 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
         )
         
         
-    
+    # fuck
     
     
     
