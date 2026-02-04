@@ -153,7 +153,7 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
     )
     
     class Media:
-        css = {"all": ("css/admin_overrides.css",'css/wide_table.css')}
+        css = {"all": ("css/admin_overrides.css",'css/wide-table.css')}
     
     
 
