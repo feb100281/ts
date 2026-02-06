@@ -198,6 +198,8 @@ class CfItems(MPTTModel):
 
     is_active = models.BooleanField(default=True)
     
+    mapping = models.ForeignKey(COA,on_delete=models.CASCADE,null=True,blank=True,verbose_name='Mapping',help_text='Маппинг для распределения по плану счетов')
+    
     desctiption = models.TextField("Описание",null=True,blank=True)
 
     class MPTTMeta:
@@ -232,6 +234,7 @@ class BankAccount(models.Model):
         max_length=3, choices=CURRENCY_CHOISE, verbose_name="Валюта", default="RUB"
     )
     bs_acc = models.ForeignKey(COA, verbose_name = "Балансовый счет", on_delete=models.CASCADE,null=True,blank=True)
+    is_active = models.BooleanField('Активный',null=True,blank=True)
 
     class Meta:
         verbose_name = "Банковский счет"

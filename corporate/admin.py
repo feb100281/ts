@@ -331,7 +331,7 @@ class BankAdmin(admin.ModelAdmin):
 
 @admin.register(BankAccount)
 class BankAccountAdmin(admin.ModelAdmin):
-    list_display = ( "bank_logo", "bank_name",  "account", "currency_view", "bs_acc_code", 'last_statement_day')
+    list_display = ( "bank_logo", "bank_name",  "account", "currency_view", "bs_acc_code", 'last_statement_day','is_active')
     list_display_links = ("bank_name",)
     search_fields = ("corporate__name", "bank__name",  "account")
     list_filter = ("corporate__name",) 

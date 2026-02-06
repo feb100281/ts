@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from dash_iconify import DashIconify
 import dash_mantine_components as dmc
+
 from utils.dash_components.common import CommonComponents as CC  #Отсюда импортируем компоненты одинаковые для все приложений
 from utils.dash_components.dftotable import df_dmc_table
 import locale

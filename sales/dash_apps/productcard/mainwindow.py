@@ -50,7 +50,7 @@ class MainWindow:
                         ),
 
                         DashIconify(icon='streamline-freehand:cash-payment-bag-1',width=40,color='blue'),
-                        CC.report_title(f"КАРТОЧКА ТОВАРА {self.product_info['Наименование'].upper()}")
+                        dmc.Title(f"КАРТОЧКА ТОВАРА {self.product_info['Наименование'].upper()}")
                     ],
                 h="100%",
                 px="md",
