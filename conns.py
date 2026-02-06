@@ -17,7 +17,7 @@ DATABASE_URL = (
 
 ENGINE = create_engine(
     DATABASE_URL,
-    echo=True,
+    # echo=True,
     pool_pre_ping=True
 )
 
