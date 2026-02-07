@@ -109,10 +109,10 @@ class CfDataInline(admin.TabularInline):
         return format_html('<a class="button" href="{}">↗</a>', url)
 
 
-class CfSplitsInline(admin.TabularInline):
+class CfSplitsInline(admin.StackedInline):
     model = CfSplits
     extra = 0
-    fields = ("flow", "amount", "cfitem", "contract", "vat_rate", "temp")
+    fields = ("flow", "amount", "cfitem", "dt","cr", "contract", "vat_rate", "temp")
     readonly_fields = ("flow", "amount")
     autocomplete_fields = ("cfitem", "contract")
 

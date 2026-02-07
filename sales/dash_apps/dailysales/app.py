@@ -1,6 +1,7 @@
 from django_plotly_dash import DjangoDash
 from .mainwindow import MainWindow
-from utils.dash_components.common import THEME
+# from utils.dash_components.common import THEME
+from utils.dash_components.styles import corporate_theme
 from dash_mantine_components import MantineProvider, Container
 from dash import html, dcc, Input, Output
 import urllib.parse
@@ -12,8 +13,8 @@ scripts = [
 ]
 styles = [
     "/static/fonts/glyphs.css",
-    "/static/css/dash/clssic_tables.css",
-    "/static/css/dash/fancy_tables.css",
+    # "/static/css/dash/clssic_tables.css",
+    "/static/css/dash/corporate_sty.css",
 ]
 
 app = DjangoDash(
@@ -25,7 +26,7 @@ app = DjangoDash(
 
 app.layout = MantineProvider(
     forceColorScheme="light",
-    theme=THEME,
+    theme=corporate_theme,
     withCssVariables=True,
     withGlobalClasses=True,
     children=[
