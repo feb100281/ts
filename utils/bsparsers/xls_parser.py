@@ -85,6 +85,8 @@ def adjust_df(filename)->pd.DataFrame:
         .apply(lambda x: x.str.strip())
     )
     
+
+    
     
     df['_len_dt'] = df["_anal_dt"].str.split("\n").str.len().fillna(0).astype(int)
     df['_len_cr'] = df["_anal_cr"].str.split("\n").str.len().fillna(0).astype(int)
