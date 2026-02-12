@@ -1,6 +1,7 @@
 # Парсим xls
 import numpy as np
 import pandas as pd
+import re
 
 from .intercompany_rules import (
     INTERCOMPANY_EXCLUDE,
@@ -32,15 +33,28 @@ FIELDS_TO_KEEP = [
 ]
 
 
-def get_acc(filename):
-    df = pd.read_excel(filename, nrows=10,header=None)
-    acc:str = df.iloc[5, 0]
-    parts = acc.split(',')
-    rpl = ','+str(parts[1])
-    print(rpl)
-    acc = acc.replace('Отбор: Банковские счета Равно "',"").replace(', АО "Банк БЖФ""','').replace(', Филиал "Корпоративный" ПАО "Совкомбанк""','').replace(rpl,'').strip()  #replace(', МОРСКОЙ БАНК (АО)"',"").strip() 
-    # Отбор: Банковские счета Равно "40702810410000104161, АО "Банк БЖФ""
-    return acc
+# def get_acc(filename):
+#     df = pd.read_excel(filename, nrows=10,header=None)
+#     acc:str = df.iloc[5, 0]
+#     parts = acc.split(',')
+#     rpl = ','+str(parts[1])
+#     print(rpl)
+#     acc = acc.replace('Отбор: Банковские счета Равно "',"").replace(', АО "Банк БЖФ""','').replace(', Филиал "Корпоративный" ПАО "Совкомбанк""','').replace(rpl,'').strip()  #replace(', МОРСКОЙ БАНК (АО)"',"").strip() 
+#     # Отбор: Банковские счета Равно "40702810410000104161, АО "Банк БЖФ""
+#     return acc
+
+
+def get_acc(filename: str) -> str:
+    df = pd.read_excel(filename, nrows=10, header=None)
+    s = str(df.iloc[5, 0])
+
+    m = re.search(r'Равно\s+"(\d{20})', s)
+    if m:
+        return m.group(1)
+
+    # fallback на всякий случай
+    m = re.search(r'(\d{20})', s)
+    return m.group(1) if m else ""
 
 def get_bb(filename):
     df = pd.read_excel(filename, nrows=11,header=None)
@@ -70,6 +84,8 @@ def adjust_df(filename)->pd.DataFrame:
         .str.split("\n", n=1, expand=True)
         .apply(lambda x: x.str.strip())
     )
+    
+
     
     
     df['_len_dt'] = df["_anal_dt"].str.split("\n").str.len().fillna(0).astype(int)

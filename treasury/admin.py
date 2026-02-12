@@ -980,6 +980,7 @@ class CfDataAdmin(admin.ModelAdmin):
                    "intercompany", 
                 #    "owner", 
                    "ba", 
+                
                    "cfitem", 
                    "contract", 
                 #    "bs"

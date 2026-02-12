@@ -74,6 +74,7 @@ ts_banks_accounts = [
     "40702810000010018499",
     "40702810200009105293",
     "40702810000009105370",
+
 ]
 
 
@@ -285,6 +286,7 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
     
     
     s = df["temp"].fillna("").str.lower()
+    
     
     
         
