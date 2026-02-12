@@ -156,6 +156,59 @@ class ProductData(models.Model):
 
     def __str__(self):
         return str(self.wb_article)
+    
+
+# -------------------------------
+# WB модели - это из парсера WB
+#--------------------------------    
+
+class NMs(models.Model):
+    nm_id = models.BigIntegerField('Артикул WB',primary_key=True)
+    name = models.CharField('Наименование',max_length=250,null=True,blank=True)
+    subject = models.BigIntegerField('Категория',null=True,blank=True)
+    vat = models.DecimalField(max_digits=5,decimal_places=2,verbose_name='Ставка НДС из карточки',null=True,blank=True)
+    
+    class Meta:
+        verbose_name = "Номенлатура WB_"
+        verbose_name_plural = "Номенлатуры WB_"
+
+    def __str__(self):
+        return f"({str(self.nm_id)} {self.name})"
+    
+    
+
+""""
+with prefetch as (
+SELECT DISTINCT
+    (payload_raw ->> 'nmID')::bigint      AS nm_id,
+    (payload_raw ->> 'subjectID')::bigint AS subject_id,
+    payload_raw ->> 'title'         AS name,
+	(
+        SELECT (elem -> 'value' ->> 0)::int
+        FROM jsonb_array_elements(payload_raw -> 'characteristics') AS elem
+        WHERE elem ->> 'name' = 'Ставка НДС'
+        LIMIT 1
+    ) AS vat_rate
+FROM wb_raw.raw_cards
+)
+INSERT INTO public.sales_nms (nm_id, name, subject, vat)
+SELECT
+    nm_id,
+    name,
+    subject_id,
+    vat_rate
+FROM prefetch
+ON CONFLICT (nm_id) DO UPDATE
+SET
+    name = EXCLUDED.name,
+    subject = EXCLUDED.subject,
+    vat = EXCLUDED.vat;
+
+
+"""
+
+
+
 
 class MVSalesProductData(models.Model): 
     wb_article_id = models.BigIntegerField(primary_key=True) 
