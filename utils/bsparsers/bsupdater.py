@@ -242,6 +242,14 @@ def owner_id_to_null(bs_id,owner_tax_id):
 # Это основныя функция которая вызывается по кнопке migrate из админки и готовит df для записи в CfData
 # --------------------------
 
+def delete_cfdata(start_date,end_date,ba_id):
+    q = """
+    DELETE FROM public.treasury_cfdata
+    where date between %(start_date)s and %(end_date)s and ba_id = %(ba_id)s    
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(q, {"start_date": start_date,"end_date":end_date,'ba_id':ba_id})
+
 
 def update_cf_data(filename:str, bs_id):
 
@@ -267,7 +275,8 @@ def update_cf_data(filename:str, bs_id):
             ba_id = ba.id
             owner_id = ba.corporate_id
             owner_inn = ba.corporate.inn  
-            
+    
+    delete_cfdata(start_date,end_date,ba_id)
 
     df['vat_rate'] = None
 
