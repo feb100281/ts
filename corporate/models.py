@@ -1,11 +1,11 @@
 # corporate/models.py
 
 from django.db import models
-from utils.choises import CURRENCY_CHOISE
 from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.models import MPTTModel, TreeForeignKey
 from django.core.validators import RegexValidator
+from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS, CURRENCY_CHOISE
 
 
 #----- СОБСТВЕННИКИ ----#
@@ -240,8 +240,15 @@ class BankAccount(models.Model):
         verbose_name = "Банковский счет"
         verbose_name_plural = "Банковские счета"
 
+    # def __str__(self):
+    #     return f"{self.bank} ({self.account})"
     def __str__(self):
-        return f"{self.bank} ({self.account})"
+        bank = self.bank.name if self.bank else "—"
+        acc = self.account
+        code = (self.currency or "").upper()
+        flag = CURRENCY_FLAGS.get(code, "")
+        sym = CURRENCY_SYMBOLS.get(code, "")
+        return f"{bank} | {acc} • {flag}{sym} {code}".strip()
 
     
 class Countries(models.Model):
