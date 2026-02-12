@@ -288,6 +288,17 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
     s = df["temp"].fillna("").str.lower()
     
     
+    df = df.drop_duplicates(
+    subset=[
+        "doc_numner",       
+        "payer_account",
+        "reciver_account",
+        "date",
+        "temp"        
+    ]
+)
+    
+    
         
 
     return df[FIELDS_TO_KEEP]
