@@ -29,28 +29,28 @@
 # print(json.dumps(j, ensure_ascii=False, indent=2))
 
 
-import os, json, requests
-from dotenv import load_dotenv
-load_dotenv()
+# import os, json, requests
+# from dotenv import load_dotenv
+# load_dotenv()
 
-TOKEN = os.getenv("WB_TOKEN")
-URL = "https://content-api.wildberries.ru/content/v2/get/cards/list"
-HEADERS = {"Authorization": TOKEN, "Content-Type": "application/json"}
+# TOKEN = os.getenv("WB_TOKEN")
+# URL = "https://content-api.wildberries.ru/content/v2/get/cards/list"
+# HEADERS = {"Authorization": TOKEN, "Content-Type": "application/json"}
 
-def test(nm_id: int):
-    payload = {"settings": {"filter": {"nmIDs": [nm_id]}, "cursor": {"limit": 1}}}
-    r = requests.post(URL, headers=HEADERS, json=payload, timeout=60)
-    print("HTTP", r.status_code)
-    j = r.json()
-    cards = j.get("cards") or []
-    got = cards[0].get("nmID") if cards else None
-    print("REQ:", nm_id, "GOT:", got, "cards:", len(cards))
-    print("cursor:", j.get("cursor"))
-    print("raw_head:", json.dumps(j, ensure_ascii=False)[:400])
+# def test(nm_id: int):
+#     payload = {"settings": {"filter": {"nmIDs": [nm_id]}, "cursor": {"limit": 1}}}
+#     r = requests.post(URL, headers=HEADERS, json=payload, timeout=60)
+#     print("HTTP", r.status_code)
+#     j = r.json()
+#     cards = j.get("cards") or []
+#     got = cards[0].get("nmID") if cards else None
+#     print("REQ:", nm_id, "GOT:", got, "cards:", len(cards))
+#     print("cursor:", j.get("cursor"))
+#     print("raw_head:", json.dumps(j, ensure_ascii=False)[:400])
 
-test(230034207)
-test(172429868)
-test(235869727)
+# test(230034207)
+# test(172429868)
+# test(235869727)
 
 # import os, requests, json
 # from dotenv import load_dotenv
@@ -118,3 +118,13 @@ test(235869727)
 
 # print("VAT VALUE RAW:", vat)
 # print(json.dumps(card.get("characteristics", []), ensure_ascii=False, indent=2)[:4000])
+
+from conns import ENGINE
+import pandas as pd
+
+file = '/Users/pavelustenko/Downloads/fin_report_1.xlsx'
+
+df = pd.read_excel(file)
+
+df.to_sql('wb_raw.tmp',con=ENGINE,index=False,if_exists='replace')
+
