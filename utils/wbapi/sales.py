@@ -17,9 +17,9 @@ if not TOKEN:
 URL = "https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod"
 HEADERS = {"Authorization": TOKEN}
 
-DATE_FROM = "2026-01-01T00:00:00"
-DATE_TO   = "2026-02-08T23:59:59"
-PERIOD    = "daily"
+DATE_FROM = "2025-11-03T00:00:00"
+DATE_TO   = "2025-11-10T23:59:59"
+PERIOD    = "weekly"
 LIMIT     = 100000
 
 SCHEMA = "wb_raw"
