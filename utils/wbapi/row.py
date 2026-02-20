@@ -17,17 +17,17 @@ URL = "https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPerio
 HEADERS = {"Authorization": TOKEN}
 
 # !!! Поменял старт на 2024-01-01
-DATE_FROM = "2024-01-01T00:00:00"
+DATE_FROM = "2025-11-03T00:00:00"
 
 # Можно оставить как у тебя, или поставить "now" руками.
 # Чтобы было стабильно и воспроизводимо - фиксируем.
-DATE_TO   = "2026-02-08T23:59:59"
+DATE_TO   = "2025-11-10T23:59:59"
 
-PERIOD    = "daily"
+PERIOD    = "weekly"
 LIMIT     = 100000
 
 SCHEMA = "wb_raw"
-TABLE  = "realization_raw"   # <-- можно назвать realization, но лучше не пересекать со старой "ломаной" таблицей
+TABLE  = "realization_raw_w"   # <-- можно назвать realization, но лучше не пересекать со старой "ломаной" таблицей
 
 STATE_KEY = f"{TABLE}_rrdid_{DATE_FROM}_{DATE_TO}_{PERIOD}"
 
