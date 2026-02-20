@@ -41,7 +41,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'fallback_secret_key')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = ['127.0.0.1','localhost','62.109.2.166']
 
-
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 
 
