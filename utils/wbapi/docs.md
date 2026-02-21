@@ -760,3 +760,362 @@ __То есть +/- наши данные сошлись в разрезе не�
 
 
 
+
+
+
+
+
+### ДЕЛАЕМ ПАРСЕР И КИДАЕМ ВСЕ ДАННЫЕ С API в RAW_DATA
+
+Табличка `wb_raw.realization_raw`
+
+поля:
+
+`rrd_id` - id строки
+`row_json` - json который прислал парсер
+`loaded_at` - время загрузки
+
+Не забываем индекс поставить на `loaded_at` что бы потом не мучаться
+
+### ОСНОВНОЙ ЗАПРОС - ПЛЮЩИМ JSON 
+
+```SQL
+SELECT
+  (t.row_json->>'date_from')::date   AS date_from,  
+  (t.row_json->>'date_to')::date   AS date_to, 
+  (t.row_json->>'rr_dt')::date   AS rr_dt, 
+  (t.row_json->>'sale_dt')::timestamptz   AS sale_dt, 
+  (t.row_json->>'order_dt')::timestamptz   AS order_dt, 
+  (t.row_json->>'create_dt')::timestamptz   AS create_dt, 
+
+
+  (t.row_json->>'rrd_id')::bigint     AS nm_id,
+  (t.row_json->>'nm_id')::bigint     AS nm_id,
+  (t.row_json->>'realizationreport_id')::bigint     AS realizationreport_id,
+  
+  (t.row_json->>'quantity')::int  AS quantity,
+  (t.row_json->>'ts_name')::text  AS ts_name,
+  (t.row_json->>'barcode')::text  AS barcode,
+  (t.row_json->>'srid')::text  AS srid,  
+  
+  (t.row_json->>'currency_name')::text AS currency_name,
+  (t.row_json->>'site_country')::text AS site_country,
+
+  (t.row_json->>'supplier_oper_name')::text AS supplier_oper_name, 
+  (t.row_json->>'doc_type_name')::text AS doc_type_name, 
+  (t.row_json->>'payment_processing')::text AS payment_processing,  
+  (t.row_json->>'bonus_type_name')::text AS bonus_type_name,  
+  kv.key        AS field,
+  (kv.value)::numeric AS value
+
+
+
+
+FROM wb_raw.realization_raw t
+CROSS JOIN LATERAL jsonb_each_text(t.row_json) AS kv(key, value)
+
+WHERE
+  
+   kv.value ~ '^-?\d+(\.\d+)?$'
+  AND (kv.value)::numeric <> 0
+  AND kv.key not in (
+  'quantity',
+  'barcode',
+  'sa_name',
+  'report_type',
+  'ts_name'
+  )
+  
+  AND kv.key !~* 'id$'
+```
+
+
+### ДЕЛАЕМ ГЛАВНУЮ ТАБЛИЦУ ДЛЯ РАСПЛЮЩЕНЫХ JSON
+
+```SQL
+CREATE SCHEMA IF NOT EXISTS wb_dwh;
+
+CREATE TABLE IF NOT EXISTS wb_dwh.realization_kv (
+  date_from              date        NOT NULL,
+  date_to                date        NULL,
+  rr_dt                  date        NULL,
+  sale_dt                timestamptz NULL,
+  order_dt               timestamptz NULL,
+  create_dt              timestamptz NULL,
+
+  rrd_id                 bigint      NOT NULL,   -- уникальный номер строки WB
+  nm_id                  bigint      NULL,
+  realizationreport_id   bigint      NULL,
+
+  quantity               int         NULL,
+  ts_name                text        NULL,
+  barcode                text        NULL,
+  srid                   text        NULL,
+
+  currency_name          text        NULL,
+  site_country           text        NULL,
+
+  supplier_oper_name     text        NULL,
+  doc_type_name          text        NULL,
+  payment_processing     text        NULL,
+  bonus_type_name        text        NULL,
+
+  field                  text        NOT NULL,
+  value                  numeric     NOT NULL,
+
+  loaded_at              timestamp   NOT NULL
+)
+PARTITION BY RANGE (date_from);
+```
+
+### ДЕЛАЕМ ПАРЦИИ ТАБЛИЦЫ ДЛЯ РАСПЛЮЩЕНЫХ JSON
+
+
+```SQL
+DO $$
+DECLARE
+  d date := DATE '2024-01-01';
+  d_end date := DATE '2031-01-01';
+  part_name text;
+BEGIN
+  WHILE d < d_end LOOP
+    part_name := format('realization_kv_%s', to_char(d, 'YYYY_MM'));
+
+    EXECUTE format(
+      'CREATE TABLE IF NOT EXISTS wb_dwh.%I PARTITION OF wb_dwh.realization_kv
+       FOR VALUES FROM (%L) TO (%L);',
+      part_name,
+      d,
+      (d + INTERVAL '1 month')::date
+    );
+
+    d := (d + INTERVAL '1 month')::date;
+  END LOOP;
+END $$;
+```
+
+```SQL
+CREATE TABLE IF NOT EXISTS wb_dwh.realization_kv_default
+PARTITION OF wb_dwh.realization_kv DEFAULT;
+```
+
+
+```SQL
+ALTER TABLE wb_dwh.realization_kv
+ADD CONSTRAINT realization_kv_uq
+UNIQUE (date_from, rrd_id, field);
+```
+
+```SQL
+INSERT INTO wb_dwh.realization_kv (
+  date_from, date_to, rr_dt, sale_dt, order_dt, create_dt,
+  rrd_id, nm_id, realizationreport_id,
+  quantity, ts_name, barcode, srid,
+  currency_name, site_country,
+  supplier_oper_name, doc_type_name, payment_processing, bonus_type_name,
+  field, value,
+  loaded_at
+)
+SELECT
+  (t.row_json->>'date_from')::date             AS date_from,
+  (t.row_json->>'date_to')::date               AS date_to,
+  (t.row_json->>'rr_dt')::date                 AS rr_dt,
+  (t.row_json->>'sale_dt')::timestamptz        AS sale_dt,
+  (t.row_json->>'order_dt')::timestamptz       AS order_dt,
+  (t.row_json->>'create_dt')::timestamptz      AS create_dt,
+
+  (t.row_json->>'rrd_id')::bigint              AS rrd_id,
+  (t.row_json->>'nm_id')::bigint               AS nm_id,
+  (t.row_json->>'realizationreport_id')::bigint AS realizationreport_id,
+
+  (t.row_json->>'quantity')::int               AS quantity,
+  (t.row_json->>'ts_name')::text               AS ts_name,
+  (t.row_json->>'barcode')::text               AS barcode,
+  (t.row_json->>'srid')::text                  AS srid,
+
+  (t.row_json->>'currency_name')::text         AS currency_name,
+  (t.row_json->>'site_country')::text          AS site_country,
+
+  (t.row_json->>'supplier_oper_name')::text    AS supplier_oper_name,
+  (t.row_json->>'doc_type_name')::text         AS doc_type_name,
+  (t.row_json->>'payment_processing')::text    AS payment_processing,
+  (t.row_json->>'bonus_type_name')::text       AS bonus_type_name,
+
+  kv.key                                       AS field,
+  (kv.value)::numeric                          AS value,
+
+  t.loaded_at                                  AS loaded_at
+FROM wb_raw.realization_raw t
+CROSS JOIN LATERAL jsonb_each_text(t.row_json) AS kv(key, value)
+WHERE
+  (t.row_json->>'date_from') IS NOT NULL
+  AND kv.value ~ '^-?\d+(\.\d+)?$'
+  AND (kv.value)::numeric <> 0
+  AND kv.key NOT IN ('quantity','barcode','sa_name','report_type','ts_name')
+  AND kv.key !~* 'id$';
+```
+
+### ДЕЛАЕМ ПО НОВОМУ 
+
+#### СОЗДАЕМ 4 справочника
+
+__СПРАВОЧНИК `supplier_oper_name`__
+```sql
+CREATE TABLE IF NOT EXISTS wb_dwh.dim_supplier_oper (
+  id   bigserial PRIMARY KEY,
+  name text NOT NULL UNIQUE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_dim_supplier_oper_name
+ON wb_dwh.dim_supplier_oper(name);
+
+INSERT INTO wb_dwh.dim_supplier_oper(name)
+SELECT DISTINCT NULLIF(btrim(t.row_json->>'supplier_oper_name'), '') AS name
+FROM wb_raw.realization_raw_w t
+WHERE t.row_json ? 'supplier_oper_name'
+  AND NULLIF(btrim(t.row_json->>'supplier_oper_name'), '') IS NOT NULL
+ON CONFLICT (name) DO NOTHING
+```
+
+doc_types
+
+```sql
+CREATE TABLE IF NOT EXISTS wb_dwh.dim_doc_type (
+  id   bigserial PRIMARY KEY,
+  name text NOT NULL UNIQUE
+);
+
+
+
+```
+
+
+```sql
+WITH a AS (
+  SELECT *
+  FROM wb_raw.realization_raw_w
+  ORDER BY rrd_id DESC
+  LIMIT 1000000
+)
+INSERT INTO wb_dwh.realization_kv (
+  -- Даты
+  date_from,
+  date_to,
+  rr_dt,
+  sale_dt,
+  order_dt,
+  create_dt,
+
+  -- IDs / RAW
+  rrd_id,
+  nm_id,
+  realizationreport_id,
+  sa_name,
+  shk_id,
+  report_type,
+
+  -- Прочее
+  barcode,
+  srid,
+  ts_name,
+  currency_name,
+  bonus_type_name,
+  quantity,
+  is_legal_entity,
+
+  -- prc
+  ppvz_kvw_prc,
+  ppvz_spp_prc,
+  sale_percent,
+  acquiring_percent,
+  ppvz_kvw_prc_base,
+  commission_percent,
+
+  -- FKs
+  country_id,
+  son_id,
+  dtn_id,
+  pmt_processing_id,
+
+  -- EAV
+  field,
+  value,
+
+  loaded_at
+)
+SELECT
+  -- Даты
+  (t.row_json->>'date_from')::date              AS date_from,
+  (t.row_json->>'date_to')::date                AS date_to,
+  (t.row_json->>'rr_dt')::date                  AS rr_dt,
+  (t.row_json->>'sale_dt')::timestamptz         AS sale_dt,
+  (t.row_json->>'order_dt')::timestamptz        AS order_dt,
+  (t.row_json->>'create_dt')::timestamptz       AS create_dt,
+
+  -- IDs / RAW
+  (t.row_json->>'rrd_id')::bigint               AS rrd_id,
+  (t.row_json->>'nm_id')::bigint                AS nm_id,
+  (t.row_json->>'realizationreport_id')::bigint AS realizationreport_id,
+  (t.row_json->>'sa_name')::text                AS sa_name,
+  (t.row_json->>'shk_id')::bigint               AS shk_id,
+  (t.row_json->>'report_type')::bigint          AS report_type,
+
+  -- Прочее
+  (t.row_json->>'barcode')::text                AS barcode,
+  (t.row_json->>'srid')::text                   AS srid,
+  (t.row_json->>'ts_name')::text                AS ts_name,
+  (t.row_json->>'currency_name')::text          AS currency_name,
+  (t.row_json->>'bonus_type_name')::text        AS bonus_type_name,
+  (t.row_json->>'quantity')::int                AS quantity,
+  (t.row_json->>'is_legal_entity')::bool        AS is_legal_entity,
+
+  -- prc
+  (t.row_json->>'ppvz_kvw_prc')::numeric         AS ppvz_kvw_prc,
+  (t.row_json->>'ppvz_spp_prc')::numeric         AS ppvz_spp_prc,
+  (t.row_json->>'sale_percent')::numeric         AS sale_percent,
+  (t.row_json->>'acquiring_percent')::numeric    AS acquiring_percent,
+  (t.row_json->>'ppvz_kvw_prc_base')::numeric    AS ppvz_kvw_prc_base,
+  (t.row_json->>'commission_percent')::numeric   AS commission_percent,
+
+  -- FKs
+  cc.id                                          AS country_id,
+  dso.id                                         AS son_id,
+  dtn.id                                         AS dtn_id,
+  pp.id                                          AS pmt_processing_id,
+
+  -- EAV
+  kv.key                                         AS field,
+  ROUND((kv.value)::numeric * 100)::bigint       AS value,
+
+  t.loaded_at                                    AS loaded_at
+FROM a t
+CROSS JOIN LATERAL jsonb_each_text(t.row_json) AS kv(key, value)
+LEFT JOIN wb_dwh.dim_supplier_oper dso
+  ON dso.name = NULLIF(btrim(t.row_json->>'supplier_oper_name'), '')
+LEFT JOIN wb_dwh.dim_doc_type dtn
+  ON dtn.name = NULLIF(btrim(t.row_json->>'doc_type_name'), '')
+LEFT JOIN public.corporate_countries cc
+  ON cc.name = NULLIF(btrim(t.row_json->>'site_country'), '')
+LEFT JOIN wb_dwh.payment_processing pp
+  ON pp.name = NULLIF(btrim(t.row_json->>'payment_processing'), '')
+WHERE
+  (t.row_json->>'date_from') IS NOT NULL
+  AND kv.value ~ '^-?\d+(\.\d+)?$'
+  AND (kv.value)::numeric <> 0
+  AND kv.key NOT IN (
+    'quantity',
+    'barcode',
+    'sa_name',
+    'report_type',
+    'ts_name',
+    'srid',
+    'kiz',
+    'ppvz_kvw_prc',
+    'ppvz_spp_prc',
+    'sale_percent',
+    'acquiring_percent',
+    'ppvz_kvw_prc_base',
+    'commission_percent'
+  )
+  AND kv.key !~* 'id$';
+```

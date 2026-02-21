@@ -17,13 +17,13 @@ URL = "https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPerio
 HEADERS = {"Authorization": TOKEN}
 
 # !!! Поменял старт на 2024-01-01
-DATE_FROM = "2025-11-03T00:00:00"
+DATE_FROM = "2026-02-20T00:00:00"
 
 # Можно оставить как у тебя, или поставить "now" руками.
 # Чтобы было стабильно и воспроизводимо - фиксируем.
-DATE_TO   = "2025-11-10T23:59:59"
+DATE_TO   = "2026-02-21T23:59:59"
 
-PERIOD    = "weekly"
+PERIOD    = "daily"
 LIMIT     = 100000
 
 SCHEMA = "wb_raw"
@@ -85,7 +85,7 @@ def ensure_raw_table():
             );
         """))
         # полезно для поисков по json
-        conn.execute(text(f'CREATE INDEX IF NOT EXISTS "{TABLE}_row_json_gin" ON "{SCHEMA}"."{TABLE}" USING GIN (row_json);'))
+        # conn.execute(text(f'CREATE INDEX IF NOT EXISTS "{TABLE}_row_json_gin" ON "{SCHEMA}"."{TABLE}" USING GIN (row_json);'))
 
 # --------------------
 # WB API

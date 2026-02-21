@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path, reverse
 from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, MVSalesDaily,MVDataMartProduct
+from .models import WBDocument
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.db.models import Q
@@ -16,6 +17,11 @@ from .print_utils import (
 )
 
 from django.db.models import F
+
+from .wb_docs import download_wb_document, WBDownloadError
+from django.http import HttpResponse
+
+from django.contrib import messages
 
 
 
@@ -181,3 +187,74 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
             request, object_id, form_url, extra_context=extra_context
         )
 
+
+#----------------------
+# Документы WB
+#----------------------
+
+
+@admin.register(WBDocument)
+class WBDocumentAdmin(admin.ModelAdmin):
+    list_display = (
+       "creation_time",
+       "category",
+       "name",
+       "extensions",
+       "viewed",
+       "download_link",
+    )
+    search_fields = ("category", "name","creation_time")
+    list_filter = ("category","creation_time", )
+    list_per_page = 25
+    ordering = ("-creation_time",)
+    
+    class Media:
+        css = {"all": ("css/admin_overrides.css",'css/wide-table.css')}
+    
+    @admin.display(description="Скачать", ordering=False)
+    def download_link(self, obj: WBDocument):
+        # extensions у тебя строка типа "zip" или "xml,zip"
+        ext = (obj.extensions or "").split(",")[0].strip()
+        if not obj.service_name or not ext:
+            return "-"
+
+        url = reverse("admin:wb_document_download", args=[obj.pk])
+        return format_html('<a class="button" href="{}">Скачать</a>', url)
+
+    # --- добавляем url в админку ---
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "download/<int:pk>/",
+                self.admin_site.admin_view(self.download_view),
+                name="wb_document_download",
+            )
+        ]
+        return custom + urls
+
+    # --- view скачивания ---
+    def download_view(self, request, pk: int):
+        obj = self.get_object(request, pk)
+        if obj is None:
+            self.message_user(request, "Документ не найден", level=messages.ERROR)
+            # вернём назад в список
+            from django.shortcuts import redirect
+            return redirect("..")
+
+        ext = (obj.extensions or "").split(",")[0].strip()
+        if not obj.service_name or not ext:
+            self.message_user(request, "Нет service_name или extension", level=messages.ERROR)
+            from django.shortcuts import redirect
+            return redirect("..")
+
+        try:
+            filename, content = download_wb_document(obj.service_name, ext)
+        except WBDownloadError as e:
+            self.message_user(request, f"WB download error: {e}", level=messages.ERROR)
+            from django.shortcuts import redirect
+            return redirect("..")
+
+        resp = HttpResponse(content, content_type="application/octet-stream")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp
