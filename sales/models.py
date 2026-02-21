@@ -1,6 +1,7 @@
 from django.db import models
 from corporate.models import Countries
 
+
 class ProductGroup(models.Model):
     name = models.CharField(max_length=250, unique=True, verbose_name="Группа")
     description = models.TextField(null=True, blank=True, help_text="Описание группы")
@@ -20,10 +21,12 @@ class Category(models.Model):
         related_name="categories",
         verbose_name="Группа",
         blank=True,
-        null = True
+        null=True,
     )
     name = models.CharField(max_length=250, verbose_name="Категория")
-    description = models.TextField(null=True, blank=True, help_text="Описание категории")
+    description = models.TextField(
+        null=True, blank=True, help_text="Описание категории"
+    )
 
     class Meta:
         verbose_name = "Категория"
@@ -50,9 +53,12 @@ class Brand(models.Model):
     def __str__(self):
         return self.name
 
+
 class SellerSKU(models.Model):
-    
-    seller_article = models.CharField(max_length=64, unique=True, db_index=True, verbose_name="Артикул продавца")
+
+    seller_article = models.CharField(
+        max_length=64, unique=True, db_index=True, verbose_name="Артикул продавца"
+    )
 
     class Meta:
         verbose_name = "Артикул продавца"
@@ -61,9 +67,12 @@ class SellerSKU(models.Model):
     def __str__(self):
         return self.seller_article
 
+
 class Barcode(models.Model):
-    
-    barcode = models.CharField(max_length=32, unique=True, db_index=True, verbose_name="Баркод")
+
+    barcode = models.CharField(
+        max_length=32, unique=True, db_index=True, verbose_name="Баркод"
+    )
 
     class Meta:
         verbose_name = "Баркод"
@@ -72,9 +81,12 @@ class Barcode(models.Model):
     def __str__(self):
         return self.barcode
 
+
 class Size(models.Model):
-    
-    size = models.CharField(max_length=32, unique=True, db_index=True, verbose_name="Размер")
+
+    size = models.CharField(
+        max_length=32, unique=True, db_index=True, verbose_name="Размер"
+    )
 
     class Meta:
         verbose_name = "Размер"
@@ -84,52 +96,53 @@ class Size(models.Model):
         return self.size
 
 
-
 class Product(models.Model):
-    wb_article = models.CharField(max_length=64, unique=True, db_index=True, verbose_name="Артикул WB")
+    wb_article = models.CharField(
+        max_length=64, unique=True, db_index=True, verbose_name="Артикул WB"
+    )
 
     categories = models.ManyToManyField(
         "Category",
         related_name="products",
-        blank=True,        
+        blank=True,
         verbose_name="Категории",
     )
 
     brands = models.ManyToManyField(
         "Brand",
         related_name="products",
-        blank=True,        
+        blank=True,
         verbose_name="Бренды",
     )
-    
+
     barcodes = models.ManyToManyField(
         "Barcode",
         related_name="products",
-        blank=True,        
+        blank=True,
         verbose_name="Баркод",
     )
-    
+
     sizes = models.ManyToManyField(
         "Size",
         related_name="products",
-        blank=True,        
+        blank=True,
         verbose_name="Размер",
     )
-    
+
     sellersku = models.ManyToManyField(
         "SellerSku",
         related_name="products",
-        blank=True,        
+        blank=True,
         verbose_name="Размер",
     )
-    
+
     class Meta:
         verbose_name = "Товар (WB)"
         verbose_name_plural = "Товары (WB)"
 
     def __str__(self):
         return self.wb_article
-    
+
     @property
     def imt_name(self):
         try:
@@ -137,17 +150,22 @@ class Product(models.Model):
         except Exception:
             return None
 
+
 class ProductData(models.Model):
-    wb_article = models.OneToOneField(   # <— тут логичнее OneToOne
+    wb_article = models.OneToOneField(  # <— тут логичнее OneToOne
         "Product",
         on_delete=models.CASCADE,
         related_name="wb_data",
         db_index=True,
     )
     data = models.JSONField(null=True, blank=True)
-    basket = models.CharField(max_length=5, null=True, blank=True, db_index=True)  # "12"
+    basket = models.CharField(
+        max_length=5, null=True, blank=True, db_index=True
+    )  # "12"
     fetched_at = models.DateTimeField(null=True, blank=True)
-    status = models.SmallIntegerField(default=0, db_index=True)  # 0=new,1=basket,2=json,-1=error
+    status = models.SmallIntegerField(
+        default=0, db_index=True
+    )  # 0=new,1=basket,2=json,-1=error
     error = models.TextField(null=True, blank=True)
 
     class Meta:
@@ -156,26 +174,64 @@ class ProductData(models.Model):
 
     def __str__(self):
         return str(self.wb_article)
+
+
+# -------------------------------
+# WB документы 
+# --------------------------------
+
+class WBDocument(models.Model):
     
+    id = models.BigIntegerField(primary_key=True)
+    service_name = models.CharField(max_length=255, null=True,blank=True,verbose_name='Имя файла')
+
+    category = models.CharField(max_length=255, blank=True, null=True, verbose_name='Тип документа')
+    name = models.CharField(max_length=255, null=True,blank=True, verbose_name='Наименование')
+
+    creation_time = models.DateTimeField(null=True, blank=True, verbose_name='Дата создания')
+
+    # вместо JSONField: строка, например "xml" или "zip" или "xml,zip"
+    extensions = models.CharField(max_length=255, blank=True, null=True, verbose_name='Тип файла')
+
+    viewed = models.BooleanField(default=False, verbose_name='Просмотрено')
+
+    fetched_at = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        managed = False
+        db_table = '"wb_raw"."wb_documents"'
+        verbose_name = "Документ WB"
+        verbose_name_plural = "Документы WB"
+        
+
+    def __str__(self) -> str:
+        return f"{self.category}: {self.name}"
+
+
 
 # -------------------------------
 # WB модели - это из парсера WB
-#--------------------------------    
+# --------------------------------
+
 
 class NMs(models.Model):
-    nm_id = models.BigIntegerField('Артикул WB',primary_key=True)
-    name = models.CharField('Наименование',max_length=250,null=True,blank=True)
-    subject = models.BigIntegerField('Категория',null=True,blank=True)
-    vat = models.DecimalField(max_digits=5,decimal_places=2,verbose_name='Ставка НДС из карточки',null=True,blank=True)
-    
+    nm_id = models.BigIntegerField("Артикул WB", primary_key=True)
+    name = models.CharField("Наименование", max_length=250, null=True, blank=True)
+    subject = models.BigIntegerField("Категория", null=True, blank=True)
+    vat = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name="Ставка НДС из карточки",
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         verbose_name = "Номенлатура WB_"
         verbose_name_plural = "Номенлатуры WB_"
 
     def __str__(self):
         return f"({str(self.nm_id)} {self.name})"
-    
-    
+
 
 """"
 with prefetch as (
@@ -208,47 +264,46 @@ SET
 """
 
 
+class MVSalesProductData(models.Model):
+    wb_article_id = models.BigIntegerField(primary_key=True)
+    status = models.SmallIntegerField(verbose_name="статус", null=True)
+    basket = models.TextField(null=True, verbose_name="Корзина WB")
+    fetched_at = models.DateTimeField(null=True, verbose_name="Дата загрузки")
+    nm_id = models.TextField(null=True, verbose_name="nm_id")
+    imt_id = models.TextField(null=True, verbose_name="WB Артикль")
+    imt_name = models.TextField(null=True, verbose_name="Наименование")
+    slug = models.TextField(null=True, verbose_name="slug")
+    vendor_code = models.TextField(null=True, verbose_name="Код поставщика")
+    subj_name = models.TextField(null=True, verbose_name="Категория")
+    subj_root_name = models.TextField(null=True, verbose_name="Группа")
+    subject_id = models.TextField(null=True, verbose_name="subject_id")
+    subject_root_id = models.TextField(null=True, verbose_name="subject_root_id")
+    brand_name = models.TextField(null=True, verbose_name="Бренд")
+    supplier_id = models.TextField(null=True, verbose_name="supplier_id")
+    photo_count = models.SmallIntegerField(null=True, verbose_name="Количество фото")
+    nm_colors_names = models.TextField(null=True, verbose_name="Цвета")
+    create_date = models.DateTimeField(null=True, verbose_name="Дата создания")
+    update_date = models.DateTimeField(null=True, verbose_name="Дата обновления")
+    contents = models.TextField(null=True, verbose_name="Кр описание")
+    description = models.TextField(null=True, verbose_name="Описание")
+    composition = models.TextField(null=True, verbose_name="Состав")
+    country = models.TextField(null=True, verbose_name="Страна производитель")
+    sex = models.TextField(null=True, verbose_name="Пол")
+    kit = models.TextField(null=True, verbose_name="Комплект")
 
-
-class MVSalesProductData(models.Model): 
-    wb_article_id = models.BigIntegerField(primary_key=True) 
-    status = models.SmallIntegerField(verbose_name='статус',null=True) 
-    basket = models.TextField(null=True,verbose_name='Корзина WB') 
-    fetched_at = models.DateTimeField(null=True,verbose_name='Дата загрузки')
-    nm_id = models.TextField(null=True,verbose_name='nm_id') 
-    imt_id = models.TextField(null=True,verbose_name='WB Артикль') 
-    imt_name = models.TextField(null=True,verbose_name='Наименование') 
-    slug = models.TextField(null=True,verbose_name='slug') 
-    vendor_code = models.TextField(null=True,verbose_name='Код поставщика') 
-    subj_name = models.TextField(null=True,verbose_name='Категория') 
-    subj_root_name = models.TextField(null=True,verbose_name='Группа') 
-    subject_id = models.TextField(null=True,verbose_name='subject_id') 
-    subject_root_id = models.TextField(null=True,verbose_name='subject_root_id') 
-    brand_name = models.TextField(null=True,verbose_name='Бренд') 
-    supplier_id = models.TextField(null=True,verbose_name='supplier_id') 
-    photo_count = models.SmallIntegerField(null=True,verbose_name='Количество фото') 
-    nm_colors_names = models.TextField(null=True,verbose_name='Цвета') 
-    create_date = models.DateTimeField(null=True,verbose_name='Дата создания') 
-    update_date = models.DateTimeField(null=True,verbose_name='Дата обновления') 
-    contents = models.TextField(null=True,verbose_name='Кр описание') 
-    description = models.TextField(null=True,verbose_name='Описание') 
-    composition = models.TextField(null=True,verbose_name='Состав') 
-    country = models.TextField(null=True,verbose_name='Страна производитель') 
-    sex = models.TextField(null=True,verbose_name='Пол') 
-    kit = models.TextField(null=True,verbose_name='Комплект') 
-    class Meta: 
-        managed = False 
+    class Meta:
+        managed = False
         db_table = "mv_sales_productdata"
         verbose_name = "Номенклатура WB"
         verbose_name_plural = "Номенклатуры WB"
-        
-        
+
     def __str__(self):
         return f"{self.imt_name} ({self.imt_id})"
 
+
 class Warehouse(models.Model):
-    name = models.CharField(max_length=250,verbose_name='Наименование')
-    
+    name = models.CharField(max_length=250, verbose_name="Наименование")
+
     class Meta:
         verbose_name = "Склад"
         verbose_name_plural = "Склады"
@@ -256,9 +311,10 @@ class Warehouse(models.Model):
     def __str__(self):
         return str(self.name)
 
+
 class Order(models.Model):
-    code = models.CharField(max_length=250,verbose_name='Код заказа')
-    
+    code = models.CharField(max_length=250, verbose_name="Код заказа")
+
     class Meta:
         verbose_name = "Код заказа"
         verbose_name_plural = "Коды заказа"
@@ -266,24 +322,55 @@ class Order(models.Model):
     def __str__(self):
         return str(self.code)
 
+
 class SalesData(models.Model):
-    created_date = models.DateTimeField(verbose_name='Дата создания')
-    sale_date = models.DateTimeField(verbose_name='Дата продажи')
-    product = models.ForeignKey(Product,on_delete=models.PROTECT,verbose_name='WB Артикль')
-    barcode = models.ForeignKey(Barcode,on_delete=models.PROTECT,verbose_name='Баркод',null=True,blank=True)
-    brand = models.ForeignKey(Brand,on_delete=models.PROTECT,verbose_name='Бренд',null=True,blank=True)
-    size = models.ForeignKey(Size,on_delete=models.PROTECT,verbose_name='Размер',null=True,blank=True)
-    country = models.ForeignKey(Countries,on_delete=models.PROTECT,verbose_name='Размер',null=True,blank=True)
-    order = models.ForeignKey(Order,on_delete=models.PROTECT,verbose_name='Код заказа',null=True,blank=True)
-    warehouse = models.ForeignKey(Warehouse,on_delete=models.PROTECT,verbose_name='Склад',null=True,blank=True)
-    amount_dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='dt Выручка')
-    amount_cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='cr Выручка')
-    quant_dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='dt Количество')
-    quant_cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='cr Количество')
-    dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Дт')
-    cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Кр')
-    transaction_type = models.CharField(max_length=50,verbose_name='Тип транскации')
-    
+    created_date = models.DateTimeField(verbose_name="Дата создания")
+    sale_date = models.DateTimeField(verbose_name="Дата продажи")
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, verbose_name="WB Артикль"
+    )
+    barcode = models.ForeignKey(
+        Barcode, on_delete=models.PROTECT, verbose_name="Баркод", null=True, blank=True
+    )
+    brand = models.ForeignKey(
+        Brand, on_delete=models.PROTECT, verbose_name="Бренд", null=True, blank=True
+    )
+    size = models.ForeignKey(
+        Size, on_delete=models.PROTECT, verbose_name="Размер", null=True, blank=True
+    )
+    country = models.ForeignKey(
+        Countries,
+        on_delete=models.PROTECT,
+        verbose_name="Размер",
+        null=True,
+        blank=True,
+    )
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.PROTECT,
+        verbose_name="Код заказа",
+        null=True,
+        blank=True,
+    )
+    warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.PROTECT, verbose_name="Склад", null=True, blank=True
+    )
+    amount_dt = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="dt Выручка"
+    )
+    amount_cr = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="cr Выручка"
+    )
+    quant_dt = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="dt Количество"
+    )
+    quant_cr = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="cr Количество"
+    )
+    dt = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Дт")
+    cr = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Кр")
+    transaction_type = models.CharField(max_length=50, verbose_name="Тип транскации")
+
     class Meta:
         verbose_name = "Данные продаж"
         verbose_name_plural = "Данные продаж"
@@ -294,74 +381,124 @@ class SalesData(models.Model):
 
 # -------------------------------
 # MV модели
-#--------------------------------
+# --------------------------------
 
 # Дневные продажи
 
-class MVSalesDaily(models.Model): 
-    date = models.DateField(primary_key=True, verbose_name='Дата')
-    amount = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Оборот',null=True,blank=True)
-    revenue = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Выручка',null=True,blank=True)
-    comission = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Проц. комисии',null=True,blank=True)
-    quant = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Количество',null=True,blank=True)
-    sales = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Продажи',null=True,blank=True)
-    rtr = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='Возвраты',null=True,blank=True)
-    rtr_ratio = models.DecimalField(max_digits=10,decimal_places=2,verbose_name='К возвратов',null=True,blank=True)
-    
-    class Meta: 
-        managed = False 
+
+class MVSalesDaily(models.Model):
+    date = models.DateField(primary_key=True, verbose_name="Дата")
+    amount = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Оборот", null=True, blank=True
+    )
+    revenue = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Выручка", null=True, blank=True
+    )
+    comission = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Проц. комисии",
+        null=True,
+        blank=True,
+    )
+    quant = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Количество",
+        null=True,
+        blank=True,
+    )
+    sales = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Продажи", null=True, blank=True
+    )
+    rtr = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Возвраты", null=True, blank=True
+    )
+    rtr_ratio = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="К возвратов",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        managed = False
         db_table = "mv_sales_daily"
         verbose_name = "Дневные продажи"
         verbose_name_plural = "Дневные продажи"
-        
-       
+
     def __str__(self):
         return self.date.strftime("%d %b-%Y")
 
 
 class MVDataMartProduct(models.Model):
     product_id = models.BigIntegerField(primary_key=True)
-    imt_name = models.CharField(max_length=300,verbose_name='Наименование')
-    nm_id = models.CharField(max_length=300,verbose_name='Артикль WB')
-    brand_name = models.CharField(max_length=300,verbose_name='Бренд')
-    subj_root_name = models.CharField(max_length=300,verbose_name='Группа')
-    subj_name = models.CharField(max_length=300,verbose_name='Категория')
-    total_revenue = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Вычка всего')
-    last_year_revenue = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Вычка LY')
-    current_year_revenue = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Вычка YTD')
-    tot_rating = models.CharField(max_length=50,verbose_name='Рейтинг за все время')
-    lys_rating = models.CharField(max_length=50,verbose_name='Рейтинг за LY')
-    cur_rating = models.CharField(max_length=50,verbose_name='Рейтинг по YTD')
-    first_sale = models.DateField(verbose_name='Дата первой продажи')
-    last_sale = models.DateField(verbose_name='Дата последней продажи')
-    days_interval = models.IntegerField(verbose_name='Кол-во дней')
-    sales_days = models.IntegerField(verbose_name='Кол-во дней с продажами')
-    zeros_days = models.IntegerField(verbose_name='Кол-во дней без продаж')
-    percent_zero = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Дней без продаж (%)')
-    tot_quant = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Кол-во продано всего (ед)')
-    mean_quant_zeros = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='μ по дням (ед)')
-    monthly_sales_zero = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Ср кол-во за мес(ед)')
-    st_dev_with_zeros  = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='σ по дням (ед)')
-    cv_zeros = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='cv по дням (ед)')
-    st_dev_quant = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='x̄ по дням (ед)')
-    mean_quant = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='s по дням (ед)')
-    cv = models.DecimalField(max_digits=12,decimal_places=2,verbose_name="cv` по дням (ед)")
-    demand_rank_zeros =  models.CharField(max_length=50,verbose_name='Волотильность по cv')
-    demand_rank = models.CharField(max_length=50,verbose_name='Волотильность по cv`')
-    
-    class Meta: 
-        managed = False 
+    imt_name = models.CharField(max_length=300, verbose_name="Наименование")
+    nm_id = models.CharField(max_length=300, verbose_name="Артикль WB")
+    brand_name = models.CharField(max_length=300, verbose_name="Бренд")
+    subj_root_name = models.CharField(max_length=300, verbose_name="Группа")
+    subj_name = models.CharField(max_length=300, verbose_name="Категория")
+    total_revenue = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Вычка всего"
+    )
+    last_year_revenue = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Вычка LY"
+    )
+    current_year_revenue = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Вычка YTD"
+    )
+    tot_rating = models.CharField(max_length=50, verbose_name="Рейтинг за все время")
+    lys_rating = models.CharField(max_length=50, verbose_name="Рейтинг за LY")
+    cur_rating = models.CharField(max_length=50, verbose_name="Рейтинг по YTD")
+    first_sale = models.DateField(verbose_name="Дата первой продажи")
+    last_sale = models.DateField(verbose_name="Дата последней продажи")
+    days_interval = models.IntegerField(verbose_name="Кол-во дней")
+    sales_days = models.IntegerField(verbose_name="Кол-во дней с продажами")
+    zeros_days = models.IntegerField(verbose_name="Кол-во дней без продаж")
+    percent_zero = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Дней без продаж (%)"
+    )
+    tot_quant = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Кол-во продано всего (ед)"
+    )
+    mean_quant_zeros = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="μ по дням (ед)"
+    )
+    monthly_sales_zero = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Ср кол-во за мес(ед)"
+    )
+    st_dev_with_zeros = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="σ по дням (ед)"
+    )
+    cv_zeros = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="cv по дням (ед)"
+    )
+    st_dev_quant = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="x̄ по дням (ед)"
+    )
+    mean_quant = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="s по дням (ед)"
+    )
+    cv = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="cv` по дням (ед)"
+    )
+    demand_rank_zeros = models.CharField(
+        max_length=50, verbose_name="Волотильность по cv"
+    )
+    demand_rank = models.CharField(max_length=50, verbose_name="Волотильность по cv`")
+
+    class Meta:
+        managed = False
         db_table = "mv_datamart_product"
         verbose_name = "Товар"
         verbose_name_plural = "Товары"
-        
-       
+
     def __str__(self):
         return f"{self.imt_name} ({self.nm_id})"
 
 
-
-#    SELECT 
+#    SELECT
 #   t.created_date,
 #   t.sale_date,
 #   p.id  AS product_id,
