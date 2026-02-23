@@ -1,0 +1,240 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+{% load admin_list %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+{% block title %}Документы WB{% endblock %}
+
+{% block content_title %}
+  <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:10px;">
+
+    {# ЛЕВАЯ ЧАСТЬ: заголовок #}
+    <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+      <div style="
+          width:40px;height:40px;border-radius:12px;
+          background:linear-gradient(135deg,#0f172a,#0ea5e9);
+          color:#f8fafc;display:flex;align-items:center;justify-content:center;
+          font-size:20px;font-weight:700;
+          box-shadow:0 10px 26px rgba(15,23,42,.12), 0 0 0 1px rgba(15,23,42,.10);
+      ">
+        📄
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:4px; line-height:1.2; min-width:0;">
+        <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;">
+          Продажи / WB
+        </span>
+        <span style="font-size:20px;font-weight:900;color:#0f172a;">
+          Документы WB
+        </span>
+      </div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    {# ПРАВАЯ КАРТОЧКА: навигация + аналитика #}
+    <div style="
+        min-width:340px;max-width:560px;
+        border-radius:18px;
+        background:rgba(248,250,252,0.90);
+        box-shadow:0 18px 40px rgba(15,23,42,0.12);
+        padding:12px 14px;
+        display:flex;flex-direction:column;gap:12px;
+        border:1px solid rgba(148,163,184,.18);
+        backdrop-filter: blur(8px);
+    ">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9ca3af;">
+          Навигация
+        </span>
+        <span style="font-size:13px;font-weight:900;color:#0f172a;">
+          Фильтры / поиск
+        </span>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a href="{% url 'admin:index' %}"
+           style="
+             font-size:12px;padding:9px 12px;border-radius:2px;text-decoration:none;
+             background:rgba(99,102,241,.10);
+             color:#3730a3;
+             display:inline-flex;align-items:center;gap:10px;
+             border:1px solid rgba(99,102,241,.18);
+             font-weight:600;
+             box-shadow:0 10px 22px rgba(99,102,241,.10);
+           ">
+          ← Назад в меню
+        </a>
+
+        <a href=""
+           style="
+             font-size:12px;padding:9px 12px;border-radius:2px;text-decoration:none;
+             background:rgba(16,185,129,.10);
+             color:#065f46;
+             display:inline-flex;align-items:center;gap:10px;
+             border:1px solid rgba(16,185,129,.18);
+             font-weight:600;
+             box-shadow:0 10px 22px rgba(16,185,129,.10);
+           ">
+          ⟳ Обновить
+        </a>
+      </div>
+
+      {# аккуратные карточки аналитики (по фильтрам или по всем) #}
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+        <div style="
+            border-radius:2px;
+            padding:14px 16px;
+            border:1px solid rgba(148,163,184,.18);
+            background:linear-gradient(180deg, rgba(255,255,255,.75), rgba(248,250,252,.85));
+            box-shadow:0 6px 18px rgba(15,23,42,.04);
+        ">
+          <div style="font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#94a3b8; font-weight:500; margin-bottom:6px;">
+            Документов • {{ analytics_scope|default:"все" }}
+          </div>
+          <div style="font-size:14px; font-weight:500; color:#0f172a; line-height:1.15;">
+            {{ analytics_docs_count|default:"—" }}
+          </div>
+          <div style="margin-top:6px; font-size:11px; color:#64748b; font-weight:400;">
+            Категорий: {{ analytics_categories_count|default:"—" }}
+          </div>
+        </div>
+
+        <div style="
+            border-radius:2px;
+            padding:14px 16px;
+            border:1px solid rgba(148,163,184,.18);
+            background:linear-gradient(180deg, rgba(255,255,255,.75), rgba(248,250,252,.85));
+            box-shadow:0 6px 18px rgba(15,23,42,.04);
+        ">
+          <div style="font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#94a3b8; font-weight:500; margin-bottom:6px;">
+            Не просмотрено
+          </div>
+          <div style="font-size:14px; font-weight:500; color:#0f172a; line-height:1.15;">
+            {{ analytics_unviewed_count|default:"—" }}
+          </div>
+          <div style="margin-top:6px; font-size:11px; color:#64748b; font-weight:400;">
+            Доля {{ analytics_unviewed_share|default:"—" }}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {# хлебные крошки #}
+  <div style="
+      display:flex;justify-content:space-between;align-items:center;
+      padding:8px 2px 0;
+      border-top:1px solid rgba(148,163,184,.22);
+      color:#6b7280;font-size:11px;
+  ">
+    <nav style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <a href="{% url 'admin:index' %}"
+         style="text-transform:uppercase;letter-spacing:0.10em;text-decoration:none;color:#9ca3af;font-weight:800;">
+        НАЧАЛО
+      </a>
+      <span style="color:#cbd5e1;">›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.10em;color:#94a3b8;font-weight:800;">
+        ПРОДАЖИ
+      </span>
+      <span style="color:#cbd5e1;">›</span>
+      <span style="text-transform:uppercase;letter-spacing:0.10em;color:#475569;font-weight:900;">
+        ДОКУМЕНТЫ WB
+      </span>
+    </nav>
+
+    <span style="color:#94a3b8;font-weight:700;">
+      {{ cl.result_count }} записей
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+    #result_list tbody tr { cursor: pointer; }
+
+    /* плотность */
+    #result_list td, #result_list th {
+      padding-top: 10px !important;
+      padding-bottom: 10px !important;
+      vertical-align: middle;
+    }
+
+    /* подсветка непросмотренных строк */
+    #result_list tbody tr.unviewed-row td,
+    #result_list tbody tr.unviewed-row th {
+      background: rgba(14,165,233,.06);
+    }
+
+    /* hover */
+    #result_list tbody tr:hover td,
+    #result_list tbody tr:hover th {
+      background: rgba(15,23,42,.04) !important;
+      transition: background .12s ease;
+    }
+
+    /* фильтры справа */
+    .filtered #changelist-filter {
+      border-radius: 16px;
+      border: 1px solid rgba(148,163,184,.18);
+      box-shadow: 0 10px 22px rgba(15,23,42,.06);
+      background: rgba(248,250,252,.92);
+      backdrop-filter: blur(6px);
+      padding: 10px 10px;
+    }
+
+    /* поиск */
+    #changelist-search input[type="text"] {
+      border-radius: 12px !important;
+      border: 1px solid rgba(148,163,184,.25) !important;
+      box-shadow: 0 10px 20px rgba(15,23,42,.06) !important;
+    }
+
+    /* бейдж “viewed” */
+    .wb-badge {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      border:1px solid rgba(148,163,184,.22);
+      background:rgba(255,255,255,.65);
+      color:#475569;
+      white-space:nowrap;
+    }
+    .wb-badge.ok { color:#065f46; border-color:rgba(16,185,129,.25); background:rgba(16,185,129,.10); }
+    .wb-badge.bad { color:#1e3a8a; border-color:rgba(14,165,233,.30); background:rgba(14,165,233,.10); }
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const rows = document.querySelectorAll('#result_list tbody tr');
+
+      rows.forEach(function (row) {
+        const link = row.querySelector('th a') || row.querySelector('td a');
+        if (!link) return;
+
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('a')) return;
+          if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
+          if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
+          if (e.target.tagName === 'BUTTON') return;
+          window.location.href = link.href;
+        });
+      });
+    });
+  </script>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

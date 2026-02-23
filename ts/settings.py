@@ -300,7 +300,9 @@ JAZZMIN_SETTINGS = {
     #     # --- ПРОДАЖИ --- 
         "sales": "fa-solid fa-chart-column",
         "sales.MVSalesDaily": "fa-solid fa-calendar-day",
-        "sales.MVSalesProductData": "fa-solid fa-shirt",
+            # "fa-solid fa-calendar-day",
+        "sales.MVDataMartProduct":  "fa-solid fa-shirt",
+        "sales.WBDocument": "fa-solid fa-file-invoice",
 
     #     # --- Договоры аренжды ---
         "contracts": "fa-solid fa-file-signature",
