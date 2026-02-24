@@ -2,6 +2,8 @@
 /.tmp/
 /media/
 /venv/
+/.venv/
+.venv/
 /staticfiles/
 __pycache__/
 .vscode/

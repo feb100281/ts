@@ -17,11 +17,11 @@ URL = "https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPerio
 HEADERS = {"Authorization": TOKEN}
 
 # !!! Поменял старт на 2024-01-01
-DATE_FROM = "2026-02-20T00:00:00"
+DATE_FROM = "2026-02-21T00:00:00"
 
 # Можно оставить как у тебя, или поставить "now" руками.
 # Чтобы было стабильно и воспроизводимо - фиксируем.
-DATE_TO   = "2026-02-21T23:59:59"
+DATE_TO   = "2026-02-23T23:59:59"
 
 PERIOD    = "daily"
 LIMIT     = 100000
