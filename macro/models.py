@@ -1,3 +1,4 @@
+# macro/models.py
 from django.db import models
 from django.utils import timezone
 from utils.choises import CURRENCY_CHOISE
@@ -66,6 +67,11 @@ class TaxesList(models.Model):
         today = timezone.now().date()
         rate = self.taxrates_set.filter(date__lte=today).order_by('-date').first()
         return f"{rate.rate}%" if rate else "—"
+    
+    def get_rate_on(self, on_date):
+        rate_obj = self.taxrates_set.filter(date__lte=on_date).order_by("-date").first()
+        return rate_obj.rate if rate_obj else None
+    
     get_current_rate.short_description = "Текущая ставка"
     
 class TaxRates(models.Model):
