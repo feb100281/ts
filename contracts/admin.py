@@ -3,6 +3,9 @@ from django.contrib.admin import RelatedOnlyFieldListFilter
 from django.db.models import Count, Prefetch
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django import forms
+import json
+
 
 from .models import (
     Contracts,
@@ -11,12 +14,68 @@ from .models import (
     ContractItems,
     ContractFiles,
     CfItemAuto,
+    AccountingMethod,
+
     
 )
 
-# class CfItemAutoInline(admin.TabularInline):
-#     model = CfItemAuto
-#     extra = 0
+
+
+class ConditionsInlineForm(forms.ModelForm):
+    params_editor = forms.CharField(
+        label="Параметры (JSON, ручной режим)",
+        required=False,
+        widget=forms.Textarea(attrs={
+            "rows": 7,
+            "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
+            "placeholder": '{\n  "any_key": "any_value"\n}'
+        }),
+        help_text="Если заполнено — сохранится в params (для нестандартных кейсов)."
+    )
+
+    class Meta:
+        model = Conditions
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # params храним скрыто, редактируем через params_editor
+        self.fields["params"].widget = forms.HiddenInput()
+        self.fields["params"].required = False
+
+        inst = getattr(self, "instance", None)
+        params = (inst.params or {}) if inst else {}
+        if params:
+            try:
+                self.initial["params_editor"] = json.dumps(params, ensure_ascii=False, indent=2)
+            except Exception:
+                self.initial["params_editor"] = str(params)
+
+    def clean(self):
+        cleaned = super().clean()
+        raw = (cleaned.get("params_editor") or "").strip()
+
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception as e:
+                raise forms.ValidationError({"params_editor": f"Некорректный JSON: {e}"})
+            if not isinstance(parsed, dict):
+                raise forms.ValidationError({"params_editor": "JSON должен быть объектом { ... }"})
+            cleaned["params"] = parsed
+        else:
+            cleaned["params"] = self.instance.params if self.instance else {}
+
+        return cleaned
+
+    def save(self, commit=True):
+        inst = super().save(commit=False)
+        inst.params = self.cleaned_data.get("params") or {}
+        if commit:
+            inst.save()
+            self.save_m2m()
+        return inst
 
 class CfItemAutoInline(admin.StackedInline):
     model = CfItemAuto
@@ -27,23 +86,77 @@ class CfItemAutoInline(admin.StackedInline):
     verbose_name_plural = mark_safe("⚙️ <b>Автоматизация</b>")
 
 
-    
-    
 
-class ContractItemsInline(admin.TabularInline):
+
+class ContractItemsInlineForm(forms.ModelForm):
+    class Meta:
+        model = ContractItems
+        fields = "__all__"
+        widgets = {
+            "item": forms.Textarea(attrs={"rows": 2, "style": "width: 70%;"}),
+        }
+
+class ContractItemsInline(admin.StackedInline):
     model = ContractItems
+    form = ContractItemsInlineForm
     extra = 0
     fields = ("item",)
     verbose_name = mark_safe("<b>🧾 Предмет</b>")
     verbose_name_plural = mark_safe("🧾 <b>Предмет</b>")
-    fields = ("item",)
-    show_change_link = True
+    
+    
 
-class ConditionsInline(admin.TabularInline):
+
+
+
+class ConditionsInline(admin.StackedInline):
     model = Conditions
-    extra = 1
+    form = ConditionsInlineForm
+    extra = 0
+    show_change_link = True
+    autocomplete_fields = ("accounting_method", "tax")
+
+    
+    fieldsets = (
+        ("Начисление", {
+            "fields": (
+                "accounting_method",  "period",
+                "date_start",
+                "date_finish",
+                ("amount", "vat_mode"),
+
+                # "tax",
+            )
+        }),
+        ("Оплата", {
+            "fields": (
+               ( "pay_rule",
+                "pay_timing"),
+                ("pay_day", "pay_offset_months"), 
+                # "pay_offset_days",
+            )
+        }),
+        ("Неустойка", {
+            "fields": (
+                "penalty_rate_day",
+            )
+        }),
+        ("Доп. параметры", {
+            "classes": ("collapse",),
+            "fields": (
+                "params_editor",
+                "params",
+            )
+        }),
+    )
+
     verbose_name = mark_safe("<b>✅ Условие</b>")
     verbose_name_plural = mark_safe("✅<b>Условия</b>")
+
+
+
+
+
 
 
 
@@ -53,12 +166,6 @@ class ContractFilesInline(admin.TabularInline):
     verbose_name = mark_safe("<b>📎 Файл</b>")
     verbose_name_plural = mark_safe("<b>📎 Файлы</b>")
     show_change_link = True
-
-
-
-
-
-
 
 
 
@@ -74,7 +181,7 @@ class ContractsAdmin(admin.ModelAdmin):
     search_fields = ("number", "cp__name", "title__title", "regex")
     search_help_text = "Поиск: номер, контрагент, тип, RegEx"
 
-    list_filter = ( ("cp", RelatedOnlyFieldListFilter), 'title', "owner",  "manager", "is_signed")
+    list_filter = ( ("cp", RelatedOnlyFieldListFilter), 'title', "owner",  "is_signed")
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
@@ -89,7 +196,7 @@ class ContractsAdmin(admin.ModelAdmin):
         (
             mark_safe('📄 <b>Карточка</b>'),
             {
-                "fields": ("title", "number", "date", "cp", "owner", "manager", "is_signed","regex",)
+                "fields": ("title", "number", "date", "cp", "owner", "currency", "manager", "is_signed","regex",)
             },
         ),
 
@@ -106,7 +213,10 @@ class ContractsAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        qs = qs.select_related("title", "cp", "cp__gr", "owner", "manager", "pid").annotate(
+
+        qs = qs.select_related(
+            "title", "cp", "cp__gr", "owner", "manager", "pid"
+        ).annotate(
             _files_count=Count("files", distinct=True),
             _amendments_count=Count("amendments", distinct=True),
         ).prefetch_related(
@@ -114,8 +224,10 @@ class ContractsAdmin(admin.ModelAdmin):
                 "cfitemauto_set",
                 queryset=CfItemAuto.objects.select_related("defaultcfdt", "defaultcfcr"),
                 to_attr="_cf_auto",
-            )
+            ),
+            "conditions__accounting_method",
         )
+
         return qs
 
     
@@ -286,7 +398,9 @@ class ContractsTitleAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(_contracts_count=Count("contracts", distinct=True))
+        return qs.annotate(_contracts_count=Count("contracts_set", distinct=True))
+        # return qs.annotate(_contracts_count=Count("contracts", distinct=True))
+    
 
     @admin.display(description="Договоров", ordering="_contracts_count")
     def contracts_badge(self, obj):
@@ -316,3 +430,19 @@ class ContractsTitleAdmin(admin.ModelAdmin):
                 "css/admin_overrides.css",  
             )
         }
+        
+        
+
+
+
+
+
+@admin.register(AccountingMethod)
+class AccountingMethodAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+    ordering = ("name",)
+    list_per_page = 50
+
+    fields = ("name", "description", "is_active") 
