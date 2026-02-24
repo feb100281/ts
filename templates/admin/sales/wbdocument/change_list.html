@@ -82,45 +82,7 @@
         </a>
       </div>
 
-      {# аккуратные карточки аналитики (по фильтрам или по всем) #}
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
-        <div style="
-            border-radius:2px;
-            padding:14px 16px;
-            border:1px solid rgba(148,163,184,.18);
-            background:linear-gradient(180deg, rgba(255,255,255,.75), rgba(248,250,252,.85));
-            box-shadow:0 6px 18px rgba(15,23,42,.04);
-        ">
-          <div style="font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#94a3b8; font-weight:500; margin-bottom:6px;">
-            Документов • {{ analytics_scope|default:"все" }}
-          </div>
-          <div style="font-size:14px; font-weight:500; color:#0f172a; line-height:1.15;">
-            {{ analytics_docs_count|default:"—" }}
-          </div>
-          <div style="margin-top:6px; font-size:11px; color:#64748b; font-weight:400;">
-            Категорий: {{ analytics_categories_count|default:"—" }}
-          </div>
-        </div>
-
-        <div style="
-            border-radius:2px;
-            padding:14px 16px;
-            border:1px solid rgba(148,163,184,.18);
-            background:linear-gradient(180deg, rgba(255,255,255,.75), rgba(248,250,252,.85));
-            box-shadow:0 6px 18px rgba(15,23,42,.04);
-        ">
-          <div style="font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#94a3b8; font-weight:500; margin-bottom:6px;">
-            Не просмотрено
-          </div>
-          <div style="font-size:14px; font-weight:500; color:#0f172a; line-height:1.15;">
-            {{ analytics_unviewed_count|default:"—" }}
-          </div>
-          <div style="margin-top:6px; font-size:11px; color:#64748b; font-weight:400;">
-            Доля {{ analytics_unviewed_share|default:"—" }}
-          </div>
-        </div>
-      </div>
-
+      
     </div>
   </div>
 

@@ -244,7 +244,7 @@ class WBDocumentAdmin(admin.ModelAdmin):
        "category",
        "name",
        "extensions",
-       "viewed",
+    #    "viewed",
        "download_link",
     )
     search_fields = ("category", "name","creation_time")

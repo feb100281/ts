@@ -3,6 +3,7 @@ from django.contrib.admin import RelatedOnlyFieldListFilter
 from django.db.models import Count, Prefetch
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django import forms
 
 from .models import (
     Contracts,
@@ -14,9 +15,7 @@ from .models import (
     
 )
 
-# class CfItemAutoInline(admin.TabularInline):
-#     model = CfItemAuto
-#     extra = 0
+
 
 class CfItemAutoInline(admin.StackedInline):
     model = CfItemAuto
@@ -27,19 +26,25 @@ class CfItemAutoInline(admin.StackedInline):
     verbose_name_plural = mark_safe("⚙️ <b>Автоматизация</b>")
 
 
-    
-    
 
-class ContractItemsInline(admin.TabularInline):
+
+class ContractItemsInlineForm(forms.ModelForm):
+    class Meta:
+        model = ContractItems
+        fields = "__all__"
+        widgets = {
+            "item": forms.Textarea(attrs={"rows": 2, "style": "width: 70%;"}),
+        }
+
+class ContractItemsInline(admin.StackedInline):
     model = ContractItems
+    form = ContractItemsInlineForm
     extra = 0
     fields = ("item",)
     verbose_name = mark_safe("<b>🧾 Предмет</b>")
     verbose_name_plural = mark_safe("🧾 <b>Предмет</b>")
-    fields = ("item",)
-    show_change_link = True
 
-class ConditionsInline(admin.TabularInline):
+class ConditionsInline(admin.StackedInline):
     model = Conditions
     extra = 1
     verbose_name = mark_safe("<b>✅ Условие</b>")
@@ -57,12 +62,6 @@ class ContractFilesInline(admin.TabularInline):
 
 
 
-
-
-
-
-
-
 @admin.register(Contracts)
 class ContractsAdmin(admin.ModelAdmin):
     inlines = (ContractFilesInline, ContractItemsInline, ConditionsInline,CfItemAutoInline)
@@ -74,7 +73,7 @@ class ContractsAdmin(admin.ModelAdmin):
     search_fields = ("number", "cp__name", "title__title", "regex")
     search_help_text = "Поиск: номер, контрагент, тип, RegEx"
 
-    list_filter = ( ("cp", RelatedOnlyFieldListFilter), 'title', "owner",  "manager", "is_signed")
+    list_filter = ( ("cp", RelatedOnlyFieldListFilter), 'title', "owner",  "is_signed")
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
