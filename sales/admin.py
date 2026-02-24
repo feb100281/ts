@@ -4,7 +4,11 @@ from .models import ProductGroup, Product, Category, Brand, MVSalesProductData, 
 from .models import WBDocument
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from django.db.models import Q
+from django.db.models import Sum, Count, Q
+from django.utils.formats import number_format
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from datetime import datetime
 
 from django.shortcuts import render, get_object_or_404
 from django.http import Http404
@@ -152,11 +156,51 @@ class MVDataMartProductAdmin(admin.ModelAdmin):
         "demand_rank_zeros",
     )
     search_fields = ("imt_name", "subj_name", "subj_root_name")
-    list_filter = ("subj_root_name","subj_name", )
+    list_filter = ("subj_root_name", "subj_name", "brand_name")
     list_per_page = 25
     ordering = (
         F("total_revenue").desc(nulls_last=True),
     )
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        response = super().changelist_view(request, extra_context=extra_context)
+
+        # Если это не обычный рендер (например, редирект) — просто возвращаем
+        if not hasattr(response, "context_data") or "cl" not in response.context_data:
+            return response
+
+        cl = response.context_data["cl"]
+        qs = cl.queryset
+
+        # определяем: есть ли фильтры/поиск (т.е. scope = "по фильтру")
+        # в Jazzmin/Django фильтры лежат в GET; если только "p" (страница) — это не фильтр
+        meaningful_keys = [k for k in request.GET.keys() if k not in ("p", "o")]
+        scope = "по фильтрам" if meaningful_keys else "все товары"
+
+        agg = qs.aggregate(
+            ytd=Sum("current_year_revenue"),
+            cnt=Count("product_id"),
+            no_sales=Count("product_id", filter=Q(current_year_revenue__isnull=True) | Q(current_year_revenue__lte=0)),
+        )
+
+        ytd = agg["ytd"] or 0
+        cnt = agg["cnt"] or 0
+        no_sales = agg["no_sales"] or 0
+
+        # форматирование “по-человечески”
+        ytd_fmt = number_format(ytd, decimal_pos=0, use_l10n=True, force_grouping=True)
+        no_sales_share = (no_sales / cnt) if cnt else 0
+        no_sales_share_fmt = f"{no_sales_share:.1%}".replace(".", ",")
+
+        response.context_data.update(
+            analytics_scope=scope,
+            analytics_ytd_revenue=f"{ytd_fmt} ₽",
+            analytics_products_count=cnt,
+            analytics_no_sales_count=no_sales,
+            analytics_no_sales_share=no_sales_share_fmt if cnt else "—",
+        )
+        return response
     
     class Media:
         css = {"all": ("css/admin_overrides.css",'css/wide-table.css')}
@@ -200,16 +244,70 @@ class WBDocumentAdmin(admin.ModelAdmin):
        "category",
        "name",
        "extensions",
-       "viewed",
+    #    "viewed",
        "download_link",
     )
     search_fields = ("category", "name","creation_time")
     list_filter = ("category","creation_time", )
     list_per_page = 25
     ordering = ("-creation_time",)
+    date_hierarchy = "creation_time"
+    actions = ["print_selected_html"]
+    
+    readonly_fields = (
+        "id",
+        "creation_time",
+        "category",
+        "name",
+        "extensions",
+        "service_name",
+        "viewed",
+        "fetched_at",
+        "download_button",
+    )
+    
+    fieldsets = (
+        ("📄 Документ", {
+            "fields": (
+                ("category", "name"),
+                ("creation_time", "viewed"),
+            )
+        }),
+        ("💾 Файл WB", {
+            "fields": (
+                "service_name",
+                "extensions",
+                "download_button",
+            )
+        }),
+        ("⚙️ Техническая информация", {
+            "classes": ("collapse",),
+            "fields": (
+                "id",
+                "fetched_at",
+            )
+        }),
+    )
+
     
     class Media:
         css = {"all": ("css/admin_overrides.css",'css/wide-table.css')}
+    
+    @admin.action(description="🖨️ Печать")
+    def print_selected_html(self, request, queryset):
+        docs = queryset.order_by("-creation_time")
+
+        html = render_to_string(
+            "admin/sales/wbdocument/wbdocuments_print.html",
+            {
+                "title": "Документы WB",
+                "generated_at": datetime.now(),  
+                "rows": docs,                   
+                "count": docs.count(),
+            },
+            request=request,
+        )
+        return HttpResponse(html)
     
     @admin.display(description="Скачать", ordering=False)
     def download_link(self, obj: WBDocument):
@@ -221,6 +319,50 @@ class WBDocumentAdmin(admin.ModelAdmin):
         url = reverse("admin:wb_document_download", args=[obj.pk])
         return format_html('<a class="button" href="{}">Скачать</a>', url)
 
+
+   
+    @admin.display(description="")
+    def download_button(self, obj: WBDocument):
+        ext = (obj.extensions or "").split(",")[0].strip()
+        if not obj.service_name or not ext:
+            return format_html(
+                '<div style="padding:10px 12px;border-radius:12px;'
+                'background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.18);'
+                'color:#991b1b;font-weight:700;">'
+                'Нет service_name или extensions — скачать нельзя'
+                '</div>'
+            )
+        url = reverse("admin:wb_document_download", args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="button" '
+            'style="padding:8px 14px;border-radius:12px;font-weight:700;">'
+            'Скачать файл</a>',
+            url,
+        )
+
+    # 🚫 запретим добавление/изменение (это витрина)
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # открыть карточку можно, но редактировать нельзя
+        return True
+
+    # def has_delete_permission(self, request, obj=None):
+    #     return False
+
+    # --- добавляем url в админку ---
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "download/<int:pk>/",
+                self.admin_site.admin_view(self.download_view),
+                name="wb_document_download",
+            )
+        ]
+        return custom + urls
+        
     # --- добавляем url в админку ---
     def get_urls(self):
         urls = super().get_urls()
@@ -258,3 +400,45 @@ class WBDocumentAdmin(admin.ModelAdmin):
         resp = HttpResponse(content, content_type="application/octet-stream")
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
+    
+    # чтобы в шаблоне можно было подсветить “не просмотрено”
+    def get_changelist_instance(self, request):
+        cl = super().get_changelist_instance(request)
+        return cl
+
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        response = super().changelist_view(request, extra_context=extra_context)
+
+        if not hasattr(response, "context_data") or "cl" not in response.context_data:
+            return response
+
+        cl = response.context_data["cl"]
+        qs = cl.queryset
+
+        meaningful_keys = [k for k in request.GET.keys() if k not in ("p", "o")]
+        scope = "по фильтрам" if meaningful_keys else "все"
+
+        agg = qs.aggregate(
+            docs=Count("id"),
+            unviewed=Count("id", filter=Q(viewed=False)),
+            categories=Count("category", distinct=True),
+        )
+
+        docs = agg["docs"] or 0
+        unviewed = agg["unviewed"] or 0
+        categories = agg["categories"] or 0
+
+        share = (unviewed / docs) if docs else 0
+        share_fmt = f"{share:.1%}".replace(".", ",")
+
+        response.context_data.update(
+            analytics_scope=scope,
+            analytics_docs_count=number_format(docs, decimal_pos=0, use_l10n=True, force_grouping=True),
+            analytics_unviewed_count=number_format(unviewed, decimal_pos=0, use_l10n=True, force_grouping=True),
+            analytics_unviewed_share=share_fmt if docs else "—",
+            analytics_categories_count=number_format(categories, decimal_pos=0, use_l10n=True, force_grouping=True),
+        )
+
+        return response

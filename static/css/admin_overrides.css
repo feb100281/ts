@@ -427,8 +427,12 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 
 
 
-
-
+/* textarea предмета */
+.inline-group textarea {
+  font-size: 13px;
+  padding: 8px 4px;
+  border-radius: 2px;
+}
 
 
 
