@@ -12,7 +12,7 @@ class Subject(models.Model):
         return f"{self.name}"
 
 # Create your models here.
-class WB(models.Model):
+class Product(models.Model):
     nm_id = models.BigIntegerField(primary_key=True,verbose_name="Артукул WB")
     sa_name = models.CharField(max_length=250,verbose_name="Артикул продавца", blank=True, null=True)
     title = models.CharField(max_length=250,verbose_name="Наименование", blank=True, null=True)
