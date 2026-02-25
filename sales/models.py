@@ -177,35 +177,45 @@ class ProductData(models.Model):
 
 
 # -------------------------------
-# WB документы 
+# WB документы
 # --------------------------------
 
+
 class WBDocument(models.Model):
-    
+
     id = models.BigIntegerField(primary_key=True)
-    service_name = models.CharField(max_length=255, null=True,blank=True,verbose_name='Имя файла')
+    service_name = models.CharField(
+        max_length=255, null=True, blank=True, verbose_name="Имя файла"
+    )
 
-    category = models.CharField(max_length=255, blank=True, null=True, verbose_name='Тип документа')
-    name = models.CharField(max_length=255, null=True,blank=True, verbose_name='Наименование')
+    category = models.CharField(
+        max_length=255, blank=True, null=True, verbose_name="Тип документа"
+    )
+    name = models.CharField(
+        max_length=255, null=True, blank=True, verbose_name="Наименование"
+    )
 
-    creation_time = models.DateTimeField(null=True, blank=True, verbose_name='Дата создания')
+    creation_time = models.DateTimeField(
+        null=True, blank=True, verbose_name="Дата создания"
+    )
 
     # вместо JSONField: строка, например "xml" или "zip" или "xml,zip"
-    extensions = models.CharField(max_length=255, blank=True, null=True, verbose_name='Тип файла')
+    extensions = models.CharField(
+        max_length=255, blank=True, null=True, verbose_name="Тип файла"
+    )
 
-    viewed = models.BooleanField(default=False, verbose_name='Просмотрено')
+    viewed = models.BooleanField(default=False, verbose_name="Просмотрено")
 
     fetched_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         managed = False
         db_table = '"wb_raw"."wb_documents"'
         verbose_name = "Документ WB"
         verbose_name_plural = "Документы WB"
-        
 
     def __str__(self) -> str:
         return f"{self.category}: {self.name}"
-
 
 
 # -------------------------------
