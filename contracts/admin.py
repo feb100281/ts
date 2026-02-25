@@ -221,6 +221,7 @@ class ContractFilesInline(admin.StackedInline):
     model = ContractFiles
     extra = 0
     show_change_link = True
+    template = "admin/contracts/inlines/contractfiles_stacked_inline.html"
 
     verbose_name = mark_safe("<b>📎 Файл</b>")
     verbose_name_plural = mark_safe("<b>📎 Файлы</b>")
