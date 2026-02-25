@@ -1,0 +1,85 @@
+{% load i18n admin_urls static %}
+
+<div class="js-inline-admin-formset inline-group jm-inline-group"
+     id="{{ inline_admin_formset.formset.prefix }}-group"
+     data-inline-type="stacked"
+     data-inline-formset="{{ inline_admin_formset.inline_formset_data }}">
+
+  <fieldset class="module {{ inline_admin_formset.classes }}">
+
+    {{ inline_admin_formset.formset.management_form }}
+    {{ inline_admin_formset.formset.non_form_errors }}
+
+    {% for inline_admin_form in inline_admin_formset %}
+      <div class="inline-related{% if inline_admin_form.original or inline_admin_form.show_url %} has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form last-related{% endif %}"
+           id="{{ inline_admin_formset.formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
+
+        {% with inst=inline_admin_form.form.instance %}
+        <details class="valuation-inline__details"
+                 {% if not inline_admin_form.original or inline_admin_form.form.errors %}open{% endif %}>
+
+          <summary class="valuation-inline__summary">
+
+            <span class="valuation-inline__title">
+              {% if inline_admin_form.original %}
+                Файл №{{ forloop.counter }}
+
+                {% if inst.doc_type %}
+                  <span class="file-pill">{{ inst.get_doc_type_display|default:"Документ"}}</span>
+                {% endif %}
+
+
+                {% if inst.doc_number %}
+                  <span class="file-no">№ {{ inst.doc_number }}</span>
+                {% endif %}
+                    от
+                {% if inst.doc_date %}
+                  <span class="file-date">{{ inst.doc_date|date:"d.m.Y" }}</span>
+                {% endif %}
+
+        
+              {% else %}
+                Новый файл
+              {% endif %}
+            </span>
+
+            {% if inline_admin_form.form.errors %}
+              <span class="valuation-inline__badge valuation-inline__badge--error">
+                {% trans "Есть ошибки" %}
+              </span>
+            {% endif %}
+
+            {% if inline_admin_formset.formset.can_delete and inline_admin_form.original %}
+              <span class="valuation-inline__delete" onclick="event.stopPropagation();">
+                {{ inline_admin_form.deletion_field.field }}
+                {{ inline_admin_form.deletion_field.label_tag }}
+              </span>
+            {% endif %}
+
+          </summary>
+
+          <div class="valuation-inline__body">
+
+            {% if inline_admin_form.form.non_field_errors %}
+              <div class="errornote">
+                {{ inline_admin_form.form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            {% for fieldset in inline_admin_form %}
+              {% include "admin/includes/fieldset.html" %}
+            {% endfor %}
+
+            {% if inline_admin_form.has_auto_field or inline_admin_form.needs_explicit_pk_field %}
+              {{ inline_admin_form.pk_field.field }}
+            {% endif %}
+            {{ inline_admin_form.fk_field.field }}
+
+          </div>
+        </details>
+        {% endwith %}
+
+      </div>
+    {% endfor %}
+  </fieldset>
+</div>

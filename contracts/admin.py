@@ -175,6 +175,7 @@ class ConditionsInline(admin.StackedInline):
     extra = 0
     show_change_link = True
     autocomplete_fields = ("accounting_method", "tax")
+    template = "admin/contracts/inlines/conditions_stacked_inline.html" 
 
     
     fieldsets = (
@@ -220,6 +221,7 @@ class ContractFilesInline(admin.StackedInline):
     model = ContractFiles
     extra = 0
     show_change_link = True
+    template = "admin/contracts/inlines/contractfiles_stacked_inline.html"
 
     verbose_name = mark_safe("<b>📎 Файл</b>")
     verbose_name_plural = mark_safe("<b>📎 Файлы</b>")
@@ -508,6 +510,7 @@ class ContractsAdmin(admin.ModelAdmin):
     
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",  )}
+        js = ("js/conditions_inline_collapse.js",)
       
     
     
@@ -533,8 +536,7 @@ class ContractsTitleAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(_contracts_count=Count("contracts_set", distinct=True))
-        # return qs.annotate(_contracts_count=Count("contracts", distinct=True))
+        return qs.annotate(_contracts_count=Count("contracts", distinct=True))
     
 
     @admin.display(description="Договоров", ordering="_contracts_count")
