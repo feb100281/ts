@@ -441,3 +441,33 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 
 
 
+
+
+
+
+
+/* StackedInline: поле file — скрываем "Currently:" и "Очистить" */
+.inline-related .field-file p.file-upload {
+  font-size: 0;
+  margin: 0;
+}
+
+.inline-related .field-file p.file-upload a,
+.inline-related .field-file p.file-upload .clear {
+  display: none !important;
+}
+
+/* оставляем нормальный размер для input */
+.inline-related .field-file input[type="file"] {
+  font-size: 13px;
+}
+
+
+.inline-related h3 {
+    font-weight: 900;
+    color: #0f766e;
+    font-size: 15px;
+    padding: 6px 10px;
+    background: linear-gradient(90deg,#ecfeff,#f8fafc);
+    border-radius: 2px;
+}

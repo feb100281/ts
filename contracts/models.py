@@ -108,6 +108,14 @@ class AccountingMethod(models.Model):
     code = models.SlugField(max_length=50, unique=True, verbose_name="Код", blank=True)
     name = models.CharField(max_length=250, unique=True, verbose_name="Название")
     description = models.TextField(null=True, blank=True, verbose_name="Описание")
+    icon = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        verbose_name="Иконка/эмодзи",
+        # help_text="Например: 🧾 или 💳 или ✅"
+    )
+
     is_active = models.BooleanField(default=True, verbose_name="Активен?")
 
     class Meta:
@@ -267,8 +275,34 @@ class Conditions(models.Model):
             models.Index(fields=["date_start", "date_finish"]),
         ]
 
+    # def __str__(self):
+    #     return f"Условия: {self.contract} ({self.date_start} - {self.date_finish or '∞'})"
     def __str__(self):
-        return f"Условия: {self.contract} ({self.date_start} - {self.date_finish or '∞'})"
+        c = self.contract
+
+        cp = getattr(c.cp, "name", "") if c and c.cp_id else ""
+        number = c.number or "без номера"
+        cdate = c.date.strftime("%d.%m.%Y") if c and c.date else "без даты"
+
+        start = self.date_start.strftime("%d.%m.%Y") if self.date_start else "—"
+        finish = self.date_finish.strftime("%d.%m.%Y") if self.date_finish else "∞"
+
+        period_txt = self.get_period_display() if self.period else ""
+        pay_txt = self.get_pay_timing_display() if self.pay_timing else ""
+
+        # метод учёта
+        am = self.accounting_method
+        if am:
+            # если ты добавила icon в AccountingMethod — покажет её
+            am_txt = f"{getattr(am, 'icon', '') or ''} {am.name}".strip()
+        else:
+            am_txt = "метод не задан"
+
+        meta_parts = [x for x in [am_txt, period_txt, pay_txt] if x]
+        meta = " • " + " • ".join(meta_parts) if meta_parts else ""
+
+        # return f"Условия: {cp} • Договор № {number} от {cdate}{meta} (с {start} по {finish})"
+        return f"Условия с {start} по {finish}: Договор № {number}{meta}"
 
     def clean(self):
         super().clean()
@@ -298,7 +332,15 @@ class Conditions(models.Model):
         return super().save(*args, **kwargs)
     
   
- 
+
+class ContractFileType(models.TextChoices):
+    CONTRACT = "contract", "Договор"
+    ADDITIONAL = "additional", "Доп. соглашение"
+    ACT = "act", "Акт"
+    RECONCILIATION = "reconciliation", "Акт сверки"
+    INVOICE = "invoice", "Счёт"
+    OTHER = "other", "Другое"
+
 
 def document_upload_path(instance, filename):
     contract = instance.contract
@@ -309,13 +351,75 @@ def document_upload_path(instance, filename):
     number = slugify(contract.number) if contract.number else "б/н"
     date = contract.date.strftime("%Y-%m-%d") if contract.date else "б/д"
 
-    return os.path.join("la", cp, f"{number}_{date}", filename)
+    doc_type = getattr(instance, "doc_type", None) or "other"
+    return os.path.join("la", cp, f"{number}_{date}", doc_type, filename)
+
+# class ContractFiles(models.Model):
+#     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,related_name='files')
+#     description = models.TextField(verbose_name='описание',null=True,blank=True)
+#     file = models.FileField(upload_to=document_upload_path, verbose_name="Файл документа", null=True, blank=True) 
+    
+#     class Meta:
+#         verbose_name = "Файл"
+#         verbose_name_plural = "Файлы"
+
+#     def __str__(self):
+#         if self.file:
+#             return os.path.basename(self.file.name)
+#         return self.description[:40] if self.description else "Файл"
+
+
+
 
 class ContractFiles(models.Model):
-    contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,related_name='files')
-    description = models.TextField(verbose_name='описание',null=True,blank=True)
-    file = models.FileField(upload_to=document_upload_path, verbose_name="Файл документа", null=True, blank=True) 
+    contract = models.ForeignKey(Contracts, on_delete=models.CASCADE, related_name="files")
 
+    doc_type = models.CharField(
+        max_length=32,
+        choices=ContractFileType.choices,
+        default=ContractFileType.OTHER,
+        verbose_name="Тип документа",
+    )
+    doc_date = models.DateField(null=True, blank=True, verbose_name="Дата документа")
+    doc_number = models.CharField(max_length=120, null=True, blank=True, verbose_name="Номер документа")
+
+    description = models.TextField(verbose_name="Комментарий", null=True, blank=True)
+
+    file = models.FileField(
+        upload_to=document_upload_path,
+        verbose_name="Файл",
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        verbose_name = "Файл"
+        verbose_name_plural = "Файлы"
+        indexes = [
+            models.Index(fields=["contract", "doc_type"]),
+            models.Index(fields=["doc_date"]),
+        ]
+
+    def __str__(self):
+        parts = []
+
+        # Тип документа (человеческое название)
+        if self.doc_type:
+            parts.append(self.get_doc_type_display())
+
+        # Номер
+        if self.doc_number:
+            parts.append(f"№ {self.doc_number}")
+
+        # Дата
+        if self.doc_date:
+            parts.append(f"от {self.doc_date.strftime('%d.%m.%Y')}")
+
+        # fallback — имя файла
+        if not parts and self.file:
+            return os.path.basename(self.file.name)
+
+        return " — ".join(parts)
 class CfItemAuto(models.Model):
     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,verbose_name='Договор')
     regex =  models.CharField(max_length=500,verbose_name='RegEx',null=True,blank=True)
