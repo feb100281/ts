@@ -1,0 +1,64 @@
+{% load i18n admin_urls admin_modify %}
+
+<div class="inline-group jm-inline-group">
+  {{ inline_admin_formset.formset.management_form }}
+
+  {% if inline_admin_formset.formset.non_form_errors %}
+    <div class="errors">{{ inline_admin_formset.formset.non_form_errors }}</div>
+  {% endif %}
+
+  {% for inline_admin_form in inline_admin_formset %}
+    {% with inst=inline_admin_form.form.instance %}
+    <div class="inline-related valuation-inline is-collapsed"
+         data-inline="conditions"
+         id="{{ inline_admin_formset.formset.prefix }}-{{ forloop.counter0 }}">
+
+      <!-- HEADER -->
+      <div class="valuation-inline__header">
+        <div class="valuation-inline__left">
+          <span class="valuation-inline__chev">▶</span>
+
+          <span class="valuation-inline__title">
+            Условие №{{ forloop.counter }}
+            {% if inst.date_start %} с {{ inst.date_start|date:"d.m.Y" }}{% endif %}
+            {% if inst.date_finish %} по {{ inst.date_finish|date:"d.m.Y" }}{% else %} — ∞{% endif %}
+          </span>
+
+          {% if inst.amount %}
+            <span class="valuation-inline__meta">
+              — {{ inst.amount }} ₽
+            </span>
+          {% endif %}
+        </div>
+
+        <div class="valuation-inline__right">
+          {# delete checkbox справа (как “Удалить”) #}
+          {% if inline_admin_formset.formset.can_delete %}
+            <span class="inline-deletelink">
+              {{ inline_admin_form.deletion_field.field }}
+              {{ inline_admin_form.deletion_field.label_tag }}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- BODY -->
+      <div class="valuation-inline__body">
+        {% if inline_admin_form.form.non_field_errors %}
+          <div class="errors">{{ inline_admin_form.form.non_field_errors }}</div>
+        {% endif %}
+
+        {% for fieldset in inline_admin_form %}
+          {% include "admin/includes/fieldset.html" %}
+        {% endfor %}
+
+        {{ inline_admin_form.pk_field.field }}
+        {{ inline_admin_form.fk_field.field }}
+      </div>
+
+    </div>
+    {% endwith %}
+  {% endfor %}
+
+  {{ inline_admin_formset.formset.empty_form }}
+</div>

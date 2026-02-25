@@ -175,6 +175,7 @@ class ConditionsInline(admin.StackedInline):
     extra = 0
     show_change_link = True
     autocomplete_fields = ("accounting_method", "tax")
+    template = "admin/contracts/inlines/conditions_stacked_inline.html" 
 
     
     fieldsets = (
