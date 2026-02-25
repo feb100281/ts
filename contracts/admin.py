@@ -536,8 +536,7 @@ class ContractsTitleAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(_contracts_count=Count("contracts_set", distinct=True))
-        # return qs.annotate(_contracts_count=Count("contracts", distinct=True))
+        return qs.annotate(_contracts_count=Count("contracts", distinct=True))
     
 
     @admin.display(description="Договоров", ordering="_contracts_count")
