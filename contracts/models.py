@@ -275,8 +275,34 @@ class Conditions(models.Model):
             models.Index(fields=["date_start", "date_finish"]),
         ]
 
+    # def __str__(self):
+    #     return f"Условия: {self.contract} ({self.date_start} - {self.date_finish or '∞'})"
     def __str__(self):
-        return f"Условия: {self.contract} ({self.date_start} - {self.date_finish or '∞'})"
+        c = self.contract
+
+        cp = getattr(c.cp, "name", "") if c and c.cp_id else ""
+        number = c.number or "без номера"
+        cdate = c.date.strftime("%d.%m.%Y") if c and c.date else "без даты"
+
+        start = self.date_start.strftime("%d.%m.%Y") if self.date_start else "—"
+        finish = self.date_finish.strftime("%d.%m.%Y") if self.date_finish else "∞"
+
+        period_txt = self.get_period_display() if self.period else ""
+        pay_txt = self.get_pay_timing_display() if self.pay_timing else ""
+
+        # метод учёта
+        am = self.accounting_method
+        if am:
+            # если ты добавила icon в AccountingMethod — покажет её
+            am_txt = f"{getattr(am, 'icon', '') or ''} {am.name}".strip()
+        else:
+            am_txt = "метод не задан"
+
+        meta_parts = [x for x in [am_txt, period_txt, pay_txt] if x]
+        meta = " • " + " • ".join(meta_parts) if meta_parts else ""
+
+        # return f"Условия: {cp} • Договор № {number} от {cdate}{meta} (с {start} по {finish})"
+        return f"Условия с {start} по {finish}: Договор № {number}{meta}"
 
     def clean(self):
         super().clean()
