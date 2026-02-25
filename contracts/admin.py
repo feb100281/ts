@@ -508,6 +508,7 @@ class ContractsAdmin(admin.ModelAdmin):
     
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",  )}
+        js = ("js/conditions_inline_collapse.js",)
       
     
     

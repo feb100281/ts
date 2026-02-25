@@ -471,3 +471,111 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
     background: linear-gradient(90deg,#ecfeff,#f8fafc);
     border-radius: 2px;
 }
+
+
+
+/* ===== Conditions accordion (stable version) ===== */
+
+/* ===== Conditions accordion (delegated) ===== */
+
+#conditions-group .inline-related h3,
+#conditions_set-group .inline-related h3{
+  display:flex !important;
+  align-items:center !important;
+  gap:10px !important;
+  padding-right:56px !important;
+}
+
+/* кнопка */
+#conditions-group .inline-related h3 .cond-toggle,
+#conditions_set-group .inline-related h3 .cond-toggle{
+  margin-left:auto;
+  width:34px;
+  height:34px;
+  border-radius:999px;
+  border:1px solid rgba(15,118,110,.18);
+  background:rgba(15,118,110,.10);
+  color:rgba(15,118,110,.90);
+  font-weight:900;
+  font-size:16px;
+  cursor:pointer;
+  position:relative;
+  z-index:9999;             /* важно: чтобы поверх всего */
+  pointer-events:auto !important;
+}
+
+/* поворот */
+#conditions-group .inline-related.is-collapsed h3 .cond-toggle,
+#conditions_set-group .inline-related.is-collapsed h3 .cond-toggle{
+  transform: rotate(-90deg);
+}
+
+
+#conditions-group .inline-related h3 .cond-toggle,
+#conditions_set-group .inline-related h3 .cond-toggle{
+  position: relative;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+}
+
+#conditions-group .inline-related.is-collapsed h3 .cond-toggle,
+#conditions_set-group .inline-related.is-collapsed h3 .cond-toggle{
+  transform: rotate(-90deg);
+}
+
+
+/* Пробиваем клики: поднимаем заголовок и кнопку над любыми overlay Jazzmin */
+#conditions-group .inline-related h3,
+#conditions_set-group .inline-related h3{
+  position: relative !important;
+  z-index: 2147483646 !important;
+}
+
+#conditions-group .inline-related h3 .cond-toggle,
+#conditions_set-group .inline-related h3 .cond-toggle{
+  position: relative !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+/* На всякий: не даём псевдоэлементам перекрывать */
+#conditions-group .inline-related h3::before,
+#conditions-group .inline-related h3::after,
+#conditions_set-group .inline-related h3::before,
+#conditions_set-group .inline-related h3::after{
+  pointer-events: none !important;
+}
+
+
+/* ===========================
+   FIX: overlay перехватывает клики в h3
+   Делаем кликабельной ТОЛЬКО кнопку
+   =========================== */
+
+/* Заголовок и всё внутри него — НЕ ловят клики */
+#conditions-group .inline-related h3,
+#conditions_set-group .inline-related h3{
+  pointer-events: none !important;
+}
+
+/* А кнопка — ловит */
+#conditions-group .inline-related h3 .cond-toggle,
+#conditions_set-group .inline-related h3 .cond-toggle{
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 2147483647 !important;
+}
+
+
+/* если оверлей лежит поверх всего inline — поднимаем кнопку ещё выше */
+#conditions-group .inline-related,
+#conditions_set-group .inline-related{
+  position: relative !important;
+}
+
+#conditions-group .inline-related h3 .cond-toggle,
+#conditions_set-group .inline-related h3 .cond-toggle{
+  position: absolute !important;
+  right: 10px !important;
+  top: 6px !important;
+}
