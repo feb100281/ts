@@ -441,3 +441,149 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 
 
 
+
+
+
+
+
+/* StackedInline: поле file — скрываем "Currently:" и "Очистить" */
+.inline-related .field-file p.file-upload {
+  font-size: 0;
+  margin: 0;
+}
+
+.inline-related .field-file p.file-upload a,
+.inline-related .field-file p.file-upload .clear {
+  display: none !important;
+}
+
+/* оставляем нормальный размер для input */
+.inline-related .field-file input[type="file"] {
+  font-size: 13px;
+}
+
+
+.inline-related h3 {
+    font-weight: 900;
+    color: #0f766e;
+    font-size: 15px;
+    padding: 6px 10px;
+    background: linear-gradient(90deg,#ecfeff,#f8fafc);
+    border-radius: 2px;
+}
+
+
+
+/* ===== Conditions accordion (stable version) ===== */
+
+/* контейнер inline как карточка */
+.valuation-inline{
+  border: 1px solid rgba(148,163,184,.35);
+  border-radius: 2px;
+  background: #fff;
+  margin: 0 0 14px 0;
+  overflow: hidden;
+}
+
+/* header */
+.valuation-inline__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 14px 16px;
+  cursor:pointer;
+  user-select:none;
+}
+
+.valuation-inline__left{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.valuation-inline__chev{
+  font-size: 12px;
+  opacity: .65;
+  transition: transform .15s ease;
+}
+
+.valuation-inline__title{
+  font-weight: 900;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.valuation-inline__meta{
+  color: #ef4444; /* если хочешь подсветку изменения/дельты — можно менять динамически */
+  font-weight: 900;
+  margin-left: 6px;
+}
+
+.valuation-inline__right{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+}
+
+/* delete справа “Удалить” как в примере */
+.valuation-inline .inline-deletelink{
+  font-weight: 900;
+  color: #ef4444;
+}
+
+/* body */
+.valuation-inline__body{
+  padding: 12px 16px 16px 16px;
+  border-top: 1px solid rgba(148,163,184,.25);
+}
+
+.valuation-inline.is-open .valuation-inline__chev{
+  transform: rotate(90deg);
+}
+
+
+
+
+.cond-dates{
+  margin-left: 6px;
+  font-weight: 700;
+  color: #334155; /* slate-700 */
+}
+
+.cond-from,
+.cond-to{
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: rgba(148,163,184,.15);
+  font-variant-numeric: tabular-nums;
+}
+
+.cond-infinity{
+  font-weight: 900;
+  color:#475569;
+}
+
+
+
+
+
+.file-pill{
+  display:inline-flex;
+  align-items:center;
+  padding:2px 8px;
+  border-radius:2px;
+  font-size:14px;
+  font-weight:800;
+  margin-left:8px;
+  background: rgba(148,163,184,.14);
+  color:#0f172a;
+}
+
+
+
+.file-name{
+  margin-left:8px;
+  color:#64748b;
+  font-weight:700;
+}

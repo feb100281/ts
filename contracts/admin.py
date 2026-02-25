@@ -5,6 +5,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django import forms
 import json
+import os
 
 
 from .models import (
@@ -20,6 +21,65 @@ from .models import (
 )
 
 
+def get_current_condition(obj):
+    # если conditions уже prefetched — это будет обычный список в памяти
+    conds = list(getattr(obj, "conditions", []).all())
+    if not conds:
+        return None
+
+    # date_start=None считаем самым старым
+    conds.sort(key=lambda c: (c.date_start is not None, c.date_start, c.id), reverse=True)
+    return conds[0]
+
+
+
+
+class HasFilesFilter(admin.SimpleListFilter):
+    title = "Файлы"
+    parameter_name = "has_files"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "Есть файлы"),
+            ("no", "Нет файлов"),
+        )
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if val == "yes":
+            return queryset.filter(files__isnull=False).distinct()
+        if val == "no":
+            return queryset.filter(files__isnull=True)
+        return queryset
+
+class AccountingMethodFilter(admin.SimpleListFilter):
+    title = "Метод учёта"
+    parameter_name = "acc_method"
+
+    def lookups(self, request, model_admin):
+        qs = AccountingMethod.objects.filter(is_active=True).order_by("name")
+        return [(str(x.pk), f"{x.icon or ''} {x.name}".strip()) for x in qs]
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if not val:
+            return queryset
+        return queryset.filter(conditions__accounting_method_id=val).distinct()
+
+
+class PayTimingFilter(admin.SimpleListFilter):
+    title = "Тип оплаты"
+    parameter_name = "pay_timing"
+
+    def lookups(self, request, model_admin):
+        return [("prepay", "Предоплата"), ("postpay", "Постоплата")]
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if not val:
+            return queryset
+        return queryset.filter(conditions__pay_timing=val).distinct()
+    
 
 class ConditionsInlineForm(forms.ModelForm):
     params_editor = forms.CharField(
@@ -115,6 +175,7 @@ class ConditionsInline(admin.StackedInline):
     extra = 0
     show_change_link = True
     autocomplete_fields = ("accounting_method", "tax")
+    template = "admin/contracts/inlines/conditions_stacked_inline.html" 
 
     
     fieldsets = (
@@ -156,16 +217,25 @@ class ConditionsInline(admin.StackedInline):
 
 
 
-
-
-
-
-class ContractFilesInline(admin.TabularInline):
+class ContractFilesInline(admin.StackedInline):
     model = ContractFiles
     extra = 0
+    show_change_link = True
+    template = "admin/contracts/inlines/contractfiles_stacked_inline.html"
+
     verbose_name = mark_safe("<b>📎 Файл</b>")
     verbose_name_plural = mark_safe("<b>📎 Файлы</b>")
-    show_change_link = True
+
+    fields = ("doc_type", "doc_date", "doc_number",  "document", "file",)
+    readonly_fields = ("document",)
+
+    def document(self, obj):
+        if not obj or not obj.file:
+            return "—"
+        name = os.path.basename(obj.file.name)
+        return format_html('<a href="{}" target="_blank" style="font-weight:800;">📄 {}</a>', obj.file.url, name)
+
+    document.short_description = "Текущий документ"
 
 
 
@@ -174,14 +244,33 @@ class ContractFilesInline(admin.TabularInline):
 class ContractsAdmin(admin.ModelAdmin):
     inlines = (ContractFilesInline, ContractItemsInline, ConditionsInline,CfItemAutoInline)
 
-    list_display = ("cp_logo", "cp_with_inn", "title", "number_with_id", "date_short", "amendment", "cf_defaults")
+    list_display = (
+        "cp_logo", 
+        "cp_with_inn", 
+        "title", 
+        "number_with_id", 
+        "date_short", 
+        "files_badge", 
+        "method_icon", 
+        "contract_end_date", 
+        # "amendment",
+        "payment_type", 
+        # "cf_defaults"
+        )
     list_display_links = ("cp_with_inn", "number_with_id",)   
     list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)
 
     search_fields = ("number", "cp__name", "title__title", "regex")
     search_help_text = "Поиск: номер, контрагент, тип, RegEx"
 
-    list_filter = ( ("cp", RelatedOnlyFieldListFilter), 'title', "owner",  "is_signed")
+    list_filter = ( 
+                   ("cp", RelatedOnlyFieldListFilter), 
+                   'title', 
+                   "owner",  
+                #    "is_signed", 
+                    HasFilesFilter, 
+                   AccountingMethodFilter, 
+                   PayTimingFilter,)
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
@@ -225,10 +314,58 @@ class ContractsAdmin(admin.ModelAdmin):
                 queryset=CfItemAuto.objects.select_related("defaultcfdt", "defaultcfcr"),
                 to_attr="_cf_auto",
             ),
+            "conditions",
             "conditions__accounting_method",
         )
 
         return qs
+    
+    @admin.display(description="Файлы", ordering="_files_count")
+    def files_badge(self, obj):
+        n = getattr(obj, "_files_count", 0) or 0
+
+        if n == 0:
+            return format_html(
+                '<span style="color:#94a3b8;">—</span>'
+            )
+
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:4px;'
+            'padding:3px 8px;border-radius:2px;'
+            'background:rgba(14,165,233,.12);'
+            'color:#075985;font-weight:800;">'
+            '📎 {}'
+            '</span>',
+            n
+        )
+
+
+    @admin.display(description="Метод")
+    def method_icon(self, obj):
+        cond = get_current_condition(obj)
+        m = getattr(cond, "accounting_method", None) if cond else None
+        if not m:
+            return "—"
+        icon = (m.icon or "").strip() or "🧩"
+        return format_html('<span style="font-size:18px; line-height:1;">{}</span>', icon)
+
+
+    @admin.display(description="Окончание")
+    def contract_end_date(self, obj):
+        cond = get_current_condition(obj)
+        if not cond:
+            return "—"
+        if not cond.date_finish:
+            return format_html('<span style="color:#94a3b8;">∞</span>')
+        return cond.date_finish.strftime("%d.%m.%Y")
+
+
+    @admin.display(description="Оплата")
+    def payment_type(self, obj):
+        cond = get_current_condition(obj)
+        if not cond:
+            return "—"
+        return "Предоплата" if cond.pay_timing == "prepay" else "Постоплата"
 
     
 
@@ -256,7 +393,7 @@ class ContractsAdmin(admin.ModelAdmin):
             cp.tax_id,
         )
     
-    @admin.display(description="Дата договора", ordering="date")
+    @admin.display(description="Дата", ordering="date")
     def date_short(self, obj):
         if not obj.date:
             return "—"
@@ -373,6 +510,7 @@ class ContractsAdmin(admin.ModelAdmin):
     
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",  )}
+        js = ("js/conditions_inline_collapse.js",)
       
     
     
@@ -398,8 +536,7 @@ class ContractsTitleAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(_contracts_count=Count("contracts_set", distinct=True))
-        # return qs.annotate(_contracts_count=Count("contracts", distinct=True))
+        return qs.annotate(_contracts_count=Count("contracts", distinct=True))
     
 
     @admin.display(description="Договоров", ordering="_contracts_count")
@@ -439,10 +576,10 @@ class ContractsTitleAdmin(admin.ModelAdmin):
 
 @admin.register(AccountingMethod)
 class AccountingMethodAdmin(admin.ModelAdmin):
-    list_display = ("name", "is_active")
+    list_display = ("name", "is_active", 'icon')
     list_filter = ("is_active",)
     search_fields = ("name",)
     ordering = ("name",)
     list_per_page = 50
 
-    fields = ("name", "description", "is_active") 
+    fields = ("name", 'icon', "is_active") 
