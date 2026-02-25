@@ -479,7 +479,7 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 /* контейнер inline как карточка */
 .valuation-inline{
   border: 1px solid rgba(148,163,184,.35);
-  border-radius: 12px;
+  border-radius: 2px;
   background: #fff;
   margin: 0 0 14px 0;
   overflow: hidden;
@@ -510,7 +510,7 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 
 .valuation-inline__title{
   font-weight: 900;
-  font-size: 18px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -538,10 +538,28 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
   border-top: 1px solid rgba(148,163,184,.25);
 }
 
-/* collapse/open behaviour */
-.valuation-inline.is-collapsed .valuation-inline__body{
-  display:none;
-}
 .valuation-inline.is-open .valuation-inline__chev{
   transform: rotate(90deg);
+}
+
+
+
+
+.cond-dates{
+  margin-left: 6px;
+  font-weight: 700;
+  color: #334155; /* slate-700 */
+}
+
+.cond-from,
+.cond-to{
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(148,163,184,.15);
+  font-variant-numeric: tabular-nums;
+}
+
+.cond-infinity{
+  font-weight: 900;
+  color:#475569;
 }

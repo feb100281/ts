@@ -1,64 +1,80 @@
-{% load i18n admin_urls admin_modify %}
+{% load i18n admin_urls static %}
 
-<div class="inline-group jm-inline-group">
-  {{ inline_admin_formset.formset.management_form }}
+<div class="js-inline-admin-formset inline-group jm-inline-group"
+     id="{{ inline_admin_formset.formset.prefix }}-group"
+     data-inline-type="stacked"
+     data-inline-formset="{{ inline_admin_formset.inline_formset_data }}">
 
-  {% if inline_admin_formset.formset.non_form_errors %}
-    <div class="errors">{{ inline_admin_formset.formset.non_form_errors }}</div>
-  {% endif %}
+  <fieldset class="module {{ inline_admin_formset.classes }}">
+    {{ inline_admin_formset.formset.management_form }}
+    {{ inline_admin_formset.formset.non_form_errors }}
 
-  {% for inline_admin_form in inline_admin_formset %}
-    {% with inst=inline_admin_form.form.instance %}
-    <div class="inline-related valuation-inline is-collapsed"
-         data-inline="conditions"
-         id="{{ inline_admin_formset.formset.prefix }}-{{ forloop.counter0 }}">
+    {% for inline_admin_form in inline_admin_formset %}
+      {# ✅ ВАЖНО: последняя форма в цикле = empty-form #}
+      <div class="inline-related{% if inline_admin_form.original or inline_admin_form.show_url %} has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form last-related{% endif %}"
+           id="{{ inline_admin_formset.formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
 
-      <!-- HEADER -->
-      <div class="valuation-inline__header">
-        <div class="valuation-inline__left">
-          <span class="valuation-inline__chev">▶</span>
+        {% with inst=inline_admin_form.form.instance %}
+        <details class="valuation-inline__details"
+                 {% if not inline_admin_form.original or inline_admin_form.form.errors %}open{% endif %}>
+          <summary class="valuation-inline__summary">
 
-          <span class="valuation-inline__title">
-            Условие №{{ forloop.counter }}
-            {% if inst.date_start %} с {{ inst.date_start|date:"d.m.Y" }}{% endif %}
-            {% if inst.date_finish %} по {{ inst.date_finish|date:"d.m.Y" }}{% else %} — ∞{% endif %}
-          </span>
-
-          {% if inst.amount %}
-            <span class="valuation-inline__meta">
-              — {{ inst.amount }} ₽
+            <span class="valuation-inline__title">
+              {% if inline_admin_form.original %}
+                Условие №{{ forloop.counter }}
+                    <span class="cond-dates">
+                    {% if inst.date_start %}
+                        <span class="cond-from">{{ inst.date_start|date:"d.m.Y" }}</span>
+                    {% endif %}
+                    →
+                    {% if inst.date_finish %}
+                        <span class="cond-to">{{ inst.date_finish|date:"d.m.Y" }}</span>
+                    {% else %}
+                        <span class="cond-infinity">∞</span>
+                    {% endif %}
+                    </span>
+                {% if inst.amount %}
+                  — {{ inst.amount }} ₽
+                {% endif %}
+              {% else %}
+                Новое условие
+              {% endif %}
             </span>
-          {% endif %}
-        </div>
 
-        <div class="valuation-inline__right">
-          {# delete checkbox справа (как “Удалить”) #}
-          {% if inline_admin_formset.formset.can_delete %}
-            <span class="inline-deletelink">
-              {{ inline_admin_form.deletion_field.field }}
-              {{ inline_admin_form.deletion_field.label_tag }}
-            </span>
-          {% endif %}
-        </div>
+            {% if inline_admin_form.form.errors %}
+              <span class="valuation-inline__badge valuation-inline__badge--error">
+                {% trans "Есть ошибки" %}
+              </span>
+            {% endif %}
+
+            {# ✅ DELETE: показываем только для сохранённых (как у кадастровой) #}
+            {% if inline_admin_formset.formset.can_delete and inline_admin_form.original %}
+              <span class="valuation-inline__delete" onclick="event.stopPropagation();">
+                {{ inline_admin_form.deletion_field.field }}
+                {{ inline_admin_form.deletion_field.label_tag }}
+              </span>
+            {% endif %}
+          </summary>
+
+          <div class="valuation-inline__body">
+            {% if inline_admin_form.form.non_field_errors %}
+              <div class="errornote">
+                {{ inline_admin_form.form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            {% for fieldset in inline_admin_form %}
+              {% include "admin/includes/fieldset.html" %}
+            {% endfor %}
+
+            {% if inline_admin_form.has_auto_field or inline_admin_form.needs_explicit_pk_field %}
+              {{ inline_admin_form.pk_field.field }}
+            {% endif %}
+            {{ inline_admin_form.fk_field.field }}
+          </div>
+        </details>
+        {% endwith %}
       </div>
-
-      <!-- BODY -->
-      <div class="valuation-inline__body">
-        {% if inline_admin_form.form.non_field_errors %}
-          <div class="errors">{{ inline_admin_form.form.non_field_errors }}</div>
-        {% endif %}
-
-        {% for fieldset in inline_admin_form %}
-          {% include "admin/includes/fieldset.html" %}
-        {% endfor %}
-
-        {{ inline_admin_form.pk_field.field }}
-        {{ inline_admin_form.fk_field.field }}
-      </div>
-
-    </div>
-    {% endwith %}
-  {% endfor %}
-
-  {{ inline_admin_formset.formset.empty_form }}
+    {% endfor %}
+  </fieldset>
 </div>
