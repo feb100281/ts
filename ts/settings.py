@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "treasury",
     "sales",
     "grossbook",
+    "wb",
     "mptt",    
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
