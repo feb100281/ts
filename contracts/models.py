@@ -40,8 +40,6 @@ class VatMode(models.TextChoices):
     UNKNOWN = "unknown", "Не задано"
     
     
-
-
 class Contracts(models.Model):
     title = models.ForeignKey(ContractsTitle,on_delete=models.DO_NOTHING, verbose_name='Тип документа')
     number = models.CharField(max_length=250,verbose_name='Номер',null=True,blank=True)
