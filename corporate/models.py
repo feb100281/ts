@@ -143,6 +143,11 @@ six_digits = RegexValidator(
     message="Код должен состоять ровно из 6 цифр",
 )
 
+
+thre_digits = RegexValidator(
+    regex=r"^\d{3}$",
+    message="Код должен состоять ровно из 3 цифр",
+)
 class COA(MPTTModel):
     code = models.CharField(
         "Код",
@@ -277,3 +282,39 @@ class Countries(models.Model):
             return f"{self.emojy_flag} {self.code}"
         return self.name
            
+
+class Subconto(MPTTModel):
+    code = models.CharField(
+        "Код",
+        max_length=3,
+        unique=True,
+        validators=[thre_digits],
+        help_text='3 цифр - уникальный'
+    )
+    name = models.CharField("Наименование", max_length=255)
+
+    parent = TreeForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="children",
+        verbose_name="Родитель",
+    )
+
+    is_active = models.BooleanField(default=True)
+    rgex = models.CharField("ReGex", max_length=255,null=True,blank=True)
+    
+    # mapping = models.ForeignKey(COA,on_delete=models.CASCADE,null=True,blank=True,verbose_name='Mapping',help_text='Маппинг для распределения по плану счетов')
+    
+    desctiption = models.TextField("Описание",null=True,blank=True)
+
+    class MPTTMeta:
+        order_insertion_by = ["code"]
+
+    class Meta:
+        verbose_name = "Субконто"
+        verbose_name_plural = "Субконто справочник"
+
+    def __str__(self):
+        return f"{self.code} {self.name}"
