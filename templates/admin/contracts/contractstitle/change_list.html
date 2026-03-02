@@ -31,7 +31,7 @@
 
         <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
           <span style="
-              font-size:11px;padding:2px 8px;border-radius:999px;
+              font-size:11px;padding:2px 8px;border-radius:2px;
               background:#eff6ff;color:#1d4ed8;font-weight:800;
           ">
             Всего: {{ cl.result_count }}
@@ -39,7 +39,7 @@
 
           {% if cl.query %}
             <span style="
-                font-size:11px;padding:2px 8px;border-radius:999px;
+                font-size:11px;padding:2px 8px;border-radius:2px;
                 background:#fef3c7;color:#92400e;font-weight:700;
             ">
               Поиск: “{{ cl.query }}”
@@ -48,7 +48,7 @@
 
           {% if cl.has_filters %}
             <span style="
-                font-size:11px;padding:2px 8px;border-radius:999px;
+                font-size:11px;padding:2px 8px;border-radius:2px;
                 background:#f3f4f6;color:#4b5563;font-weight:700;
             ">
               Фильтры применены
