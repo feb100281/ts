@@ -27,7 +27,7 @@ from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 
 from counterparties.models import Glyph
 from counterparties.helpers.glyph_fields import GlyphChoiceField, char_to_code, code_to_char
-
+from .models import Subconto
 
 
 #---------- ФОРМЫ ---------#
@@ -419,7 +419,7 @@ class AccountAdmin(DraggableMPTTAdmin):
     mptt_level_indent = 32
     actions = ["print_coa_registry"]
 
-    list_display = ("tree_actions", "indented_title", "active_badge", "children_badge")
+    list_display = ("tree_actions", "indented_title", "active_badge", "children_badge","id")
     list_display_links = ("indented_title",)
     search_fields = ("code", "name")
     # list_filter = ("is_active",)
@@ -998,3 +998,23 @@ class CountriesAdmin(admin.ModelAdmin):
                 obj.save(update_fields=["regex_patterns"])
                 updated += 1
         self.message_user(request, f"Очищено записей: {updated}")
+
+
+@admin.register(Subconto)
+class SubcontoAdmin(DraggableMPTTAdmin):
+    mptt_level_indent = 32
+    list_display = ("tree_actions", "indented_title", "code", "name", "id")
+    list_display_links = ("indented_title",)
+    search_fields = ("code", "name")
+    ordering = ("code",)
+    preserve_filters = True
+    
+  
+    class Media:
+        css = {
+            "all": (
+              
+                "css/admin_overrides.css",  
+                "css/mptt_pretty.css"
+            )
+        }
