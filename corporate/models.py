@@ -145,7 +145,7 @@ six_digits = RegexValidator(
 
 
 thre_digits = RegexValidator(
-    regex=r"^\d{3}$",
+    regex=r"^\d{4}$",
     message="Код должен состоять ровно из 3 цифр",
 )
 class COA(MPTTModel):
@@ -286,10 +286,10 @@ class Countries(models.Model):
 class Subconto(MPTTModel):
     code = models.CharField(
         "Код",
-        max_length=3,
+        max_length=4,
         unique=True,
         validators=[thre_digits],
-        help_text='3 цифр - уникальный'
+        help_text='4 цифры - уникальный'
     )
     name = models.CharField("Наименование", max_length=255)
 
