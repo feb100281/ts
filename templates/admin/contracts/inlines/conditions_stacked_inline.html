@@ -33,9 +33,9 @@
                         <span class="cond-infinity">∞</span>
                     {% endif %}
                     </span>
-                {% if inst.amount %}
+                {% comment %} {% if inst.amount %}
                   — {{ inst.amount }} ₽
-                {% endif %}
+                {% endif %} {% endcomment %}
               {% else %}
                 Новое условие
               {% endif %}

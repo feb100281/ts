@@ -12,6 +12,8 @@ from django.db.models import Q
 from utils.choises import CURRENCY_CHOISE
 from decimal import Decimal
 
+from contracts.accruals.registry import accrual_choices
+
 
 
 # Модели договоров.
@@ -185,10 +187,14 @@ class Conditions(models.Model):
         verbose_name="Период начисления"
     )
     
+    accrual_fn = models.CharField(
+        max_length=64,
+        choices=accrual_choices,
+        default="fixed_payments",
+        verbose_name="Функция начисления",
+    )
+        
     
-    # ----------------------------
-    # Оплата (платежный календарь)
-    # ----------------------------
     pay_rule = models.CharField(
         max_length=20,
         choices=PAY_RULE_CHOICES,
