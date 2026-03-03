@@ -7,6 +7,9 @@ from django import forms
 import json
 import os
 
+from contracts.accruals.registry import ACCRUAL_REGISTRY
+from decimal import Decimal, InvalidOperation
+
 
 from .models import (
     Contracts,
@@ -82,21 +85,48 @@ class PayTimingFilter(admin.SimpleListFilter):
     
 
 class ConditionsInlineForm(forms.ModelForm):
+    # params_editor = forms.CharField(
+    #     label="Параметры (JSON, ручной режим)",
+    #     required=False,
+    #     widget=forms.Textarea(attrs={
+    #         "rows": 7,
+    #         "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
+    #         "placeholder": '{\n  "any_key": "any_value"\n}'
+    #     }),
+    #     help_text="Если заполнено — сохранится в params (для нестандартных кейсов)."
+    # )
+    
     params_editor = forms.CharField(
-        label="Параметры (JSON, ручной режим)",
+        label="Параметры начисления (JSON)",
         required=False,
         widget=forms.Textarea(attrs={
-            "rows": 7,
-            "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
-            "placeholder": '{\n  "any_key": "any_value"\n}'
-        }),
-        help_text="Если заполнено — сохранится в params (для нестандартных кейсов)."
+        "rows": 7,
+        "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
+        "placeholder": '{\n  "amount": "",\n  "vat_mode": "included"\n}'
+    }),
+        help_text="Заполняется по выбранной функции начисления."
     )
 
     class Meta:
         model = Conditions
         fields = "__all__"
 
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+
+    #     # params храним скрыто, редактируем через params_editor
+    #     self.fields["params"].widget = forms.HiddenInput()
+    #     self.fields["params"].required = False
+
+    #     inst = getattr(self, "instance", None)
+    #     params = (inst.params or {}) if inst else {}
+    #     if params:
+    #         try:
+    #             self.initial["params_editor"] = json.dumps(params, ensure_ascii=False, indent=2)
+    #         except Exception:
+    #             self.initial["params_editor"] = str(params)
+    
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -106,11 +136,42 @@ class ConditionsInlineForm(forms.ModelForm):
 
         inst = getattr(self, "instance", None)
         params = (inst.params or {}) if inst else {}
+
+        # если уже есть params — просто показываем их
         if params:
             try:
                 self.initial["params_editor"] = json.dumps(params, ensure_ascii=False, indent=2)
             except Exception:
                 self.initial["params_editor"] = str(params)
+        else:
+            # если params пустой — подставим шаблон по выбранной функции
+            fn = None
+            if inst and getattr(inst, "accrual_fn", None):
+                fn = inst.accrual_fn
+            else:
+                fn = "fixed_payments"  # default
+
+            schema = ACCRUAL_REGISTRY.get(fn) or {}
+            defaults = schema.get("defaults", {}) or {}
+            fields = schema.get("fields", []) or []
+
+            tmpl = {}
+
+            for f in fields:
+                key = f.get("key")
+                if not key:
+                    continue
+
+                if key in defaults:
+                    tmpl[key] = defaults[key]
+                else:
+                    tmpl[key] = ""
+
+            # добавим defaults если вдруг не попали выше
+            for k, v in defaults.items():
+                tmpl.setdefault(k, v)
+
+            self.initial["params_editor"] = json.dumps(tmpl, ensure_ascii=False, indent=2)
 
     def clean(self):
         cleaned = super().clean()
@@ -126,6 +187,17 @@ class ConditionsInlineForm(forms.ModelForm):
             cleaned["params"] = parsed
         else:
             cleaned["params"] = self.instance.params if self.instance else {}
+
+        # ✅ АВТО-ВЫБОР ФУНКЦИИ ДЛЯ CASH BASED
+        acc = cleaned.get("accounting_method")  # объект AccountingMethod или None
+        if acc:
+            name = (acc.name or "").lower()
+            code = (getattr(acc, "code", "") or "").lower()
+
+            if "cash" in name or "cash" in code:
+                cleaned["accrual_fn"] = "by_bank_statement"
+                # чтобы не требовать JSON для "по выписке"
+                cleaned["params"] = cleaned.get("params") or {}
 
         return cleaned
 
@@ -174,43 +246,39 @@ class ConditionsInline(admin.StackedInline):
     form = ConditionsInlineForm
     extra = 0
     show_change_link = True
-    autocomplete_fields = ("accounting_method", "tax")
+    # autocomplete_fields = ("accounting_method", "tax")
     template = "admin/contracts/inlines/conditions_stacked_inline.html" 
 
     
     fieldsets = (
-        ("Начисление", {
-            "fields": (
-                "accounting_method",  "period",
-                "date_start",
-                "date_finish",
-                ("amount", "vat_mode"),
-
-                # "tax",
-            )
-        }),
-        ("Оплата", {
-            "fields": (
-               ( "pay_rule",
-                "pay_timing"),
-                ("pay_day", "pay_offset_months"), 
-                # "pay_offset_days",
-            )
-        }),
-        ("Неустойка", {
-            "fields": (
-                "penalty_rate_day",
-            )
-        }),
-        ("Доп. параметры", {
-            "classes": ("collapse",),
-            "fields": (
-                "params_editor",
-                "params",
-            )
-        }),
-    )
-
+            ("Начисление", {
+                "fields": (
+                    "accounting_method",
+                    "accrual_fn",
+                    "date_start",
+                    "date_finish",
+                    "vat_mode",
+                    "params_editor",
+                )
+            }),
+            ("Оплата", {
+                "fields": (
+                    ("pay_rule", "pay_timing"),
+                    ("pay_day", "pay_offset_months"),
+                )
+            }),
+            ("Неустойка", {
+                "fields": (
+                    "penalty_rate_day",
+                )
+            }),
+            ("Доп. параметры", {
+                "classes": ("collapse",),
+                "fields": (
+                    "params",
+                )
+            }),
+        )
     verbose_name = mark_safe("<b>✅ Условие</b>")
     verbose_name_plural = mark_safe("✅<b>Условия</b>")
 
