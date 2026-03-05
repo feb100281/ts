@@ -1,4 +1,5 @@
-{% load i18n admin_urls static %}
+{% load i18n admin_urls static l10n %}
+
 
 <div class="js-inline-admin-formset inline-group jm-inline-group"
      id="{{ inline_admin_formset.formset.prefix }}-group"
@@ -35,6 +36,12 @@
                     от
                 {% if inst.doc_date %}
                   <span class="file-date">{{ inst.doc_date|date:"d.m.Y" }}</span>
+                {% endif %}
+
+                {% if inst.amount %}
+                  <span class="file-amount">
+                    — {{ inst.amount|floatformat:2|localize }} {{ inst.contract.currency }}
+                  </span>
                 {% endif %}
 
         
