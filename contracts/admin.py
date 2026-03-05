@@ -431,7 +431,7 @@ class ContractsAdmin(admin.ModelAdmin):
         (
             mark_safe('📄 <b>Карточка</b>'),
             {
-                "fields": ("title", "number", "date", "cp", "owner", "currency", "manager", "is_signed","regex",)
+                "fields": ("title", "number", "date", "cp", "owner", "currency", "manager", "is_signed","regex","bs",)
             },
         ),
 
