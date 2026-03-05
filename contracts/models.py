@@ -2,6 +2,7 @@
 
 from django.db import models
 from corporate.models import Owners, CfItems
+from corporate.models import COA
 from counterparties.models import Counterparty
 from django.conf import settings
 import os
@@ -74,6 +75,7 @@ class Contracts(models.Model):
     )
     is_signed = models.BooleanField(verbose_name='Подписан',null=True,blank=True)
     regex =  models.TextField(verbose_name='RegEx',null=True,blank=True)
+    bs = models.ForeignKey(COA,verbose_name='Счет для рассчетов',on_delete=models.CASCADE,blank=True,null=True)
     
     class Meta:
         verbose_name = "Договор"
