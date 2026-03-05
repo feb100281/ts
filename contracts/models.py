@@ -358,20 +358,6 @@ def document_upload_path(instance, filename):
     doc_type = getattr(instance, "doc_type", None) or "other"
     return os.path.join("la", cp, f"{number}_{date}", doc_type, filename)
 
-# class ContractFiles(models.Model):
-#     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,related_name='files')
-#     description = models.TextField(verbose_name='описание',null=True,blank=True)
-#     file = models.FileField(upload_to=document_upload_path, verbose_name="Файл документа", null=True, blank=True) 
-    
-#     class Meta:
-#         verbose_name = "Файл"
-#         verbose_name_plural = "Файлы"
-
-#     def __str__(self):
-#         if self.file:
-#             return os.path.basename(self.file.name)
-#         return self.description[:40] if self.description else "Файл"
-
 
 
 
@@ -386,6 +372,14 @@ class ContractFiles(models.Model):
     )
     doc_date = models.DateField(null=True, blank=True, verbose_name="Дата документа")
     doc_number = models.CharField(max_length=120, null=True, blank=True, verbose_name="Номер документа")
+    amount = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Сумма",
+        # help_text="Необязательно. Например сумма по акту/счёту."
+    )
 
     description = models.TextField(verbose_name="Комментарий", null=True, blank=True)
 
@@ -399,31 +393,28 @@ class ContractFiles(models.Model):
     class Meta:
         verbose_name = "Файл"
         verbose_name_plural = "Файлы"
+        ordering = ["doc_date", "id"] 
         indexes = [
             models.Index(fields=["contract", "doc_type"]),
             models.Index(fields=["doc_date"]),
+            
         ]
 
     def __str__(self):
         parts = []
-
-        # Тип документа (человеческое название)
         if self.doc_type:
             parts.append(self.get_doc_type_display())
-
-        # Номер
         if self.doc_number:
             parts.append(f"№ {self.doc_number}")
-
-        # Дата
         if self.doc_date:
             parts.append(f"от {self.doc_date.strftime('%d.%m.%Y')}")
-
-        # fallback — имя файла
+        if self.amount is not None:
+            parts.append(f"на {self.amount:.2f} {self.contract.currency}")
         if not parts and self.file:
             return os.path.basename(self.file.name)
-
         return " — ".join(parts)
+
+
 class CfItemAuto(models.Model):
     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,verbose_name='Договор')
     regex =  models.CharField(max_length=500,verbose_name='RegEx',null=True,blank=True)

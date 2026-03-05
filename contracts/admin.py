@@ -294,7 +294,7 @@ class ContractFilesInline(admin.StackedInline):
     verbose_name = mark_safe("<b>📎 Файл</b>")
     verbose_name_plural = mark_safe("<b>📎 Файлы</b>")
 
-    fields = ("doc_type", "doc_date", "doc_number",  "document", "file",)
+    fields = ("doc_type", "doc_date", "doc_number",  "amount", "document", "file",)
     readonly_fields = ("document",)
 
     def document(self, obj):
