@@ -9,7 +9,7 @@ import os
 
 from contracts.accruals.registry import ACCRUAL_REGISTRY
 from decimal import Decimal, InvalidOperation
-
+from django.http import QueryDict
 
 from .models import (
     Contracts,
@@ -83,50 +83,131 @@ class PayTimingFilter(admin.SimpleListFilter):
             return queryset
         return queryset.filter(conditions__pay_timing=val).distinct()
     
+    
+    
+
+def build_params_template(fn: str) -> dict:
+    schema = ACCRUAL_REGISTRY.get(fn) or {}
+    defaults = schema.get("defaults") or {}
+    fields = schema.get("fields") or []
+
+    tmpl = {}
+    for f in fields:
+        key = f.get("key")
+        if key:
+            tmpl[key] = defaults.get(key, "")
+
+    # добавим defaults, которых нет в fields
+    for k, v in defaults.items():
+        tmpl.setdefault(k, v)
+
+    return tmpl
+    
+
+# class ConditionsInlineForm(forms.ModelForm):
+    
+#     params_editor = forms.CharField(
+#         label="Параметры начисления (JSON)",
+#         required=False,
+#         widget=forms.Textarea(attrs={
+#         "rows": 7,
+#         "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
+#         "placeholder": '{\n  "amount": "",\n  "vat_mode": "included"\n}'
+#     }),
+#         help_text="Заполняется по выбранной функции начисления."
+#     )
+
+#     class Meta:
+#         model = Conditions
+#         fields = "__all__"
+
+    
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+
+#         self.fields["params"].widget = forms.HiddenInput()
+#         self.fields["params"].required = False
+
+#         inst = getattr(self, "instance", None)
+#         params = (inst.params or {}) if inst else {}
+
+#         if params:
+#             self.initial["params_editor"] = json.dumps(params, ensure_ascii=False, indent=2, default=str)
+#         else:
+#             self.initial["params_editor"] = ""
+        
+#                 # ✅ если форма отправлена (POST) и params_editor пустой —
+#         # подставим шаблон по выбранной accrual_fn,
+#         # чтобы он был виден даже когда сохранение падает по другой ошибке
+#         if self.is_bound:
+#             pe_key = self.add_prefix("params_editor")
+#             fn_key = self.add_prefix("accrual_fn")
+
+#             current = (self.data.get(pe_key) or "").strip()
+#             if current == "":
+#                 fn = (self.data.get(fn_key) or "").strip() or "fixed_payments"
+#                 tmpl = build_params_template(fn)
+
+#                 qd = self.data.copy()  # QueryDict -> mutable
+#                 qd[pe_key] = json.dumps(tmpl, ensure_ascii=False, indent=2, default=str)
+#                 self.data = qd
+        
+#     def clean(self):
+#         cleaned = super().clean()
+#         raw = (cleaned.get("params_editor") or "").strip()
+
+#         if raw:
+#             try:
+#                 parsed = json.loads(raw)
+#             except Exception as e:
+#                 raise forms.ValidationError({"params_editor": f"Некорректный JSON: {e}"})
+#             if not isinstance(parsed, dict):
+#                 raise forms.ValidationError({"params_editor": "JSON должен быть объектом { ... }"})
+#             cleaned["params"] = parsed
+#         else:
+#             fn = cleaned.get("accrual_fn") or getattr(self.instance, "accrual_fn", None) or "fixed_payments"
+#             cleaned["params"] = build_params_template(fn)
+
+#         # ✅ АВТО-ВЫБОР ФУНКЦИИ ДЛЯ CASH BASED
+#         acc = cleaned.get("accounting_method")
+#         if acc:
+#             name = (acc.name or "").lower()
+#             code = (getattr(acc, "code", "") or "").lower()
+
+#             if "cash" in name or "cash" in code:
+#                 cleaned["accrual_fn"] = "by_bank_statement"
+#                 cleaned["params"] = {}
+
+#         return cleaned
+
+#     def save(self, commit=True):
+#         inst = super().save(commit=False)
+#         inst.params = self.cleaned_data.get("params") or {}
+#         if commit:
+#             inst.save()
+#             self.save_m2m()
+#         return inst
+    
+    
 
 class ConditionsInlineForm(forms.ModelForm):
-    # params_editor = forms.CharField(
-    #     label="Параметры (JSON, ручной режим)",
-    #     required=False,
-    #     widget=forms.Textarea(attrs={
-    #         "rows": 7,
-    #         "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
-    #         "placeholder": '{\n  "any_key": "any_value"\n}'
-    #     }),
-    #     help_text="Если заполнено — сохранится в params (для нестандартных кейсов)."
-    # )
-    
     params_editor = forms.CharField(
         label="Параметры начисления (JSON)",
         required=False,
-        widget=forms.Textarea(attrs={
-        "rows": 7,
-        "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
-        "placeholder": '{\n  "amount": "",\n  "vat_mode": "included"\n}'
-    }),
-        help_text="Заполняется по выбранной функции начисления."
+        widget=forms.Textarea(
+            attrs={
+                "rows": 7,
+                "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
+                "placeholder": '{\n  "amount": "",\n  "vat_mode": "included"\n}',
+            }
+        ),
+        help_text="Заполняется по выбранной функции начисления.",
     )
 
     class Meta:
         model = Conditions
         fields = "__all__"
 
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-
-    #     # params храним скрыто, редактируем через params_editor
-    #     self.fields["params"].widget = forms.HiddenInput()
-    #     self.fields["params"].required = False
-
-    #     inst = getattr(self, "instance", None)
-    #     params = (inst.params or {}) if inst else {}
-    #     if params:
-    #         try:
-    #             self.initial["params_editor"] = json.dumps(params, ensure_ascii=False, indent=2)
-    #         except Exception:
-    #             self.initial["params_editor"] = str(params)
-    
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -137,67 +218,62 @@ class ConditionsInlineForm(forms.ModelForm):
         inst = getattr(self, "instance", None)
         params = (inst.params or {}) if inst else {}
 
-        # если уже есть params — просто показываем их
+        # показываем текущие params
         if params:
-            try:
-                self.initial["params_editor"] = json.dumps(params, ensure_ascii=False, indent=2)
-            except Exception:
-                self.initial["params_editor"] = str(params)
+            self.initial["params_editor"] = json.dumps(
+                params, ensure_ascii=False, indent=2, default=str
+            )
         else:
-            # если params пустой — подставим шаблон по выбранной функции
-            fn = None
-            if inst and getattr(inst, "accrual_fn", None):
-                fn = inst.accrual_fn
-            else:
-                fn = "fixed_payments"  # default
+            self.initial["params_editor"] = ""
 
-            schema = ACCRUAL_REGISTRY.get(fn) or {}
-            defaults = schema.get("defaults", {}) or {}
-            fields = schema.get("fields", []) or []
+        # ✅ КЛЮЧЕВОЕ: если форма уже отправлена (POST) и params_editor пустой —
+        # подставим шаблон по выбранной функции, чтобы он был виден даже при ошибке сохранения
+        if self.is_bound:
+            pe_key = self.add_prefix("params_editor")
+            fn_key = self.add_prefix("accrual_fn")
 
-            tmpl = {}
+            current = (self.data.get(pe_key) or "").strip()
+            if current == "":
+                fn = (self.data.get(fn_key) or "").strip() or "fixed_payments"
+                tmpl = build_params_template(fn)
 
-            for f in fields:
-                key = f.get("key")
-                if not key:
-                    continue
-
-                if key in defaults:
-                    tmpl[key] = defaults[key]
-                else:
-                    tmpl[key] = ""
-
-            # добавим defaults если вдруг не попали выше
-            for k, v in defaults.items():
-                tmpl.setdefault(k, v)
-
-            self.initial["params_editor"] = json.dumps(tmpl, ensure_ascii=False, indent=2)
+                qd = self.data.copy()  # QueryDict -> mutable copy
+                qd[pe_key] = json.dumps(tmpl, ensure_ascii=False, indent=2, default=str)
+                self.data = qd
 
     def clean(self):
         cleaned = super().clean()
         raw = (cleaned.get("params_editor") or "").strip()
 
+        # 1) если JSON ввели руками — парсим
         if raw:
             try:
                 parsed = json.loads(raw)
             except Exception as e:
                 raise forms.ValidationError({"params_editor": f"Некорректный JSON: {e}"})
             if not isinstance(parsed, dict):
-                raise forms.ValidationError({"params_editor": "JSON должен быть объектом { ... }"})
+                raise forms.ValidationError(
+                    {"params_editor": "JSON должен быть объектом { ... }"}
+                )
             cleaned["params"] = parsed
-        else:
-            cleaned["params"] = self.instance.params if self.instance else {}
 
-        # ✅ АВТО-ВЫБОР ФУНКЦИИ ДЛЯ CASH BASED
-        acc = cleaned.get("accounting_method")  # объект AccountingMethod или None
+        # 2) если JSON пустой — генерим шаблон по accrual_fn
+        else:
+            fn = (
+                cleaned.get("accrual_fn")
+                or getattr(self.instance, "accrual_fn", None)
+                or "fixed_payments"
+            )
+            cleaned["params"] = build_params_template(fn)
+
+        # 3) CASH BASED: принудительно ставим функцию и чистим params
+        acc = cleaned.get("accounting_method")
         if acc:
             name = (acc.name or "").lower()
             code = (getattr(acc, "code", "") or "").lower()
-
             if "cash" in name or "cash" in code:
                 cleaned["accrual_fn"] = "by_bank_statement"
-                # чтобы не требовать JSON для "по выписке"
-                cleaned["params"] = cleaned.get("params") or {}
+                cleaned["params"] = {}
 
         return cleaned
 
@@ -208,6 +284,8 @@ class ConditionsInlineForm(forms.ModelForm):
             inst.save()
             self.save_m2m()
         return inst
+    
+    
 
 class CfItemAutoInline(admin.StackedInline):
     model = CfItemAuto
@@ -435,7 +513,6 @@ class ContractsAdmin(admin.ModelAdmin):
             return "—"
         return "Предоплата" if cond.pay_timing == "prepay" else "Постоплата"
 
-    
 
     
     @admin.display(description="№ договора", ordering="number")
@@ -575,10 +652,14 @@ class ContractsAdmin(admin.ModelAdmin):
         return getattr(obj, "_files_count", 0) or 0
     
     
+    def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
+        context["accrual_registry_json"] = json.dumps(ACCRUAL_REGISTRY, ensure_ascii=False, default=str)
+        return super().render_change_form(request, context, add, change, form_url, obj)
     
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",  )}
-        js = ("js/conditions_inline_collapse.js",)
+        js = ("js/conditions_inline_collapse.js", )
+
       
     
     
