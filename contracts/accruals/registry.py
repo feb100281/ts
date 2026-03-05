@@ -1,8 +1,9 @@
 # contracts/accruals/registry.py
+from decimal import Decimal
 
 ACCRUAL_REGISTRY = {
     
-    
+# ✅  ФИКСИРОВАННЫЕ ПЛАТЕЖИ
 "fixed_payments": {
         "title": "Фиксированные платежи",
         "fields": [
@@ -13,11 +14,29 @@ ACCRUAL_REGISTRY = {
         "defaults": {"amount_basis":"month"},
         },
 
-
+# ✅  CASH BASED
  "by_bank_statement": {
         "title": "Cумма из оплаты",
         "fields": [],
         "defaults": {},
+    },
+ 
+ # ✅  АРЕНДА ПОМЕЩЕНИЙ
+ "rent_premises": {
+        "title": "Аренда помещений (cтавка мес.)",
+        "fields": [
+            {"key": "bap", "label": "БАП", "type": "decimal", "required": True},
+            {"key": "ep", "label": "ЭП", "type": "decimal", "required": False},
+            {"key": "calc_area", "label": "Расч. площадь", "type": "decimal", "required": True},
+
+            {"key": "indexation_percent", "label": "Процент индексации, %", "type": "decimal", "required": False},
+            {"key": "indexation_start_date", "label": "Дата начала индексации", "type": "date", "required": False},
+        ],
+        "defaults": {
+            "ep": Decimal("0"),
+            "indexation_percent": Decimal("0"),
+            "indexation_start_date": "",
+        },
     },
  
  
