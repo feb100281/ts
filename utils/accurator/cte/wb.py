@@ -246,6 +246,7 @@ def connect_db():
     )
 
 CONTRACT_ID = 109 #ПОКА ТАК
+COMPANY_ID = 1
 
 CTEs = {
    
@@ -604,6 +605,7 @@ def fact_query(d:dict,k):
     
     acc_id = d['acc_id']
     contract_id = CONTRACT_ID
+    company_id = COMPANY_ID
     field = d['field']
     sc = d['subconto']    
     if sc:
@@ -629,7 +631,7 @@ def fact_query(d:dict,k):
         sum(dt_{pref}) filter (where field = 'ppvz_for_pay') 
         as cr,
         '{description}' as description,
-        {subconto_id} as subconto_id
+        {company_id} as company_id
         from gl.base
         where field in  ('retail_price','ppvz_for_pay')
          
@@ -647,7 +649,8 @@ def fact_query(d:dict,k):
         sum(dt_{pref}) as dt,
         sum(cr_{pref}) as cr,
         '{description}' as description,
-        {subconto_id} as subconto_id
+        {company_id} as company_id
+        
         from gl.base
         where field = '{field}' 
         group by date_from
@@ -668,8 +671,8 @@ def import_facts(d:dict,conn):
     q = 'UNION ALL \n'.join(queries)
     
     final_query = f"""
-    INSERT INTO gl.fact (id, pid, date_from, acc_id, contract_id, dt, cr, description)
-    SELECT id, pid, date_from, acc_id, contract_id, dt, cr, description
+    INSERT INTO gl.fact (id, pid, date_from, acc_id, contract_id, dt, cr, description, company_id)
+    SELECT id, pid, date_from, acc_id, contract_id, dt, cr, description, company_id
     FROM(
         {q}
     ) src
@@ -681,12 +684,13 @@ def import_facts(d:dict,conn):
         contract_id = EXCLUDED.contract_id,
         dt          = EXCLUDED.dt,
         cr          = EXCLUDED.cr,
-        description = EXCLUDED.description
+        description = EXCLUDED.description,
+        company_id  = EXCLUDED.company_id
         
     WHERE
-        (gl.fact.pid, gl.fact.date_from, gl.fact.acc_id, gl.fact.contract_id, gl.fact.dt, gl.fact.cr, gl.fact.description)
+        (gl.fact.pid, gl.fact.date_from, gl.fact.acc_id, gl.fact.contract_id, gl.fact.dt, gl.fact.cr, gl.fact.description, gl.fact.company_id)
         IS DISTINCT FROM
-        (EXCLUDED.pid, EXCLUDED.date_from, EXCLUDED.acc_id, EXCLUDED.contract_id, EXCLUDED.dt, EXCLUDED.cr, EXCLUDED.description);        
+        (EXCLUDED.pid, EXCLUDED.date_from, EXCLUDED.acc_id, EXCLUDED.contract_id, EXCLUDED.dt, EXCLUDED.cr, EXCLUDED.description, EXCLUDED.company_id);        
     """    
     with conn.cursor() as cur:
          cur.execute(final_query)
@@ -723,11 +727,11 @@ def make_details(conn):
 def main():
 
     conn = connect_db()
-    START_DATE = "2024-03-01"
-    END_DATE = "2025-01-01"
+    START_DATE = "2026-02-01"
+    END_DATE = "2026-03-01"
 
     fields = parse_fields()
-    print(fields)
+    # print(fields)
     create_temp_table(conn, START_DATE, END_DATE, fields)    
     make_target_tbl(conn)
     t = import_facts(CTEs,conn)
