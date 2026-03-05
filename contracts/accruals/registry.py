@@ -23,7 +23,7 @@ ACCRUAL_REGISTRY = {
  
  # ✅  АРЕНДА ПОМЕЩЕНИЙ
  "rent_premises": {
-        "title": "Аренда помещений",
+        "title": "Аренда помещений (cтавка мес.)",
         "fields": [
             {"key": "bap", "label": "БАП", "type": "decimal", "required": True},
             {"key": "ep", "label": "ЭП", "type": "decimal", "required": False},
