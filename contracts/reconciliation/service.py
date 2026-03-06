@@ -5,7 +5,6 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-from django.db.models import Q
 from django.db.models import Max
 
 from contracts.models import Conditions, Contracts
