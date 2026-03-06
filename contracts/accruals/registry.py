@@ -8,10 +8,11 @@ ACCRUAL_REGISTRY = {
         "title": "Фиксированные платежи",
         "fields": [
             {"key":"amount","label":"Сумма","type":"decimal","required":True},
-            {"key":"amount_basis","label":"База суммы","type":"choice","required":True,
-   },
+            {"key":"amount_basis","label":"База суммы","type":"choice","required":True,},
+            {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
         ],
         "defaults": {"amount_basis":"month"},
+        "vat_rate": Decimal("0"),
         },
 
 # ✅  CASH BASED
@@ -28,12 +29,14 @@ ACCRUAL_REGISTRY = {
             {"key": "bap", "label": "БАП", "type": "decimal", "required": True},
             {"key": "ep", "label": "ЭП", "type": "decimal", "required": False},
             {"key": "calc_area", "label": "Расч. площадь", "type": "decimal", "required": True},
+            {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
 
             {"key": "indexation_percent", "label": "Процент индексации, %", "type": "decimal", "required": False},
             {"key": "indexation_start_date", "label": "Дата начала индексации", "type": "date", "required": False},
         ],
         "defaults": {
             "ep": Decimal("0"),
+             "vat_rate": Decimal("0"),
             "indexation_percent": Decimal("0"),
             "indexation_start_date": "",
         },

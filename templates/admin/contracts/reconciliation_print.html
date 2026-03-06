@@ -1,0 +1,218 @@
+{% load static accruals_extras %}
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+<title>
+  Акт сверки{% if contract.cp %} — {{ contract.cp }}{% endif %}{% if contract.number %} — № {{ contract.number }}{% endif %}
+</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{% static 'contracts/reconciliation_print.css' %}">
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="sheet">
+
+      <div class="toolbar no-print">
+        <a href="/admin/contracts/contracts/{{ contract.id }}/change/" class="btn-back">
+          ← К договору
+        </a>
+
+        <button class="btn-print" onclick="window.print()">
+          Печать / PDF
+        </button>
+      </div>
+
+      <header class="report-header">
+        <div class="header-topline">
+          <div class="doc-kicker">Акт сверки</div>
+        </div>
+
+        <h1 class="doc-title">Акт сверки по договору</h1>
+
+        <div class="party-block">
+          <div class="party-name">
+            {{ contract.cp|default:"—" }}
+          </div>
+          <div class="contract-name">
+            {% if contract.number %}
+              Договор № {{ contract.number }}
+            {% else %}
+              Договор не указан
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="report-period">
+          <div class="report-period-title">
+            Период отражения операций: {{ date_from|month_year_ru }} — {{ date_to|month_year_ru }}
+          </div>
+          <div class="report-period-sub">
+            {{ date_from|date_ru }} — {{ date_to|date_ru }}
+          </div>
+        </div>
+
+        <div class="report-state-line">
+          Состояние взаиморасчётов на {{ report_date|date_ru }}
+        </div>
+      </header>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Сводка</h2>
+            <div class="section-subtitle">
+              Показатели по договору за весь период отражения операций и отдельно состояние на текущую дату.
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-list">
+          <div class="summary-row">
+            <div class="summary-key">Сальдо на начало периода</div>
+            <div class="summary-val summary-money">{{ opening_balance|money_ru }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Начислено за весь период</div>
+            <div class="summary-val summary-money">{{ total_accruals|money_ru }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Оплачено за весь период</div>
+            <div class="summary-val summary-money">{{ total_payments|money_ru }}</div>
+          </div>
+
+          <div class="summary-row total">
+            <div class="summary-key">Итоговое сальдо по всем периодам</div>
+            <div class="summary-val summary-money strong">{{ closing_balance|money_ru }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Статус итогового сальдо</div>
+            <div class="summary-val">
+              <span class="status-badge {{ closing_balance_status_class }}">
+                {{ closing_balance_status }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="balance-note">
+          <div class="balance-note-title">
+            Состояние на {{ report_date|date_ru }}
+          </div>
+
+          <div class="summary-list" style="margin-top: 12px;">
+            <div class="summary-row total">
+              <div class="summary-key">Сальдо на текущую дату</div>
+              <div class="summary-val summary-money strong">{{ current_balance|money_ru }}</div>
+            </div>
+
+            <div class="summary-row">
+              <div class="summary-key">Статус на текущую дату</div>
+              <div class="summary-val">
+                <span class="status-badge {{ current_balance_status_class }}">
+                  {{ current_balance_status }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="balance-note-text">
+            {{ current_balance_comment }}
+          </div>
+        </div>
+      </section>
+
+      <section class="section page-break">
+        <div class="section-head">
+          <div>
+            <h2>Операции по договору</h2>
+            <div class="section-subtitle">
+              Начисления и оплаты в хронологическом порядке за весь период ведения данных.
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="registry-table">
+            <thead>
+              <tr>
+                <th class="col-date">Дата</th>
+                <th class="col-doc">Основание</th>
+                <th class="col-desc">Описание</th>
+                <th class="col-money">Начислено</th>
+                <th class="col-money">Оплачено</th>
+                <th class="col-money">Сальдо</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if rows %}
+                {% for r in rows %}
+                  <tr>
+                    <td class="date-cell">{{ r.row_date|date_ru }}</td>
+                    <td class="doc-cell">
+                      {{ r.doc_label|default:"—" }}
+                    </td>
+                    <td class="desc-cell">
+                      <div class="desc-main">{{ r.description|default:"—" }}</div>
+
+                      {% if r.period_from and r.period_to %}
+                        <div class="desc-sub">
+                          Период: {{ r.period_from|date_ru }} — {{ r.period_to|date_ru }}
+                        </div>
+                      {% endif %}
+
+                      {% if r.comment %}
+                        <div class="desc-sub">
+                          {{ r.comment }}
+                        </div>
+                      {% endif %}
+                    </td>
+                    <td class="money-cell">
+                      {% if r.accrual and r.accrual > 0 %}
+                        {{ r.accrual|money_ru }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td class="money-cell payment-cell">
+                      {% if r.payment and r.payment > 0 %}
+                        {{ r.payment|money_ru }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td class="money-cell strong">
+                      {{ r.balance|money_ru }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr class="empty-row">
+                  <td colspan="6">Нет данных за выбранный период.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3" class="tfoot-label">Итого по всем периодам</td>
+                <td class="money-cell">{{ total_accruals|money_ru }}</td>
+                <td class="money-cell">{{ total_payments|money_ru }}</td>
+                <td class="money-cell strong">{{ closing_balance|money_ru }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <footer class="report-footer">
+        Печатная форма для внутреннего использования.
+      </footer>
+
+    </div>
+  </div>
+</body>
+</html>

@@ -22,24 +22,32 @@
             <span class="valuation-inline__title">
               {% if inline_admin_form.original %}
                 Условие №{{ forloop.counter }}
-                    <span class="cond-dates">
-                    {% if inst.date_start %}
-                        <span class="cond-from">{{ inst.date_start|date:"d.m.Y" }}</span>
-                    {% endif %}
-                    →
-                    {% if inst.date_finish %}
-                        <span class="cond-to">{{ inst.date_finish|date:"d.m.Y" }}</span>
-                    {% else %}
-                        <span class="cond-infinity">∞</span>
-                    {% endif %}
-                    </span>
-                {% comment %} {% if inst.amount %}
-                  — {{ inst.amount }} ₽
-                {% endif %} {% endcomment %}
+                <span class="cond-dates">
+                  {% if inst.date_start %}
+                    <span class="cond-from">{{ inst.date_start|date:"d.m.Y" }}</span>
+                  {% endif %}
+                  →
+                  {% if inst.date_finish %}
+                    <span class="cond-to">{{ inst.date_finish|date:"d.m.Y" }}</span>
+                  {% else %}
+                    <span class="cond-infinity">∞</span>
+                  {% endif %}
+                </span>
               {% else %}
                 Новое условие
               {% endif %}
             </span>
+
+            {# ✅ КНОПКА "Показать начисления" — только для сохранённых условий #}
+{% if inline_admin_form.original %}
+  <a class="button"
+     href="{% url 'contracts:condition_accruals_preview' condition_id=inst.id %}"
+     target="_blank"
+     onclick="event.stopPropagation();"
+     style="margin-left:auto; padding:4px 12px;">
+    📊 Показать начисления
+  </a>
+{% endif %}
 
             {% if inline_admin_form.form.errors %}
               <span class="valuation-inline__badge valuation-inline__badge--error">
@@ -47,7 +55,7 @@
               </span>
             {% endif %}
 
-            {# ✅ DELETE: показываем только для сохранённых (как у кадастровой) #}
+            {# ✅ DELETE: показываем только для сохранённых #}
             {% if inline_admin_formset.formset.can_delete and inline_admin_form.original %}
               <span class="valuation-inline__delete" onclick="event.stopPropagation();">
                 {{ inline_admin_form.deletion_field.field }}
@@ -78,3 +86,4 @@
     {% endfor %}
   </fieldset>
 </div>
+

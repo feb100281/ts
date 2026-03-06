@@ -1,0 +1,270 @@
+{% load static accruals_extras %}
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+<title>
+{{ contract.cp }} — {{ contract.number }} — начисления (условие {{ condition.id }})
+</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{% static 'contracts/accruals_print.css' %}">
+</head>
+
+<body>
+  <div class="page-wrap">
+    <div class="sheet">
+
+      <div class="toolbar no-print">
+        <a href="/admin/contracts/contracts/{{ contract.id }}/change/" class="btn-back">
+          ← К договору
+        </a>
+
+        <button class="btn-print" onclick="window.print()">
+          Печать / PDF
+        </button>
+      </div>
+
+      <header class="report-header">
+        <div class="header-topline">
+          <div class="doc-kicker">Реестр начислений</div>
+          <div class="doc-badge">Печатная форма</div>
+        </div>
+
+        <h1 class="doc-title">Начисления по условию</h1>
+
+        <div class="party-block">
+          <div class="party-name">
+            {{ contract.cp|default:"—" }}
+          </div>
+
+          <div class="contract-name">
+            {% if contract.number %}
+              Договор № {{ contract.number }}
+            {% else %}
+              Договор не указан
+            {% endif %}
+          </div>
+        </div>
+
+
+          <div class="section-subtitle">
+        Условие ID
+          {{ condition.id }}
+          </div> 
+
+          {% comment %} <div class="meta-item">
+            <span class="meta-label">Функция начисления</span>
+            <span class="meta-value">{{ fn_title|default:"—" }}</span>
+          </div>
+
+          <div class="meta-item">
+            <span class="meta-label">Метод учёта</span>
+            <span class="meta-value">
+              {% if condition.accounting_method %}
+                {{ condition.accounting_method }}
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+        </div> {% endcomment %}
+
+        {% comment %} {% if period_from and period_to %}
+          <div class="report-period">
+            <div class="report-period-title">
+              Период расчёта: {{ period_from|month_year_ru }}
+            </div>
+            <div class="report-period-sub">
+              {{ period_from|date_ru }} — {{ period_to|date_ru }}
+            </div>
+          </div>
+        {% endif %} {% endcomment %}
+      </header>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Сводка</h2>
+            <div class="section-subtitle">
+              Основные параметры условия и итоговые суммы начислений.
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-list">
+          <div class="summary-row">
+            <div class="summary-key">Функция начисления</div>
+            <div class="summary-val">{{ fn_title|default:"—" }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Метод учёта</div>
+            <div class="summary-val">
+              {% if condition.accounting_method %}
+                {{ condition.accounting_method }}
+              {% else %}
+                —
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Срок действия условия</div>
+            <div class="summary-val">
+              {% if condition.date_start %}
+                {{ condition.date_start|date_ru }}
+              {% else %}
+                —
+              {% endif %}
+              —
+              {% if condition.date_finish %}
+                {{ condition.date_finish|date_ru }}
+              {% else %}
+                бессрочно
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Режим НДС</div>
+            <div class="summary-val">
+              {{ vat_mode|vat_mode_ru }}
+              {% if vat_rate %}
+                <span class="summary-muted">• {{ vat_rate|money_ru }}%</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Итого без НДС</div>
+            <div class="summary-val summary-money">{{ total_net|money_ru }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Итого НДС</div>
+            <div class="summary-val summary-money">{{ total_vat|money_ru }}</div>
+          </div>
+
+          <div class="summary-row total">
+            <div class="summary-key">Итого с НДС</div>
+            <div class="summary-val summary-money strong">{{ total_gross|money_ru }}</div>
+          </div>
+        </div>
+      </section>
+
+
+        <section class="section page-break">
+        <div class="section-head">
+          <div>
+            <h2>Детализация начислений</h2>
+            <div class="section-subtitle">
+              Строки начислений, сформированные по правилам выбранной функции.
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="registry-table">
+            <thead>
+              <tr>
+                <th class="col-period">Период</th>
+                <th class="col-days">Дней</th>
+                <th class="col-money">Без НДС</th>
+                <th class="col-money">НДС</th>
+                <th class="col-money">С НДС</th>
+                <th class="col-comment">Комментарий</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% if rows %}
+                {% for r in rows %}
+                  <tr>
+                    <td class="period-cell">
+                      <div class="period-main">
+                        {{ r.period_from|month_year_ru }}
+                      </div>
+                      <div class="period-sub">
+                        {{ r.period_from|date_ru }} — {{ r.period_to|date_ru }}
+                      </div>
+                    </td>
+
+                    <td class="num-cell">
+                      {% if r.days %}
+                        {{ r.days }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+
+                    <td class="money-cell">
+                      {{ r.amount_net|money_ru }}
+                    </td>
+
+                    <td class="money-cell">
+                      {{ r.vat_amount|money_ru }}
+                    </td>
+
+                    <td class="money-cell strong">
+                      {% if r.amount_gross %}
+                        {{ r.amount_gross|money_ru }}
+                      {% else %}
+                        {{ r.amount|money_ru }}
+                      {% endif %}
+                    </td>
+
+                    <td class="comment-cell">
+                      {{ r.comment|default:"—" }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr class="empty-row">
+                  <td colspan="6">Нет строк начислений для отображения.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+
+            {% if rows %}
+              <tfoot>
+                <tr>
+                  <td colspan="2" class="tfoot-label">Итого</td>
+                  <td class="money-cell">{{ total_net|money_ru }}</td>
+                  <td class="money-cell">{{ total_vat|money_ru }}</td>
+                  <td class="money-cell strong">{{ total_gross|money_ru }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            {% endif %}
+          </table>
+        </div>
+
+        {% if result.note %}
+          <div class="note-box">
+            {{ result.note }}
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="section page-break-before">
+        <div class="section-head">
+          <div>
+            <h2>Приложение 1. Параметры начисления</h2>
+            <div class="section-subtitle">
+              Значения параметров, использованные для расчёта.
+            </div>
+          </div>
+        </div>
+
+        <pre class="json-box">{{ condition.params|default:"{}"|pprint }}</pre>
+      </section>
+
+      <footer class="report-footer">
+        Печатная форма для внутреннего использования. Рекомендуется сохранять PDF как версию расчёта на дату формирования.
+      </footer>
+
+    </div>
+  </div>
+</body>
+</html>
