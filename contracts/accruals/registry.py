@@ -64,6 +64,13 @@ ACCRUAL_REGISTRY = {
     },
     
     
+    "own_funds_transfer": {
+            "title": "Перевод собственных средств",
+            "fields": [],
+            "defaults": {},
+        },
+            
+    
 }
 
 

@@ -160,42 +160,6 @@ class ConditionsInlineForm(forms.ModelForm):
                 qd = self.data.copy()  # QueryDict -> mutable copy
                 qd[pe_key] = json.dumps(tmpl, ensure_ascii=False, indent=2, default=str)
                 self.data = qd
-
-    # def clean(self):
-    #     cleaned = super().clean()
-    #     raw = (cleaned.get("params_editor") or "").strip()
-
-    #     # 1) если JSON ввели руками — парсим
-    #     if raw:
-    #         try:
-    #             parsed = json.loads(raw)
-    #         except Exception as e:
-    #             raise forms.ValidationError({"params_editor": f"Некорректный JSON: {e}"})
-    #         if not isinstance(parsed, dict):
-    #             raise forms.ValidationError(
-    #                 {"params_editor": "JSON должен быть объектом { ... }"}
-    #             )
-    #         cleaned["params"] = parsed
-
-    #     # 2) если JSON пустой — генерим шаблон по accrual_fn
-    #     else:
-    #         fn = (
-    #             cleaned.get("accrual_fn")
-    #             or getattr(self.instance, "accrual_fn", None)
-    #             or "fixed_payments"
-    #         )
-    #         cleaned["params"] = build_params_template(fn)
-
-    #     # 3) CASH BASED: принудительно ставим функцию и чистим params
-    #     acc = cleaned.get("accounting_method")
-    #     if acc:
-    #         name = (acc.name or "").lower()
-    #         code = (getattr(acc, "code", "") or "").lower()
-    #         if "cash" in name or "cash" in code:
-    #             cleaned["accrual_fn"] = "by_bank_statement"
-    #             cleaned["params"] = {}
-
-    #     return cleaned
     
     
     def clean(self):
@@ -366,7 +330,7 @@ class ContractsAdmin(admin.ModelAdmin):
         # "amendment",
         "payment_type", 
         "reconciliation_button",
-        # "cf_defaults"
+        "cf_defaults"
         )
     list_display_links = ("cp_with_inn", "number_with_id",)   
     list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)

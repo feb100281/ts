@@ -4,6 +4,7 @@ from .calculators.fixed_payments import preview as preview_fixed_payments
 from .calculators.by_bank_statement import preview as preview_by_bank_statement
 from .calculators.rent_premises import preview as preview_rent_premises
 from .calculators.deposit_by_bank_statement import preview as preview_deposit_by_bank_statement
+from .calculators.own_funds_transfer import preview as preview_own_funds_transfer
 
 
 
@@ -12,6 +13,8 @@ PREVIEW_HANDLERS = {
     "by_bank_statement": preview_by_bank_statement,
     "rent_premises": preview_rent_premises,
     "deposit_by_bank_statement": preview_deposit_by_bank_statement,
+    "own_funds_transfer": preview_own_funds_transfer,
+    
 
     
 }
