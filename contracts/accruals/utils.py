@@ -7,7 +7,8 @@ from contracts.models import VatMode
 
 
 def q2(x: Decimal) -> Decimal:
-    return x.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return Decimal(str(x or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # return x.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def month_start(d: date) -> date:

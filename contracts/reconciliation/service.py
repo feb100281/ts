@@ -70,6 +70,29 @@ def _payment_amount_from_split(obj: CfSplits) -> Decimal:
         return dt
     return Decimal("0.00")
 
+
+def _cfitem_code(cfitem) -> str:
+    if not cfitem:
+        return ""
+    return str(cfitem.code or "").strip()
+
+
+def _is_deposit_condition(cond: Conditions) -> bool:
+    return (cond.accrual_fn or "") == "deposit_by_bank_statement"
+
+
+def _is_deposit_principal_flow(flow_type: str) -> bool:
+    return flow_type in {"placement", "principal_return"}
+
+
+def _is_deposit_principal_cf_code(code: str) -> bool:
+    return code in {"322100", "314100"}
+
+
+def _is_deposit_interest_cf_code(code: str) -> bool:
+    return code == "313100"
+
+
 def get_contract_full_horizon_date(contract: Contracts) -> date:
     cond_agg = Conditions.objects.filter(contract=contract).aggregate(
         max_finish=Max("date_finish"),
@@ -99,12 +122,8 @@ def get_contract_full_horizon_date(contract: Contracts) -> date:
 def _build_accrual_rows_for_condition(cond: Conditions, date_from: date, date_to: date) -> list[dict[str, Any]]:
     """
     Используем твою существующую логику preview_accruals.
-    ВАЖНО:
-    preview_accruals считает период по самому condition:
-    - от cond.date_start / cond.date_finish
-    - либо anchor month
-
-    Поэтому для акта сверки берем только те строки, которые попадают в период акта.
+    Для deposit_by_bank_statement в акт сверки берем только проценты,
+    а размещение и возврат тела депозита не включаем.
     """
     result = preview_accruals(cond, anchor_date=date_from)
     rows = result.get("rows", []) or []
@@ -115,8 +134,13 @@ def _build_accrual_rows_for_condition(cond: Conditions, date_from: date, date_to
     for r in rows:
         row_from = _safe_date(r.get("period_from"))
         row_to = _safe_date(r.get("period_to"))
+        flow_type = (r.get("flow_type") or "").strip()
 
         if not row_from or not row_to:
+            continue
+
+        # Для депозитов в акт сверки берем только проценты
+        if _is_deposit_condition(cond) and _is_deposit_principal_flow(flow_type):
             continue
 
         # оставляем только строки, пересекающиеся с периодом акта
@@ -185,6 +209,14 @@ def get_contract_payment_rows(contract: Contracts, date_from: date, date_to: dat
         if amount <= 0:
             continue
 
+        code = _cfitem_code(s.cfitem)
+
+        # В акт сверки не включаем тело депозита:
+        # размещение и возврат тела
+        if _is_deposit_principal_cf_code(code):
+            continue
+        
+        
         used_transaction_ids.add(s.transaction_id)
 
         doc_number = s.transaction.doc_numner or "б/н"
@@ -223,6 +255,12 @@ def get_contract_payment_rows(contract: Contracts, date_from: date, date_to: dat
         if amount <= 0:
             continue
 
+        code = _cfitem_code(p.cfitem)
+
+        # В акт сверки не включаем тело депозита
+        if _is_deposit_principal_cf_code(code):
+            continue
+
         doc_number = p.doc_numner or "б/н"
         doc_date = p.doc_date or ""
         temp = (p.temp or "").strip()
@@ -248,6 +286,7 @@ def _get_accrual_total_before(contract: Contracts, date_from: date) -> Decimal:
     """
     MVP-вариант:
     считаем начисления по всем условиям, оставляя строки строго ДО date_from.
+    Для deposit_by_bank_statement учитываем только проценты.
     """
     if not contract:
         return Decimal("0.00")
@@ -266,7 +305,12 @@ def _get_accrual_total_before(contract: Contracts, date_from: date) -> Decimal:
 
         for r in rows:
             row_from = _safe_date(r.get("period_from"))
+            flow_type = (r.get("flow_type") or "").strip()
+
             if not row_from:
+                continue
+
+            if _is_deposit_condition(cond) and _is_deposit_principal_flow(flow_type):
                 continue
 
             if row_from < date_from:
@@ -281,7 +325,7 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
 
     split_qs = (
         CfSplits.objects
-        .select_related("transaction")
+        .select_related("transaction", "cfitem")
         .filter(
             contract=contract,
             transaction__date__lt=date_from,
@@ -290,12 +334,20 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
 
     for s in split_qs:
         amount = _payment_amount_from_split(s)
-        if amount > 0:
-            total += amount
-            used_transaction_ids.add(s.transaction_id)
+        if amount <= 0:
+            continue
+
+        code = _cfitem_code(s.cfitem)
+
+        if _is_deposit_principal_cf_code(code):
+            continue
+
+        total += amount
+        used_transaction_ids.add(s.transaction_id)
 
     cf_qs = (
         CfData.objects
+        .select_related("cfitem")
         .filter(
             contract=contract,
             date__lt=date_from,
@@ -305,11 +357,17 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
 
     for p in cf_qs:
         amount = _payment_amount_from_cfdata(p)
-        if amount > 0:
-            total += amount
+        if amount <= 0:
+            continue
+
+        code = _cfitem_code(p.cfitem)
+
+        if _is_deposit_principal_cf_code(code):
+            continue
+
+        total += amount
 
     return q2(total)
-
 
 def get_balance_status(balance: Decimal) -> str:
     balance = q2(balance)

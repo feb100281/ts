@@ -19,11 +19,16 @@ ACCRUAL_REGISTRY = {
 
 
 
+    
     "by_bank_statement": {
-        "title": "Cумма из оплаты",
-        "fields": [],
-        "defaults": {},
+    "title": "Cумма из оплаты",
+    "fields": [
+        {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
+    ],
+    "defaults": {
+        "vat_rate": Decimal("0"),
     },
+},
     
     
     
@@ -45,6 +50,20 @@ ACCRUAL_REGISTRY = {
             "indexation_start_date": "",
         },
     },
+    
+    
+    
+    "deposit_by_bank_statement": {
+        "title": "Депозит / по выписке",
+        "fields": [],
+        "defaults": {
+            "placement_cf_code": "322100",
+            "interest_cf_code": "313100",
+            "return_cf_code": "314100",
+        },
+    },
+    
+    
 }
 
 
