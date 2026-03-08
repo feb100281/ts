@@ -160,7 +160,8 @@ class ConditionsInlineForm(forms.ModelForm):
                 qd = self.data.copy()  # QueryDict -> mutable copy
                 qd[pe_key] = json.dumps(tmpl, ensure_ascii=False, indent=2, default=str)
                 self.data = qd
-
+    
+    
     def clean(self):
         cleaned = super().clean()
         raw = (cleaned.get("params_editor") or "").strip()
@@ -186,14 +187,21 @@ class ConditionsInlineForm(forms.ModelForm):
             )
             cleaned["params"] = build_params_template(fn)
 
-        # 3) CASH BASED: принудительно ставим функцию и чистим params
+        # 3) CASH BASED: принудительно ставим функцию, НО params не затираем
         acc = cleaned.get("accounting_method")
         if acc:
             name = (acc.name or "").lower()
             code = (getattr(acc, "code", "") or "").lower()
+
             if "cash" in name or "cash" in code:
                 cleaned["accrual_fn"] = "by_bank_statement"
-                cleaned["params"] = {}
+
+                params = cleaned.get("params") or {}
+                if not isinstance(params, dict):
+                    params = {}
+
+                params.setdefault("vat_rate", "0")
+                cleaned["params"] = params
 
         return cleaned
 
@@ -322,7 +330,7 @@ class ContractsAdmin(admin.ModelAdmin):
         # "amendment",
         "payment_type", 
         "reconciliation_button",
-        # "cf_defaults"
+        "cf_defaults"
         )
     list_display_links = ("cp_with_inn", "number_with_id",)   
     list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)
