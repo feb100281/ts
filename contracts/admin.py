@@ -6,10 +6,14 @@ from django.utils.safestring import mark_safe
 from django import forms
 import json
 import os
+from datetime import date
+from django.urls import reverse
 
 from contracts.accruals.registry import ACCRUAL_REGISTRY
-from decimal import Decimal, InvalidOperation
-from django.http import QueryDict
+from django.template.response import TemplateResponse
+from django.shortcuts import get_object_or_404
+
+from contracts.accruals.service import preview_accruals
 
 from .models import (
     Contracts,
@@ -104,91 +108,7 @@ def build_params_template(fn: str) -> dict:
     return tmpl
     
 
-# class ConditionsInlineForm(forms.ModelForm):
-    
-#     params_editor = forms.CharField(
-#         label="Параметры начисления (JSON)",
-#         required=False,
-#         widget=forms.Textarea(attrs={
-#         "rows": 7,
-#         "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
-#         "placeholder": '{\n  "amount": "",\n  "vat_mode": "included"\n}'
-#     }),
-#         help_text="Заполняется по выбранной функции начисления."
-#     )
 
-#     class Meta:
-#         model = Conditions
-#         fields = "__all__"
-
-    
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         self.fields["params"].widget = forms.HiddenInput()
-#         self.fields["params"].required = False
-
-#         inst = getattr(self, "instance", None)
-#         params = (inst.params or {}) if inst else {}
-
-#         if params:
-#             self.initial["params_editor"] = json.dumps(params, ensure_ascii=False, indent=2, default=str)
-#         else:
-#             self.initial["params_editor"] = ""
-        
-#                 # ✅ если форма отправлена (POST) и params_editor пустой —
-#         # подставим шаблон по выбранной accrual_fn,
-#         # чтобы он был виден даже когда сохранение падает по другой ошибке
-#         if self.is_bound:
-#             pe_key = self.add_prefix("params_editor")
-#             fn_key = self.add_prefix("accrual_fn")
-
-#             current = (self.data.get(pe_key) or "").strip()
-#             if current == "":
-#                 fn = (self.data.get(fn_key) or "").strip() or "fixed_payments"
-#                 tmpl = build_params_template(fn)
-
-#                 qd = self.data.copy()  # QueryDict -> mutable
-#                 qd[pe_key] = json.dumps(tmpl, ensure_ascii=False, indent=2, default=str)
-#                 self.data = qd
-        
-#     def clean(self):
-#         cleaned = super().clean()
-#         raw = (cleaned.get("params_editor") or "").strip()
-
-#         if raw:
-#             try:
-#                 parsed = json.loads(raw)
-#             except Exception as e:
-#                 raise forms.ValidationError({"params_editor": f"Некорректный JSON: {e}"})
-#             if not isinstance(parsed, dict):
-#                 raise forms.ValidationError({"params_editor": "JSON должен быть объектом { ... }"})
-#             cleaned["params"] = parsed
-#         else:
-#             fn = cleaned.get("accrual_fn") or getattr(self.instance, "accrual_fn", None) or "fixed_payments"
-#             cleaned["params"] = build_params_template(fn)
-
-#         # ✅ АВТО-ВЫБОР ФУНКЦИИ ДЛЯ CASH BASED
-#         acc = cleaned.get("accounting_method")
-#         if acc:
-#             name = (acc.name or "").lower()
-#             code = (getattr(acc, "code", "") or "").lower()
-
-#             if "cash" in name or "cash" in code:
-#                 cleaned["accrual_fn"] = "by_bank_statement"
-#                 cleaned["params"] = {}
-
-#         return cleaned
-
-#     def save(self, commit=True):
-#         inst = super().save(commit=False)
-#         inst.params = self.cleaned_data.get("params") or {}
-#         if commit:
-#             inst.save()
-#             self.save_m2m()
-#         return inst
-    
-    
 
 class ConditionsInlineForm(forms.ModelForm):
     params_editor = forms.CharField(
@@ -240,7 +160,8 @@ class ConditionsInlineForm(forms.ModelForm):
                 qd = self.data.copy()  # QueryDict -> mutable copy
                 qd[pe_key] = json.dumps(tmpl, ensure_ascii=False, indent=2, default=str)
                 self.data = qd
-
+    
+    
     def clean(self):
         cleaned = super().clean()
         raw = (cleaned.get("params_editor") or "").strip()
@@ -266,14 +187,21 @@ class ConditionsInlineForm(forms.ModelForm):
             )
             cleaned["params"] = build_params_template(fn)
 
-        # 3) CASH BASED: принудительно ставим функцию и чистим params
+        # 3) CASH BASED: принудительно ставим функцию, НО params не затираем
         acc = cleaned.get("accounting_method")
         if acc:
             name = (acc.name or "").lower()
             code = (getattr(acc, "code", "") or "").lower()
+
             if "cash" in name or "cash" in code:
                 cleaned["accrual_fn"] = "by_bank_statement"
-                cleaned["params"] = {}
+
+                params = cleaned.get("params") or {}
+                if not isinstance(params, dict):
+                    params = {}
+
+                params.setdefault("vat_rate", "0")
+                cleaned["params"] = params
 
         return cleaned
 
@@ -401,7 +329,8 @@ class ContractsAdmin(admin.ModelAdmin):
         "contract_end_date", 
         # "amendment",
         "payment_type", 
-        # "cf_defaults"
+        "reconciliation_button",
+        "cf_defaults"
         )
     list_display_links = ("cp_with_inn", "number_with_id",)   
     list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)
@@ -465,6 +394,28 @@ class ContractsAdmin(admin.ModelAdmin):
         )
 
         return qs
+    
+    
+    # def condition_accruals_preview(self, request, condition_id: int):
+    #     cond = get_object_or_404(
+    #         Conditions.objects.select_related("contract", "accounting_method"),
+    #         pk=condition_id
+    #     )
+
+    #     result = preview_accruals(cond, anchor_date=date.today())
+
+    #     context = {
+    #         "condition": cond,
+    #         "contract": cond.contract,
+    #         "result": result,
+    #         "rows": result.get("rows", []) or [],
+    #         "total": result.get("total"),
+    #     }
+
+    #     return TemplateResponse(request, "contracts/accruals_print.html", context)
+
+    
+
     
     @admin.display(description="Файлы", ordering="_files_count")
     def files_badge(self, obj):
@@ -651,6 +602,20 @@ class ContractsAdmin(admin.ModelAdmin):
     def files_count(self, obj):
         return getattr(obj, "_files_count", 0) or 0
     
+    @admin.display(description="Сверка")
+    def reconciliation_button(self, obj):
+        url = reverse("contracts:contract_reconciliation_preview", args=[obj.id])
+
+        return format_html(
+            '<a href="{}" target="_blank" '
+            'style="display:inline-flex;align-items:center;justify-content:center;'
+            'padding:5px 10px;border-radius:2px;'
+            'background:rgba(37,99,235,.10);'
+            'color:#1d4ed8;font-weight:800;text-decoration:none;'
+            'border:1px solid rgba(37,99,235,.18);">📘</a>',
+            url
+        )
+    
     
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
         context["accrual_registry_json"] = json.dumps(ACCRUAL_REGISTRY, ensure_ascii=False, default=str)
@@ -659,6 +624,7 @@ class ContractsAdmin(admin.ModelAdmin):
     class Media:
         css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",  )}
         js = ("js/conditions_inline_collapse.js", )
+
 
       
     
