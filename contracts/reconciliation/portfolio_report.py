@@ -1,4 +1,5 @@
 # contracts/reconciliation/portfolio_report.py
+# contracts/reconciliation/portfolio_report.py
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -99,31 +100,7 @@ def _is_deposit_principal_flow(flow_type: str) -> bool:
     return flow_type in {"placement", "principal_return"}
 
 
-def get_balance_label(balance: Decimal) -> str:
-    balance = q2(balance)
-
-    if balance > 0:
-        return "Дебитор"
-    if balance < 0:
-        return "Кредитор"
-    return "Закрыто"
-
-
-def get_balance_class(balance: Decimal) -> str:
-    balance = q2(balance)
-
-    if balance > 0:
-        return "is-debtor"
-    if balance < 0:
-        return "is-creditor"
-    return "is-closed"
-
-
 def _get_accrual_total_to_date(contract: Contracts, end_date: date) -> Decimal:
-    """
-    Считаем все начисления по договору накопительно до end_date включительно.
-    Это проще для отчета по сальдо на конец месяца.
-    """
     total = Decimal("0.00")
 
     conditions = (
@@ -187,12 +164,11 @@ def debt_report(request):
         .order_by("cp__name", "number", "id")
     )
 
-    rows = []
+    debt_rows = []
+    credit_rows = []
+
     total_debit_raw = Decimal("0.00")
     total_credit_raw = Decimal("0.00")
-    debit_count = 0
-    credit_count = 0
-    closed_count = 0
 
     for contract in contracts_qs:
         cp = getattr(contract, "cp", None)
@@ -205,26 +181,11 @@ def debt_report(request):
         except Exception:
             continue
 
-        if (
-            total_accruals == Decimal("0.00")
-            and total_payments == Decimal("0.00")
-            and closing_balance == Decimal("0.00")
-        ):
+        # Главное изменение: в детализацию берем только ненулевые остатки
+        if closing_balance == Decimal("0.00"):
             continue
 
-        balance_label = get_balance_label(closing_balance)
-        balance_class = get_balance_class(closing_balance)
-
-        if closing_balance > 0:
-            debit_count += 1
-            total_debit_raw += closing_balance
-        elif closing_balance < 0:
-            credit_count += 1
-            total_credit_raw += abs(closing_balance)
-        else:
-            closed_count += 1
-
-        rows.append({
+        row = {
             "contragent": contragent_name,
             "contract_number": contract.number or "без номера",
             "contract_title": str(contract.title) if contract.title else "—",
@@ -233,21 +194,24 @@ def debt_report(request):
             "total_payments_raw": total_payments,
             "total_payments": format_money(total_payments),
             "closing_balance_raw": closing_balance,
+            "closing_balance_abs_raw": abs(closing_balance),
             "closing_balance_abs": format_money(abs(closing_balance)),
-            "balance_label": balance_label,
-            "balance_class": balance_class,
             "contract_id": contract.id,
-        })
+        }
 
-    def sort_key(r):
-        bal = r["closing_balance_raw"]
-        if bal > 0:
-            return (0, -bal, r["contragent"])
-        if bal < 0:
-            return (1, -abs(bal), r["contragent"])
-        return (2, 0, r["contragent"])
+        if closing_balance > 0:
+            debt_rows.append(row)
+            total_debit_raw += closing_balance
+        else:
+            credit_rows.append(row)
+            total_credit_raw += abs(closing_balance)
 
-    rows.sort(key=sort_key)
+    debt_rows.sort(key=lambda r: (-r["closing_balance_abs_raw"], r["contragent"], r["contract_number"]))
+    credit_rows.sort(key=lambda r: (-r["closing_balance_abs_raw"], r["contragent"], r["contract_number"]))
+
+    debit_count = len(debt_rows)
+    credit_count = len(credit_rows)
+    closed_count = 0  # в детализации закрытые больше не показываем
 
     total_net_raw = q2(total_debit_raw - total_credit_raw)
     month_label = f"{MONTHS_RU_NOMINATIVE[month]} {year}"
@@ -256,7 +220,10 @@ def debt_report(request):
         request,
         "contracts/debt_report.html",
         {
-            "rows": rows,
+            "debt_rows": debt_rows,
+            "credit_rows": credit_rows,
+            "rows_count": debit_count + credit_count,
+
             "month_label": month_label,
             "start_date": start_date,
             "end_date": end_date,
