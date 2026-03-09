@@ -6,7 +6,6 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Min, Max
 
 from .models import Conditions
-# from contracts.accruals.service import preview_accruals
 
 from .models import Contracts
 from contracts.reconciliation.service import build_contract_reconciliation,  get_contract_full_horizon_date

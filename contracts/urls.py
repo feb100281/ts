@@ -1,6 +1,8 @@
 # contracts/urls.py
 from django.urls import path
 from . import views
+from contracts.accruals.report import accruals_report
+from contracts.reconciliation.portfolio_report import debt_report
 
 
 app_name = "contracts"
@@ -17,4 +19,14 @@ urlpatterns = [
         views.contract_reconciliation_preview,
         name="contract_reconciliation_preview",
     ),
+    
+
+    path("accruals-report/", accruals_report, 
+         name="accruals_report"),
+    
+     path(
+            "debt-report/",
+            debt_report,
+            name="debt_report",
+        ),
 ]
