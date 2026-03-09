@@ -57,7 +57,7 @@
       align-items: center;
       gap: 6px;
       padding: 4px 10px;
-      border-radius: 999px;
+      border-radius: 2px;
       font-size: 12px;
       font-weight: 700;
       white-space: nowrap;
@@ -81,6 +81,14 @@
       flex-wrap: wrap;
       margin-bottom: 10px;
     }
+
+    @media print {
+  .page-break {
+    page-break-before: always;
+    break-before: page;
+  }
+}
+
 
     @media print {
       .summary-card {
@@ -118,9 +126,6 @@
         <div class="accruals-period-box">
           <div class="accruals-period-title">
             Срез на дату: {{ end_date|date:"d.m.Y" }}
-          </div>
-          <div class="accruals-period-sub">
-            Дебиторская задолженность — начисления меньше оплат. Кредиторская задолженность — начисления больше оплат.
           </div>
         </div>
       </header>
@@ -174,18 +179,18 @@
 
         <div class="summary-card-grid">
           <div class="summary-card">
-            <div class="summary-card__label">Дебиторская задолженность</div>
+            <div class="summary-card__label">Кредиторская задолженность</div>
             <div class="summary-card__value">{{ total_debit }}</div>
             <div class="summary-card__sub">
-              {{ debit_count }} {{ debit_count_label }} в дебиторской задолженности
+              {{ debit_count }} {{ debit_count_label }} в кредиторской задолженности
             </div>
           </div>
 
           <div class="summary-card">
-            <div class="summary-card__label">Кредиторская задолженность</div>
+            <div class="summary-card__label">Дебиторская задолженность</div>
             <div class="summary-card__value">{{ total_credit }}</div>
             <div class="summary-card__sub">
-              {{ credit_count }} {{ credit_count_label }} в кредиторской задолженности
+              {{ credit_count }} {{ credit_count_label }} в дебиторской задолженности
             </div>
           </div>
 
@@ -208,7 +213,7 @@
       </section>
 
       {% if debt_rows or credit_rows %}
-        <section class="accruals-section">
+        <section class="accruals-section page-break">
           <div class="accruals-section-head">
             <div>
               <h2>Детализация задолженности</h2>
@@ -222,10 +227,8 @@
             <div style="margin-bottom:24px;">
               <div class="section-table-title">
                 <div>
-                  <h3 style="margin:0;">Дебиторская задолженность</h3>
-                  <div class="accruals-section-subtitle">
-                    Начисления меньше оплат.
-                  </div>
+                  <h3 style="margin:0;">Кредиторская задолженность</h3>
+
                 </div>
 
                 <span class="section-badge section-badge--debit">
@@ -279,7 +282,7 @@
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого дебиторская задолженность:</td>
+                      <td colspan="5" class="tfoot-label">Итого кредиторская задолженность:</td>
                       <td class="money-cell money-cell--strong">{{ total_debit }}</td>
                     </tr>
                   </tfoot>
@@ -292,10 +295,7 @@
             <div>
               <div class="section-table-title">
                 <div>
-                  <h3 style="margin:0;">Кредиторская задолженность</h3>
-                  <div class="accruals-section-subtitle">
-                    Начисления больше оплат.
-                  </div>
+                  <h3 style="margin:0;">Дебиторская задолженность</h3>
                 </div>
 
                 <span class="section-badge section-badge--credit">
@@ -349,7 +349,7 @@
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого кредиторская задолженность:</td>
+                      <td colspan="5" class="tfoot-label">Итого Дебиторская задолженность:</td>
                       <td class="money-cell money-cell--strong">{{ total_credit }}</td>
                     </tr>
                   </tfoot>
