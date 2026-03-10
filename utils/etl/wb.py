@@ -14,8 +14,115 @@ from datetime import datetime, timedelta, timezone
 
 import psycopg
 
+from psycopg.rows import dict_row ##ДОБАВИЛИ
 
-from wbmaping import FIELD
+
+FIELD = {
+    "retail_price": {
+        "acc_ws":46,
+        "acc_pl":48,
+        "acc_vat":80,
+        "subconto_ws":(52,87),
+        "sunconto_pl":(90,91),
+        "sunconto_vat":(52,87),
+        "ns":"11111111-1111-1111-1111-111111111111"        
+    },
+    "retail_amount": {
+        "acc_ws":91,        
+        "subconto_ws":(52,87),        
+        "ns":"11111111-1111-1111-1111-111111111113"    
+    },
+    "ppvz_for_pay": {
+        "acc_ws":92,        
+        "subconto_ws":(52,87),        
+        "ns":"11111111-1111-1111-1111-111111111114"    
+    },
+    "comission": {
+        "acc_ws":46,
+        "acc_pl":59,
+        "acc_vat":81,
+        "subconto_ws":(52,87),
+        "sunconto_pl":(90,91),
+        "sunconto_vat":(52,87),
+        "ns":"11111111-1111-1111-1111-111111111115"        
+    },
+    "delivery_rub": {
+        "acc_ws":46,
+        "acc_pl":60,
+        "acc_vat":82,
+        "subconto_ws":(78,97),
+        "sunconto_pl":(108,109),
+        "sunconto_vat":(78,97),
+        "ns":"11111111-1111-1111-1111-111111111116"        
+    },
+    "storage_fee": {
+        "acc_ws":46,
+        "acc_pl":60,
+        "acc_vat":82,
+        "subconto_ws":(79,98),
+        "sunconto_pl":(111,112),
+        "sunconto_vat":(79,98),
+        "ns":"11111111-1111-1111-1111-111111111117"        
+    },
+    "acceptance": {
+        "acc_ws":46,
+        "acc_pl":60,
+        "acc_vat":82,
+        "subconto_ws":(80,99),
+        "sunconto_pl":(114,115),
+        "sunconto_vat":(80,99),
+        "ns":"11111111-1111-1111-1111-111111111118"        
+    },
+    "deduction": {
+        "acc_ws":46,
+        "acc_pl":62,
+        "acc_vat":82,
+        "subconto_ws":(81,100),
+        "sunconto_pl":(118,119),
+        "sunconto_vat":(81,100),
+        "ns":"11111111-1111-1111-1111-111111111119"        
+    },
+    "penalty": {
+        "acc_ws":46,
+        "acc_pl":60,        
+        "subconto_ws":(82,101),
+        "sunconto_pl":(121,122),
+        "ns":"11111111-1111-1111-1111-111111111120"        
+    },
+    "additional_payment": {
+        "acc_ws":46,
+        "acc_pl":49,        
+        "subconto_ws":(83,102),
+        "sunconto_pl":(125,126),
+        "ns":"11111111-1111-1111-1111-111111111121"        
+    },
+    "cashback_commission_change": {
+        "acc_ws":46,
+        "acc_pl":62,
+        "acc_vat":82,
+        "subconto_ws":(84,103),
+        "sunconto_pl":(127,128),
+        "sunconto_vat":(84,103),
+        "ns":"11111111-1111-1111-1111-111111111122"     
+    },
+    "cashback_amount": {
+        "acc_ws":46,
+        "acc_pl":62,
+        # "acc_vat":82,
+        "subconto_ws":(85,104),
+        "sunconto_pl":(129,130),
+        # "sunconto_vat":(84,103),
+        "ns":"11111111-1111-1111-1111-111111111123"     
+    },
+    "payment_schedule": {
+        "acc_ws":46,
+        "acc_pl":62,        
+        "subconto_ws":(86,95),
+        "sunconto_pl":(132,133),
+        "ns":"11111111-1111-1111-1111-111111111124"        
+    },
+    
+}
 
 
 CONTRACT_ID = 109
@@ -252,8 +359,32 @@ def wb_distribution(conn):
 
     q = """
     
-    CREATE TABLE IF NOT EXISTS gl.wb_distibution AS
-    SELECT
+    INSERT INTO gl.wb_distibution (
+    id,
+    date_from,
+    report_type,
+    field,
+    dt_wb,
+    cr_wb,
+    dt_pl,
+    cr_pl,
+    dt_vat,
+    cr_vat,
+    acc_ws,
+    acc_pl,
+    acc_vat,
+    acc_ob,
+    subconto_ws,
+    subconto_pl,
+    subconto_vat,
+    vat,
+    ns
+)
+SELECT
+    uuid_generate_v5(
+        ns,
+        concat_ws('|', t.date_from, t.field, t.report_type, t.cr_wb, t.dt_wb)
+    ) AS id,
     t.date_from,
     t.report_type,
     t.field,
@@ -266,28 +397,25 @@ def wb_distribution(conn):
     m.acc_ws,
     m.acc_pl,
     m.acc_vat,
+    m.acc_ob,
     m.subconto_ws,
     m.subconto_pl,
     m.subconto_vat,
     m.vat,
     m.ns
-
-    FROM (
-
+FROM (
     SELECT
-    date_from,
-    report_type,
-    field,
-
-
-    sum(dt_wb) as dt_wb,
-    sum(cr_wb) as cr_wb,
-    sum(dt_pl) as dt_pl,
-    sum(cr_pl) as cr_pl,
-    sum(dt_vat) as dt_vat,
-    sum(cr_vat) as cr_vat
-    from gl.base
-    group by  date_from, report_type, field
+        date_from,
+        report_type,
+        field,
+        SUM(dt_wb) AS dt_wb,
+        SUM(cr_wb) AS cr_wb,
+        SUM(dt_pl) AS dt_pl,
+        SUM(cr_pl) AS cr_pl,
+        SUM(dt_vat) AS dt_vat,
+        SUM(cr_vat) AS cr_vat
+    FROM gl.base
+    GROUP BY date_from, report_type, field
 
     UNION ALL
 
@@ -298,13 +426,13 @@ def wb_distribution(conn):
 
         COALESCE(SUM(cr_wb) FILTER (WHERE field = 'retail_price'), 0) -
         COALESCE(SUM(cr_wb) FILTER (WHERE field = 'ppvz_for_pay'), 0) AS dt_wb,
-        
+
         COALESCE(SUM(dt_wb) FILTER (WHERE field = 'retail_price'), 0) -
         COALESCE(SUM(dt_wb) FILTER (WHERE field = 'ppvz_for_pay'), 0) AS cr_wb,
 
         COALESCE(SUM(cr_pl) FILTER (WHERE field = 'retail_price'), 0) -
         COALESCE(SUM(cr_pl) FILTER (WHERE field = 'ppvz_for_pay'), 0) AS dt_pl,
-        
+
         COALESCE(SUM(dt_pl) FILTER (WHERE field = 'retail_price'), 0) -
         COALESCE(SUM(dt_pl) FILTER (WHERE field = 'ppvz_for_pay'), 0) AS cr_pl,
 
@@ -313,17 +441,85 @@ def wb_distribution(conn):
 
         COALESCE(SUM(dt_vat) FILTER (WHERE field = 'retail_price'), 0) -
         COALESCE(SUM(dt_vat) FILTER (WHERE field = 'ppvz_for_pay'), 0) AS cr_vat
-
-        
-    FROM gl.base 
+    FROM gl.base
     GROUP BY date_from, report_type
-    ) t
 
-    left join gl.wb_mapping as m on m.field = t.field and m.report_type = t.report_type
-    
+    UNION ALL
+
+    SELECT
+        date AS date_from,
+        1 AS report_type,
+        'withdraw' AS field,
+        ROUND(cr * 100, 0)::bigint AS dt_wb,
+        ROUND(dt * 100, 0)::bigint AS cr_wb,
+        0 AS dt_pl,
+        0 AS cr_pl,
+        0 AS dt_vat,
+        0 AS cr_vat
+    FROM public.treasury_cfdata
+    WHERE cfitem_id = 134
+) t
+LEFT JOIN gl.wb_mapping AS m
+  ON m.field = t.field
+ AND m.report_type = t.report_type
+
+ON CONFLICT (id) DO UPDATE
+SET
+    date_from     = EXCLUDED.date_from,
+    report_type   = EXCLUDED.report_type,
+    field         = EXCLUDED.field,
+    dt_wb         = EXCLUDED.dt_wb,
+    cr_wb         = EXCLUDED.cr_wb,
+    dt_pl         = EXCLUDED.dt_pl,
+    cr_pl         = EXCLUDED.cr_pl,
+    dt_vat        = EXCLUDED.dt_vat,
+    cr_vat        = EXCLUDED.cr_vat,
+    acc_ws        = EXCLUDED.acc_ws,
+    acc_pl        = EXCLUDED.acc_pl,
+    acc_vat       = EXCLUDED.acc_vat,
+    subconto_ws   = EXCLUDED.subconto_ws,
+    subconto_pl   = EXCLUDED.subconto_pl,
+    subconto_vat  = EXCLUDED.subconto_vat,
+    vat           = EXCLUDED.vat,
+    ns            = EXCLUDED.ns
+WHERE
+    (gl.wb_distibution.date_from,
+     gl.wb_distibution.report_type,
+     gl.wb_distibution.field,
+     gl.wb_distibution.dt_wb,
+     gl.wb_distibution.cr_wb,
+     gl.wb_distibution.dt_pl,
+     gl.wb_distibution.cr_pl,
+     gl.wb_distibution.dt_vat,
+     gl.wb_distibution.cr_vat,
+     gl.wb_distibution.acc_ws,
+     gl.wb_distibution.acc_pl,
+     gl.wb_distibution.acc_vat,
+     gl.wb_distibution.subconto_ws,
+     gl.wb_distibution.subconto_pl,
+     gl.wb_distibution.subconto_vat,
+     gl.wb_distibution.vat,
+     gl.wb_distibution.ns)
+IS DISTINCT FROM
+    (EXCLUDED.date_from,
+     EXCLUDED.report_type,
+     EXCLUDED.field,
+     EXCLUDED.dt_wb,
+     EXCLUDED.cr_wb,
+     EXCLUDED.dt_pl,
+     EXCLUDED.cr_pl,
+     EXCLUDED.dt_vat,
+     EXCLUDED.cr_vat,
+     EXCLUDED.acc_ws,
+     EXCLUDED.acc_pl,
+     EXCLUDED.acc_vat,
+     EXCLUDED.subconto_ws,
+     EXCLUDED.subconto_pl,
+     EXCLUDED.subconto_vat,
+     EXCLUDED.vat,
+     EXCLUDED.ns);
     """
-    with conn.cursor() as cur:
-        cur.execute(f"DROP TABLE IF EXISTS  gl.wb_distibution")
+    
     conn.commit()
     with conn.cursor() as cur:
         cur.execute(q)
@@ -339,23 +535,29 @@ def wb_distribution(conn):
 # --------------------
 # Helpers
 # --------------------
+
+MSK = timezone(timedelta(hours=3))
+
 def get_env(name: str) -> str:
     v = os.getenv(name)
     if not v:
         raise RuntimeError(f"{name} is not set")
     return v
 
+def iso_msk(dt: datetime) -> str:
+    return dt.astimezone(MSK).replace(microsecond=0).isoformat()
 
 
 # def connect_db():
 #     return psycopg.connect(
-#         dbname=get_env("ts_db"), #DB_NAME
-#         user=get_env("ts_user"), #DB_USER
-#         password=get_env("Dec8108079"), #DB_PASSWORD
-#         host=get_env("127.0.0.1"), #DB_HOST
-#         port=get_env("5433"), #DB_PORT
+#         dbname=get_env("DB_NAME"),
+#         user=get_env("DB_USER"),
+#         password=get_env("DB_PASSWORD"),
+#         host=get_env("DB_HOST"),
+#         port=get_env("DB_PORT"),
 #         connect_timeout=10,
 #     )
+
 
 
 def connect_db():
@@ -509,7 +711,7 @@ def add_trasfers(conn, start, finish):
     109 AS contract_id
     FROM public.treasury_cfdata
     where cfitem_id = 134 
-    and date >= '{start}' and date < '{finish}'
+    
     
     ON CONFLICT (id) DO UPDATE
 SET
@@ -662,7 +864,7 @@ FROM src
 ON CONFLICT (id) DO UPDATE
 SET
     pid         = EXCLUDED.pid,
-    date_from        = EXCLUDED.date_from,
+    date_from   = EXCLUDED.date_from,
     acc_id      = EXCLUDED.acc_id,
     contract_id = EXCLUDED.contract_id,
     dt          = EXCLUDED.dt,
@@ -670,7 +872,7 @@ SET
     description = EXCLUDED.description,
     subconto_id = EXCLUDED.subconto_id,
     company_id  = EXCLUDED.company_id,
-    chapter     =EXCLUDED.chapter
+    chapter     = EXCLUDED.chapter
 WHERE
     (gl.fact.pid,
      gl.fact.date_from,
@@ -702,6 +904,319 @@ IS DISTINCT FROM
         cur.execute(q)
     conn.commit()
     
+### СЧИТАЕМ БАЛАНСЫ И КУРСОВЫЕ РАЗНИЦЫ
+
+def fletch_accounts(conn):
+    
+    SQL = """
+    SELECT 
+        x.ba_id,
+        x.acc_id,
+        x.currency,
+        x.is_active,
+        x.min_date,
+        CASE 
+            WHEN x.is_active IS TRUE THEN CURRENT_DATE
+            ELSE x.max_date
+        END AS max_date
+    FROM (
+        SELECT
+            a.id AS ba_id,
+            a.bs_acc_id AS acc_id,
+            a.currency,
+            a.is_active,
+            MIN(t.date) AS min_date,
+            MAX(t.date) AS max_date
+        FROM public.corporate_bankaccount a
+        JOIN public.treasury_cfdata t 
+            ON t.ba_id = a.id
+        GROUP BY a.id, a.bs_acc_id, a.currency, a.is_active
+    ) x    
+    """
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(SQL)
+        rows = cur.fetchall()
+    return rows
+
+
+def cash_revolution(acc_id,conn):
+    q = f"""
+    INSERT INTO gl.cash_revaluation (
+    acc_id,
+    date_from,
+    currency,
+    rate_previous,
+    fx_rate,
+    fx_diff,
+    base_bb,
+    base_eb,
+    bb,
+    eb,
+    fx_gains_loss
+    )
+    with ballances AS(
+    SELECT
+        x.acc_id,
+        x.date_from,
+        COALESCE(
+            LEAD(x.date_from) OVER (
+                PARTITION BY x.acc_id
+                ORDER BY x.date_from
+            ),
+            a.max_date + 1
+        ) AS date_to,
+        SUM(x.turnover) OVER (
+            PARTITION BY x.acc_id
+            ORDER BY x.date_from
+        ) AS eb
+    FROM (
+        SELECT
+            acc_id,
+            date_from,
+            SUM(base_dt - base_cr) AS turnover
+        FROM gl.normalized_cf
+        WHERE acc_id = {acc_id}
+        GROUP BY acc_id, date_from
+        UNION ALL
+        SELECT 
+        acc_id,
+        date::date as date_from,
+        round(sum(dt-cr)*100,0)::bigint as turnover		
+        from public.grossbook_manual
+        WHERE acc_id = {acc_id}
+        GROUP BY acc_id, date_from	
+    ) x
+    JOIN gl.v_bank_acounts a
+    ON a.acc_id = x.acc_id
+    )
+
+
+    SELECT
+    t.acc_id,
+    t.date_from,
+    t.currency,
+    t.rate_previous,
+    t.fx_rate,
+    t.fx_diff,
+    t.base_bb,
+    t.base_eb,
+    round(t.base_bb * t.fx_rate,0)::bigint as bb,
+    round(t.base_eb * t.fx_rate,0)::bigint as eb,
+    round(t.base_bb * t.fx_diff,0)::bigint as fx_gains_loss
+
+
+    FROM(
+    SELECT 
+    x.acc_id,
+    x.d::date as date_from,
+    x.currency,
+    case when x.currency = 'RUB' then 1 else
+    COALESCE(LAG(fx.rate) OVER (ORDER BY date), 0) end as rate_previous,
+    case when x.currency = 'RUB' then 1 else 
+    fx.rate end as fx_rate,
+    case when x.currency = 'RUB' then 0 else 
+    fx.rate - COALESCE(LAG(fx.rate) OVER (ORDER BY date), 0) end as fx_diff,
+    COALESCE(LAG(b.eb) OVER (ORDER BY x.d::date), 0) as base_bb,
+    b.eb as base_eb
+    FROM (
+    select 
+    a.acc_id,
+    a.currency,
+    generate_series(
+            a.min_date,
+            a.max_date,
+            '1 day'
+        ) d
+    from gl.v_bank_acounts a 
+    where acc_id = {acc_id}
+    order by d
+    ) x 
+    LEFT JOIN public.macro_currencyrate fx
+    ON fx.currency = x.currency
+    AND fx.date = x.d
+    AND x.currency <> 'RUB'
+    left join ballances b on x.d::date >= b.date_from and x.d::date < b.date_to 
+    ) t
+    ON CONFLICT (acc_id, date_from) DO UPDATE
+SET
+    currency       = EXCLUDED.currency,
+    rate_previous  = EXCLUDED.rate_previous,
+    fx_rate        = EXCLUDED.fx_rate,
+    fx_diff        = EXCLUDED.fx_diff,
+    base_bb        = EXCLUDED.base_bb,
+    base_eb        = EXCLUDED.base_eb,
+    bb             = EXCLUDED.bb,
+    eb             = EXCLUDED.eb,
+    fx_gains_loss  = EXCLUDED.fx_gains_loss
+WHERE
+    (gl.cash_revaluation.currency,
+     gl.cash_revaluation.rate_previous,
+     gl.cash_revaluation.fx_rate,
+     gl.cash_revaluation.fx_diff,
+     gl.cash_revaluation.base_bb,
+     gl.cash_revaluation.base_eb,
+     gl.cash_revaluation.bb,
+     gl.cash_revaluation.eb,
+     gl.cash_revaluation.fx_gains_loss)
+IS DISTINCT FROM
+    (EXCLUDED.currency,
+     EXCLUDED.rate_previous,
+     EXCLUDED.fx_rate,
+     EXCLUDED.fx_diff,
+     EXCLUDED.base_bb,
+     EXCLUDED.base_eb,
+     EXCLUDED.bb,
+     EXCLUDED.eb,
+     EXCLUDED.fx_gains_loss);    
+    
+    """
+    
+    
+    with conn.cursor() as cur:
+        cur.execute(q)
+    conn.commit()
+
+def execute_cash_revolution(conn):
+    with conn.cursor() as cur:
+        cur.execute("TRUNCATE gl.cash_revaluation;")
+    conn.commit()
+    accounts = fletch_accounts(conn)
+    for acc in accounts:
+        acc_id = acc['acc_id']
+        cash_revolution(acc_id,conn)
+
+def include_WB_ballance(conn):
+    q = """
+    INSERT INTO gl.cash_revaluation (
+    acc_id,
+    date_from,
+    currency,
+    rate_previous,
+    fx_rate,
+    fx_diff,
+    base_bb,
+    base_eb,
+    bb,
+    eb,
+    fx_gains_loss
+    )    
+    with ballances AS(
+    SELECT
+        x.acc_id,
+        x.date_from,
+        COALESCE(
+            LEAD(x.date_from) OVER (
+                PARTITION BY x.acc_id
+                ORDER BY x.date_from
+            ),
+            current_date + 1
+        ) AS date_to,
+        SUM(x.turnover) OVER (
+            PARTITION BY x.acc_id
+            ORDER BY x.date_from
+        ) AS eb
+    FROM (
+        SELECT
+            acc_id,
+            date_from,
+            SUM(base_dt - base_cr) AS turnover
+        FROM gl.wb_cf
+        WHERE acc_id = 46
+        GROUP BY acc_id, date_from
+        UNION ALL
+        SELECT 
+        acc_id,
+        date::date as date_from,
+        round(sum(dt-cr)*100,0)::bigint as turnover		
+        from public.grossbook_manual
+        WHERE acc_id = 46
+        GROUP BY acc_id, date_from	
+    ) x
+    
+    )
+
+
+    SELECT
+    t.acc_id,
+    t.date_from,
+    t.currency,
+    t.rate_previous,
+    t.fx_rate,
+    t.fx_diff,
+    t.base_bb,
+    t.base_eb,
+    round(t.base_bb * t.fx_rate,0)::bigint as bb,
+    round(t.base_eb * t.fx_rate,0)::bigint as eb,
+    round(t.base_bb * t.fx_diff,0)::bigint as fx_gains_loss
+
+
+    FROM(
+    SELECT 
+    x.acc_id,
+    x.d::date as date_from,
+    x.currency,
+    1 as rate_previous,
+    1 as fx_rate,
+    0 as fx_diff,
+    COALESCE(LAG(b.eb) OVER (ORDER BY x.d::date), 0) as base_bb,
+    b.eb as base_eb
+    FROM (
+    select 
+    46 as acc_id,
+    'RUB' as currency,
+    generate_series(
+            '2023-08-28',
+            current_date,
+            '1 day'
+        ) d    
+    order by d
+    ) x 
+    LEFT JOIN public.macro_currencyrate fx
+    ON fx.currency = x.currency
+    AND fx.date = x.d
+    AND x.currency <> 'RUB'
+    left join ballances b on x.d::date >= b.date_from and x.d::date < b.date_to 
+    ) t
+    ON CONFLICT (acc_id, date_from) DO UPDATE
+SET
+    currency       = EXCLUDED.currency,
+    rate_previous  = EXCLUDED.rate_previous,
+    fx_rate        = EXCLUDED.fx_rate,
+    fx_diff        = EXCLUDED.fx_diff,
+    base_bb        = EXCLUDED.base_bb,
+    base_eb        = EXCLUDED.base_eb,
+    bb             = EXCLUDED.bb,
+    eb             = EXCLUDED.eb,
+    fx_gains_loss  = EXCLUDED.fx_gains_loss
+WHERE
+    (gl.cash_revaluation.currency,
+     gl.cash_revaluation.rate_previous,
+     gl.cash_revaluation.fx_rate,
+     gl.cash_revaluation.fx_diff,
+     gl.cash_revaluation.base_bb,
+     gl.cash_revaluation.base_eb,
+     gl.cash_revaluation.bb,
+     gl.cash_revaluation.eb,
+     gl.cash_revaluation.fx_gains_loss)
+IS DISTINCT FROM
+    (EXCLUDED.currency,
+     EXCLUDED.rate_previous,
+     EXCLUDED.fx_rate,
+     EXCLUDED.fx_diff,
+     EXCLUDED.base_bb,
+     EXCLUDED.base_eb,
+     EXCLUDED.bb,
+     EXCLUDED.eb,
+     EXCLUDED.fx_gains_loss);    
+    
+    """
+    with conn.cursor() as cur:
+        cur.execute(q)
+    conn.commit()
+    
+
+
+
 
 # --------------------
 # MAIN
@@ -709,30 +1224,39 @@ IS DISTINCT FROM
 def main():
 
     conn = connect_db()
-    START_DATE = "2025-01-01"
-    END_DATE = "2026-01-01"
+    START_DATE = "2026-01-01"
+    END_DATE = "2026-03-09"
     
-    with conn.cursor() as cur:
-        cur.execute("REFRESH MATERIALIZED VIEW gl.vr;")
-    conn.commit()
+    date_to_msk = datetime.now(timezone.utc).astimezone(MSK)
+    date_from_msk = date_to_msk - timedelta(days=2)
+    
+    DATE_FROM = iso_msk(date_from_msk)
+    DATE_TO = iso_msk(date_to_msk)
+    
+    # with conn.cursor() as cur:
+    #     cur.execute("REFRESH MATERIALIZED VIEW gl.vr;")
+    # conn.commit()
     
     
-    insert_normizized(conn)
+    # insert_normizized(conn)
 
     fields = parse_fields()
     create_temp_table(conn, START_DATE, END_DATE, fields)
     make_target_tbl(conn)
     wb_distribution(conn)
-    wb_cf(conn)
-    add_trasfers(conn, START_DATE, END_DATE)
-    update_gl_with_wb(conn)
+    # wb_cf(conn)
+    # add_trasfers(conn, DATE_FROM, DATE_TO)
+    # update_gl_with_wb(conn)
+    # # print(fletch_accounts(conn))
+    # execute_cash_revolution(conn)
+    # include_WB_ballance(conn)
     
+    # with conn.cursor() as cur:
+    #     cur.execute("REFRESH MATERIALIZED VIEW gl.mv_cf_report;")
+    # conn.commit()
+    conn.close()
     
-    with conn.cursor() as cur:
-        cur.execute("REFRESH MATERIALIZED VIEW gl.mv_cf_report;")
-    conn.commit()
-    
-
+# scp /Users/pavelustenko/ts/utils/etl/wb.py daria@82.202.197.94:/opt/wb_jobs/wb_etl.py
 
 if __name__ == "__main__":
     main()
