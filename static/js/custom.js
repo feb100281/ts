@@ -496,7 +496,50 @@ document.addEventListener("click", function (event) {
       console.warn("cp issues status error", e);
     }
 
-    // 3) Казначейство (3 отдельные строки)
+
+
+        // 3) Договоры
+    try {
+      const resp = await fetch("/admin/contracts-issues-status/", { credentials: "same-origin" });
+      if (resp.ok) {
+        const data = await resp.json();
+
+        const noAccrual = data.no_accrual_fn || {};
+        const totalNoAccrual = num(noAccrual.total);
+
+        const items = [];
+
+        if (totalNoAccrual === 0) {
+          items.push({
+            status: "ok",
+            title: "Договоры без функции начисления",
+            sub: "Пусто",
+            badge: "OK",
+            href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
+          });
+        } else {
+          problems += 1;
+          items.push({
+            status: "danger",
+            title: "Договоры без функции начисления",
+            sub: "Нужно добавить условия начисления",
+            badge: String(totalNoAccrual),
+            href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
+          });
+        }
+
+        sections.push({ title: "Договоры", items });
+      }
+    } catch (e) {
+      console.warn("contracts issues status error", e);
+    }
+
+
+
+
+
+
+    // 4) Казначейство (3 отдельные строки)
     try {
       const resp = await fetch("/admin/treasury-status/", { credentials: "same-origin" });
       if (resp.ok) {

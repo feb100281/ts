@@ -10,16 +10,23 @@
 {% block content_title %}
   {% url cl.opts|admin_urlname:'add' as add_url %}
   {% url cl.opts|admin_urlname:'changelist' as changelist_url %}
+  {% url 'contracts:accruals_report' as accruals_report_url %}
+  {% url 'contracts:debt_report' as debt_report_url %}
 
   <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
 
-    {# Левая часть #}
     <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
       <div style="
-          width:40px;height:40px;border-radius:2px;
-          background:#0f172a;color:#e2e8f0;
-          display:flex;align-items:center;justify-content:center;
-          font-size:20px;font-weight:800;
+          width:40px;
+          height:40px;
+          border-radius:2px;
+          background:#0f172a;
+          color:#e2e8f0;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:20px;
+          font-weight:800;
           box-shadow:0 0 0 1px rgba(15,23,42,.18);
       ">📄</div>
 
@@ -33,12 +40,14 @@
         </span>
 
         <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
-
-
           {% if cl.query %}
             <span style="
-                font-size:11px;padding:2px 8px;border-radius:2px;
-                background:#fef3c7;color:#92400e;font-weight:700;
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:2px;
+                background:#fef3c7;
+                color:#92400e;
+                font-weight:700;
             ">
               Поиск: “{{ cl.query }}”
             </span>
@@ -46,8 +55,12 @@
 
           {% if cl.has_filters %}
             <span style="
-                font-size:11px;padding:2px 8px;border-radius:2px;
-                background:#f3f4f6;color:#4b5563;font-weight:700;
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:2px;
+                background:#f3f4f6;
+                color:#4b5563;
+                font-weight:700;
             ">
               Фильтры применены
             </span>
@@ -58,14 +71,16 @@
 
     <div style="flex:1;"></div>
 
-    {# Правая карточка: только действия #}
     <div style="
-        min-width:280px; max-width:360px;
+        min-width:280px;
+        max-width:360px;
         border-radius:2px;
         background:rgba(248,250,252,0.9);
         box-shadow:0 18px 40px rgba(15,23,42,0.16);
         padding:10px 12px 12px;
-        display:flex;flex-direction:column;gap:8px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
     ">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         <span style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9ca3af;">
@@ -81,37 +96,113 @@
           <a href="{{ add_url }}"
              class="button"
              style="
-               font-size:13px;padding:4px 10px;border-radius:2px;
-               display:inline-flex;align-items:center;gap:6px;justify-content:flex-start;
-               background:#e0f2fe;border:1px solid rgba(2,132,199,.20);
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:2px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+               background:#e0f2fe;
+               border:1px solid rgba(2,132,199,.20);
              ">
             ➕ Добавить договор
           </a>
         {% endif %}
+      </div>
 
-        {% comment %} <a href="{{ changelist_url }}"
-           style="
-             font-size:11px;padding:3px 8px;border-radius:2px;text-decoration:none;
-             background:#eef2ff;color:#3730a3;display:inline-flex;align-items:center;gap:6px;
-           ">
-          🔄 Обновить список
-        </a>
+      <div style="border-top:1px solid #e5e7eb; padding-top:10px;">
+        <div style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.08em;
+            color:#6b7280;
+            margin-bottom:8px;
+        ">
+          Отчеты
+        </div>
 
-        <a href="{{ changelist_url }}"
-           style="
-             font-size:11px;padding:3px 8px;border-radius:2px;text-decoration:none;
-             background:#fff1f2;color:#9f1239;display:inline-flex;align-items:center;gap:6px;
-           ">
-          🧹 Сбросить фильтры
-        </a> {% endcomment %}
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <input
+            id="report-month"
+            type="month"
+            value="{% now 'Y-m' %}"
+            style="
+              height:34px;
+              border:1px solid #d1d5db;
+              border-radius:2px;
+              padding:4px 8px;
+              font-size:13px;
+              background:#fff;
+              color:#111827;
+            "
+          >
+
+          <form
+            id="accruals-report-form"
+            method="get"
+            action="{{ accruals_report_url }}"
+            target="_blank"
+            style="margin:0;"
+          >
+            <input type="hidden" name="month" id="accruals-report-month" value="{% now 'Y-m' %}">
+            <button
+              type="submit"
+              style="
+                width:100%;
+                height:34px;
+                border:none;
+                border-radius:2px;
+                background:#0f172a;
+                color:#fff;
+                font-size:13px;
+                font-weight:700;
+                cursor:pointer;
+              "
+            >
+              📅 Открыть начисления
+            </button>
+          </form>
+
+          <form
+            id="debt-report-form"
+            method="get"
+            action="{{ debt_report_url }}"
+            target="_blank"
+            style="margin:0;"
+          >
+            <input type="hidden" name="month" id="debt-report-month" value="{% now 'Y-m' %}">
+            <button
+              type="submit"
+              style="
+                width:100%;
+                height:34px;
+                border:none;
+                border-radius:2px;
+                background:#7c2d12;
+                color:#fff;
+                font-size:13px;
+                font-weight:700;
+                cursor:pointer;
+              "
+            >
+              💼 Открыть дебиторов / кредиторов
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   </div>
 
   <div style="
-      display:flex;justify-content:space-between;align-items:center;
-      margin-top:4px;padding:6px 2px 0;border-top:1px solid #e5e7eb;
-      color:#6b7280;font-size:11px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
   ">
     <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
       <a href="{% url 'admin:index' %}"
@@ -150,9 +241,42 @@
           if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
           if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
           if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+          if (e.target.closest('form')) return;
           window.location.href = link.href;
         });
       });
+
+      const monthInput = document.getElementById('report-month');
+      const accrualsMonthInput = document.getElementById('accruals-report-month');
+      const debtMonthInput = document.getElementById('debt-report-month');
+      const accrualsForm = document.getElementById('accruals-report-form');
+      const debtForm = document.getElementById('debt-report-form');
+
+      function syncMonth() {
+        const month = monthInput && monthInput.value ? monthInput.value : "{% now 'Y-m' %}";
+
+        if (accrualsMonthInput) {
+          accrualsMonthInput.value = month;
+        }
+
+        if (debtMonthInput) {
+          debtMonthInput.value = month;
+        }
+      }
+
+      if (monthInput) {
+        monthInput.addEventListener('change', syncMonth);
+        monthInput.addEventListener('input', syncMonth);
+        syncMonth();
+      }
+
+      if (accrualsForm) {
+        accrualsForm.addEventListener('submit', syncMonth);
+      }
+
+      if (debtForm) {
+        debtForm.addEventListener('submit', syncMonth);
+      }
     });
   </script>
 

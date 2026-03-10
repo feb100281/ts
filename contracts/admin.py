@@ -39,6 +39,26 @@ def get_current_condition(obj):
     return conds[0]
 
 
+class HasAccrualFunctionFilter(admin.SimpleListFilter):
+    title = "Функция начисления"
+    parameter_name = "has_accrual_fn"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "Есть функция"),
+            ("no", "Нет функции"),
+        )
+
+    def queryset(self, request, queryset):
+        val = self.value()
+
+        if val == "yes":
+            return queryset.filter(conditions__isnull=False).distinct()
+
+        if val == "no":
+            return queryset.filter(conditions__isnull=True)
+
+        return queryset
 
 
 class HasFilesFilter(admin.SimpleListFilter):
@@ -345,7 +365,8 @@ class ContractsAdmin(admin.ModelAdmin):
                 #    "is_signed", 
                     HasFilesFilter, 
                    AccountingMethodFilter, 
-                   PayTimingFilter,)
+                   PayTimingFilter,
+                   HasAccrualFunctionFilter,)
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True

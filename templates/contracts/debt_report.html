@@ -1,0 +1,376 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Задолженность_{{ start_date|date:"Y-m" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{% static 'contracts/accruals_report_print.css' %}">
+  <style>
+    .money-debit {
+      color: #075985;
+      font-weight: 700;
+    }
+
+    .money-credit {
+      color: #92400e;
+      font-weight: 700;
+    }
+
+    .summary-card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .summary-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fff;
+      padding: 14px 16px;
+    }
+
+    .summary-card__label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6b7280;
+      margin-bottom: 8px;
+    }
+
+    .summary-card__value {
+      font-size: 24px;
+      font-weight: 800;
+      color: #111827;
+      line-height: 1.15;
+    }
+
+    .summary-card__sub {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .section-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 2px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .section-badge--debit {
+      background: rgba(3, 105, 161, 0.12);
+      color: #075985;
+    }
+
+    .section-badge--credit {
+      background: rgba(180, 83, 9, 0.12);
+      color: #92400e;
+    }
+
+    .section-table-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    @media print {
+  .page-break {
+    page-break-before: always;
+    break-before: page;
+  }
+}
+
+
+    @media print {
+      .summary-card {
+        break-inside: avoid;
+      }
+
+      .accruals-table-wrap {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="accruals-page-wrap">
+    <div class="accruals-sheet">
+
+      <div class="accruals-toolbar no-print">
+        <a href="/admin/contracts/contract/" class="accruals-btn accruals-btn--light">
+          ← К списку договоров
+        </a>
+
+        <button type="button" class="accruals-btn accruals-btn--dark" onclick="window.print()">
+          Печать / PDF
+        </button>
+      </div>
+
+      <header class="accruals-header">
+        <div class="accruals-header-top">
+          <div class="accruals-kicker">Финансовый отчет</div>
+          <div class="accruals-badge">Дебиторская / кредиторская задолженность</div>
+        </div>
+
+        <h1 class="accruals-title">Задолженность на конец {{ month_label }}</h1>
+
+        <div class="accruals-period-box">
+          <div class="accruals-period-title">
+            Срез на дату: {{ end_date|date:"d.m.Y" }}
+          </div>
+        </div>
+      </header>
+
+      <section class="accruals-filter no-print">
+        <form method="get" class="accruals-filter-form">
+          <div class="accruals-field">
+            <label class="accruals-label">Отчетный месяц</label>
+            <input
+              type="month"
+              name="month"
+              value="{{ selected_month }}"
+              class="accruals-input"
+            >
+          </div>
+
+          <button type="submit" class="accruals-btn accruals-btn--dark">
+            Показать
+          </button>
+        </form>
+      </section>
+
+      <section class="accruals-section">
+        <div class="accruals-section-head">
+          <div>
+            <h2>Сводная информация</h2>
+            <div class="accruals-section-subtitle">
+              Остатки задолженности по состоянию на конец выбранного месяца.
+            </div>
+          </div>
+        </div>
+
+        <div class="accruals-summary-list">
+          <div class="accruals-summary-row">
+            <div class="accruals-summary-key">Отчетный месяц</div>
+            <div class="accruals-summary-val">{{ month_label }}</div>
+          </div>
+
+          <div class="accruals-summary-row">
+            <div class="accruals-summary-key">Дата среза</div>
+            <div class="accruals-summary-val">{{ end_date|date:"d.m.Y" }}</div>
+          </div>
+
+          <div class="accruals-summary-row total">
+            <div class="accruals-summary-key">Чистая позиция</div>
+            <div class="accruals-summary-val accruals-summary-val--strong accruals-money">
+              {{ total_net }}
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-card-grid">
+          <div class="summary-card">
+            <div class="summary-card__label">Кредиторская задолженность</div>
+            <div class="summary-card__value">{{ total_debit }}</div>
+            <div class="summary-card__sub">
+              {{ debit_count }} {{ debit_count_label }} в кредиторской задолженности
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-card__label">Дебиторская задолженность</div>
+            <div class="summary-card__value">{{ total_credit }}</div>
+            <div class="summary-card__sub">
+              {{ credit_count }} {{ credit_count_label }} в дебиторской задолженности
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-card__label">Строк в детализации</div>
+            <div class="summary-card__value">{{ rows_count }}</div>
+            <div class="summary-card__sub">
+              Только договоры с ненулевым остатком на конец месяца
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-card__label">Дата формирования</div>
+            <div class="summary-card__value">{{ end_date|date:"d.m.Y" }}</div>
+            <div class="summary-card__sub">
+              Состояние расчетов на отчетную дату
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {% if debt_rows or credit_rows %}
+        <section class="accruals-section page-break">
+          <div class="accruals-section-head">
+            <div>
+              <h2>Детализация задолженности</h2>
+              <div class="accruals-section-subtitle">
+                По каждому договору показаны накопленные начисления, накопленные оплаты и остаток на конец месяца.
+              </div>
+            </div>
+          </div>
+
+          {% if debt_rows %}
+            <div style="margin-bottom:24px;">
+              <div class="section-table-title">
+                <div>
+                  <h3 style="margin:0;">Кредиторская задолженность</h3>
+
+                </div>
+
+                <span class="section-badge section-badge--debit">
+                  {{ debit_count }} {{ debit_count_label }}
+                </span>
+              </div>
+
+              <div class="accruals-table-wrap">
+                <table class="accruals-table">
+                  <thead>
+                    <tr>
+                      <th class="col-contragent">Контрагент</th>
+                      <th class="col-contract">Договор</th>
+                      <th>Тип договора</th>
+                      <th>Начислено накоп.</th>
+                      <th>Оплачено накоп.</th>
+                      <th class="col-amount">Сальдо</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in debt_rows %}
+                    <tr>
+                      <td>
+                        <div class="cell-main">{{ r.contragent }}</div>
+                      </td>
+
+                      <td>
+                        <div class="cell-main">{{ r.contract_number }}</div>
+                        {% if r.contract_id %}
+                          <div class="cell-sub">Contract ID: {{ r.contract_id }}</div>
+                        {% endif %}
+                      </td>
+
+                      <td>
+                        <div class="cell-main">{{ r.contract_title }}</div>
+                      </td>
+
+                      <td class="money-cell">
+                        {{ r.total_accruals }}
+                      </td>
+
+                      <td class="money-cell">
+                        {{ r.total_payments }}
+                      </td>
+
+                      <td class="money-cell">
+                        <span class="money-debit">{{ r.closing_balance_abs }}</span>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="5" class="tfoot-label">Итого кредиторская задолженность:</td>
+                      <td class="money-cell money-cell--strong">{{ total_debit }}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if credit_rows %}
+            <div>
+              <div class="section-table-title">
+                <div>
+                  <h3 style="margin:0;">Дебиторская задолженность</h3>
+                </div>
+
+                <span class="section-badge section-badge--credit">
+                  {{ credit_count }} {{ credit_count_label }}
+                </span>
+              </div>
+
+              <div class="accruals-table-wrap">
+                <table class="accruals-table">
+                  <thead>
+                    <tr>
+                      <th class="col-contragent">Контрагент</th>
+                      <th class="col-contract">Договор</th>
+                      <th>Тип договора</th>
+                      <th>Начислено накоп.</th>
+                      <th>Оплачено накоп.</th>
+                      <th class="col-amount">Сальдо</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in credit_rows %}
+                    <tr>
+                      <td>
+                        <div class="cell-main">{{ r.contragent }}</div>
+                      </td>
+
+                      <td>
+                        <div class="cell-main">{{ r.contract_number }}</div>
+                        {% if r.contract_id %}
+                          <div class="cell-sub">Contract ID: {{ r.contract_id }}</div>
+                        {% endif %}
+                      </td>
+
+                      <td>
+                        <div class="cell-main">{{ r.contract_title }}</div>
+                      </td>
+
+                      <td class="money-cell">
+                        {{ r.total_accruals }}
+                      </td>
+
+                      <td class="money-cell">
+                        {{ r.total_payments }}
+                      </td>
+
+                      <td class="money-cell">
+                        <span class="money-credit">{{ r.closing_balance_abs }}</span>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="5" class="tfoot-label">Итого Дебиторская задолженность:</td>
+                      <td class="money-cell money-cell--strong">{{ total_credit }}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          {% endif %}
+        </section>
+      {% else %}
+        <section class="accruals-section">
+          <div class="accruals-empty-box">
+            На конец выбранного месяца задолженность не найдена.
+          </div>
+        </section>
+      {% endif %}
+
+      <footer class="accruals-footer">
+        Печатная форма для внутреннего использования.
+      </footer>
+
+    </div>
+  </div>
+</body>
+</html>

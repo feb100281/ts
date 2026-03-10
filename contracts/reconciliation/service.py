@@ -119,6 +119,54 @@ def get_contract_full_horizon_date(contract: Contracts) -> date:
     return max(candidate_dates) if candidate_dates else date.today()
 
 
+# def _build_accrual_rows_for_condition(cond: Conditions, date_from: date, date_to: date) -> list[dict[str, Any]]:
+#     """
+#     Используем твою существующую логику preview_accruals.
+#     Для deposit_by_bank_statement в акт сверки берем только проценты,
+#     а размещение и возврат тела депозита не включаем.
+#     """
+#     result = preview_accruals(cond, anchor_date=date_from)
+#     rows = result.get("rows", []) or []
+#     title = result.get("title") or cond.accrual_fn or "Начисление"
+
+#     output = []
+
+#     for r in rows:
+#         row_from = _safe_date(r.get("period_from"))
+#         row_to = _safe_date(r.get("period_to"))
+#         flow_type = (r.get("flow_type") or "").strip()
+
+#         if not row_from or not row_to:
+#             continue
+
+#         # Для депозитов в акт сверки берем только проценты
+#         if _is_deposit_condition(cond) and _is_deposit_principal_flow(flow_type):
+#             continue
+
+#         # оставляем только строки, пересекающиеся с периодом акта
+#         if row_to < date_from or row_from > date_to:
+#             continue
+
+#         amount = q2(r.get("amount_gross") or r.get("amount") or "0")
+
+#         output.append({
+#             "row_date": row_from,
+#             "row_type": "accrual",
+#             "row_type_label": "Начисление",
+#             "doc_label": f"Условие #{cond.id}",
+#             "description": f"{title}",
+#             "period_from": row_from,
+#             "period_to": row_to,
+#             "accrual": amount,
+#             "payment": Decimal("0.00"),
+#             "sort_order": 1,
+#         })
+
+#     return output
+
+
+
+
 def _build_accrual_rows_for_condition(cond: Conditions, date_from: date, date_to: date) -> list[dict[str, Any]]:
     """
     Используем твою существующую логику preview_accruals.
@@ -132,11 +180,12 @@ def _build_accrual_rows_for_condition(cond: Conditions, date_from: date, date_to
     output = []
 
     for r in rows:
-        row_from = _safe_date(r.get("period_from"))
-        row_to = _safe_date(r.get("period_to"))
+        row_date = _safe_date(r.get("accrual_date")) or _safe_date(r.get("period_from"))
+        row_from = _safe_date(r.get("period_from")) or row_date
+        row_to = _safe_date(r.get("period_to")) or row_date
         flow_type = (r.get("flow_type") or "").strip()
 
-        if not row_from or not row_to:
+        if not row_date or not row_from or not row_to:
             continue
 
         # Для депозитов в акт сверки берем только проценты
@@ -150,7 +199,7 @@ def _build_accrual_rows_for_condition(cond: Conditions, date_from: date, date_to
         amount = q2(r.get("amount_gross") or r.get("amount") or "0")
 
         output.append({
-            "row_date": row_from,
+            "row_date": row_date,
             "row_type": "accrual",
             "row_type_label": "Начисление",
             "doc_label": f"Условие #{cond.id}",
@@ -282,6 +331,44 @@ def get_contract_payment_rows(contract: Contracts, date_from: date, date_to: dat
     return rows
 
 
+# def _get_accrual_total_before(contract: Contracts, date_from: date) -> Decimal:
+#     """
+#     MVP-вариант:
+#     считаем начисления по всем условиям, оставляя строки строго ДО date_from.
+#     Для deposit_by_bank_statement учитываем только проценты.
+#     """
+#     if not contract:
+#         return Decimal("0.00")
+
+#     conditions = (
+#         Conditions.objects
+#         .filter(contract=contract)
+#         .order_by("date_start", "id")
+#     )
+
+#     total = Decimal("0.00")
+
+#     for cond in conditions:
+#         result = preview_accruals(cond, anchor_date=date_from)
+#         rows = result.get("rows", []) or []
+
+#         for r in rows:
+#             row_from = _safe_date(r.get("period_from"))
+#             flow_type = (r.get("flow_type") or "").strip()
+
+#             if not row_from:
+#                 continue
+
+#             if _is_deposit_condition(cond) and _is_deposit_principal_flow(flow_type):
+#                 continue
+
+#             if row_from < date_from:
+#                 total += q2(r.get("amount_gross") or r.get("amount") or "0")
+
+#     return q2(total)
+
+
+
 def _get_accrual_total_before(contract: Contracts, date_from: date) -> Decimal:
     """
     MVP-вариант:
@@ -304,16 +391,16 @@ def _get_accrual_total_before(contract: Contracts, date_from: date) -> Decimal:
         rows = result.get("rows", []) or []
 
         for r in rows:
-            row_from = _safe_date(r.get("period_from"))
+            row_date = _safe_date(r.get("accrual_date")) or _safe_date(r.get("period_from"))
             flow_type = (r.get("flow_type") or "").strip()
 
-            if not row_from:
+            if not row_date:
                 continue
 
             if _is_deposit_condition(cond) and _is_deposit_principal_flow(flow_type):
                 continue
 
-            if row_from < date_from:
+            if row_date < date_from:
                 total += q2(r.get("amount_gross") or r.get("amount") or "0")
 
     return q2(total)
