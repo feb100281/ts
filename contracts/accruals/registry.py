@@ -69,6 +69,21 @@ ACCRUAL_REGISTRY = {
             "fields": [],
             "defaults": {},
         },
+    
+    
+    "annual_payment": {
+        "title": "Ежегодный платеж",
+        "fields": [
+            {"key": "amount", "label": "Сумма", "type": "decimal", "required": True},
+            {"key": "payment_month", "label": "Месяц начисления", "type": "integer", "required": True},
+            {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
+        ],
+        "defaults": {
+            "payment_month": 1,
+            "vat_rate": Decimal("0"),
+        },
+    },
+
             
     
 }
