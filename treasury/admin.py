@@ -9,7 +9,7 @@ import re
 
 from django.http import HttpResponse
 from django.contrib import admin, messages
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Prefetch
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
@@ -934,6 +934,7 @@ class CfDataAdmin(admin.ModelAdmin):
         "cfitem_block",
         # "vat_badge",
         "temp_short",
+        "splits_preview",
 
     )
     list_display_links = ("date_short", "dt_amount", "dt_amount")
@@ -1001,6 +1002,15 @@ class CfDataAdmin(admin.ModelAdmin):
         (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
         (mark_safe("🏦 <b>Детали</b>"), {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "cp_final", "contract", "cfitem", "bs", "owner", "ba"
+        ).prefetch_related(
+            "splits__cfitem",
+            "splits__contract",
+        )
 
     # -------------------- Колонки списка --------------------
     def _currency_code(self, obj) -> str:
@@ -1022,10 +1032,161 @@ class CfDataAdmin(admin.ModelAdmin):
         
 
     
+    # def export_csv_view(self, request):
+    #     cl = self.get_changelist_instance(request)
+    #     qs = cl.get_queryset(request).select_related(
+    #         "cp",            # <-- добавили
+    #         "cp_final",
+    #         "contract",
+    #         "cfitem",
+    #         "owner",
+    #         "ba",
+    #         "ba__bank",
+    #         "bs",
+    #     )
+
+    #     response = HttpResponse(content_type="text/csv; charset=utf-8")
+    #     response["Content-Disposition"] = 'attachment; filename="cf_data.csv"'
+    #     response.write("\ufeff")  # UTF-8 BOM для Excel
+
+    #     writer = csv.writer(
+    #         response,
+    #         delimiter="|",
+    #         quoting=csv.QUOTE_MINIMAL,
+    #     )
+
+    #     LEVELS = 4
+
+    #     header = [
+    #         "date", "dt", "cr", "amount",
+    #         "cp_inn_name",        
+    #         "cp_final_name",
+    #         "cp_final_match",     
+    #         "contract_number",
+    #         "cfitem_name",
+    #         "cfitem_path_names",
+    #     ]
+    #     for i in range(1, LEVELS + 1):
+    #         header += [f"cfitem_lvl{i}_name"]
+
+    #     header += [
+    #         "temp", "tax_id",
+    #         "owner_name",
+    #         "ba_currency",
+    #         "ba_bank_account",
+    #         "bs_start", "bs_finish",
+    #     ]
+
+    #     writer.writerow(header)
+
+    #     for obj in qs:
+    #         # --- даты операции (YYYY-MM-DD) ---
+    #         op_date_txt = obj.date.isoformat() if obj.date else ""
+    #         bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
+    #         bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
+
+    #         # --- dt/cr -> amount (+/-) ---
+    #         dt_val = obj.dt or Decimal("0")
+    #         cr_val = obj.cr or Decimal("0")
+
+    #         if dt_val > 0:
+    #             amount = dt_val
+    #         elif cr_val > 0:
+    #             amount = -cr_val
+    #         else:
+    #             amount = Decimal("0")
+
+    #         # --- договор: дата договора в формате DD.MM.YYYY ---
+    #         contract_txt = ""
+    #         if obj.contract:
+    #             title = getattr(getattr(obj.contract, "title", None), "title", "") or ""
+    #             num = (obj.contract.number or "").strip() or "б/н"
+
+    #             contract_date_part = ""
+    #             if obj.contract.date:
+    #                 contract_date_txt = obj.contract.date.strftime("%d.%m.%Y")
+    #                 contract_date_part = f" от {contract_date_txt}"
+
+    #             if title:
+    #                 contract_txt = f"{title} № {num}{contract_date_part}"
+    #             else:
+    #                 contract_txt = f"{num}{contract_date_part}"
+
+    #         # --- CF item и иерархия ---
+    #         it = obj.cfitem
+    #         if it:
+    #             ancestors = list(it.get_ancestors(include_self=True))  # [root, ..., self]
+    #             path_names = " / ".join(a.name for a in ancestors)
+    #             it_name = it.name
+    #         else:
+    #             ancestors = []
+    #             path_names = ""
+    #             it_name = ""
+
+    #         # --- банк / счет / валюта ---
+    #         ba_account = obj.ba.account if obj.ba else ""
+    #         ba_bank_name = obj.ba.bank.name if (obj.ba and obj.ba.bank) else ""
+    #         ba_currency = obj.ba.currency if obj.ba else ""
+    #         ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
+
+    #         # --- контрагент по ИНН (из выписки) / финальный / матч ---
+    #         cp_inn_name = obj.cp.name if getattr(obj, "cp", None) else ""
+    #         cp_final_name = obj.cp_final.name if getattr(obj, "cp_final", None) else ""
+
+    #         if obj.cp_final_id and obj.cp_id:
+    #             cp_final_match = "MATCH" if obj.cp_final_id == obj.cp_id else "MISMATCH"
+    #         elif obj.cp_final_id and not obj.cp_id:
+    #             cp_final_match = "NO_INN_CP"
+    #         elif obj.cp_id and not obj.cp_final_id:
+    #             cp_final_match = "NO_FINAL"
+    #         else:
+    #             cp_final_match = "EMPTY"
+
+    #         row = [
+    #             op_date_txt,  # <-- дата операции ISO
+    #             (str(dt_val) if dt_val else ""),
+    #             (str(cr_val) if cr_val else ""),
+    #             str(amount),
+
+    #             cp_inn_name,       # <-- НОВОЕ
+    #             cp_final_name,     # <-- финальный
+    #             cp_final_match,    # <-- НОВОЕ (рулевая)
+
+    #             contract_txt,
+    #             it_name,
+    #             path_names,
+    #         ]
+
+    #         # lvl1..lvlN: root -> ...
+    #         for idx in range(LEVELS):
+    #             if idx < len(ancestors):
+    #                 row += [ancestors[idx].name]
+    #             else:
+    #                 row += [""]
+
+    #         row += [
+    #             (obj.temp or "").replace("\n", " ").strip(),
+    #             obj.tax_id or "",
+    #             (obj.owner.name if obj.owner else ""),
+    #             ba_currency,
+    #             ba_bank_account,
+    #             bs_start,
+    #             bs_finish,
+    #         ]
+
+    #         writer.writerow(row)
+
+    #     return response
+    
+    
+    
+    from django.db.models import Prefetch
+    from decimal import Decimal
+
     def export_csv_view(self, request):
         cl = self.get_changelist_instance(request)
         qs = cl.get_queryset(request).select_related(
-            "cp",            # <-- добавили
+            "cp",
             "cp_final",
             "contract",
             "cfitem",
@@ -1033,6 +1194,11 @@ class CfDataAdmin(admin.ModelAdmin):
             "ba",
             "ba__bank",
             "bs",
+        ).prefetch_related(
+            Prefetch(
+                "splits",
+                queryset=CfSplits.objects.select_related("contract", "cfitem").order_by("id")
+            )
         )
 
         response = HttpResponse(content_type="text/csv; charset=utf-8")
@@ -1049,9 +1215,9 @@ class CfDataAdmin(admin.ModelAdmin):
 
         header = [
             "date", "dt", "cr", "amount",
-            "cp_inn_name",        
+            "cp_inn_name",
             "cp_final_name",
-            "cp_final_match",     
+            "cp_final_match",
             "contract_number",
             "cfitem_name",
             "cfitem_path_names",
@@ -1069,41 +1235,24 @@ class CfDataAdmin(admin.ModelAdmin):
 
         writer.writerow(header)
 
-        for obj in qs:
-            # --- даты операции (YYYY-MM-DD) ---
-            op_date_txt = obj.date.isoformat() if obj.date else ""
-            bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
-            bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
-
-            # --- dt/cr -> amount (+/-) ---
-            dt_val = obj.dt or Decimal("0")
-            cr_val = obj.cr or Decimal("0")
-
-            if dt_val > 0:
-                amount = dt_val
-            elif cr_val > 0:
-                amount = -cr_val
-            else:
-                amount = Decimal("0")
-
-            # --- договор: дата договора в формате DD.MM.YYYY ---
+        def build_contract_txt(contract):
             contract_txt = ""
-            if obj.contract:
-                title = getattr(getattr(obj.contract, "title", None), "title", "") or ""
-                num = (obj.contract.number or "").strip() or "б/н"
+            if contract:
+                title = getattr(getattr(contract, "title", None), "title", "") or ""
+                num = (contract.number or "").strip() or "б/н"
 
                 contract_date_part = ""
-                if obj.contract.date:
-                    contract_date_txt = obj.contract.date.strftime("%d.%m.%Y")
+                if contract.date:
+                    contract_date_txt = contract.date.strftime("%d.%m.%Y")
                     contract_date_part = f" от {contract_date_txt}"
 
                 if title:
                     contract_txt = f"{title} № {num}{contract_date_part}"
                 else:
                     contract_txt = f"{num}{contract_date_part}"
+            return contract_txt
 
-            # --- CF item и иерархия ---
-            it = obj.cfitem
+        def build_cfitem_data(it):
             if it:
                 ancestors = list(it.get_ancestors(include_self=True))  # [root, ..., self]
                 path_names = " / ".join(a.name for a in ancestors)
@@ -1112,14 +1261,29 @@ class CfDataAdmin(admin.ModelAdmin):
                 ancestors = []
                 path_names = ""
                 it_name = ""
+            return it_name, path_names, ancestors
 
-            # --- банк / счет / валюта ---
+        def calc_amount(dt_val, cr_val):
+            dt_val = dt_val or Decimal("0")
+            cr_val = cr_val or Decimal("0")
+
+            if dt_val > 0:
+                return dt_val
+            elif cr_val > 0:
+                return -cr_val
+            return Decimal("0")
+
+        for obj in qs:
+            # --- общие данные родительской операции ---
+            op_date_txt = obj.date.isoformat() if obj.date else ""
+            bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
+            bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
+
             ba_account = obj.ba.account if obj.ba else ""
             ba_bank_name = obj.ba.bank.name if (obj.ba and obj.ba.bank) else ""
             ba_currency = obj.ba.currency if obj.ba else ""
             ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
 
-            # --- контрагент по ИНН (из выписки) / финальный / матч ---
             cp_inn_name = obj.cp.name if getattr(obj, "cp", None) else ""
             cp_final_name = obj.cp_final.name if getattr(obj, "cp_final", None) else ""
 
@@ -1132,22 +1296,31 @@ class CfDataAdmin(admin.ModelAdmin):
             else:
                 cp_final_match = "EMPTY"
 
+            # -----------------------------
+            # 1. Основная строка CfData
+            # -----------------------------
+            dt_val = obj.dt or Decimal("0")
+            cr_val = obj.cr or Decimal("0")
+            amount = calc_amount(dt_val, cr_val)
+
+            contract_txt = build_contract_txt(obj.contract)
+            it_name, path_names, ancestors = build_cfitem_data(obj.cfitem)
+
             row = [
-                op_date_txt,  # <-- дата операции ISO
+                op_date_txt,
                 (str(dt_val) if dt_val else ""),
                 (str(cr_val) if cr_val else ""),
                 str(amount),
 
-                cp_inn_name,       # <-- НОВОЕ
-                cp_final_name,     # <-- финальный
-                cp_final_match,    # <-- НОВОЕ (рулевая)
+                cp_inn_name,
+                cp_final_name,
+                cp_final_match,
 
                 contract_txt,
                 it_name,
                 path_names,
             ]
 
-            # lvl1..lvlN: root -> ...
             for idx in range(LEVELS):
                 if idx < len(ancestors):
                     row += [ancestors[idx].name]
@@ -1165,6 +1338,50 @@ class CfDataAdmin(admin.ModelAdmin):
             ]
 
             writer.writerow(row)
+
+            # -----------------------------
+            # 2. Строки сплитов
+            # -----------------------------
+            for split in obj.splits.all():
+                split_dt = split.dt or Decimal("0")
+                split_cr = split.cr or Decimal("0")
+                split_amount = calc_amount(split_dt, split_cr)
+
+                split_contract_txt = build_contract_txt(split.contract)
+                split_it_name, split_path_names, split_ancestors = build_cfitem_data(split.cfitem)
+
+                split_row = [
+                    op_date_txt,
+                    (str(split_dt) if split_dt else ""),
+                    (str(split_cr) if split_cr else ""),
+                    str(split_amount),
+
+                    cp_inn_name,
+                    cp_final_name,
+                    cp_final_match,
+
+                    split_contract_txt,
+                    split_it_name,
+                    split_path_names,
+                ]
+
+                for idx in range(LEVELS):
+                    if idx < len(split_ancestors):
+                        split_row += [split_ancestors[idx].name]
+                    else:
+                        split_row += [""]
+
+                split_row += [
+                    (split.temp or "").replace("\n", " ").strip(),
+                    obj.tax_id or "",
+                    (obj.owner.name if obj.owner else ""),
+                    ba_currency,
+                    ba_bank_account,
+                    bs_start,
+                    bs_finish,
+                ]
+
+                writer.writerow(split_row)
 
         return response
 
@@ -1351,6 +1568,37 @@ class CfDataAdmin(admin.ModelAdmin):
             c.id,
         )
 
+
+    @admin.display(description="Сплиты")
+    def splits_preview(self, obj):
+        splits = list(obj.splits.all())
+        if not splits:
+            return "—"
+
+        html = []
+        for s in splits[:3]:
+            flow = "Дт" if (s.dt or 0) > 0 else "Кт"
+            amount = s.dt if (s.dt or 0) > 0 else s.cr
+            html.append(
+                format_html(
+                    '<div style="margin-bottom:4px;">'
+                    '<b>{}</b> {}<br>'
+                    '<span style="font-size:11px;opacity:.7;">{} | {}</span>'
+                    '</div>',
+                    flow,
+                    money(amount),
+                    s.cfitem.name if s.cfitem else "без статьи",
+                    s.contract.number if s.contract else "без договора",
+                )
+            )
+
+        if len(splits) > 3:
+            html.append(format_html(
+                '<div style="font-size:11px;opacity:.7;">ещё {}</div>',
+                len(splits) - 3
+            ))
+
+        return mark_safe("".join(str(x) for x in html))
 
     # --------------------  --------------------
     @admin.display(description="НДС")
