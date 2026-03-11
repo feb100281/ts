@@ -83,6 +83,18 @@ ACCRUAL_REGISTRY = {
             "vat_rate": Decimal("0"),
         },
     },
+    
+    
+    "fixed_total_by_period": {
+            "title": "Фиксированная сумма за весь период",
+            "fields": [
+                {"key": "amount", "label": "Сумма за весь период", "type": "decimal", "required": True},
+                {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
+            ],
+            "defaults": {
+                "vat_rate": Decimal("0"),
+            },
+        },
 
             
     

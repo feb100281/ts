@@ -1,3 +1,4 @@
+# grossbook/models.py
 from django.db import models
 from utils.choises import CURRENCY_CHOISE
 from corporate.models import Owners,COA,CfItems

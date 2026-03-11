@@ -922,6 +922,7 @@ class CfDataAdmin(admin.ModelAdmin):
     inlines = [CfSplitsInline]
     form = CfDataAdminForm
     list_per_page = 25
+    readonly_fields = ("source_dt", "source_cr")
     change_list_template = "admin/treasury/cfdata/change_list.html"
 
     list_display = (
@@ -996,7 +997,7 @@ class CfDataAdmin(admin.ModelAdmin):
     list_select_related = ("cp_final", "contract", "cfitem", "bs", "owner", "ba")
 
     fieldsets = (
-        (mark_safe("🧾 <b>Основное</b>"), {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
+        (mark_safe("🧾 <b>Основное</b>"), {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr", "source_dt", "source_cr")}),
         (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
         (mark_safe("🏦 <b>Детали</b>"), {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
