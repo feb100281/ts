@@ -1,4 +1,5 @@
 # contracts/accruals/calculators/fixed_payments.py
+
 from decimal import Decimal
 
 from ..registry import ACCRUAL_REGISTRY
@@ -7,6 +8,7 @@ from ..utils import q2, month_start, month_end, iter_months, resolve_period, spl
 
 def preview(cond, anchor_date):
     params = cond.params or {}
+    
     fn = "fixed_payments"
     title = ACCRUAL_REGISTRY.get(fn, {}).get("title", fn)
 
@@ -69,3 +71,4 @@ def preview(cond, anchor_date):
         "vat_mode": cond.vat_mode,
         "rows": rows,
     }
+

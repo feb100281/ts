@@ -12,7 +12,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from contracts.models import Contracts, Conditions
 from contracts.reconciliation.service import q2, _get_payment_total_before
 from contracts.accruals.engine import preview_accruals
-from treasury.models import CfData, CfSplits
+from treasury.models import CfData, CfSplits 
 
 
 MONTHS_RU_NOMINATIVE = {
