@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "grossbook",
     "wb",
     "mptt",    
+    "jsoneditor",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
     "django.contrib.admin",

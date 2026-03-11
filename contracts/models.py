@@ -12,6 +12,8 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from utils.choises import CURRENCY_CHOISE
 from decimal import Decimal
+from copy import deepcopy
+
 
 from contracts.accruals.registry import accrual_choices
 
@@ -75,8 +77,11 @@ class Contracts(models.Model):
     )
     is_signed = models.BooleanField(verbose_name='Подписан',null=True,blank=True)
     regex =  models.TextField(verbose_name='RegEx',null=True,blank=True)
-    bs = models.ForeignKey(COA,verbose_name='Счет для рассчетов',on_delete=models.CASCADE,blank=True,null=True)
-    
+    bs = models.ForeignKey(COA,verbose_name='Счет ST',on_delete=models.CASCADE,blank=True,null=True, related_name='acc_st',help_text='Счет для рачетов')
+    pl = models.ForeignKey(COA,verbose_name='Счет PL',on_delete=models.CASCADE,blank=True,null=True, related_name='acc_pl',help_text='Счет для PL')
+    st = models.ForeignKey(COA,verbose_name='Счет BS',on_delete=models.CASCADE,blank=True,null=True, related_name='acc_bs', help_text='Счет для BS')
+    subconto_bs = models.ForeignKey(CfItems,verbose_name='Субконто BS',on_delete=models.CASCADE,blank=True,null=True, related_name='subconto_bs',help_text='Субконто для BS')
+    subconto_pl = models.ForeignKey(CfItems,verbose_name='Субконто PL',on_delete=models.CASCADE,blank=True,null=True, related_name='subconto_pl',help_text='Статья доходов и расходов PL')
     class Meta:
         verbose_name = "Договор"
         verbose_name_plural = "Договоры"        
@@ -159,6 +164,31 @@ PAY_TIMING_CHOICES = (
     ("postpay", "Постоплата"),
 )
 
+# Дефолтный НДС
+
+def default_vat():
+    return {
+        '2023-01-01': 20,
+        '2024-01-01': 20,
+        '2025-01-01': 20,
+        '2026-01-01': 22,
+    }
+
+# Здесь регим функции для начислений
+class AccuralFn(models.Model):
+    name = models.CharField(verbose_name='Имя функции',unique=True,max_length=100)
+    python_path = models.CharField(verbose_name='Функция локальная',unique=True,max_length=250)
+    server_path = models.CharField(verbose_name='Функция на сервере',unique=True,max_length=250)
+    accounting_method = models.ForeignKey(AccountingMethod,on_delete=models.DO_NOTHING,null=True,blank=True,verbose_name='Метод начислений')
+    condition_template = models.JSONField(verbose_name='Параметры')
+    description = models.TextField(verbose_name='Описание',help_text='Описание обязательно')
+    
+    class Meta:
+        verbose_name = "⚙️ Функция начислений"
+        verbose_name_plural = "⚙️ Функции начислений"
+
+    def __str__(self):
+        return str(self.name)
 
 
 
@@ -169,8 +199,6 @@ class Conditions(models.Model):
         verbose_name="Договор",
         related_name="conditions",
     )
-    
-    
     
     amount = models.DecimalField(
         max_digits=18,
@@ -195,7 +223,8 @@ class Conditions(models.Model):
         default="fixed_payments",
         verbose_name="Функция начисления",
     )
-        
+    
+       
     
     pay_rule = models.CharField(
         max_length=20,
@@ -272,7 +301,59 @@ class Conditions(models.Model):
     )
 
     params = models.JSONField("Параметры", null=True, blank=True)
-
+    
+    ## ДОБАВЛЯЕМ НОВЫЕ ПОЛЯ
+    fn = models.ForeignKey(
+        AccuralFn,
+        on_delete=models.DO_NOTHING,
+        verbose_name='New Fn',
+        null=True,
+        blank=True
+    )
+    
+    param_json = models.JSONField(
+        verbose_name='New Params',
+        null=True,
+        blank=True
+    )
+    
+    vat_json = models.JSONField(
+        verbose_name='НДС по дефолту',
+        default=default_vat
+    ) 
+    
+    acc_bs = models.ForeignKey(
+        COA,
+        on_delete=models.DO_NOTHING,
+        verbose_name='Счет BS',
+        null=True,
+        blank=True,
+        related_name='conditions_acc_bs'        
+    )
+    subconto_bs = models.ForeignKey(
+        CfItems,
+        on_delete=models.DO_NOTHING,
+        verbose_name='Субконто BS',
+        null=True,
+        blank=True,
+        related_name='conditions_subconto_bs'        
+    )
+    acc_pl = models.ForeignKey(
+        COA,
+        on_delete=models.DO_NOTHING,
+        verbose_name='Счет PL',
+        null=True,
+        blank=True,
+        related_name='conditions_acc_pl'        
+    )
+    subconto_pl = models.ForeignKey(
+        CfItems,
+        on_delete=models.DO_NOTHING,
+        verbose_name='Субконто PL',
+        null=True,
+        blank=True,
+        related_name='conditions_subconto_pl'              
+    )  
     class Meta:
         verbose_name = "Условие договора"
         verbose_name_plural = "Условия договоров"
@@ -334,6 +415,21 @@ class Conditions(models.Model):
                 raise ValidationError("Периоды условий пересекаются для этого договора.")
 
     def save(self, *args, **kwargs):
+        should_copy_template = False
+
+        if self.fn_id:
+            if self.pk is None:
+                # новый объект
+                should_copy_template = True
+            else:
+                old = Conditions.objects.filter(pk=self.pk).only("fn_id").first()
+                if old and old.fn_id != self.fn_id:
+                    # функция изменена
+                    should_copy_template = True
+
+        if should_copy_template:
+            self.param_json = deepcopy(self.fn.condition_template or {})
+
         self.full_clean()
         return super().save(*args, **kwargs)
     
@@ -430,6 +526,4 @@ class CfItemAuto(models.Model):
     def __str__(self):
         return str(self.contract)
 
-    
-    
     
