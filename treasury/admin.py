@@ -934,6 +934,7 @@ class CfDataAdmin(admin.ModelAdmin):
         "cfitem_block",
         # "vat_badge",
         "temp_short",
+        "splits_preview",
 
     )
     list_display_links = ("date_short", "dt_amount", "dt_amount")
@@ -1001,6 +1002,15 @@ class CfDataAdmin(admin.ModelAdmin):
         (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
         (mark_safe("🏦 <b>Детали</b>"), {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "cp_final", "contract", "cfitem", "bs", "owner", "ba"
+        ).prefetch_related(
+            "splits__cfitem",
+            "splits__contract",
+        )
 
     # -------------------- Колонки списка --------------------
     def _currency_code(self, obj) -> str:
@@ -1558,6 +1568,37 @@ class CfDataAdmin(admin.ModelAdmin):
             c.id,
         )
 
+
+    @admin.display(description="Сплиты")
+    def splits_preview(self, obj):
+        splits = list(obj.splits.all())
+        if not splits:
+            return "—"
+
+        html = []
+        for s in splits[:3]:
+            flow = "Дт" if (s.dt or 0) > 0 else "Кт"
+            amount = s.dt if (s.dt or 0) > 0 else s.cr
+            html.append(
+                format_html(
+                    '<div style="margin-bottom:4px;">'
+                    '<b>{}</b> {}<br>'
+                    '<span style="font-size:11px;opacity:.7;">{} | {}</span>'
+                    '</div>',
+                    flow,
+                    money(amount),
+                    s.cfitem.name if s.cfitem else "без статьи",
+                    s.contract.number if s.contract else "без договора",
+                )
+            )
+
+        if len(splits) > 3:
+            html.append(format_html(
+                '<div style="font-size:11px;opacity:.7;">ещё {}</div>',
+                len(splits) - 3
+            ))
+
+        return mark_safe("".join(str(x) for x in html))
 
     # --------------------  --------------------
     @admin.display(description="НДС")
