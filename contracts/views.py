@@ -97,32 +97,52 @@ def contract_reconciliation_preview(request, contract_id: int):
         report_date=report_date,
     )
 
+    # context = {
+    #     "contract": contract,
+    #     "result": result,
+    #     "rows": result["rows"],
+
+    #     "date_from": result["date_from"],
+    #     "date_to": result["date_to"],
+    #     "report_date": result["report_date"],
+
+    #     "opening_balance": result["opening_balance"],
+
+    #     # весь горизонт
+    #     "total_accruals": result["total_accruals"],
+    #     "total_payments": result["total_payments"],
+    #     "closing_balance": result["closing_balance"],
+    #     "closing_balance_status": result["closing_balance_status"],
+    #     "closing_balance_comment": result["closing_balance_comment"],
+    #     "closing_balance_status_class": result["closing_balance_status_class"],
+
+    #     # текущее состояние
+    #     "current_accruals": result["current_accruals"],
+    #     "current_payments": result["current_payments"],
+    #     "current_balance": result["current_balance"],
+    #     "current_balance_status": result["current_balance_status"],
+    #     "current_balance_comment": result["current_balance_comment"],
+    #     "current_balance_status_class": result["current_balance_status_class"],
+        
+        
+    #         # аналитика по кредиту / займу
+    #     "loan_issued_total": result["loan_issued_total"],
+    #     "loan_principal_returned_total": result["loan_principal_returned_total"],
+    #     "loan_principal_outstanding": result["loan_principal_outstanding"],
+    #     "loan_interest_accrued_total": result["loan_interest_accrued_total"],
+    #     "loan_interest_paid_total": result["loan_interest_paid_total"],
+    #     "loan_interest_outstanding": result["loan_interest_outstanding"],
+    # }
+    has_loan = Conditions.objects.filter(
+        contract=contract,
+        accrual_fn="loan_by_bank_statement",
+    ).exists()
+    
     context = {
+        **result,
         "contract": contract,
         "result": result,
-        "rows": result["rows"],
-
-        "date_from": result["date_from"],
-        "date_to": result["date_to"],
-        "report_date": result["report_date"],
-
-        "opening_balance": result["opening_balance"],
-
-        # весь горизонт
-        "total_accruals": result["total_accruals"],
-        "total_payments": result["total_payments"],
-        "closing_balance": result["closing_balance"],
-        "closing_balance_status": result["closing_balance_status"],
-        "closing_balance_comment": result["closing_balance_comment"],
-        "closing_balance_status_class": result["closing_balance_status_class"],
-
-        # текущее состояние
-        "current_accruals": result["current_accruals"],
-        "current_payments": result["current_payments"],
-        "current_balance": result["current_balance"],
-        "current_balance_status": result["current_balance_status"],
-        "current_balance_comment": result["current_balance_comment"],
-        "current_balance_status_class": result["current_balance_status_class"],
+        "has_loan": has_loan,
     }
 
     return TemplateResponse(request, "admin/contracts/reconciliation_print.html", context)

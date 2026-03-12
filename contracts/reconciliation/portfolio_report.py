@@ -96,6 +96,73 @@ def _is_deposit_condition(cond: Conditions) -> bool:
     return (cond.accrual_fn or "") == "deposit_by_bank_statement"
 
 
+def _is_loan_condition(cond: Conditions) -> bool:
+    return (cond.accrual_fn or "") == "loan_by_bank_statement"
+
+
+def _get_loan_totals_to_date(contract: Contracts, end_date: date) -> dict[str, Decimal]:
+    """
+    По займам считаем на дату:
+    - выдано тела
+    - возвращено тела
+    - остаток тела
+    - начислено процентов
+    - оплачено процентов
+    - остаток процентов
+    """
+    issued_total = Decimal("0.00")
+    principal_returned_total = Decimal("0.00")
+    interest_accrued_total = Decimal("0.00")
+    interest_paid_total = Decimal("0.00")
+
+    conditions = (
+        Conditions.objects
+        .filter(contract=contract, accrual_fn="loan_by_bank_statement")
+        .order_by("date_start", "id")
+    )
+
+    for cond in conditions:
+        result = preview_accruals(cond, anchor_date=end_date)
+        rows = result.get("rows", []) or []
+
+        for r in rows:
+            row_date = _safe_date(r.get("accrual_date")) or _safe_date(r.get("period_from"))
+            flow_type = (r.get("flow_type") or "").strip()
+            amount = q2(r.get("amount_gross") or r.get("amount") or "0")
+
+            if not row_date or row_date > end_date or amount <= 0:
+                continue
+
+            if flow_type == "issue":
+                issued_total += amount
+            elif flow_type == "principal_return":
+                principal_returned_total += amount
+            elif flow_type == "interest_accrual":
+                interest_accrued_total += amount
+            elif flow_type == "interest_payment":
+                interest_paid_total += amount
+
+    principal_outstanding = q2(issued_total - principal_returned_total)
+    interest_outstanding = q2(interest_accrued_total - interest_paid_total)
+    total_outstanding = q2(principal_outstanding + interest_outstanding)
+
+    return {
+        "issued_total": q2(issued_total),
+        "principal_returned_total": q2(principal_returned_total),
+        "principal_outstanding": q2(principal_outstanding),
+        "interest_accrued_total": q2(interest_accrued_total),
+        "interest_paid_total": q2(interest_paid_total),
+        "interest_outstanding": q2(interest_outstanding),
+        "total_outstanding": q2(total_outstanding),
+    }
+
+
+def _has_loan_conditions(contract: Contracts) -> bool:
+    return Conditions.objects.filter(
+        contract=contract,
+        accrual_fn="loan_by_bank_statement",
+    ).exists()
+
 def _is_deposit_principal_flow(flow_type: str) -> bool:
     return flow_type in {"placement", "principal_return"}
 
@@ -175,9 +242,25 @@ def debt_report(request):
         contragent_name = getattr(cp, "name", "—") or "—"
 
         try:
-            total_accruals = _get_accrual_total_to_date(contract, end_date)
-            total_payments = _get_payment_total_before(contract, next_day)
-            closing_balance = q2(total_accruals - total_payments)
+            is_loan_contract = _has_loan_conditions(contract)
+
+            if is_loan_contract:
+                loan_totals = _get_loan_totals_to_date(contract, end_date)
+
+                total_accruals = loan_totals["interest_accrued_total"]
+                total_payments = loan_totals["interest_paid_total"]
+                closing_balance = loan_totals["total_outstanding"]
+
+                loan_principal_outstanding = loan_totals["principal_outstanding"]
+                loan_interest_outstanding = loan_totals["interest_outstanding"]
+            else:
+                total_accruals = _get_accrual_total_to_date(contract, end_date)
+                total_payments = _get_payment_total_before(contract, next_day)
+                closing_balance = q2(total_accruals - total_payments)
+
+                loan_principal_outstanding = Decimal("0.00")
+                loan_interest_outstanding = Decimal("0.00")
+
         except Exception:
             continue
 
@@ -189,13 +272,24 @@ def debt_report(request):
             "contragent": contragent_name,
             "contract_number": contract.number or "без номера",
             "contract_title": str(contract.title) if contract.title else "—",
+
             "total_accruals_raw": total_accruals,
             "total_accruals": format_money(total_accruals),
+
             "total_payments_raw": total_payments,
             "total_payments": format_money(total_payments),
+
+            "loan_principal_outstanding_raw": loan_principal_outstanding,
+            "loan_principal_outstanding": format_money(loan_principal_outstanding),
+
+            "loan_interest_outstanding_raw": loan_interest_outstanding,
+            "loan_interest_outstanding": format_money(loan_interest_outstanding),
+
             "closing_balance_raw": closing_balance,
             "closing_balance_abs_raw": abs(closing_balance),
             "closing_balance_abs": format_money(abs(closing_balance)),
+
+            "is_loan_contract": is_loan_contract,
             "contract_id": contract.id,
         }
 

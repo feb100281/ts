@@ -306,7 +306,7 @@ JAZZMIN_SETTINGS = {
         "sales.MVDataMartProduct":  "fa-solid fa-shirt",
         "sales.WBDocument": "fa-solid fa-file-invoice",
 
-    #     # --- Договоры аренжды ---
+    #     # --- Договоры ---
         "contracts": "fa-solid fa-file-signature",
         "contracts.contracts": "fa-solid fa-file-signature",
     #     "la.Subject": "fa-solid fa-cubes",
@@ -317,11 +317,15 @@ JAZZMIN_SETTINGS = {
     #     "la.Indexation": "fa-solid fa-arrow-trend-up",
     #     "la.ProjectsType": "fa-solid fa-diagram-project",
         "contracts.ContractsTitle": "fa-solid fa-list-ul",
+        "contracts.AccuralFn": "fa-solid fa-gears",
     #     "la.AmendmentsType": "fa-solid fa-file-pen",
     #     "la.LaFiles": "fa-solid fa-file-upload",
     #     "la.LaEventLog": "fa-solid fa-clipboard-list",
     #     "la.LaManage": "fa-solid fa-sitemap",
 
+    #     # --- ГЛАВАЯ КНИГА ---
+        "grossbook": "fa-solid fa-book",
+        "grossbook.Manual": "fa-solid fa-book-bookmark",
 
     #     # --- Телеграмм-бот ---
     #     "botconfig": "fa-brands fa-telegram",
@@ -370,6 +374,8 @@ JAZZMIN_SETTINGS = {
         "contracts",       # Договоры 
         'sales',           # Продажи 
         'treasury',        # Казначейство 
+        'grossbook',       # Главная книга
+        
         "auth",            # Пользователи и группы
 
         "botconfig",
