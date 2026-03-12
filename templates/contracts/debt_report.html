@@ -13,7 +13,7 @@
     }
 
     .money-credit {
-      color: #92400e;
+      color: #b91c1c;
       font-weight: 700;
     }
 
@@ -69,8 +69,8 @@
     }
 
     .section-badge--credit {
-      background: rgba(180, 83, 9, 0.12);
-      color: #92400e;
+      background: rgba(185, 28, 28, 0.12);
+      color: #b91c1c;
     }
 
     .section-table-title {
@@ -82,13 +82,26 @@
       margin-bottom: 10px;
     }
 
-    @media print {
-  .page-break {
-    page-break-before: always;
-    break-before: page;
-  }
-}
+    .loan-breakdown {
+      margin-top: 4px;
+      display: grid;
+      gap: 2px;
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.35;
+    }
 
+    .loan-breakdown__item strong {
+      color: #111827;
+      font-weight: 700;
+    }
+
+    @media print {
+      .page-break {
+        page-break-before: always;
+        break-before: page;
+      }
+    }
 
     @media print {
       .summary-card {
@@ -179,18 +192,18 @@
 
         <div class="summary-card-grid">
           <div class="summary-card">
-            <div class="summary-card__label">Кредиторская задолженность</div>
-            <div class="summary-card__value">{{ total_debit }}</div>
+            <div class="summary-card__label">Дебиторская задолженность</div>
+            <div class="summary-card__value money-debit">{{ total_debit }}</div>
             <div class="summary-card__sub">
-              {{ debit_count }} {{ debit_count_label }} в кредиторской задолженности
+              {{ debit_count }} {{ debit_count_label }} в дебиторской задолженности
             </div>
           </div>
 
           <div class="summary-card">
-            <div class="summary-card__label">Дебиторская задолженность</div>
-            <div class="summary-card__value">{{ total_credit }}</div>
+            <div class="summary-card__label">Кредиторская задолженность</div>
+            <div class="summary-card__value money-credit">{{ total_credit }}</div>
             <div class="summary-card__sub">
-              {{ credit_count }} {{ credit_count_label }} в дебиторской задолженности
+              {{ credit_count }} {{ credit_count_label }} в кредиторской задолженности
             </div>
           </div>
 
@@ -227,8 +240,7 @@
             <div style="margin-bottom:24px;">
               <div class="section-table-title">
                 <div>
-                  <h3 style="margin:0;">Кредиторская задолженность</h3>
-
+                  <h3 style="margin:0;">Дебиторская задолженность</h3>
                 </div>
 
                 <span class="section-badge section-badge--debit">
@@ -268,21 +280,45 @@
 
                       <td class="money-cell">
                         {{ r.total_accruals }}
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__item">
+                              <strong>Проценты по займу:</strong> {{ r.total_accruals }}
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
 
                       <td class="money-cell">
                         {{ r.total_payments }}
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__item">
+                              <strong>Оплачено процентов:</strong> {{ r.total_payments }}
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
 
                       <td class="money-cell">
                         <span class="money-debit">{{ r.closing_balance_abs }}</span>
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__item">
+                              <strong>Тело займа:</strong> {{ r.loan_principal_outstanding }}
+                            </div>
+                            <div class="loan-breakdown__item">
+                              <strong>Проценты:</strong> {{ r.loan_interest_outstanding }}
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
                     </tr>
                     {% endfor %}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого кредиторская задолженность:</td>
+                      <td colspan="5" class="tfoot-label">Итого дебиторская задолженность:</td>
                       <td class="money-cell money-cell--strong">{{ total_debit }}</td>
                     </tr>
                   </tfoot>
@@ -295,7 +331,7 @@
             <div>
               <div class="section-table-title">
                 <div>
-                  <h3 style="margin:0;">Дебиторская задолженность</h3>
+                  <h3 style="margin:0;">Кредиторская задолженность</h3>
                 </div>
 
                 <span class="section-badge section-badge--credit">
@@ -335,21 +371,45 @@
 
                       <td class="money-cell">
                         {{ r.total_accruals }}
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__item">
+                              <strong>Проценты по займу:</strong> {{ r.total_accruals }}
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
 
                       <td class="money-cell">
                         {{ r.total_payments }}
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__item">
+                              <strong>Оплачено процентов:</strong> {{ r.total_payments }}
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
 
                       <td class="money-cell">
                         <span class="money-credit">{{ r.closing_balance_abs }}</span>
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__item">
+                              <strong>Тело займа:</strong> {{ r.loan_principal_outstanding }}
+                            </div>
+                            <div class="loan-breakdown__item">
+                              <strong>Проценты:</strong> {{ r.loan_interest_outstanding }}
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
                     </tr>
                     {% endfor %}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого Дебиторская задолженность:</td>
+                      <td colspan="5" class="tfoot-label">Итого кредиторская задолженность:</td>
                       <td class="money-cell money-cell--strong">{{ total_credit }}</td>
                     </tr>
                   </tfoot>
