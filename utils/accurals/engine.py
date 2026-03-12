@@ -7,7 +7,6 @@ import importlib
 from datetime import datetime, timedelta, timezone
 import psycopg
 from psycopg.rows import dict_row
-from pprint import pprint
 
 # Подключаемся к базе данных 
 def connect_db():
@@ -65,7 +64,6 @@ def accruals(conn, row):
     args = {k: v for k, v in row.items() if k != "python_path"}
     return fn(conn=conn, **args)
 
-
 #Запускаем accurals все
 def main():
     conn = connect_db()
@@ -77,12 +75,13 @@ def main():
 
         for row in rows:
             accruals(conn, row)
+        
+        with conn.cursor() as cur:
+            cur.execute("SELECT gl.load_accrual_distribution_to_fact();")
+        conn.commit()
 
     finally:
         conn.close()
-
-
-
 
 if __name__ == "__main__":
     main()

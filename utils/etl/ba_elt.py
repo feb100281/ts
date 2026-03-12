@@ -12,35 +12,6 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 from psycopg.rows import dict_row
 
-
-def get_env(name: str) -> str:
-    v = os.getenv(name)
-    if not v:
-        raise RuntimeError(f"{name} is not set")
-    return v
-
-
-# def connect_db():
-#     return psycopg.connect(
-#         dbname=get_env("DB_NAME"),
-#         user=get_env("DB_USER"),
-#         password=get_env("DB_PASSWORD"),
-#         host=get_env("DB_HOST"),
-#         port=get_env("DB_PORT"),
-#         connect_timeout=10,
-#     )
-
-def connect_db():
-    return psycopg.connect(
-        dbname="ts_db",  # DB_NAME
-        user="ts_user",  # DB_USER
-        password="Dec8108079",  # DB_PASSWORD
-        host="127.0.0.1",  # DB_HOST
-        port="5433",  # DB_PORT
-        connect_timeout=10,
-    )
-
-
 def insert_normizized(conn):
     """
     Стираем и перезаписываем заного весь CF для работы
@@ -275,9 +246,9 @@ def execute_cash_revolution(conn):
         cash_revolution(acc_id, conn)
 
 
-def main():
+def main(conn):
 
-    conn = connect_db()
+    conn = conn
 
     with conn.cursor() as cur:
         cur.execute("REFRESH MATERIALIZED VIEW gl.vr;")
@@ -286,7 +257,7 @@ def main():
     insert_normizized(conn)
     execute_cash_revolution(conn)
 
-    conn.close()
+    
 
 
 # scp /Users/pavelustenko/ts/utils/etl/ba_elt.py daria@82.202.197.94:/opt/wb_jobs/ba_etl.py
