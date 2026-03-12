@@ -184,8 +184,8 @@ class AccuralFn(models.Model):
     description = models.TextField(verbose_name='Описание',help_text='Описание обязательно')
     
     class Meta:
-        verbose_name = "⚙️ Функция начислений"
-        verbose_name_plural = "⚙️ Функции начислений"
+        verbose_name = "Функция начислений"
+        verbose_name_plural = "Функции начислений"
 
     def __str__(self):
         return str(self.name)

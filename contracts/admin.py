@@ -715,10 +715,153 @@ class ContractsAdmin(admin.ModelAdmin):
         js = ("js/conditions_inline_collapse.js",)
 
 
+# @admin.register(AccuralFn)
+# class AccuralFnAdmin(admin.ModelAdmin):
+#     list_display = ("name", "accounting_method", "description")
+#     formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
+
+#     class Media:
+#         css = {
+#             "all": (
+#                 "fonts/glyphs.css",
+#                 "css/admin_overrides.css",
+#             )
+#         }
+
+
 @admin.register(AccuralFn)
 class AccuralFnAdmin(admin.ModelAdmin):
-    list_display = ("name", "accounting_method", "description")
-    formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
+    change_list_template = "admin/contracts/accuralfn/change_list.html"
+    change_form_template = "admin/contracts/accuralfn/change_form.html"
+
+    list_display = (
+        "name_badge",
+        "accounting_method_badge",
+        "python_path_short",
+        "server_path_short",
+        "template_size",
+        "description_short",
+    )
+    list_display_links = ("name_badge",)
+    list_filter = ("accounting_method",)
+    search_fields = (
+        "name",
+        "python_path",
+        "server_path",
+        "description",
+        "accounting_method__name",
+    )
+    ordering = ("name",)
+    list_per_page = 25
+    preserve_filters = True
+
+    autocomplete_fields = ("accounting_method",)
+
+    fieldsets = (
+        (
+            mark_safe("⚙️ <b>Карточка функции</b>"),
+            {
+                "fields": (
+                    "name",
+                    "accounting_method",
+                    "description",
+                )
+            },
+        ),
+        (
+            mark_safe("🧠 <b>Пути к функциям</b>"),
+            {
+                "fields": (
+                    "python_path",
+                    "server_path",
+                )
+            },
+        ),
+        (
+            mark_safe("🧩 <b>Шаблон параметров</b>"),
+            {
+                "fields": ("condition_template",),
+            },
+        ),
+    )
+
+    formfield_overrides = {
+        models.JSONField: {"widget": JSONEditor},
+    }
+
+    @admin.display(description="Функция", ordering="name")
+    def name_badge(self, obj):
+        return format_html(
+            '<div style="display:flex;flex-direction:column;gap:2px;">'
+            '<span style="font-weight:800;color:#0f172a;">⚙️ {}</span>'
+            '<span style="font-size:11px;color:#94a3b8;">id: {}</span>'
+            "</div>",
+            obj.name,
+            obj.id,
+        )
+
+    @admin.display(description="Метод учёта", ordering="accounting_method__name")
+    def accounting_method_badge(self, obj):
+        m = obj.accounting_method
+        if not m:
+            return format_html('<span style="color:#94a3b8;">—</span>')
+
+        icon = (m.icon or "").strip() or "🧩"
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:6px;'
+            "padding:4px 10px;border-radius:2px;"
+            "background:rgba(14,165,233,.10);"
+            'color:#075985;font-weight:800;">'
+            "{} {}"
+            "</span>",
+            icon,
+            m.name,
+        )
+
+    @admin.display(description="Python path", ordering="python_path")
+    def python_path_short(self, obj):
+        value = obj.python_path or "—"
+        return format_html(
+            '<code style="font-size:12px;color:#334155;">{}</code>',
+            value,
+        )
+
+    @admin.display(description="Server path", ordering="server_path")
+    def server_path_short(self, obj):
+        value = obj.server_path or "—"
+        return format_html(
+            '<code style="font-size:12px;color:#334155;">{}</code>',
+            value,
+        )
+
+    @admin.display(description="Параметры")
+    def template_size(self, obj):
+        data = obj.condition_template or {}
+        if not isinstance(data, dict) or not data:
+            return format_html('<span style="color:#94a3b8;">пусто</span>')
+
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;justify-content:center;'
+            "min-width:34px;padding:4px 10px;border-radius:2px;"
+            "font-size:12px;font-weight:800;"
+            "background:rgba(16,185,129,.10);color:#047857;"
+            'border:1px solid rgba(16,185,129,.18);">{}</span>',
+            len(data),
+        )
+
+    @admin.display(description="Описание")
+    def description_short(self, obj):
+        if not obj.description:
+            return format_html('<span style="color:#94a3b8;">—</span>')
+
+        txt = obj.description.strip()
+        if len(txt) > 90:
+            txt = txt[:90].rstrip() + "…"
+
+        return format_html(
+            '<span style="color:#475569;">{}</span>',
+            txt,
+        )
 
     class Media:
         css = {
@@ -727,6 +870,8 @@ class AccuralFnAdmin(admin.ModelAdmin):
                 "css/admin_overrides.css",
             )
         }
+        
+        
 
 
 @admin.register(ContractsTitle)
@@ -781,3 +926,5 @@ class AccountingMethodAdmin(admin.ModelAdmin):
     list_per_page = 50
 
     fields = ("name", "icon", "is_active")
+    def get_model_perms(self, request):
+        return {}

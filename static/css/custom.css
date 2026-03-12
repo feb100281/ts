@@ -284,7 +284,8 @@
     --color-system:          #9CA3AF;  /* серый: служебные / системные */
     --color-bot:             #0EA5E9;  /* cyan: Телеграм-бот и околоботовое */
     --color-treasury:        #1f9c95;
-    --color-sales: #60A5FA;
+    --color-sales:           #60A5FA;
+    --color-finance:         #4F46E5;  /* бухгалтерия / проводки */
 
 
     /* Фон для active / hover */
@@ -377,6 +378,7 @@
 /* 2. Договоры аренды / сделки */
 .fa-handshake,
 .fa-list-ul,
+.fa-gears,
 .fa-file-signature {
     color: var(--color-deals) !important;
 }
@@ -428,6 +430,12 @@
 .fa-robot,
 .fa-receipt {
     color: var(--color-treasury) !important;
+}
+
+/* Главная книга */
+.fa-book,
+.fa-book-bookmark {
+    color: var(--color-finance) !important;
 }
 
 
