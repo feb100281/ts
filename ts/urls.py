@@ -36,5 +36,6 @@ urlpatterns = [
     path("reset/done/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),
     
     path("contracts/", include("contracts.urls", namespace="contracts")),
+    path("tools/", include("core.urls")),
 ]
 

@@ -236,6 +236,7 @@ JAZZMIN_SETTINGS = {
         {"model": "counterparties.Counterparty"},
         {"model": "contracts.Contracts"},
          {"model": "treasury.BankStatements"},
+         {"name": "Запустить GL ETL", "url": "run_gl_etl", "new_window": False},
 
         
         # {"name": "Помощь", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
