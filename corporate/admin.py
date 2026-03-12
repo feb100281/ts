@@ -90,6 +90,7 @@ class OwnersAdmin(admin.ModelAdmin):
 
     list_display = ("name", "inn", "ceo_display", "bankaccounts_count_display")
     inlines = [BankAccountInline]
+    search_fields = ("name", "inn", "full_name", "ceo_name", "email")
 
 
     class Media:

@@ -95,6 +95,32 @@ ACCRUAL_REGISTRY = {
                 "vat_rate": Decimal("0"),
             },
         },
+    
+    
+    
+    "loan_by_bank_statement": {
+            "title": "Заем / по выписке + начисление процентов",
+            "fields": [
+                {"key": "annual_rate", "label": "Ставка, % годовых", "type": "decimal", "required": True},
+                {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
+
+                {"key": "issue_cf_code", "label": "CF код выдачи займа", "type": "string", "required": True},
+                {"key": "principal_return_cf_code", "label": "CF код возврата тела займа", "type": "string", "required": True},
+                {"key": "interest_payment_cf_code", "label": "CF код оплаты процентов", "type": "string", "required": False},
+
+                {"key": "interest_start_mode", "label": "Начало начисления процентов", "type": "choice", "required": True},
+                {"key": "day_count_basis", "label": "База дней", "type": "choice", "required": True},
+            ],
+            "defaults": {
+                "annual_rate": Decimal("14.5"),
+                "vat_rate": Decimal("0"),
+                "issue_cf_code": "312100",
+                "principal_return_cf_code": "321100",
+                "interest_payment_cf_code": "321200",
+                "interest_start_mode": "next_day",
+                "day_count_basis": "365",
+            },
+        },
 
             
     

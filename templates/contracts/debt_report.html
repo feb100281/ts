@@ -7,99 +7,352 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{% static 'contracts/accruals_report_print.css' %}">
   <style>
-    .money-debit {
-      color: #075985;
-      font-weight: 700;
+  :root {
+    --text-main: #111827;
+    --text-soft: #6b7280;
+    --line: #dbe3ee;
+    --line-strong: #cbd5e1;
+    --bg-soft: #f8fafc;
+    --credit: #b91c1c;
+    --debit: #075985;
+    --loan-bg: #eef2ff;
+    --loan-text: #3730a3;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    color: var(--text-main);
+    font-family: Inter, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    background: #f3f4f6;
+  }
+
+  .money-debit {
+    color: var(--debit);
+    font-weight: 700;
+  }
+
+  .money-credit {
+    color: var(--credit);
+    font-weight: 700;
+  }
+
+  .summary-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .summary-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    padding: 12px 14px;
+  }
+
+  .summary-card__label {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+  }
+
+  .summary-card__value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1.1;
+  }
+
+  .summary-card__sub {
+    margin-top: 5px;
+    font-size: 11px;
+    color: var(--text-soft);
+  }
+
+  .section-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .section-badge--debit {
+    background: rgba(3, 105, 161, 0.12);
+    color: var(--debit);
+  }
+
+  .section-badge--credit {
+    background: rgba(185, 28, 28, 0.12);
+    color: var(--credit);
+  }
+
+  .section-table-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .cell-main {
+    font-weight: 700;
+    color: #1e293b;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .cell-sub {
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--text-soft);
+  }
+
+  .money-cell {
+    vertical-align: top;
+  }
+
+  .money-main {
+    display: block;
+    font-weight: 800;
+    white-space: nowrap;
+    color: var(--text-main);
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .loan-breakdown {
+    margin-top: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10.5px;
+    color: var(--text-soft);
+    line-height: 1.3;
+    white-space: normal;
+    background: var(--bg-soft);
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 7px 8px;
+  }
+
+  .loan-breakdown__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .loan-breakdown__label {
+    color: var(--text-soft);
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .loan-breakdown__value {
+    color: var(--text-main);
+    font-weight: 700;
+    white-space: nowrap;
+    text-align: right;
+    flex: 0 0 auto;
+  }
+
+  .loan-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    background: var(--loan-bg);
+    color: var(--loan-text);
+    margin-top: 6px;
+  }
+
+  .accruals-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .accruals-table th,
+  .accruals-table td {
+    vertical-align: top;
+  }
+
+  .accruals-table th {
+    font-size: 12px;
+    padding: 11px 12px;
+  }
+
+  .accruals-table td {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .accruals-table .col-contragent {
+    width: 36%;
+  }
+
+  .accruals-table .col-contract {
+    width: 22%;
+  }
+
+  .accruals-table .col-type {
+    width: 16%;
+  }
+
+  .accruals-table .col-balance {
+    width: 26%;
+  }
+
+  .tfoot-label {
+    font-weight: 700;
+  }
+
+  .money-cell--strong {
+    font-weight: 800;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 12mm 10mm;
+  }
+
+  @media print {
+    html, body {
+      background: #fff !important;
+      font-size: 11px;
+      line-height: 1.3;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
-    .money-credit {
-      color: #92400e;
-      font-weight: 700;
+    .page-break {
+      page-break-before: always;
+      break-before: page;
     }
 
     .summary-card-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(220px, 1fr));
-      gap: 12px;
-      margin-top: 14px;
+      gap: 8px;
     }
 
     .summary-card {
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      background: #fff;
-      padding: 14px 16px;
+      padding: 10px 12px;
+      break-inside: avoid;
     }
 
     .summary-card__label {
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #6b7280;
-      margin-bottom: 8px;
+      font-size: 9px;
+      margin-bottom: 5px;
     }
 
     .summary-card__value {
-      font-size: 24px;
-      font-weight: 800;
-      color: #111827;
-      line-height: 1.15;
+      font-size: 17px;
     }
 
     .summary-card__sub {
-      margin-top: 6px;
-      font-size: 12px;
-      color: #6b7280;
-    }
-
-    .section-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 2px;
-      font-size: 12px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    .section-badge--debit {
-      background: rgba(3, 105, 161, 0.12);
-      color: #075985;
-    }
-
-    .section-badge--credit {
-      background: rgba(180, 83, 9, 0.12);
-      color: #92400e;
+      font-size: 10px;
+      margin-top: 4px;
     }
 
     .section-table-title {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
-    @media print {
-  .page-break {
-    page-break-before: always;
-    break-before: page;
+    .section-badge {
+      font-size: 10px;
+      padding: 3px 8px;
+    }
+
+    .cell-main {
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .cell-sub {
+      font-size: 9px;
+      margin-top: 2px;
+    }
+
+    .money-main {
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .loan-badge {
+      font-size: 9px;
+      padding: 2px 7px;
+      margin-top: 5px;
+    }
+
+    .loan-breakdown {
+      margin-top: 5px;
+      padding: 5px 6px;
+      gap: 3px;
+      font-size: 8.8px;
+      border-radius: 6px;
+      break-inside: avoid;
+    }
+
+    .loan-breakdown__row {
+      gap: 6px;
+      break-inside: avoid;
+    }
+
+    .accruals-table-wrap {
+      break-inside: avoid;
+    }
+
+    .accruals-table th {
+      font-size: 10px;
+      padding: 7px 8px;
+    }
+
+    .accruals-table td {
+      font-size: 10px;
+      padding: 8px 8px;
+    }
+
+    .accruals-header,
+    .accruals-section,
+    .accruals-table,
+    .accruals-table tr,
+    .accruals-table td {
+      break-inside: avoid;
+    }
+
+    .accruals-title {
+      font-size: 20px !important;
+      line-height: 1.15;
+    }
+
+    .accruals-kicker,
+    .accruals-badge,
+    .accruals-period-title,
+    .accruals-section-subtitle,
+    .accruals-footer {
+      font-size: 10px !important;
+    }
+
+    .money-credit {
+      color: var(--credit) !important;
+    }
+
+    .money-debit {
+      color: var(--debit) !important;
+    }
   }
-}
-
-
-    @media print {
-      .summary-card {
-        break-inside: avoid;
-      }
-
-      .accruals-table-wrap {
-        break-inside: avoid;
-      }
-    }
-  </style>
+</style>
 </head>
 <body>
   <div class="accruals-page-wrap">
@@ -180,7 +433,7 @@
         <div class="summary-card-grid">
           <div class="summary-card">
             <div class="summary-card__label">Кредиторская задолженность</div>
-            <div class="summary-card__value">{{ total_debit }}</div>
+            <div class="summary-card__value money-credit">{{ total_debit }}</div>
             <div class="summary-card__sub">
               {{ debit_count }} {{ debit_count_label }} в кредиторской задолженности
             </div>
@@ -188,7 +441,7 @@
 
           <div class="summary-card">
             <div class="summary-card__label">Дебиторская задолженность</div>
-            <div class="summary-card__value">{{ total_credit }}</div>
+            <div class="summary-card__value money-debit">{{ total_credit }}</div>
             <div class="summary-card__sub">
               {{ credit_count }} {{ credit_count_label }} в дебиторской задолженности
             </div>
@@ -218,7 +471,7 @@
             <div>
               <h2>Детализация задолженности</h2>
               <div class="accruals-section-subtitle">
-                По каждому договору показаны накопленные начисления, накопленные оплаты и остаток на конец месяца.
+                По каждому договору показан остаток задолженности на конец месяца.
               </div>
             </div>
           </div>
@@ -228,10 +481,9 @@
               <div class="section-table-title">
                 <div>
                   <h3 style="margin:0;">Кредиторская задолженность</h3>
-
                 </div>
 
-                <span class="section-badge section-badge--debit">
+                <span class="section-badge section-badge--credit">
                   {{ debit_count }} {{ debit_count_label }}
                 </span>
               </div>
@@ -242,10 +494,8 @@
                     <tr>
                       <th class="col-contragent">Контрагент</th>
                       <th class="col-contract">Договор</th>
-                      <th>Тип договора</th>
-                      <th>Начислено накоп.</th>
-                      <th>Оплачено накоп.</th>
-                      <th class="col-amount">Сальдо</th>
+                      <th class="col-type">Тип договора</th>
+                      <th class="col-balance">Задолженность</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -260,6 +510,9 @@
                         {% if r.contract_id %}
                           <div class="cell-sub">Contract ID: {{ r.contract_id }}</div>
                         {% endif %}
+                        {% if r.is_loan_contract %}
+                          <div class="loan-badge">Заем</div>
+                        {% endif %}
                       </td>
 
                       <td>
@@ -267,23 +520,27 @@
                       </td>
 
                       <td class="money-cell">
-                        {{ r.total_accruals }}
-                      </td>
-
-                      <td class="money-cell">
-                        {{ r.total_payments }}
-                      </td>
-
-                      <td class="money-cell">
-                        <span class="money-debit">{{ r.closing_balance_abs }}</span>
+                        <span class="money-main money-credit">{{ r.closing_balance_abs }}</span>
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__row">
+                              <span class="loan-breakdown__label">Тело займа</span>
+                              <span class="loan-breakdown__value">{{ r.loan_principal_outstanding }}</span>
+                            </div>
+                            <div class="loan-breakdown__row">
+                              <span class="loan-breakdown__label">Проценты</span>
+                              <span class="loan-breakdown__value">{{ r.loan_interest_outstanding }}</span>
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
                     </tr>
                     {% endfor %}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого кредиторская задолженность:</td>
-                      <td class="money-cell money-cell--strong">{{ total_debit }}</td>
+                      <td colspan="3" class="tfoot-label">Итого кредиторская задолженность:</td>
+                      <td class="money-cell money-cell--strong money-credit">{{ total_debit }}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -298,7 +555,7 @@
                   <h3 style="margin:0;">Дебиторская задолженность</h3>
                 </div>
 
-                <span class="section-badge section-badge--credit">
+                <span class="section-badge section-badge--debit">
                   {{ credit_count }} {{ credit_count_label }}
                 </span>
               </div>
@@ -309,10 +566,8 @@
                     <tr>
                       <th class="col-contragent">Контрагент</th>
                       <th class="col-contract">Договор</th>
-                      <th>Тип договора</th>
-                      <th>Начислено накоп.</th>
-                      <th>Оплачено накоп.</th>
-                      <th class="col-amount">Сальдо</th>
+                      <th class="col-type">Тип договора</th>
+                      <th class="col-balance">Задолженность</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -327,6 +582,9 @@
                         {% if r.contract_id %}
                           <div class="cell-sub">Contract ID: {{ r.contract_id }}</div>
                         {% endif %}
+                        {% if r.is_loan_contract %}
+                          <div class="loan-badge">Заем</div>
+                        {% endif %}
                       </td>
 
                       <td>
@@ -334,23 +592,27 @@
                       </td>
 
                       <td class="money-cell">
-                        {{ r.total_accruals }}
-                      </td>
-
-                      <td class="money-cell">
-                        {{ r.total_payments }}
-                      </td>
-
-                      <td class="money-cell">
-                        <span class="money-credit">{{ r.closing_balance_abs }}</span>
+                        <span class="money-main money-debit">{{ r.closing_balance_abs }}</span>
+                        {% if r.is_loan_contract %}
+                          <div class="loan-breakdown">
+                            <div class="loan-breakdown__row">
+                              <span class="loan-breakdown__label">Тело займа</span>
+                              <span class="loan-breakdown__value">{{ r.loan_principal_outstanding }}</span>
+                            </div>
+                            <div class="loan-breakdown__row">
+                              <span class="loan-breakdown__label">Проценты</span>
+                              <span class="loan-breakdown__value">{{ r.loan_interest_outstanding }}</span>
+                            </div>
+                          </div>
+                        {% endif %}
                       </td>
                     </tr>
                     {% endfor %}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого Дебиторская задолженность:</td>
-                      <td class="money-cell money-cell--strong">{{ total_credit }}</td>
+                      <td colspan="3" class="tfoot-label">Итого дебиторская задолженность:</td>
+                      <td class="money-cell money-cell--strong money-debit">{{ total_credit }}</td>
                     </tr>
                   </tfoot>
                 </table>

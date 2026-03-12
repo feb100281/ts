@@ -7,6 +7,8 @@ from .calculators.rent_premises import preview as preview_rent_premises
 from .calculators.deposit_by_bank_statement import preview as preview_deposit_by_bank_statement
 from .calculators.own_funds_transfer import preview as preview_own_funds_transfer
 from .calculators.annual_payment import preview as preview_annual_payment
+from .calculators.loan_by_bank_statement import preview as preview_loan_by_bank_statement
+
 
 
 
@@ -18,6 +20,8 @@ PREVIEW_HANDLERS = {
     "deposit_by_bank_statement": preview_deposit_by_bank_statement,
     "own_funds_transfer": preview_own_funds_transfer,
      "annual_payment": preview_annual_payment,
+    "loan_by_bank_statement": preview_loan_by_bank_statement,
+     
     
 
     
