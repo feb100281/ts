@@ -57,7 +57,7 @@
       align-items: center;
       gap: 6px;
       padding: 4px 10px;
-      border-radius: 2px;
+      border-radius: 6px;
       font-size: 12px;
       font-weight: 700;
       white-space: nowrap;
@@ -84,6 +84,7 @@
 
     .cell-main {
       font-weight: 700;
+      color: #1e293b;
     }
 
     .cell-sub {
@@ -100,13 +101,14 @@
       display: block;
       font-weight: 700;
       white-space: nowrap;
+      color: #111827;
     }
 
     .loan-breakdown {
-      margin-top: 6px;
+      margin-top: 8px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 5px;
       font-size: 11px;
       color: #6b7280;
       line-height: 1.35;
@@ -119,7 +121,7 @@
       align-items: flex-start;
       gap: 10px;
       border-top: 1px dashed #e5e7eb;
-      padding-top: 4px;
+      padding-top: 5px;
     }
 
     .loan-breakdown__row:first-child {
@@ -144,13 +146,13 @@
     .loan-badge {
       display: inline-flex;
       align-items: center;
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 999px;
       font-size: 11px;
       font-weight: 700;
       background: #eef2ff;
       color: #3730a3;
-      margin-top: 6px;
+      margin-top: 8px;
     }
 
     .accruals-table {
@@ -197,6 +199,7 @@
         break-inside: avoid;
       }
 
+      .loan-breakdown,
       .loan-breakdown__row {
         break-inside: avoid;
       }
@@ -372,25 +375,10 @@
 
                       <td class="money-cell">
                         <span class="money-main">{{ r.total_accruals }}</span>
-                        {% if r.is_loan_contract %}
-                          <div class="loan-breakdown">
-                            <div class="loan-breakdown__row">
-                              <span class="loan-breakdown__value">{{ r.total_accruals }}</span>
-                            </div>
-                          </div>
-                        {% endif %}
                       </td>
 
                       <td class="money-cell">
                         <span class="money-main">{{ r.total_payments }}</span>
-                        {% if r.is_loan_contract %}
-                          <div class="loan-breakdown">
-                            <div class="loan-breakdown__row">
-                              <span class="loan-breakdown__label">Оплаченные проценты</span>
-                              <span class="loan-breakdown__value">{{ r.total_payments }}</span>
-                            </div>
-                          </div>
-                        {% endif %}
                       </td>
 
                       <td class="money-cell">
@@ -469,25 +457,10 @@
 
                       <td class="money-cell">
                         <span class="money-main">{{ r.total_accruals }}</span>
-                        {% if r.is_loan_contract %}
-                          <div class="loan-breakdown">
-                            <div class="loan-breakdown__row">
-                              <span class="loan-breakdown__value">{{ r.total_accruals }}</span>
-                            </div>
-                          </div>
-                        {% endif %}
                       </td>
 
                       <td class="money-cell">
                         <span class="money-main">{{ r.total_payments }}</span>
-                        {% if r.is_loan_contract %}
-                          <div class="loan-breakdown">
-                            <div class="loan-breakdown__row">
-                              <span class="loan-breakdown__label">Оплаченные проценты</span>
-                              <span class="loan-breakdown__value">{{ r.total_payments }}</span>
-                            </div>
-                          </div>
-                        {% endif %}
                       </td>
 
                       <td class="money-cell">
