@@ -99,9 +99,10 @@
 
     .money-main {
       display: block;
-      font-weight: 700;
+      font-weight: 800;
       white-space: nowrap;
       color: #111827;
+      font-size: 15px;
     }
 
     .loan-breakdown {
@@ -166,23 +167,19 @@
     }
 
     .accruals-table .col-contragent {
-      width: 29%;
+      width: 34%;
     }
 
     .accruals-table .col-contract {
-      width: 20%;
+      width: 22%;
     }
 
     .accruals-table .col-type {
-      width: 13%;
-    }
-
-    .accruals-table .col-money {
-      width: 12%;
+      width: 18%;
     }
 
     .accruals-table .col-balance {
-      width: 14%;
+      width: 26%;
     }
 
     @media print {
@@ -323,7 +320,7 @@
             <div>
               <h2>Детализация задолженности</h2>
               <div class="accruals-section-subtitle">
-                По каждому договору показаны накопленные начисления, накопленные оплаты и остаток на конец месяца.
+                По каждому договору показан остаток задолженности на конец месяца.
               </div>
             </div>
           </div>
@@ -347,9 +344,7 @@
                       <th class="col-contragent">Контрагент</th>
                       <th class="col-contract">Договор</th>
                       <th class="col-type">Тип договора</th>
-                      <th class="col-money">Начислено накоп.</th>
-                      <th class="col-money">Оплачено накоп.</th>
-                      <th class="col-balance">Сальдо</th>
+                      <th class="col-balance">Задолженность</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -374,14 +369,6 @@
                       </td>
 
                       <td class="money-cell">
-                        <span class="money-main">{{ r.total_accruals }}</span>
-                      </td>
-
-                      <td class="money-cell">
-                        <span class="money-main">{{ r.total_payments }}</span>
-                      </td>
-
-                      <td class="money-cell">
                         <span class="money-main money-credit">{{ r.closing_balance_abs }}</span>
                         {% if r.is_loan_contract %}
                           <div class="loan-breakdown">
@@ -401,7 +388,7 @@
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого кредиторская задолженность:</td>
+                      <td colspan="3" class="tfoot-label">Итого кредиторская задолженность:</td>
                       <td class="money-cell money-cell--strong money-credit">{{ total_debit }}</td>
                     </tr>
                   </tfoot>
@@ -429,9 +416,7 @@
                       <th class="col-contragent">Контрагент</th>
                       <th class="col-contract">Договор</th>
                       <th class="col-type">Тип договора</th>
-                      <th class="col-money">Начислено накоп.</th>
-                      <th class="col-money">Оплачено накоп.</th>
-                      <th class="col-balance">Сальдо</th>
+                      <th class="col-balance">Задолженность</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -456,14 +441,6 @@
                       </td>
 
                       <td class="money-cell">
-                        <span class="money-main">{{ r.total_accruals }}</span>
-                      </td>
-
-                      <td class="money-cell">
-                        <span class="money-main">{{ r.total_payments }}</span>
-                      </td>
-
-                      <td class="money-cell">
                         <span class="money-main money-debit">{{ r.closing_balance_abs }}</span>
                         {% if r.is_loan_contract %}
                           <div class="loan-breakdown">
@@ -483,7 +460,7 @@
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="5" class="tfoot-label">Итого дебиторская задолженность:</td>
+                      <td colspan="3" class="tfoot-label">Итого дебиторская задолженность:</td>
                       <td class="money-cell money-cell--strong money-debit">{{ total_credit }}</td>
                     </tr>
                   </tfoot>
