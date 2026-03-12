@@ -4,9 +4,9 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-<title>
-  Акт сверки{% if contract.cp %} — {{ contract.cp }}{% endif %}{% if contract.number %} — № {{ contract.number }}{% endif %}
-</title>
+  <title>
+    Акт сверки{% if contract.cp %} — {{ contract.cp }}{% endif %}{% if contract.number %} — № {{ contract.number }}{% endif %}
+  </title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{% static 'contracts/reconciliation_print.css' %}">
 </head>
@@ -126,6 +126,51 @@
         </div>
       </section>
 
+      {% if has_loan %}
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Аналитика по кредиту / займу</h2>
+            <div class="section-subtitle">
+              Отдельная расшифровка по телу кредита и процентам за выбранный период.
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-list">
+          <div class="summary-row">
+            <div class="summary-key">Перечислено по телу кредита</div>
+            <div class="summary-val summary-money">{{ loan_issued_total|money_ru }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Возвращено тела кредита</div>
+            <div class="summary-val summary-money">{{ loan_principal_returned_total|money_ru }}</div>
+          </div>
+
+          <div class="summary-row total">
+            <div class="summary-key">Остаток тела кредита на конец периода</div>
+            <div class="summary-val summary-money strong">{{ loan_principal_outstanding|money_ru }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Начислено процентов</div>
+            <div class="summary-val summary-money">{{ loan_interest_accrued_total|money_ru }}</div>
+          </div>
+
+          <div class="summary-row">
+            <div class="summary-key">Оплачено процентов</div>
+            <div class="summary-val summary-money">{{ loan_interest_paid_total|money_ru }}</div>
+          </div>
+
+          <div class="summary-row total">
+            <div class="summary-key">Остаток процентов на конец периода</div>
+            <div class="summary-val summary-money strong">{{ loan_interest_outstanding|money_ru }}</div>
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
       <section class="section page-break">
         <div class="section-head">
           <div>
@@ -143,19 +188,28 @@
                 <th class="col-date">Дата</th>
                 <th class="col-doc">Основание</th>
                 <th class="col-desc">Описание</th>
+
+                {% if has_loan %}
+                  <th class="col-money">Выдача займа</th>
+                  <th class="col-money">Возврат тела</th>
+                {% endif %}
+
                 <th class="col-money">Начислено</th>
                 <th class="col-money">Оплачено</th>
                 <th class="col-money">Сальдо</th>
               </tr>
             </thead>
+
             <tbody>
               {% if rows %}
                 {% for r in rows %}
                   <tr>
                     <td class="date-cell">{{ r.row_date|date_ru }}</td>
+
                     <td class="doc-cell">
                       {{ r.doc_label|default:"—" }}
                     </td>
+
                     <td class="desc-cell">
                       <div class="desc-main">{{ r.description|default:"—" }}</div>
 
@@ -171,6 +225,25 @@
                         </div>
                       {% endif %}
                     </td>
+
+                    {% if has_loan %}
+                      <td class="money-cell">
+                        {% if r.loan_issue and r.loan_issue > 0 %}
+                          {{ r.loan_issue|money_ru }}
+                        {% else %}
+                          —
+                        {% endif %}
+                      </td>
+
+                      <td class="money-cell">
+                        {% if r.loan_principal_return and r.loan_principal_return > 0 %}
+                          {{ r.loan_principal_return|money_ru }}
+                        {% else %}
+                          —
+                        {% endif %}
+                      </td>
+                    {% endif %}
+
                     <td class="money-cell">
                       {% if r.accrual and r.accrual > 0 %}
                         {{ r.accrual|money_ru }}
@@ -178,6 +251,7 @@
                         —
                       {% endif %}
                     </td>
+
                     <td class="money-cell payment-cell">
                       {% if r.payment and r.payment > 0 %}
                         {{ r.payment|money_ru }}
@@ -185,6 +259,7 @@
                         —
                       {% endif %}
                     </td>
+
                     <td class="money-cell strong">
                       {{ r.balance|money_ru }}
                     </td>
@@ -192,13 +267,22 @@
                 {% endfor %}
               {% else %}
                 <tr class="empty-row">
-                  <td colspan="6">Нет данных за выбранный период.</td>
+                  <td colspan="{% if has_loan %}8{% else %}6{% endif %}">
+                    Нет данных за выбранный период.
+                  </td>
                 </tr>
               {% endif %}
             </tbody>
+
             <tfoot>
               <tr>
                 <td colspan="3" class="tfoot-label">Итого по всем периодам</td>
+
+                {% if has_loan %}
+                  <td class="money-cell">{{ total_loan_issue|money_ru }}</td>
+                  <td class="money-cell">{{ total_loan_principal_return|money_ru }}</td>
+                {% endif %}
+
                 <td class="money-cell">{{ total_accruals|money_ru }}</td>
                 <td class="money-cell">{{ total_payments|money_ru }}</td>
                 <td class="money-cell strong">{{ closing_balance|money_ru }}</td>
