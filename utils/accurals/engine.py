@@ -71,12 +71,17 @@ def main():
     conn = connect_db()
     try:
         rows = load_conditions(conn)
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE gl.accural_distribution;")
+        conn.commit()
 
         for row in rows:
             accruals(conn, row)
 
     finally:
         conn.close()
+
+
 
 
 if __name__ == "__main__":
