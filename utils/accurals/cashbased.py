@@ -15,19 +15,21 @@ def cash_based_distibution(conn,**args):
     
     if ignored:
         return
-   
+    
+    
+    
     
     SQL = """
     INSERT INTO gl.accural_distribution(
 	p_fn_id, pid, date_from, contract_id, condition_id, 
     company_id, acc_st, dt_st, cr_st, vat_rate, acc_vat, dt_vat, 
     cr_vat, acc_pl, subconto_pl, dt_pl, cr_pl, acc_bs, 
-    subconto_bs, dt_bs, cr_bs)
+    subconto_bs, dt_bs, cr_bs, description_st,description_pl, description_bs, vat_mode)
     SELECT 
     p_fn_id, pid, date_from, contract_id, condition_id, 
     company_id, acc_st, dt_st, cr_st, vat_rate, acc_vat, dt_vat, 
     cr_vat, acc_pl, subconto_pl, dt_pl, cr_pl, acc_bs, 
-    subconto_bs, dt_bs, cr_bs    
+    subconto_bs, dt_bs, cr_bs, description_st,description_pl, description_bs, vat_mode     
     FROM gl.cash_based_distribution(
         %s,
         %s,
