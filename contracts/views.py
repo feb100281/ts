@@ -8,7 +8,7 @@ from django.db.models import Min, Max
 from .models import Conditions
 
 from .models import Contracts
-from contracts.reconciliation.service import build_contract_reconciliation,  get_contract_full_horizon_date
+from contracts.reconciliation.service import build_contract_reconciliation,  get_contract_full_horizon_date, LOAN_ACCRUAL_FNS
 from django.db.models import Min, Max
 from treasury.models import CfData, CfSplits
 from .models import Conditions
@@ -133,10 +133,15 @@ def contract_reconciliation_preview(request, contract_id: int):
     #     "loan_interest_paid_total": result["loan_interest_paid_total"],
     #     "loan_interest_outstanding": result["loan_interest_outstanding"],
     # }
+    # has_loan = Conditions.objects.filter(
+    #     contract=contract,
+    #     accrual_fn="loan_by_bank_statement",
+    # ).exists()
+    
     has_loan = Conditions.objects.filter(
-        contract=contract,
-        accrual_fn="loan_by_bank_statement",
-    ).exists()
+            contract=contract,
+            accrual_fn__in=LOAN_ACCRUAL_FNS,
+        ).exists()
     
     context = {
         **result,
