@@ -1471,7 +1471,7 @@
 
 
 
-
+# contracts/reconciliation/service.py
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -1484,6 +1484,15 @@ from contracts.models import Conditions, Contracts
 from contracts.accruals.service import preview_accruals
 from treasury.models import CfData, CfSplits
 from grossbook.models import Manual
+
+
+
+
+LOAN_ACCRUAL_FNS = {
+    "loan_by_bank_statement",
+    "loan_by_bank_statement_key_rate_share",
+}
+
 
 
 def q2(x: Decimal | str | int | float | None) -> Decimal:
@@ -1559,8 +1568,7 @@ def _is_deposit_interest_cf_code(code: str) -> bool:
 
 
 def _is_loan_condition(cond: Conditions) -> bool:
-    return (cond.accrual_fn or "") == "loan_by_bank_statement"
-
+    return (cond.accrual_fn or "") in LOAN_ACCRUAL_FNS
 
 def _is_loan_principal_flow(flow_type: str) -> bool:
     return flow_type in {"issue", "principal_return"}
@@ -1711,7 +1719,7 @@ def _get_loan_codes(cond: Conditions) -> tuple[str, str, str]:
 def _is_loan_principal_cf_code_for_contract(contract: Contracts, code: str) -> bool:
     conditions = Conditions.objects.filter(
         contract=contract,
-        accrual_fn="loan_by_bank_statement",
+        accrual_fn__in=LOAN_ACCRUAL_FNS,
     )
 
     for cond in conditions:
@@ -1721,10 +1729,14 @@ def _is_loan_principal_cf_code_for_contract(contract: Contracts, code: str) -> b
     return False
 
 
+def _is_loan_ndfl_flow(flow_type: str) -> bool:
+    return flow_type == "ndfl_withholding"
+
+
 def _is_loan_interest_payment_cf_code_for_contract(contract: Contracts, code: str) -> bool:
     conditions = Conditions.objects.filter(
         contract=contract,
-        accrual_fn="loan_by_bank_statement",
+        accrual_fn__in=LOAN_ACCRUAL_FNS,
     )
 
     for cond in conditions:
@@ -1783,7 +1795,8 @@ def _build_loan_rows_for_condition(cond: Conditions, date_from: date, date_to: d
     - начисление процентов агрегируем по месяцам
     - оплату процентов здесь НЕ добавляем, потому что она уже приходит из выписки
     """
-    result = preview_accruals(cond, anchor_date=date_from)
+    # result = preview_accruals(cond, anchor_date=date_from)
+    result = preview_accruals(cond, anchor_date=date_to)
     rows = result.get("rows", []) or []
     title = result.get("title") or cond.accrual_fn or "Заем"
 
@@ -1794,7 +1807,39 @@ def _build_loan_rows_for_condition(cond: Conditions, date_from: date, date_to: d
         row_date = _safe_date(r.get("accrual_date")) or _safe_date(r.get("period_from"))
         row_from = _safe_date(r.get("period_from")) or row_date
         row_to = _safe_date(r.get("period_to")) or row_date
+        
+        
+        
         flow_type = (r.get("flow_type") or "").strip()
+
+        if not row_date or not row_from or not row_to:
+            continue
+
+        if row_to < date_from or row_from > date_to:
+            continue
+
+        amount = q2(r.get("amount_gross") or r.get("amount") or "0")
+        if amount <= 0:
+            continue
+
+        # 5. Удержание НДФЛ
+        if flow_type == "ndfl_withholding":
+            output.append({
+                "row_date": row_date,
+                "row_type": "payment",
+                "row_type_label": "Удержан НДФЛ",
+                "doc_label": f"Условие #{cond.id}",
+                "description": "Удержан НДФЛ с процентов по займу",
+                "period_from": row_date,
+                "period_to": row_date,
+                "accrual": Decimal("0.00"),
+                "payment": amount,
+                "loan_issue": Decimal("0.00"),
+                "loan_principal_return": Decimal("0.00"),
+                "sort_order": 2,
+                "comment": "НДФЛ удержан налоговым агентом",
+            })
+            continue
 
         if not row_date or not row_from or not row_to:
             continue
@@ -2169,6 +2214,8 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
     До начала периода считаем оплаты:
     - исключаем тело депозита
     - исключаем тело кредита
+    - ДОБАВЛЯЕМ удержанный НДФЛ по займу из preview_accruals,
+      потому что это не банковская выписка, а синтетическая строка начисления
     """
     used_transaction_ids = set()
     total = Decimal("0.00")
@@ -2247,15 +2294,40 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
 
         total += amount
 
-    return q2(total)
+    # ---------------------------------------------------------
+    # ДОБАВЛЯЕМ синтетические оплаты НДФЛ по займам из preview
+    # ---------------------------------------------------------
+    loan_conditions = (
+        Conditions.objects
+        .filter(
+                contract=contract,
+                accrual_fn__in=LOAN_ACCRUAL_FNS,
+            )
+        .order_by("date_start", "id")
+    )
 
+    for cond in loan_conditions:
+        result = preview_accruals(cond, anchor_date=date_from)
+        rows = result.get("rows", []) or []
+
+        for r in rows:
+            row_date = _safe_date(r.get("accrual_date")) or _safe_date(r.get("period_from"))
+            flow_type = (r.get("flow_type") or "").strip()
+
+            if not row_date:
+                continue
+
+            if flow_type == "ndfl_withholding" and row_date < date_from:
+                total += q2(r.get("amount_gross") or r.get("amount") or "0")
+
+    return q2(total)
 
 def get_balance_status(balance: Decimal) -> str:
     balance = q2(balance)
 
-    if balance > 0:
+    if balance > 2:
         return "Наш долг"
-    if balance < 0:
+    if balance < -2:
         return "Переплата"
     return "Сальдо закрыто"
 
@@ -2263,9 +2335,9 @@ def get_balance_status(balance: Decimal) -> str:
 def get_balance_comment(balance: Decimal) -> str:
     balance = q2(balance)
 
-    if balance > 0:
+    if balance > 2:
         return "Положительное сальдо на текущую дату означает задолженность нашей компании перед контрагентом."
-    if balance < 0:
+    if balance < -2:
         return "Отрицательное сальдо на текущую дату означает переплату со стороны нашей компании."
     return "По состоянию на текущую дату задолженность отсутствует."
 
@@ -2273,9 +2345,9 @@ def get_balance_comment(balance: Decimal) -> str:
 def get_balance_status_class(balance: Decimal) -> str:
     balance = q2(balance)
 
-    if balance > 0:
+    if balance > 2:
         return "is-debt"
-    if balance < 0:
+    if balance < -2:
         return "is-overpayment"
     return "is-closed"
 
@@ -2288,13 +2360,14 @@ def get_contract_loan_summary(contract: Contracts, date_from: date, date_to: dat
     - остаток тела на конец периода
     - начислено процентов
     - оплачено процентов
+    - удержан НДФЛ
     - остаток процентов на конец периода
     """
     conditions = (
         Conditions.objects
         .filter(
             contract=contract,
-            accrual_fn="loan_by_bank_statement",
+            accrual_fn__in=LOAN_ACCRUAL_FNS,
         )
         .order_by("date_start", "id")
     )
@@ -2303,14 +2376,16 @@ def get_contract_loan_summary(contract: Contracts, date_from: date, date_to: dat
     principal_returned_total = Decimal("0.00")
     interest_accrued_total = Decimal("0.00")
     interest_paid_total = Decimal("0.00")
+    ndfl_withheld_total = Decimal("0.00")
 
     issued_total_before = Decimal("0.00")
     principal_returned_total_before = Decimal("0.00")
     interest_accrued_total_before = Decimal("0.00")
     interest_paid_total_before = Decimal("0.00")
+    ndfl_withheld_total_before = Decimal("0.00")
 
     for cond in conditions:
-        result = preview_accruals(cond, anchor_date=date_from)
+        result = preview_accruals(cond, anchor_date=date_to)
         rows = result.get("rows", []) or []
 
         for r in rows:
@@ -2330,6 +2405,8 @@ def get_contract_loan_summary(contract: Contracts, date_from: date, date_to: dat
                     interest_accrued_total_before += amount
                 elif flow_type == "interest_payment":
                     interest_paid_total_before += amount
+                elif flow_type == "ndfl_withholding":
+                    ndfl_withheld_total_before += amount
 
             if date_from <= row_date <= date_to:
                 if flow_type == "issue":
@@ -2340,24 +2417,31 @@ def get_contract_loan_summary(contract: Contracts, date_from: date, date_to: dat
                     interest_accrued_total += amount
                 elif flow_type == "interest_payment":
                     interest_paid_total += amount
+                elif flow_type == "ndfl_withholding":
+                    ndfl_withheld_total += amount
 
     principal_outstanding = q2(
-        (issued_total_before + issued_total) - (principal_returned_total_before + principal_returned_total)
+        (issued_total_before + issued_total)
+        - (principal_returned_total_before + principal_returned_total)
     )
+
     interest_outstanding = q2(
-        (interest_accrued_total_before + interest_accrued_total) - (interest_paid_total_before + interest_paid_total)
+        (interest_accrued_total_before + interest_accrued_total)
+        - (interest_paid_total_before + interest_paid_total)
+        - (ndfl_withheld_total_before + ndfl_withheld_total)
     )
 
     return {
         "issued_total": q2(issued_total),
         "principal_returned_total": q2(principal_returned_total),
         "principal_outstanding": q2(principal_outstanding),
+
         "interest_accrued_total": q2(interest_accrued_total),
         "interest_paid_total": q2(interest_paid_total),
+        "ndfl_withheld_total": q2(ndfl_withheld_total),
+
         "interest_outstanding": q2(interest_outstanding),
     }
-
-
 def build_contract_reconciliation(
     contract: Contracts,
     date_from: date,
@@ -2452,6 +2536,7 @@ def build_contract_reconciliation(
         "loan_principal_outstanding": q2(loan_summary["principal_outstanding"]),
         "loan_interest_accrued_total": q2(loan_summary["interest_accrued_total"]),
         "loan_interest_paid_total": q2(loan_summary["interest_paid_total"]),
+        "loan_ndfl_withheld_total": q2(loan_summary["ndfl_withheld_total"]), 
         "loan_interest_outstanding": q2(loan_summary["interest_outstanding"]),
 
         "rows": prepared_rows,

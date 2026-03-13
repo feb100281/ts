@@ -1068,7 +1068,7 @@ class TaxRatesInline(admin.TabularInline):
     show_change_link = True
     verbose_name = "Ставка налога"
     verbose_name_plural = "Ставки налога"
-    fields = ("date", "rate", )
+    fields = ("date", "income_limit", "rate", )
     ordering = ("-date",)
     verbose_name_plural = mark_safe(
         "💯 <b>История ставок</b><br>"

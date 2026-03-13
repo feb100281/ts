@@ -1,19 +1,35 @@
-# contracts/accruals/calculators/loan_by_bank_statement.py
-from decimal import Decimal
+# contracts/accruals/calculators/loan_by_bank_statement_key_rate_share.py
+from decimal import Decimal, InvalidOperation
 from datetime import date, timedelta
 import calendar
 
 from django.db.models import Min, Max
 
 from treasury.models import CfData, CfSplits
-from macro.models import TaxesList, TaxRates
+from macro.models import TaxesList, TaxRates, KeyRate
 
 from ..registry import ACCRUAL_REGISTRY
 from ..utils import q2
 
 
-def _days_in_year(d: date) -> Decimal:
+def _days_in_year_actual(d: date) -> Decimal:
     return Decimal("366") if calendar.isleap(d.year) else Decimal("365")
+
+
+def _resolve_day_count_basis(current_date: date, basis: str) -> Decimal:
+    """
+    Поддержка:
+    - "365"   -> всегда 365
+    - "366"   -> всегда 366
+    - "actual" / "actual_actual" -> 365/366 в зависимости от года
+    """
+    basis = str(basis or "365").strip().lower()
+
+    if basis == "366":
+        return Decimal("366")
+    if basis in {"actual", "actual_actual", "fact", "fact_actual"}:
+        return _days_in_year_actual(current_date)
+    return Decimal("365")
 
 
 def _payment_amount_from_cfdata(obj: CfData) -> Decimal:
@@ -85,7 +101,7 @@ def _cfitem_code(cfitem) -> str:
 
 def _flow_type(code, issue_code, principal_return_code, interest_payment_code):
     """
-    issue               -> выдача тела кредита / займа
+    issue               -> выдача тела займа
     principal_return    -> возврат тела
     interest_payment    -> оплата процентов
     """
@@ -100,27 +116,13 @@ def _flow_type(code, issue_code, principal_return_code, interest_payment_code):
 
 def _flow_title(flow_type):
     return {
-        "issue": "Выдача кредита",
-        "principal_return": "Возврат тела кредита",
+        "issue": "Выдача займа",
+        "principal_return": "Возврат тела займа",
         "interest_payment": "Оплата процентов",
         "interest_accrual": "Начисление процентов",
         "ndfl_withholding": "Удержание НДФЛ",
-    }.get(flow_type, "Кредит")
+    }.get(flow_type, "Заем")
 
-
-def _append_cash_flow(cash_flows, flow_date, flow_type, amount, cf_code="", cf_name="", comment=""):
-    amount = q2(amount)
-    if amount <= 0 or not flow_type:
-        return
-
-    cash_flows.append({
-        "flow_date": flow_date,
-        "flow_type": flow_type,
-        "amount": amount,
-        "cf_code": cf_code,
-        "cf_name": cf_name,
-        "comment": comment,
-    })
 
 def _iter_dates(start_date: date, end_date: date):
     current = start_date
@@ -140,23 +142,21 @@ def _group_cash_flows_by_date(cash_flows: list[dict]) -> dict[date, list[dict]]:
 def _to_decimal(value, default="0.00") -> Decimal:
     if value is None or value == "":
         return Decimal(default)
+    if isinstance(value, Decimal):
+        return value
     return Decimal(str(value))
+
+
+def _to_int(value, default=0) -> int:
+    if value is None or value == "":
+        return default
+    return int(value)
 
 
 def _get_ndfl_brackets_from_model(anchor_date: date, tax_name: str = "НДФЛ") -> list[dict]:
     """
     Берем прогрессивную шкалу НДФЛ из модели TaxRates.
-
-    Логика:
-    1. Находим налог TaxesList по имени.
-    2. Находим максимальную date <= anchor_date.
-    3. Берем ВСЕ ставки TaxRates на эту дату.
-    4. Сортируем по income_limit:
-       2400000 -> 5000000 -> 20000000 -> None
-    5. Превращаем в brackets вида:
-       [{"limit": Decimal(...), "rate": Decimal(...)}]
     """
-
     tax = TaxesList.objects.filter(tax_name=tax_name).first()
     if not tax:
         raise ValueError(f"Не найден налог '{tax_name}' в справочнике TaxesList.")
@@ -219,22 +219,6 @@ def _get_ndfl_brackets_from_model(anchor_date: date, tax_name: str = "НДФЛ")
 
 
 def _calculate_progressive_tax(amount: Decimal, brackets: list[dict]) -> tuple[Decimal, list[dict]]:
-    """
-    amount = налоговая база
-    brackets = [
-        {"limit": 2400000, "rate": 13},
-        {"limit": 5000000, "rate": 15},
-        {"limit": 20000000, "rate": 18},
-        {"limit": None, "rate": 20},
-    ]
-
-    Пример:
-    amount = 5 048 000
-
-    0 -> 2 400 000     по 13%
-    2 400 000 -> 5 000 000 по 15%
-    5 000 000 -> ...   по 18% / 20% и т.д.
-    """
     amount = q2(amount)
 
     if amount <= 0:
@@ -291,28 +275,64 @@ def _calculate_progressive_tax(amount: Decimal, brackets: list[dict]) -> tuple[D
     return q2(total_tax), breakdown
 
 
+def _get_key_rate_on(current_date: date) -> dict:
+    """
+    Берем последнюю действующую ключевую ставку на дату.
+    Логика именно такая, как вы описали:
+    если появилась новая дата начала действия, старая ставка больше не работает.
+    """
+    row = (
+        KeyRate.objects
+        .filter(date__lte=current_date)
+        .order_by("-date")
+        .first()
+    )
+
+    if not row:
+        raise ValueError(
+            f"Не найдена ключевая ставка на дату {current_date} "
+            f"(или ранее) в модели KeyRate."
+        )
+
+    return {
+        "effective_date": row.date,
+        "key_rate": q2(_to_decimal(row.key_rate)),
+        "comment": row.comment or "",
+    }
+
+
 def preview(cond, anchor_date):
     """
     Логика:
     1. Из выписки читаем:
-       - выдачу кредита
+       - выдачу займа
        - возврат тела
        - оплату процентов
     2. Проценты начисляем ежедневно на фактический остаток тела.
-    3. В total попадают только начисленные проценты.
-    4. НДФЛ считаем ТОЛЬКО от начисленных процентов.
-    5. НДФЛ считаем по прогрессивной шкале из модели TaxRates.
+    3. Годовая ставка на каждый день = ключевая ставка на эту дату * (числитель / знаменатель)
+       Например: 2/3 ключевой ставки.
+    4. В total попадают только начисленные проценты.
+    5. НДФЛ считаем только от начисленных процентов.
     """
     params = cond.params or {}
     withholding_ndfl = bool(params.get("withholding_ndfl", False))
 
-    fn = "loan_by_bank_statement"
+    fn = "loan_by_bank_statement_key_rate_share"
     title = ACCRUAL_REGISTRY.get(fn, {}).get("title", fn)
 
     start, finish = _resolve_cash_period(cond, anchor_date)
 
-    annual_rate = q2(params.get("annual_rate") or "0")
-    vat_rate = q2(params.get("vat_rate") or "0")
+    vat_rate = q2(_to_decimal(params.get("vat_rate") or "0"))
+
+    key_rate_numerator = _to_int(params.get("key_rate_numerator"), 2)
+    key_rate_denominator = _to_int(params.get("key_rate_denominator"), 3)
+
+    if key_rate_denominator == 0:
+        raise ValueError("Знаменатель доли ключевой ставки не может быть равен 0.")
+
+    share_multiplier = (
+        Decimal(str(key_rate_numerator)) / Decimal(str(key_rate_denominator))
+    )
 
     issue_cf_code = str(params.get("issue_cf_code") or "").strip()
     principal_return_cf_code = str(params.get("principal_return_cf_code") or "").strip()
@@ -322,8 +342,7 @@ def preview(cond, anchor_date):
     if interest_start_mode not in {"same_day", "next_day"}:
         interest_start_mode = "next_day"
 
-    # имя налога можно при желании передавать в params,
-    # но по умолчанию берем "НДФЛ"
+    day_count_basis_mode = str(params.get("day_count_basis") or "actual").strip().lower()
     ndfl_tax_name = str(params.get("ndfl_tax_name") or "НДФЛ").strip()
 
     rows = []
@@ -336,10 +355,11 @@ def preview(cond, anchor_date):
     ndfl_breakdown = []
     ndfl_brackets = []
 
+    used_transaction_ids = set()
     cash_flows = []
 
     # ---------------------------------------------------------
-    # 1. Сначала читаем все сплиты и считаем сумму split по transaction
+    # 1. Сначала сплиты
     # ---------------------------------------------------------
     split_qs = (
         CfSplits.objects
@@ -352,27 +372,12 @@ def preview(cond, anchor_date):
         .order_by("transaction__date", "id")
     )
 
-    # split_amounts_by_transaction = {}
-    # split_transaction_ids = set()
-
-    # for s in split_qs:
-    #     split_amount = _payment_amount_from_split(s)
-    #     if split_amount <= 0:
-    #         continue
-
-    #     split_transaction_ids.add(s.transaction_id)
-    #     split_amounts_by_transaction.setdefault(s.transaction_id, Decimal("0.00"))
-    #     split_amounts_by_transaction[s.transaction_id] += q2(split_amount)
-    
-    
-    split_transaction_ids = set()
-
     for s in split_qs:
-        split_amount = _payment_amount_from_split(s)
-        if split_amount <= 0:
+        amount = _payment_amount_from_split(s)
+        if amount <= 0:
             continue
 
-        split_transaction_ids.add(s.transaction_id)
+        used_transaction_ids.add(s.transaction_id)
 
         code = _cfitem_code(s.cfitem)
         flow_type = _flow_type(
@@ -381,20 +386,20 @@ def preview(cond, anchor_date):
             principal_return_cf_code,
             interest_payment_cf_code,
         )
+        if not flow_type:
+            continue
 
-        _append_cash_flow(
-            cash_flows=cash_flows,
-            flow_date=s.transaction.date,
-            flow_type=flow_type,
-            amount=split_amount,
-            cf_code=code,
-            cf_name=s.cfitem.name if s.cfitem else "",
-            comment=f"{_flow_title(flow_type)} / сплит #{s.transaction_id}",
-        )
+        cash_flows.append({
+            "flow_date": s.transaction.date,
+            "flow_type": flow_type,
+            "amount": q2(amount),
+            "cf_code": code,
+            "cf_name": s.cfitem.name if s.cfitem else "",
+            "comment": f"{_flow_title(flow_type)} / сплит #{s.transaction_id}",
+        })
 
     # ---------------------------------------------------------
-    # 2. Читаем все CfData и для частично разбитых платежей
-    #    добавляем нераспределенный остаток
+    # 2. Потом прямые CfData, которых нет в сплитах
     # ---------------------------------------------------------
     cf_qs = (
         CfData.objects
@@ -404,12 +409,13 @@ def preview(cond, anchor_date):
             date__gte=start,
             date__lte=finish,
         )
+        .exclude(id__in=used_transaction_ids)
         .order_by("date", "id")
     )
 
     for p in cf_qs:
-        original_amount = _payment_amount_from_cfdata(p)
-        if original_amount <= 0:
+        amount = _payment_amount_from_cfdata(p)
+        if amount <= 0:
             continue
 
         code = _cfitem_code(p.cfitem)
@@ -419,37 +425,18 @@ def preview(cond, anchor_date):
             principal_return_cf_code,
             interest_payment_cf_code,
         )
-
-        # Если по платежу нет split — берем весь CfData как раньше
-        if p.id not in split_transaction_ids:
-            _append_cash_flow(
-                cash_flows=cash_flows,
-                flow_date=p.date,
-                flow_type=flow_type,
-                amount=original_amount,
-                cf_code=code,
-                cf_name=p.cfitem.name if p.cfitem else "",
-                comment=f"{_flow_title(flow_type)} #{p.id}",
-            )
+        if not flow_type:
             continue
 
-        # Если split есть — берем только остаток, который не разнесли в split
-        # Если split есть — CfData уже хранит остаток после split,
-        # поэтому берем его как есть, ничего дополнительно не вычитаем
-        if p.id in split_transaction_ids:
-            residual_amount = q2(original_amount)
+        cash_flows.append({
+            "flow_date": p.date,
+            "flow_type": flow_type,
+            "amount": q2(amount),
+            "cf_code": code,
+            "cf_name": p.cfitem.name if p.cfitem else "",
+            "comment": f"{_flow_title(flow_type)} #{p.id}",
+        })
 
-            if residual_amount > 0:
-                _append_cash_flow(
-                    cash_flows=cash_flows,
-                    flow_date=p.date,
-                    flow_type=flow_type,
-                    amount=residual_amount,
-                    cf_code=code,
-                    cf_name=p.cfitem.name if p.cfitem else "",
-                    comment=f"{_flow_title(flow_type)} #{p.id} / остаток после split",
-                )
-            continue
     cash_flows.sort(key=lambda x: (x["flow_date"], x["flow_type"], x["amount"]))
 
     # ---------------------------------------------------------
@@ -472,10 +459,16 @@ def preview(cond, anchor_date):
         if principal_balance < 0:
             principal_balance = Decimal("0.00")
 
-        day_count_basis = _days_in_year(current_date)
+        key_rate_data = _get_key_rate_on(current_date)
+        key_rate = _to_decimal(key_rate_data["key_rate"])
+
+        annual_rate_raw = key_rate * share_multiplier
+        annual_rate = q2(annual_rate_raw)
+
+        day_count_basis = _resolve_day_count_basis(current_date, day_count_basis_mode)
 
         daily_interest = q2(
-            principal_balance * annual_rate / Decimal("100") / day_count_basis
+            principal_balance * annual_rate_raw / Decimal("100") / day_count_basis
         )
 
         if daily_interest > 0:
@@ -494,9 +487,16 @@ def preview(cond, anchor_date):
                 "flow_type": "interest_accrual",
                 "cf_code": "",
                 "cf_name": "",
-                "comment": "Начисление процентов на остаток тела кредита",
+                "comment": (
+                    f"Начисление процентов на остаток тела займа "
+                    f"по ставке {key_rate_numerator}/{key_rate_denominator} "
+                    f"от ключевой ставки"
+                ),
                 "principal_balance": q2(principal_balance),
+                "key_rate": q2(key_rate),
                 "annual_rate": q2(annual_rate),
+                "rate_multiplier": share_multiplier,
+                "key_rate_effective_date": key_rate_data["effective_date"],
                 "day_count_basis": q2(day_count_basis),
             })
 
@@ -586,8 +586,7 @@ def preview(cond, anchor_date):
     rows.extend(accrual_rows)
 
     # ---------------------------------------------------------
-    # 6. НДФЛ ТОЛЬКО от начисленных процентов
-    #    Ставки берем из модели TaxRates
+    # 6. НДФЛ только от начисленных процентов
     # ---------------------------------------------------------
     if withholding_ndfl and interest_accrued_total > 0:
         ndfl_brackets = _get_ndfl_brackets_from_model(
@@ -621,7 +620,10 @@ def preview(cond, anchor_date):
                 "flow_type": "ndfl_withholding",
                 "cf_code": "",
                 "cf_name": "",
-                "comment": "Удержан НДФЛ с начисленных процентов по займу",
+                "comment": (
+                    "Удержан НДФЛ с начисленных процентов по займу "
+                    "по ставке, привязанной к ключевой ставке"
+                ),
             })
 
     issued_total = q2(issued_total)
@@ -663,12 +665,18 @@ def preview(cond, anchor_date):
         "ndfl_brackets": ndfl_brackets,
         "ndfl_breakdown": ndfl_breakdown,
 
+        "key_rate_numerator": key_rate_numerator,
+        "key_rate_denominator": key_rate_denominator,
+        "rate_multiplier": share_multiplier,
+
         "vat_rate": vat_rate,
         "vat_mode": getattr(cond, "vat_mode", "no_vat"),
         "rows": rows,
         "note": (
-            "Проценты по кредиту рассчитаны на фактический остаток тела кредита. "
-            "НДФЛ рассчитан только от начисленных процентов по прогрессивной шкале "
-            "из модели TaxRates."
+            f"Проценты по займу рассчитаны на фактический остаток тела займа "
+            f"по ставке {key_rate_numerator}/{key_rate_denominator} от ключевой ставки. "
+            f"Ключевая ставка определяется по модели KeyRate на каждую дату начисления. "
+            f"НДФЛ рассчитан только от начисленных процентов по прогрессивной шкале "
+            f"из модели TaxRates."
         ),
     }

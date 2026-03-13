@@ -359,9 +359,11 @@
     <div class="accruals-sheet">
 
       <div class="accruals-toolbar no-print">
-        <a href="/admin/contracts/contract/" class="accruals-btn accruals-btn--light">
-          ← К списку договоров
-        </a>
+
+        <a href="{% url 'admin:contracts_contracts_changelist' %}" class="accruals-btn accruals-btn--light">
+  ← К списку договоров
+</a>
+
 
         <button type="button" class="accruals-btn accruals-btn--dark" onclick="window.print()">
           Печать / PDF

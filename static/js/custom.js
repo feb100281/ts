@@ -69,6 +69,7 @@ document.addEventListener("click", function (event) {
     Контрагенты: "fa-solid fa-handshake",
     Договоры: "fa-solid fa-file-signature",
     Выписки: "fa-solid fa-receipt",
+    'Запустить GL ETL': "fa-solid fa-gears"
   };
 
   function enhanceTopMenu() {
