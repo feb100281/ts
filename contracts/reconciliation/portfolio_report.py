@@ -108,12 +108,14 @@ def _get_loan_totals_to_date(contract: Contracts, end_date: date) -> dict[str, D
     - остаток тела
     - начислено процентов
     - оплачено процентов
+    - удержано НДФЛ
     - остаток процентов
     """
     issued_total = Decimal("0.00")
     principal_returned_total = Decimal("0.00")
     interest_accrued_total = Decimal("0.00")
     interest_paid_total = Decimal("0.00")
+    ndfl_withheld_total = Decimal("0.00")
 
     conditions = (
         Conditions.objects
@@ -141,17 +143,24 @@ def _get_loan_totals_to_date(contract: Contracts, end_date: date) -> dict[str, D
                 interest_accrued_total += amount
             elif flow_type == "interest_payment":
                 interest_paid_total += amount
+            elif flow_type == "ndfl_withholding":
+                ndfl_withheld_total += amount
 
     principal_outstanding = q2(issued_total - principal_returned_total)
-    interest_outstanding = q2(interest_accrued_total - interest_paid_total)
+    interest_outstanding = q2(
+        interest_accrued_total - interest_paid_total - ndfl_withheld_total
+    )
     total_outstanding = q2(principal_outstanding + interest_outstanding)
 
     return {
         "issued_total": q2(issued_total),
         "principal_returned_total": q2(principal_returned_total),
         "principal_outstanding": q2(principal_outstanding),
+
         "interest_accrued_total": q2(interest_accrued_total),
         "interest_paid_total": q2(interest_paid_total),
+        "ndfl_withheld_total": q2(ndfl_withheld_total),
+
         "interest_outstanding": q2(interest_outstanding),
         "total_outstanding": q2(total_outstanding),
     }
@@ -248,7 +257,9 @@ def debt_report(request):
                 loan_totals = _get_loan_totals_to_date(contract, end_date)
 
                 total_accruals = loan_totals["interest_accrued_total"]
-                total_payments = loan_totals["interest_paid_total"]
+                total_payments = q2(
+                    loan_totals["interest_paid_total"] + loan_totals["ndfl_withheld_total"]
+                )
                 closing_balance = loan_totals["total_outstanding"]
 
                 loan_principal_outstanding = loan_totals["principal_outstanding"]
