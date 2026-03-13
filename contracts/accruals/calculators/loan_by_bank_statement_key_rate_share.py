@@ -330,7 +330,7 @@ def preview(cond, anchor_date):
     if key_rate_denominator == 0:
         raise ValueError("Знаменатель доли ключевой ставки не может быть равен 0.")
 
-    share_multiplier = q2(
+    share_multiplier = (
         Decimal(str(key_rate_numerator)) / Decimal(str(key_rate_denominator))
     )
 
@@ -460,13 +460,15 @@ def preview(cond, anchor_date):
             principal_balance = Decimal("0.00")
 
         key_rate_data = _get_key_rate_on(current_date)
-        key_rate = q2(key_rate_data["key_rate"])
-        annual_rate = q2(key_rate * share_multiplier)
+        key_rate = _to_decimal(key_rate_data["key_rate"])
+
+        annual_rate_raw = key_rate * share_multiplier
+        annual_rate = q2(annual_rate_raw)
 
         day_count_basis = _resolve_day_count_basis(current_date, day_count_basis_mode)
 
         daily_interest = q2(
-            principal_balance * annual_rate / Decimal("100") / day_count_basis
+            principal_balance * annual_rate_raw / Decimal("100") / day_count_basis
         )
 
         if daily_interest > 0:
