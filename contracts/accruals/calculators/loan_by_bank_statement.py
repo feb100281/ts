@@ -108,6 +108,20 @@ def _flow_title(flow_type):
     }.get(flow_type, "Кредит")
 
 
+def _append_cash_flow(cash_flows, flow_date, flow_type, amount, cf_code="", cf_name="", comment=""):
+    amount = q2(amount)
+    if amount <= 0 or not flow_type:
+        return
+
+    cash_flows.append({
+        "flow_date": flow_date,
+        "flow_type": flow_type,
+        "amount": amount,
+        "cf_code": cf_code,
+        "cf_name": cf_name,
+        "comment": comment,
+    })
+
 def _iter_dates(start_date: date, end_date: date):
     current = start_date
     while current <= end_date:
@@ -322,11 +336,10 @@ def preview(cond, anchor_date):
     ndfl_breakdown = []
     ndfl_brackets = []
 
-    used_transaction_ids = set()
     cash_flows = []
 
     # ---------------------------------------------------------
-    # 1. Сначала сплиты
+    # 1. Сначала читаем все сплиты и считаем сумму split по transaction
     # ---------------------------------------------------------
     split_qs = (
         CfSplits.objects
@@ -339,12 +352,27 @@ def preview(cond, anchor_date):
         .order_by("transaction__date", "id")
     )
 
+    # split_amounts_by_transaction = {}
+    # split_transaction_ids = set()
+
+    # for s in split_qs:
+    #     split_amount = _payment_amount_from_split(s)
+    #     if split_amount <= 0:
+    #         continue
+
+    #     split_transaction_ids.add(s.transaction_id)
+    #     split_amounts_by_transaction.setdefault(s.transaction_id, Decimal("0.00"))
+    #     split_amounts_by_transaction[s.transaction_id] += q2(split_amount)
+    
+    
+    split_transaction_ids = set()
+
     for s in split_qs:
-        amount = _payment_amount_from_split(s)
-        if amount <= 0:
+        split_amount = _payment_amount_from_split(s)
+        if split_amount <= 0:
             continue
 
-        used_transaction_ids.add(s.transaction_id)
+        split_transaction_ids.add(s.transaction_id)
 
         code = _cfitem_code(s.cfitem)
         flow_type = _flow_type(
@@ -353,20 +381,20 @@ def preview(cond, anchor_date):
             principal_return_cf_code,
             interest_payment_cf_code,
         )
-        if not flow_type:
-            continue
 
-        cash_flows.append({
-            "flow_date": s.transaction.date,
-            "flow_type": flow_type,
-            "amount": q2(amount),
-            "cf_code": code,
-            "cf_name": s.cfitem.name if s.cfitem else "",
-            "comment": f"{_flow_title(flow_type)} / сплит #{s.transaction_id}",
-        })
+        _append_cash_flow(
+            cash_flows=cash_flows,
+            flow_date=s.transaction.date,
+            flow_type=flow_type,
+            amount=split_amount,
+            cf_code=code,
+            cf_name=s.cfitem.name if s.cfitem else "",
+            comment=f"{_flow_title(flow_type)} / сплит #{s.transaction_id}",
+        )
 
     # ---------------------------------------------------------
-    # 2. Потом прямые CfData, которых нет в сплитах
+    # 2. Читаем все CfData и для частично разбитых платежей
+    #    добавляем нераспределенный остаток
     # ---------------------------------------------------------
     cf_qs = (
         CfData.objects
@@ -376,13 +404,12 @@ def preview(cond, anchor_date):
             date__gte=start,
             date__lte=finish,
         )
-        .exclude(id__in=used_transaction_ids)
         .order_by("date", "id")
     )
 
     for p in cf_qs:
-        amount = _payment_amount_from_cfdata(p)
-        if amount <= 0:
+        original_amount = _payment_amount_from_cfdata(p)
+        if original_amount <= 0:
             continue
 
         code = _cfitem_code(p.cfitem)
@@ -392,18 +419,37 @@ def preview(cond, anchor_date):
             principal_return_cf_code,
             interest_payment_cf_code,
         )
-        if not flow_type:
+
+        # Если по платежу нет split — берем весь CfData как раньше
+        if p.id not in split_transaction_ids:
+            _append_cash_flow(
+                cash_flows=cash_flows,
+                flow_date=p.date,
+                flow_type=flow_type,
+                amount=original_amount,
+                cf_code=code,
+                cf_name=p.cfitem.name if p.cfitem else "",
+                comment=f"{_flow_title(flow_type)} #{p.id}",
+            )
             continue
 
-        cash_flows.append({
-            "flow_date": p.date,
-            "flow_type": flow_type,
-            "amount": q2(amount),
-            "cf_code": code,
-            "cf_name": p.cfitem.name if p.cfitem else "",
-            "comment": f"{_flow_title(flow_type)} #{p.id}",
-        })
+        # Если split есть — берем только остаток, который не разнесли в split
+        # Если split есть — CfData уже хранит остаток после split,
+        # поэтому берем его как есть, ничего дополнительно не вычитаем
+        if p.id in split_transaction_ids:
+            residual_amount = q2(original_amount)
 
+            if residual_amount > 0:
+                _append_cash_flow(
+                    cash_flows=cash_flows,
+                    flow_date=p.date,
+                    flow_type=flow_type,
+                    amount=residual_amount,
+                    cf_code=code,
+                    cf_name=p.cfitem.name if p.cfitem else "",
+                    comment=f"{_flow_title(flow_type)} #{p.id} / остаток после split",
+                )
+            continue
     cash_flows.sort(key=lambda x: (x["flow_date"], x["flow_type"], x["amount"]))
 
     # ---------------------------------------------------------
