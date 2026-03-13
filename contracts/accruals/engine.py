@@ -61,6 +61,10 @@ from .calculators.deposit_by_bank_statement import preview as preview_deposit_by
 from .calculators.own_funds_transfer import preview as preview_own_funds_transfer
 from .calculators.annual_payment import preview as preview_annual_payment
 from .calculators.loan_by_bank_statement import preview as preview_loan_by_bank_statement
+from .calculators.loan_by_bank_statement_key_rate_share import (
+    preview as preview_loan_by_bank_statement_key_rate_share,
+)
+
 
 
 PREVIEW_HANDLERS = {
@@ -72,6 +76,7 @@ PREVIEW_HANDLERS = {
     "own_funds_transfer": preview_own_funds_transfer,
     "annual_payment": preview_annual_payment,
     "loan_by_bank_statement": preview_loan_by_bank_statement,
+    "loan_by_bank_statement_key_rate_share": preview_loan_by_bank_statement_key_rate_share,
 }
 
 
