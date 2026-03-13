@@ -15,6 +15,9 @@ from django.shortcuts import get_object_or_404
 
 from contracts.accruals.service import preview_accruals
 
+from grossbook.models import Settlements
+
+
 from .models import (
     Contracts,
     Conditions,
@@ -263,6 +266,18 @@ class ContractItemsInline(admin.StackedInline):
     verbose_name = mark_safe("<b>🧾 Предмет</b>")
     verbose_name_plural = mark_safe("🧾 <b>Предмет</b>")
 
+## ТУТ ДОБАВИЛ
+class SettlementsInlineForm(admin.TabularInline):
+    model = Settlements
+    fk_name = 'contract'
+    extra = 0
+    class Meta:
+        model = Settlements
+        fields = "__all__"
+        widgets = {
+            "item": forms.Textarea(attrs={"rows": 2, "style": "width: 70%;"}),
+        }
+
 
 class ConditionsInline(admin.StackedInline):
     model = Conditions
@@ -364,6 +379,7 @@ class ContractsAdmin(admin.ModelAdmin):
         ContractItemsInline,
         ConditionsInline,
         CfItemAutoInline,
+        SettlementsInlineForm
     )
 
     list_display = (
