@@ -1486,6 +1486,15 @@ from treasury.models import CfData, CfSplits
 from grossbook.models import Manual
 
 
+
+
+LOAN_ACCRUAL_FNS = {
+    "loan_by_bank_statement",
+    "loan_by_bank_statement_key_rate_share",
+}
+
+
+
 def q2(x: Decimal | str | int | float | None) -> Decimal:
     return Decimal(str(x or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -1559,8 +1568,7 @@ def _is_deposit_interest_cf_code(code: str) -> bool:
 
 
 def _is_loan_condition(cond: Conditions) -> bool:
-    return (cond.accrual_fn or "") == "loan_by_bank_statement"
-
+    return (cond.accrual_fn or "") in LOAN_ACCRUAL_FNS
 
 def _is_loan_principal_flow(flow_type: str) -> bool:
     return flow_type in {"issue", "principal_return"}
@@ -1711,7 +1719,7 @@ def _get_loan_codes(cond: Conditions) -> tuple[str, str, str]:
 def _is_loan_principal_cf_code_for_contract(contract: Contracts, code: str) -> bool:
     conditions = Conditions.objects.filter(
         contract=contract,
-        accrual_fn="loan_by_bank_statement",
+        accrual_fn__in=LOAN_ACCRUAL_FNS,
     )
 
     for cond in conditions:
@@ -1728,7 +1736,7 @@ def _is_loan_ndfl_flow(flow_type: str) -> bool:
 def _is_loan_interest_payment_cf_code_for_contract(contract: Contracts, code: str) -> bool:
     conditions = Conditions.objects.filter(
         contract=contract,
-        accrual_fn="loan_by_bank_statement",
+        accrual_fn__in=LOAN_ACCRUAL_FNS,
     )
 
     for cond in conditions:
@@ -2291,7 +2299,10 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
     # ---------------------------------------------------------
     loan_conditions = (
         Conditions.objects
-        .filter(contract=contract, accrual_fn="loan_by_bank_statement")
+        .filter(
+                contract=contract,
+                accrual_fn__in=LOAN_ACCRUAL_FNS,
+            )
         .order_by("date_start", "id")
     )
 
@@ -2356,7 +2367,7 @@ def get_contract_loan_summary(contract: Contracts, date_from: date, date_to: dat
         Conditions.objects
         .filter(
             contract=contract,
-            accrual_fn="loan_by_bank_statement",
+            accrual_fn__in=LOAN_ACCRUAL_FNS,
         )
         .order_by("date_start", "id")
     )
