@@ -66,7 +66,7 @@ def money_ru(value):
     except (InvalidOperation, ValueError, TypeError):
         return value
 
-    formatted = f"{dec_value:,.2f}"
+    formatted = f"{dec_value:,.0f}"
     formatted = formatted.replace(",", "X").replace(".", ",").replace("X", " ")
     return formatted
 
