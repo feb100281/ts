@@ -41,24 +41,24 @@ class Manual(models.Model):
     
             
     
-class Settlements(models.Model):
-    id = models.UUIDField(primary_key=True)
-    date_from = models.DateField(verbose_name='Дата')
-    pid = models.ForeignKey(Contracts,on_delete=models.DO_NOTHING,verbose_name='Основной договор',related_name='pid_contract', null=True,blank=True)
-    contract = models.ForeignKey(Contracts,on_delete=models.DO_NOTHING,verbose_name='Договор',related_name='contract', null=True,blank=True)
-    cp = models.ForeignKey(Counterparty,on_delete=models.DO_NOTHING,verbose_name='Контрагент',related_name='cp_name', null=True,blank=True)
-    st = models.ForeignKey(COA,on_delete=models.DO_NOTHING,verbose_name='Счет',related_name='account', null=True,blank=True)
-    description = models.TextField(verbose_name='Описание',null=True,blank=True)
-    dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Дт')
-    cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Кр')
+# class Settlements(models.Model):
+#     id = models.UUIDField(primary_key=True)
+#     date_from = models.DateField(verbose_name='Дата')
+#     pid = models.ForeignKey(Contracts,on_delete=models.DO_NOTHING,verbose_name='Основной договор',related_name='pid_contract', null=True,blank=True)
+#     contract = models.ForeignKey(Contracts,on_delete=models.DO_NOTHING,verbose_name='Договор',related_name='contract', null=True,blank=True)
+#     cp = models.ForeignKey(Counterparty,on_delete=models.DO_NOTHING,verbose_name='Контрагент',related_name='cp_name', null=True,blank=True)
+#     st = models.ForeignKey(COA,on_delete=models.DO_NOTHING,verbose_name='Счет',related_name='account', null=True,blank=True)
+#     description = models.TextField(verbose_name='Описание',null=True,blank=True)
+#     dt = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Дт')
+#     cr = models.DecimalField(max_digits=12,decimal_places=2,verbose_name='Кр')
     
-    class Meta:
-        managed = False
-        db_table = '"gl"."mv_accurals"'
-        verbose_name = "Взаиморасчеты"
-        verbose_name_plural = "Взаиморасчеты"
+#     class Meta:
+#         managed = False
+#         db_table = '"gl"."mv_accurals"'
+#         verbose_name = "Взаиморасчеты"
+#         verbose_name_plural = "Взаиморасчеты"
 
-    def __str__(self):
-        return f"{self.date_from:} на сумму: ({(self.dt - self.cr):,.0f})"
+#     def __str__(self):
+#         return f"{self.date_from:} на сумму: ({(self.dt - self.cr):,.0f})"
     
 
