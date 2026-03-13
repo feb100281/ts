@@ -2314,9 +2314,9 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
 def get_balance_status(balance: Decimal) -> str:
     balance = q2(balance)
 
-    if balance > 0.999:
+    if balance > 2:
         return "Наш долг"
-    if balance < 0:
+    if balance < -2:
         return "Переплата"
     return "Сальдо закрыто"
 
@@ -2324,9 +2324,9 @@ def get_balance_status(balance: Decimal) -> str:
 def get_balance_comment(balance: Decimal) -> str:
     balance = q2(balance)
 
-    if balance > 0.999:
+    if balance > 2:
         return "Положительное сальдо на текущую дату означает задолженность нашей компании перед контрагентом."
-    if balance < 0:
+    if balance < -2:
         return "Отрицательное сальдо на текущую дату означает переплату со стороны нашей компании."
     return "По состоянию на текущую дату задолженность отсутствует."
 
@@ -2334,9 +2334,9 @@ def get_balance_comment(balance: Decimal) -> str:
 def get_balance_status_class(balance: Decimal) -> str:
     balance = q2(balance)
 
-    if balance > 0.999:
+    if balance > 2:
         return "is-debt"
-    if balance < 0:
+    if balance < -2:
         return "is-overpayment"
     return "is-closed"
 
