@@ -276,7 +276,8 @@ def debt_report(request):
             continue
 
         # Главное изменение: в детализацию берем только ненулевые остатки
-        if closing_balance == Decimal("0.00"):
+        # if closing_balance == Decimal("0.00"):
+        if abs(closing_balance) < Decimal("1"):
             continue
 
         row = {
