@@ -342,7 +342,7 @@ def preview(cond, anchor_date):
     if interest_start_mode not in {"same_day", "next_day"}:
         interest_start_mode = "next_day"
 
-    day_count_basis_mode = str(params.get("day_count_basis") or "365").strip().lower()
+    day_count_basis_mode = str(params.get("day_count_basis") or "actual").strip().lower()
     ndfl_tax_name = str(params.get("ndfl_tax_name") or "НДФЛ").strip()
 
     rows = []

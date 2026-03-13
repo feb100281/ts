@@ -1,5 +1,4 @@
 # contracts/reconciliation/portfolio_report.py
-# contracts/reconciliation/portfolio_report.py
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -10,7 +9,7 @@ from django.shortcuts import render
 from django.contrib.admin.views.decorators import staff_member_required
 
 from contracts.models import Contracts, Conditions
-from contracts.reconciliation.service import q2, _get_payment_total_before
+from contracts.reconciliation.service import q2, _get_payment_total_before, LOAN_ACCRUAL_FNS
 from contracts.accruals.engine import preview_accruals
 from treasury.models import CfData, CfSplits 
 
@@ -97,7 +96,7 @@ def _is_deposit_condition(cond: Conditions) -> bool:
 
 
 def _is_loan_condition(cond: Conditions) -> bool:
-    return (cond.accrual_fn or "") == "loan_by_bank_statement"
+    return (cond.accrual_fn or "") in LOAN_ACCRUAL_FNS
 
 
 def _get_loan_totals_to_date(contract: Contracts, end_date: date) -> dict[str, Decimal]:
@@ -118,10 +117,10 @@ def _get_loan_totals_to_date(contract: Contracts, end_date: date) -> dict[str, D
     ndfl_withheld_total = Decimal("0.00")
 
     conditions = (
-        Conditions.objects
-        .filter(contract=contract, accrual_fn="loan_by_bank_statement")
-        .order_by("date_start", "id")
-    )
+            Conditions.objects
+            .filter(contract=contract, accrual_fn__in=LOAN_ACCRUAL_FNS)
+            .order_by("date_start", "id")
+        )
 
     for cond in conditions:
         result = preview_accruals(cond, anchor_date=end_date)
@@ -169,7 +168,7 @@ def _get_loan_totals_to_date(contract: Contracts, end_date: date) -> dict[str, D
 def _has_loan_conditions(contract: Contracts) -> bool:
     return Conditions.objects.filter(
         contract=contract,
-        accrual_fn="loan_by_bank_statement",
+        accrual_fn__in=LOAN_ACCRUAL_FNS,
     ).exists()
 
 def _is_deposit_principal_flow(flow_type: str) -> bool:

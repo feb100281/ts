@@ -154,7 +154,7 @@ ACCRUAL_REGISTRY = {
             "principal_return_cf_code": "321100",
             "interest_payment_cf_code": "321200",
             "interest_start_mode": "next_day",
-            "day_count_basis": "365",
+            "day_count_basis": "actual",
         },
     },
 
