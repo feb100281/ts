@@ -14,6 +14,11 @@ from treasury.models import CfData, CfSplits
 from .models import Conditions
 from contracts.accruals.engine import preview_accruals
 
+from django.db import connection
+from pprint import pprint
+
+import pandas as pd
+import numpy as np
 
 @staff_member_required
 def condition_accruals_preview(request, condition_id: int):
@@ -24,8 +29,44 @@ def condition_accruals_preview(request, condition_id: int):
     contract = condition.contract
 
     result = preview_accruals(condition, anchor_date=date.today())
+    
+# {'condition_id': 111,
+#  'fn': 'by_bank_statement',
+#  'note': 'Начисление сформировано по данным банковской выписки.',
+#  'period': {'from': datetime.date(2025, 4, 25),
+#             'to': datetime.date(2026, 3, 13)},
+#  'rows': [{'amount': Decimal('3000.00'),
+#            'amount_gross': Decimal('3000.00'),
+#            'amount_net': Decimal('3000.00'),
+#            'comment': 'Начисление по выписке #166036',
+#            'days': 1,
+#            'period_from': datetime.date(2025, 4, 25),
+#            'period_to': datetime.date(2025, 4, 25),
+#            'vat_amount': Decimal('0.00'),
+#            'vat_mode': 'unknown',
+#            'vat_rate': Decimal('0')}],
+#  'title': 'Cумма из оплаты',
+#  'total': Decimal('3000.00'),
+#  'total_gross': Decimal('3000.00'),
+#  'total_net': Decimal('3000.00'),
+#  'total_vat': Decimal('0.00'),
+#  'vat_mode': 'unknown',
+#  'vat_rate': Decimal('0')}
+# [{'amount': Decimal('3000.00'),
+#   'amount_gross': Decimal('3000.00'),
+#   'amount_net': Decimal('3000.00'),
+#   'comment': 'Начисление по выписке #166036',
+#   'days': 1,
+#   'period_from': datetime.date(2025, 4, 25),
+#   'period_to': datetime.date(2025, 4, 25),
+#   'vat_amount': Decimal('0.00'),
+#   'vat_mode': 'unknown',
+#   'vat_rate': Decimal('0')}]
+    # pprint(result)
 
     rows = result.get("rows", []) or []
+    
+    # pprint(rows)
 
     context = {
         "condition": condition,
@@ -44,6 +85,32 @@ def condition_accruals_preview(request, condition_id: int):
     }
     return TemplateResponse(request, "admin/contracts/accruals_print.html", context)
 
+# Нужно потом в SQL функцию перетащий; Это порнография какая то получается
+# 1 запрос и все
+def get_sql(pid):
+    return f"""
+    SELECT
+    case when cr=0 then round((dt-cr)/100,2)::numeric else 0 end as accrual,
+    0 as balance,
+    description as comment,
+    'ХЗ' as description,
+    'Выписки но блин не хочу' as doc_label,
+    0 as loan_issue,
+    0 as loan_principal_return,
+    case when dt = 0 then round((cr-dt)/100,2)::numeric else 0 end as payment,
+    null as period_from,
+    null as period_to,
+    date_from as row_date,
+    case when cr = 0 then 'accrual' else 'payment' end as row_type,
+    case when cr = 0 then 'Начисление' else 'Оплата' end as row_type_label,
+    case when cr = 0 then 1 else 2 end as sort_order
+    from gl.mv_accurals
+    where pid_id = {pid} and date_from::date <= current_date
+    order by date_from
+    """
+
+
+
 
 @staff_member_required
 def contract_reconciliation_preview(request, contract_id: int):
@@ -51,7 +118,7 @@ def contract_reconciliation_preview(request, contract_id: int):
         Contracts.objects.select_related("cp", "title"),
         pk=contract_id
     )
-
+    
     date_from_str = request.GET.get("date_from")
     date_to_str = request.GET.get("date_to")
 
@@ -96,6 +163,28 @@ def contract_reconciliation_preview(request, contract_id: int):
         date_to=date_to,
         report_date=report_date,
     )
+    
+    # ------------------------------------------
+    ### ВСЕ ПРЕВЬЮ В ТРИ СТРОЧКИ!!! ЗАКОМЕНТЬ ПОТОМ ЕСЛИ ЧТО
+    #ВАЖНО СЧИТАЕМ ПО PID
+    root_id = contract.pid_id or contract.id
+    df = pd.read_sql(get_sql(root_id),connection)
+    
+    #Делаем сверку    
+    rows_new = {
+    "rows": df.to_dict(orient="records")
+    }    
+    #ХОД КОНЕМ ЧТО БЫ НЕ КОПАТЬСЯ В 2 тыс срок services
+    result["rows"] = rows_new["rows"]
+    result["total_accruals"] = df['accrual'].sum()
+    result["total_payments"] = df['payment'].sum()    
+    result["current_accruals"] = df['accrual'].sum()  ### Не увенер просто так сделал
+    result["current_balance"] = df['accrual'].sum() - df['payment'].sum() 
+    result["closing_balance"] = df['accrual'].sum() - df['payment'].sum() 
+    # ВСЕ ОСТАЛЬНОЕ МОЖНО ЧЕРЕЗ DF найти и передать в шаблон.
+    #ДЖАНГО НЕ ЮЗАЕМ В РАСЧЕТАХ
+    # ------------------------------------------
+    
 
     # context = {
     #     "contract": contract,
@@ -149,5 +238,7 @@ def contract_reconciliation_preview(request, contract_id: int):
         "result": result,
         "has_loan": has_loan,
     }
+    
+    
 
     return TemplateResponse(request, "admin/contracts/reconciliation_print.html", context)
