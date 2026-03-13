@@ -103,6 +103,7 @@ ACCRUAL_REGISTRY = {
             "fields": [
                 {"key": "annual_rate", "label": "Ставка, % годовых", "type": "decimal", "required": True},
                 {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
+                {"key": "withholding_ndfl", "label": "Удерживать НДФЛ", "type": "boolean", "required": False},
 
                 {"key": "issue_cf_code", "label": "CF код выдачи займа", "type": "string", "required": True},
                 {"key": "principal_return_cf_code", "label": "CF код возврата тела займа", "type": "string", "required": True},
@@ -114,6 +115,7 @@ ACCRUAL_REGISTRY = {
             "defaults": {
                 "annual_rate": Decimal("14.5"),
                 "vat_rate": Decimal("0"),
+                "withholding_ndfl": False,
                 "issue_cf_code": "312100",
                 "principal_return_cf_code": "321100",
                 "interest_payment_cf_code": "321200",
@@ -121,6 +123,40 @@ ACCRUAL_REGISTRY = {
                 "day_count_basis": "365",
             },
         },
+    
+    
+    
+    
+    "loan_by_bank_statement_key_rate_share": {
+        "title": "Заем / по выписке + проценты как доля ключевой ставки",
+        "fields": [
+            {"key": "key_rate_numerator", "label": "Числитель доли ключевой ставки", "type": "integer", "required": True},
+            {"key": "key_rate_denominator", "label": "Знаменатель доли ключевой ставки", "type": "integer", "required": True},
+
+            {"key": "vat_rate", "label": "Ставка НДС, %", "type": "decimal", "required": False},
+            {"key": "withholding_ndfl", "label": "Удерживать НДФЛ", "type": "boolean", "required": False},
+            {"key": "ndfl_tax_name", "label": "Наименование налога для НДФЛ", "type": "string", "required": False},
+
+            {"key": "issue_cf_code", "label": "CF код выдачи займа", "type": "string", "required": True},
+            {"key": "principal_return_cf_code", "label": "CF код возврата тела займа", "type": "string", "required": True},
+            {"key": "interest_payment_cf_code", "label": "CF код оплаты процентов", "type": "string", "required": False},
+
+            {"key": "interest_start_mode", "label": "Начало начисления процентов", "type": "choice", "required": True},
+            {"key": "day_count_basis", "label": "База дней", "type": "choice", "required": True},
+        ],
+        "defaults": {
+            "key_rate_numerator": 2,
+            "key_rate_denominator": 3,
+            "vat_rate": Decimal("0"),
+            "withholding_ndfl": False,
+            "ndfl_tax_name": "НДФЛ",
+            "issue_cf_code": "312100",
+            "principal_return_cf_code": "321100",
+            "interest_payment_cf_code": "321200",
+            "interest_start_mode": "next_day",
+            "day_count_basis": "actual",
+        },
+    },
 
             
     

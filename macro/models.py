@@ -63,10 +63,15 @@ class TaxesList(models.Model):
     def __str__(self):
         return f"{self.tax_name}"
     
+    # def get_current_rate(self):
+    #     today = timezone.now().date()
+    #     rate = self.taxrates_set.filter(date__lte=today).order_by('-date').first()
+    #     return f"{rate.rate}%" if rate else "—"
+    
     def get_current_rate(self):
         today = timezone.now().date()
         rate = self.taxrates_set.filter(date__lte=today).order_by('-date').first()
-        return f"{rate.rate}%" if rate else "—"
+        return rate.rate if rate else None
     
     def get_rate_on(self, on_date):
         rate_obj = self.taxrates_set.filter(date__lte=on_date).order_by("-date").first()
@@ -78,6 +83,14 @@ class TaxRates(models.Model):
     tax = models.ForeignKey(TaxesList, on_delete=models.CASCADE, verbose_name="Налог")
     date = models.DateField(verbose_name="Дата начала действия")
     rate = models.FloatField(verbose_name="Ставка (%)")
+    
+    income_limit = models.DecimalField(
+    max_digits=15,
+    decimal_places=2,
+    null=True,
+    blank=True,
+    verbose_name="Предел дохода"
+)
     comment = models.TextField(verbose_name="Комментарий", null=True, blank=True)
 
     class Meta:

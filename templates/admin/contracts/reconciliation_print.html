@@ -163,6 +163,13 @@
             <div class="summary-val summary-money">{{ loan_interest_paid_total|money_ru }}</div>
           </div>
 
+
+          <div class="summary-row">
+            <div class="summary-key">Удержан НДФЛ</div>
+            <div class="summary-val summary-money">{{ loan_ndfl_withheld_total|money_ru }}</div>
+          </div>
+
+
           <div class="summary-row total">
             <div class="summary-key">Остаток процентов на конец периода</div>
             <div class="summary-val summary-money strong">{{ loan_interest_outstanding|money_ru }}</div>

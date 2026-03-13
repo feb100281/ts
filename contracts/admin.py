@@ -210,23 +210,23 @@ class ConditionsInlineForm(forms.ModelForm):
             )
             cleaned["params"] = build_params_template(fn)
 
-        # 3) CASH BASED: принудительно ставим функцию, НО params не затираем
-        acc = cleaned.get("accounting_method")
-        if acc:
-            name = (acc.name or "").lower()
-            code = (getattr(acc, "code", "") or "").lower()
+        # # 3) CASH BASED: принудительно ставим функцию, НО params не затираем
+        # acc = cleaned.get("accounting_method")
+        # if acc:
+        #     name = (acc.name or "").lower()
+        #     code = (getattr(acc, "code", "") or "").lower()
 
-            if "cash" in name or "cash" in code:
-                cleaned["accrual_fn"] = "by_bank_statement"
+        #     if "cash" in name or "cash" in code:
+        #         cleaned["accrual_fn"] = "by_bank_statement"
 
-                params = cleaned.get("params") or {}
-                if not isinstance(params, dict):
-                    params = {}
+        #         params = cleaned.get("params") or {}
+        #         if not isinstance(params, dict):
+        #             params = {}
 
-                params.setdefault("vat_rate", "0")
-                cleaned["params"] = params
+        #         params.setdefault("vat_rate", "0")
+        #         cleaned["params"] = params
 
-        return cleaned
+        # return cleaned
 
     def save(self, commit=True):
         inst = super().save(commit=False)
