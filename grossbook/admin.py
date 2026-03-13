@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import Manual
-from .models import Settlements
+# from .models import Settlements
 # Register your models here.
 # @admin.register(Manual)
 # class ManualAdmin(admin.ModelAdmin):
@@ -231,23 +231,23 @@ class ManualAdmin(admin.ModelAdmin):
         }
 
 
-@admin.register(Settlements)
-class SettlementsAdmin(admin.ModelAdmin):
-    list_display = (
-        "date_from",
-        "pid",
-        "contract",
-        "cp",
-        "st",
-        "description",
-        "dt",
-        "cr",       
-    )
-    class Media:
-        css = {
-            "all": (
-                "css/admin_overrides.css",
-                "css/wide-table.css",
-            )
-        }
+# @admin.register(Settlements)
+# class SettlementsAdmin(admin.ModelAdmin):
+#     list_display = (
+#         "date_from",
+#         "pid",
+#         "contract",
+#         "cp",
+#         "st",
+#         "description",
+#         "dt",
+#         "cr",       
+#     )
+#     class Media:
+#         css = {
+#             "all": (
+#                 "css/admin_overrides.css",
+#                 "css/wide-table.css",
+#             )
+#         }
     
