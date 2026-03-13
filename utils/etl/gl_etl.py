@@ -8,7 +8,6 @@
 
 
 import os
-from datetime import datetime, timedelta, timezone
 import psycopg
 import ba_elt
 # from psycopg.rows import dict_row
@@ -73,7 +72,7 @@ def main():
 
     conn = connect_db()
     
-    ba_elt.main()
+    ba_elt.main(conn)
 
     with conn.cursor() as cur:
         cur.execute("REFRESH MATERIALIZED VIEW gl.mv_ba_distribution;")
@@ -95,6 +94,7 @@ def main():
 
 
 # scp /Users/pavelustenko/ts/utils/etl/ba_elt.py daria@82.202.197.94:/opt/wb_jobs/ba_etl.py
+# scp -r /Users/pavelustenko/ts/utils/accurals daria@82.202.197.94:/opt/wb_jobs/
 
 if __name__ == "__main__":
     main()
