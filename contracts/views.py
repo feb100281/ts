@@ -29,44 +29,8 @@ def condition_accruals_preview(request, condition_id: int):
     contract = condition.contract
 
     result = preview_accruals(condition, anchor_date=date.today())
-    
-# {'condition_id': 111,
-#  'fn': 'by_bank_statement',
-#  'note': 'Начисление сформировано по данным банковской выписки.',
-#  'period': {'from': datetime.date(2025, 4, 25),
-#             'to': datetime.date(2026, 3, 13)},
-#  'rows': [{'amount': Decimal('3000.00'),
-#            'amount_gross': Decimal('3000.00'),
-#            'amount_net': Decimal('3000.00'),
-#            'comment': 'Начисление по выписке #166036',
-#            'days': 1,
-#            'period_from': datetime.date(2025, 4, 25),
-#            'period_to': datetime.date(2025, 4, 25),
-#            'vat_amount': Decimal('0.00'),
-#            'vat_mode': 'unknown',
-#            'vat_rate': Decimal('0')}],
-#  'title': 'Cумма из оплаты',
-#  'total': Decimal('3000.00'),
-#  'total_gross': Decimal('3000.00'),
-#  'total_net': Decimal('3000.00'),
-#  'total_vat': Decimal('0.00'),
-#  'vat_mode': 'unknown',
-#  'vat_rate': Decimal('0')}
-# [{'amount': Decimal('3000.00'),
-#   'amount_gross': Decimal('3000.00'),
-#   'amount_net': Decimal('3000.00'),
-#   'comment': 'Начисление по выписке #166036',
-#   'days': 1,
-#   'period_from': datetime.date(2025, 4, 25),
-#   'period_to': datetime.date(2025, 4, 25),
-#   'vat_amount': Decimal('0.00'),
-#   'vat_mode': 'unknown',
-#   'vat_rate': Decimal('0')}]
-    # pprint(result)
-
     rows = result.get("rows", []) or []
     
-    # pprint(rows)
 
     context = {
         "condition": condition,
@@ -87,26 +51,95 @@ def condition_accruals_preview(request, condition_id: int):
 
 # Нужно потом в SQL функцию перетащий; Это порнография какая то получается
 # 1 запрос и все
-def get_sql(pid):
-    return f"""
+# def get_sql(pid):
+#     return f"""
+#     SELECT
+#     case when cr=0 then round((dt-cr)/100,2)::numeric else 0 end as accrual,
+#     0 as balance,
+#     description as comment,
+#     'ХЗ' as description,
+#     'Выписки но блин не хочу' as doc_label,
+#     0 as loan_issue,
+#     0 as loan_principal_return,
+#     case when dt = 0 then round((cr-dt)/100,2)::numeric else 0 end as payment,
+#     null as period_from,
+#     null as period_to,
+#     date_from as row_date,
+#     case when cr = 0 then 'accrual' else 'payment' end as row_type,
+#     case when cr = 0 then 'Начисление' else 'Оплата' end as row_type_label,
+#     case when cr = 0 then 1 else 2 end as sort_order
+#     from gl.mv_accurals
+#     where pid_id = {pid} and date_from::date <= current_date
+#     order by date_from
+#     """
+
+
+
+def get_sql():
+    return """
     SELECT
-    case when cr=0 then round((dt-cr)/100,2)::numeric else 0 end as accrual,
-    0 as balance,
-    description as comment,
-    'ХЗ' as description,
-    'Выписки но блин не хочу' as doc_label,
-    0 as loan_issue,
-    0 as loan_principal_return,
-    case when dt = 0 then round((cr-dt)/100,2)::numeric else 0 end as payment,
-    null as period_from,
-    null as period_to,
-    date_from as row_date,
-    case when cr = 0 then 'accrual' else 'payment' end as row_type,
-    case when cr = 0 then 'Начисление' else 'Оплата' end as row_type_label,
-    case when cr = 0 then 1 else 2 end as sort_order
-    from gl.mv_accurals
-    where pid_id = {pid} and date_from::date <= current_date
-    order by date_from
+        CASE
+            WHEN cr = 0 THEN ROUND((dt - cr) / 100.0, 2)::numeric
+            ELSE 0::numeric
+        END AS accrual,
+
+        0::numeric AS balance,
+
+        COALESCE(temp, description, '') AS comment,
+
+        CASE
+            WHEN dt = 0
+                 AND COALESCE(doc_numner, '') <> ''
+                 AND doc_date IS NOT NULL
+                THEN 'Оплата по документу № ' || doc_numner || ' от ' || TO_CHAR(doc_date, 'DD.MM.YYYY')
+            WHEN dt = 0
+                 AND COALESCE(doc_numner, '') <> ''
+                THEN 'Оплата по документу № ' || doc_numner
+            WHEN cr = 0
+                THEN COALESCE(description, 'Начисление')
+            ELSE COALESCE(description, 'Операция')
+        END AS description,
+
+        CASE
+            WHEN dt = 0 AND COALESCE(cp_bs_name, '') <> ''
+                THEN 'Выписка — ' || cp_bs_name
+            WHEN cr = 0
+                THEN 'Начисление'
+            ELSE 'Документ'
+        END AS doc_label,
+
+        0::numeric AS loan_issue,
+        0::numeric AS loan_principal_return,
+
+        CASE
+            WHEN dt = 0 THEN ROUND((cr - dt) / 100.0, 2)::numeric
+            ELSE 0::numeric
+        END AS payment,
+
+        NULL::date AS period_from,
+        NULL::date AS period_to,
+
+        date_from::date AS row_date,
+
+        CASE
+            WHEN cr = 0 THEN 'accrual'
+            ELSE 'payment'
+        END AS row_type,
+
+        CASE
+            WHEN cr = 0 THEN 'Начисление'
+            ELSE 'Оплата'
+        END AS row_type_label,
+
+        CASE
+            WHEN cr = 0 THEN 1
+            ELSE 2
+        END AS sort_order
+
+    FROM gl.mv_accurals
+    WHERE pid_id = %s
+      AND date_from::date <= current_date
+    ORDER BY date_from::date, sort_order, description
     """
 
 
@@ -165,67 +198,49 @@ def contract_reconciliation_preview(request, contract_id: int):
     )
     
     # ------------------------------------------
-    ### ВСЕ ПРЕВЬЮ В ТРИ СТРОЧКИ!!! ЗАКОМЕНТЬ ПОТОМ ЕСЛИ ЧТО
-    #ВАЖНО СЧИТАЕМ ПО PID
+    # ### ВСЕ ПРЕВЬЮ В ТРИ СТРОЧКИ!!! ЗАКОМЕНТЬ ПОТОМ ЕСЛИ ЧТО ЭТО ОТ ПАШИ
+    # #ВАЖНО СЧИТАЕМ ПО PID
     root_id = contract.pid_id or contract.id
-    df = pd.read_sql(get_sql(root_id),connection)
+    # df = pd.read_sql(get_sql(root_id),connection)
+    df = pd.read_sql(get_sql(), connection, params=[root_id])
     
     #Делаем сверку    
-    rows_new = {
-    "rows": df.to_dict(orient="records")
-    }    
-    #ХОД КОНЕМ ЧТО БЫ НЕ КОПАТЬСЯ В 2 тыс срок services
-    result["rows"] = rows_new["rows"]
-    result["total_accruals"] = df['accrual'].sum()
-    result["total_payments"] = df['payment'].sum()    
-    result["current_accruals"] = df['accrual'].sum()  ### Не увенер просто так сделал
-    result["current_balance"] = df['accrual'].sum() - df['payment'].sum() 
-    result["closing_balance"] = df['accrual'].sum() - df['payment'].sum() 
+    # rows_new = {
+    # "rows": df.to_dict(orient="records")
+    # }    
+    # #ХОД КОНЕМ ЧТО БЫ НЕ КОПАТЬСЯ В 2 тыс срок services
+    # result["rows"] = rows_new["rows"]
+    # result["total_accruals"] = df['accrual'].sum()
+    # result["total_payments"] = df['payment'].sum()    
+    # result["current_accruals"] = df['accrual'].sum()  ### Не увенер просто так сделал
+    # result["current_balance"] = df['accrual'].sum() - df['payment'].sum() 
+    # result["closing_balance"] = df['accrual'].sum() - df['payment'].sum() 
     # ВСЕ ОСТАЛЬНОЕ МОЖНО ЧЕРЕЗ DF найти и передать в шаблон.
-    #ДЖАНГО НЕ ЮЗАЕМ В РАСЧЕТАХ
+    # #ДЖАНГО НЕ ЮЗАЕМ В РАСЧЕТАХ
+    
+    if df.empty:
+        df = pd.DataFrame(columns=[
+            "accrual", "balance", "comment", "description", "doc_label",
+            "loan_issue", "loan_principal_return", "payment",
+            "period_from", "period_to", "row_date",
+            "row_type", "row_type_label", "sort_order"
+        ])
+
+    for col in ["accrual", "payment", "loan_issue", "loan_principal_return"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    df["balance"] = (df["accrual"] - df["payment"]).cumsum()
+
+    result["rows"] = df.to_dict(orient="records")
+    result["total_accruals"] = df["accrual"].sum()
+    result["total_payments"] = df["payment"].sum()
+    result["current_accruals"] = df["accrual"].sum()
+    result["current_payments"] = df["payment"].sum()
+    result["current_balance"] = df["accrual"].sum() - df["payment"].sum()
+    result["closing_balance"] = df["accrual"].sum() - df["payment"].sum()
     # ------------------------------------------
     
-
-    # context = {
-    #     "contract": contract,
-    #     "result": result,
-    #     "rows": result["rows"],
-
-    #     "date_from": result["date_from"],
-    #     "date_to": result["date_to"],
-    #     "report_date": result["report_date"],
-
-    #     "opening_balance": result["opening_balance"],
-
-    #     # весь горизонт
-    #     "total_accruals": result["total_accruals"],
-    #     "total_payments": result["total_payments"],
-    #     "closing_balance": result["closing_balance"],
-    #     "closing_balance_status": result["closing_balance_status"],
-    #     "closing_balance_comment": result["closing_balance_comment"],
-    #     "closing_balance_status_class": result["closing_balance_status_class"],
-
-    #     # текущее состояние
-    #     "current_accruals": result["current_accruals"],
-    #     "current_payments": result["current_payments"],
-    #     "current_balance": result["current_balance"],
-    #     "current_balance_status": result["current_balance_status"],
-    #     "current_balance_comment": result["current_balance_comment"],
-    #     "current_balance_status_class": result["current_balance_status_class"],
-        
-        
-    #         # аналитика по кредиту / займу
-    #     "loan_issued_total": result["loan_issued_total"],
-    #     "loan_principal_returned_total": result["loan_principal_returned_total"],
-    #     "loan_principal_outstanding": result["loan_principal_outstanding"],
-    #     "loan_interest_accrued_total": result["loan_interest_accrued_total"],
-    #     "loan_interest_paid_total": result["loan_interest_paid_total"],
-    #     "loan_interest_outstanding": result["loan_interest_outstanding"],
-    # }
-    # has_loan = Conditions.objects.filter(
-    #     contract=contract,
-    #     accrual_fn="loan_by_bank_statement",
-    # ).exists()
     
     has_loan = Conditions.objects.filter(
             contract=contract,
