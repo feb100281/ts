@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.admin import RelatedOnlyFieldListFilter
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django import forms
@@ -100,7 +100,10 @@ class AccountingMethodFilter(admin.SimpleListFilter):
         val = self.value()
         if not val:
             return queryset
-        return queryset.filter(conditions__accounting_method_id=val).distinct()
+        return queryset.filter(
+            Q(conditions__accounting_method_id=val) |
+            Q(conditions__fn__accounting_method_id=val)
+        ).distinct()
 
 
 class PayTimingFilter(admin.SimpleListFilter):
@@ -494,6 +497,8 @@ class ContractsAdmin(admin.ModelAdmin):
                 ),
                 "conditions",
                 "conditions__accounting_method",
+                "conditions__fn",
+                "conditions__fn__accounting_method",
             )
         )
 
@@ -537,14 +542,16 @@ class ContractsAdmin(admin.ModelAdmin):
     @admin.display(description="Метод")
     def method_icon(self, obj):
         cond = get_current_condition(obj)
-        m = getattr(cond, "accounting_method", None) if cond else None
+        m = cond.resolved_accounting_method if cond else None
         if not m:
             return "—"
+
         icon = (m.icon or "").strip() or "🧩"
         return format_html(
-            '<span style="font-size:18px; line-height:1;">{}</span>', icon
+            '<span style="font-size:18px; line-height:1;">{}</span>',
+            icon
         )
-
+        
     @admin.display(description="Окончание")
     def contract_end_date(self, obj):
         cond = get_current_condition(obj)

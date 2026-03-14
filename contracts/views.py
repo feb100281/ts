@@ -8,7 +8,14 @@ from django.db.models import Min, Max
 from .models import Conditions
 
 from .models import Contracts
-from contracts.reconciliation.service import build_contract_reconciliation,  get_contract_full_horizon_date, LOAN_ACCRUAL_FNS
+from contracts.reconciliation.service import (
+    build_contract_reconciliation,
+    get_contract_full_horizon_date,
+    LOAN_ACCRUAL_FNS,
+    get_balance_status,
+    get_balance_comment,
+    get_balance_status_class,
+)
 from django.db.models import Min, Max
 from treasury.models import CfData, CfSplits
 from .models import Conditions
@@ -79,40 +86,70 @@ def get_sql():
     return """
     SELECT
         CASE
-            WHEN cr = 0 THEN ROUND((dt - cr) / 100.0, 2)::numeric
+            WHEN dt = 0 THEN ROUND((cr - dt) / 100.0, 2)::numeric
             ELSE 0::numeric
         END AS accrual,
 
         0::numeric AS balance,
-
-        COALESCE(temp, description, '') AS comment,
+        
+        COALESCE(contract_name, '') AS contract_name,
 
         CASE
-            WHEN dt = 0
+            -- ОПЛАТА
+            WHEN cr = 0 
+                 AND COALESCE(acc_name, '') <> '' 
+                 AND COALESCE(temp, description, '') <> ''
+                THEN acc_name || E'\\n' || COALESCE(temp, description, '')
+
+            WHEN cr = 0 
+                 AND COALESCE(acc_name, '') <> ''
+                THEN acc_name
+
+            WHEN cr = 0
+                THEN COALESCE(temp, description, '')
+
+            -- НАЧИСЛЕНИЕ
+                WHEN dt = 0 
+                    AND COALESCE(acc_name, '') <> '' 
+                    AND COALESCE(description, '') <> ''
+                    THEN acc_name || E'\n' || description
+
+                WHEN dt = 0 
+                    AND COALESCE(acc_name, '') <> ''
+                    THEN acc_name
+
+                WHEN dt = 0
+                    THEN COALESCE(description, '')
+
+            ELSE ''
+        END AS comment,
+
+        CASE
+            WHEN cr = 0
                  AND COALESCE(doc_numner, '') <> ''
-                 AND doc_date IS NOT NULL
-                THEN 'Оплата по документу № ' || doc_numner || ' от ' || TO_CHAR(doc_date, 'DD.MM.YYYY')
-            WHEN dt = 0
+                 AND COALESCE(doc_date, '') <> ''
+                THEN 'Оплата по документу № ' || doc_numner || ' от ' || doc_date
+
+            WHEN cr = 0
                  AND COALESCE(doc_numner, '') <> ''
                 THEN 'Оплата по документу № ' || doc_numner
+
             WHEN cr = 0
-                THEN COALESCE(description, 'Начисление')
-            ELSE COALESCE(description, 'Операция')
+                THEN 'Оплата'
+
+            WHEN dt = 0
+                THEN 'Начисление'
+
+            ELSE 'Операция'
         END AS description,
 
-        CASE
-            WHEN dt = 0 AND COALESCE(cp_bs_name, '') <> ''
-                THEN 'Выписка — ' || cp_bs_name
-            WHEN cr = 0
-                THEN 'Начисление'
-            ELSE 'Документ'
-        END AS doc_label,
+        ''::text AS doc_label,
 
         0::numeric AS loan_issue,
         0::numeric AS loan_principal_return,
 
         CASE
-            WHEN dt = 0 THEN ROUND((cr - dt) / 100.0, 2)::numeric
+            WHEN cr = 0 THEN ROUND((dt - cr) / 100.0, 2)::numeric
             ELSE 0::numeric
         END AS payment,
 
@@ -122,18 +159,21 @@ def get_sql():
         date_from::date AS row_date,
 
         CASE
-            WHEN cr = 0 THEN 'accrual'
-            ELSE 'payment'
+            WHEN dt = 0 THEN 'accrual'
+            WHEN cr = 0 THEN 'payment'
+            ELSE 'operation'
         END AS row_type,
 
         CASE
-            WHEN cr = 0 THEN 'Начисление'
-            ELSE 'Оплата'
+            WHEN dt = 0 THEN 'Начисление'
+            WHEN cr = 0 THEN 'Оплата'
+            ELSE 'Операция'
         END AS row_type_label,
 
         CASE
-            WHEN cr = 0 THEN 1
-            ELSE 2
+            WHEN dt = 0 THEN 1
+            WHEN cr = 0 THEN 2
+            ELSE 3
         END AS sort_order
 
     FROM gl.mv_accurals
@@ -141,9 +181,9 @@ def get_sql():
       AND date_from::date <= current_date
     ORDER BY date_from::date, sort_order, description
     """
-
-
-
+    
+    
+    
 
 @staff_member_required
 def contract_reconciliation_preview(request, contract_id: int):
@@ -204,6 +244,14 @@ def contract_reconciliation_preview(request, contract_id: int):
     # df = pd.read_sql(get_sql(root_id),connection)
     df = pd.read_sql(get_sql(), connection, params=[root_id])
     
+    contract_name_from_mv = None
+    if not df.empty and "contract_name" in df.columns:
+        non_empty_names = df["contract_name"].dropna().astype(str).str.strip()
+        non_empty_names = non_empty_names[non_empty_names != ""]
+        if not non_empty_names.empty:
+            contract_name_from_mv = non_empty_names.iloc[0]
+
+    
     #Делаем сверку    
     # rows_new = {
     # "rows": df.to_dict(orient="records")
@@ -239,6 +287,15 @@ def contract_reconciliation_preview(request, contract_id: int):
     result["current_payments"] = df["payment"].sum()
     result["current_balance"] = df["accrual"].sum() - df["payment"].sum()
     result["closing_balance"] = df["accrual"].sum() - df["payment"].sum()
+    
+    
+    result["closing_balance_status"] = get_balance_status(result["closing_balance"])
+    result["closing_balance_comment"] = get_balance_comment(result["closing_balance"])
+    result["closing_balance_status_class"] = get_balance_status_class(result["closing_balance"])
+
+    result["current_balance_status"] = get_balance_status(result["current_balance"])
+    result["current_balance_comment"] = get_balance_comment(result["current_balance"])
+    result["current_balance_status_class"] = get_balance_status_class(result["current_balance"])
     # ------------------------------------------
     
     
@@ -252,6 +309,7 @@ def contract_reconciliation_preview(request, contract_id: int):
         "contract": contract,
         "result": result,
         "has_loan": has_loan,
+         "contract_name_from_mv": contract_name_from_mv,
     }
     
     

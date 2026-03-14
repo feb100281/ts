@@ -35,13 +35,13 @@
           <div class="party-name">
             {{ contract.cp|default:"—" }}
           </div>
-          <div class="contract-name">
-            {% if contract.number %}
-              Договор № {{ contract.number }}
-            {% else %}
-              Договор не указан
-            {% endif %}
-          </div>
+         <div class="contract-name">
+  {% if contract_name_from_mv %}
+    {{ contract_name_from_mv }}
+  {% else %}
+    Договор не указан
+  {% endif %}
+</div>
         </div>
 
         <div class="report-period">
@@ -193,7 +193,7 @@
             <thead>
               <tr>
                 <th class="col-date">Дата</th>
-                <th class="col-doc">Основание</th>
+                {% comment %} <th class="col-doc">Основание</th> {% endcomment %}
                 <th class="col-desc">Описание</th>
 
                 {% if has_loan %}
@@ -213,9 +213,9 @@
                   <tr>
                     <td class="date-cell">{{ r.row_date|date_ru }}</td>
 
-                    <td class="doc-cell">
+                    {% comment %} <td class="doc-cell">
                       {{ r.doc_label|default:"—" }}
-                    </td>
+                    </td> {% endcomment %}
 
                     <td class="desc-cell">
                       <div class="desc-main">{{ r.description|default:"—" }}</div>
@@ -227,9 +227,9 @@
                       {% endif %}
 
                       {% if r.comment %}
-                        <div class="desc-sub">
-                          {{ r.comment }}
-                        </div>
+                      <div class="desc-sub">
+                        {{ r.comment|linebreaksbr }}
+                      </div>
                       {% endif %}
                     </td>
 
@@ -283,7 +283,7 @@
 
             <tfoot>
               <tr>
-                <td colspan="3" class="tfoot-label">Итого по всем периодам</td>
+                <td colspan="2" class="tfoot-label">Итого по всем периодам</td>
 
                 {% if has_loan %}
                   <td class="money-cell">{{ total_loan_issue|money_ru }}</td>

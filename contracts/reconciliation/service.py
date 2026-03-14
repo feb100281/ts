@@ -21,6 +21,36 @@ LOAN_ACCRUAL_FNS = {
 }
 
 
+def get_balance_status(balance: Decimal) -> str:
+    balance = q2(balance)
+
+    if balance > 2:
+        return "Наш долг"
+    if balance < -2:
+        return "Переплата"
+    return "Сальдо закрыто"
+
+
+def get_balance_comment(balance: Decimal) -> str:
+    balance = q2(balance)
+
+    if balance > 2:
+        return "Положительное сальдо на текущую дату означает задолженность нашей компании перед контрагентом."
+    if balance < -2:
+        return "Отрицательное сальдо на текущую дату означает переплату со стороны нашей компании."
+    return "По состоянию на текущую дату задолженность отсутствует."
+
+
+def get_balance_status_class(balance: Decimal) -> str:
+    balance = q2(balance)
+
+    if balance > 2:
+        return "is-debt"
+    if balance < -2:
+        return "is-overpayment"
+    return "is-closed"
+
+
 
 def q2(x: Decimal | str | int | float | None) -> Decimal:
     return Decimal(str(x or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -849,34 +879,7 @@ def _get_payment_total_before(contract: Contracts, date_from: date) -> Decimal:
 
     return q2(total)
 
-def get_balance_status(balance: Decimal) -> str:
-    balance = q2(balance)
 
-    if balance > 2:
-        return "Наш долг"
-    if balance < -2:
-        return "Переплата"
-    return "Сальдо закрыто"
-
-
-def get_balance_comment(balance: Decimal) -> str:
-    balance = q2(balance)
-
-    if balance > 2:
-        return "Положительное сальдо на текущую дату означает задолженность нашей компании перед контрагентом."
-    if balance < -2:
-        return "Отрицательное сальдо на текущую дату означает переплату со стороны нашей компании."
-    return "По состоянию на текущую дату задолженность отсутствует."
-
-
-def get_balance_status_class(balance: Decimal) -> str:
-    balance = q2(balance)
-
-    if balance > 2:
-        return "is-debt"
-    if balance < -2:
-        return "is-overpayment"
-    return "is-closed"
 
 
 def get_contract_loan_summary(contract: Contracts, date_from: date, date_to: date) -> dict[str, Decimal]:
