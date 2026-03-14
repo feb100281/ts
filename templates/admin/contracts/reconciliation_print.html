@@ -99,26 +99,39 @@
           </div>
         </div>
 
-        <div class="balance-note">
-          <div class="balance-note-title">
-            Состояние на {{ report_date|date_ru }}
-          </div>
 
-          <div class="summary-list" style="margin-top: 12px;">
-            <div class="summary-row total">
-              <div class="summary-key">Сальдо на текущую дату</div>
-              <div class="summary-val summary-money strong">{{ current_balance|money_ru }}</div>
-            </div>
+          <div class="balance-note">
+                <div class="balance-note-title">
+                  Состояние на {{ report_date|date_ru }}
+                </div>
 
-            <div class="summary-row">
-              <div class="summary-key">Статус на текущую дату</div>
-              <div class="summary-val">
-                <span class="status-badge {{ current_balance_status_class }}">
-                  {{ current_balance_status }}
-                </span>
-              </div>
-            </div>
-          </div>
+                <div class="summary-list" style="margin-top: 12px;">
+                  <div class="summary-row">
+                    <div class="summary-key">Начислено на текущую дату</div>
+                    <div class="summary-val summary-money">{{ current_accruals|money_ru }}</div>
+                  </div>
+
+                  <div class="summary-row">
+                    <div class="summary-key">Оплачено на текущую дату</div>
+                    <div class="summary-val summary-money">{{ current_payments|money_ru }}</div>
+                  </div>
+
+                  <div class="summary-row total">
+                    <div class="summary-key">Сальдо на текущую дату</div>
+                    <div class="summary-val summary-money strong">{{ current_balance|money_ru }}</div>
+                  </div>
+
+                  <div class="summary-row">
+                    <div class="summary-key">Статус на текущую дату</div>
+                    <div class="summary-val">
+                      <span class="status-badge {{ current_balance_status_class }}">
+                        {{ current_balance_status }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+
 
           <div class="balance-note-text">
             {{ current_balance_comment }}

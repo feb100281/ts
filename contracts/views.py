@@ -12,9 +12,7 @@ from contracts.reconciliation.service import (
     build_contract_reconciliation,
     get_contract_full_horizon_date,
     LOAN_ACCRUAL_FNS,
-    get_balance_status,
-    get_balance_comment,
-    get_balance_status_class,
+
 )
 from django.db.models import Min, Max
 from treasury.models import CfData, CfSplits
@@ -26,6 +24,100 @@ from pprint import pprint
 
 import pandas as pd
 import numpy as np
+
+
+#####-----СТАТУСЫ ПО ДОЛГАМ-----#####
+def balance_status(balance: float) -> str:
+    if balance > 2:
+        return "Наш долг"
+    if balance < -2:
+        return "Переплата"
+    return "Сальдо закрыто"
+
+
+def balance_comment(balance: float) -> str:
+    if balance > 2:
+        return "Положительное сальдо на текущую дату означает задолженность нашей компании перед контрагентом."
+    if balance < -2:
+        return "Отрицательное сальдо на текущую дату означает переплату со стороны нашей компании."
+    return "По состоянию на текущую дату задолженность отсутствует."
+
+
+def balance_status_class(balance: float) -> str:
+    if balance > 2:
+        return "is-debt"
+    if balance < -2:
+        return "is-overpayment"
+    return "is-closed"
+
+
+def prepare_reconciliation_df(df, report_date, opening_balance=0.0):
+    """
+    df — все строки по договору за весь период
+    report_date — дата, на которую считаем текущую ситуацию
+    opening_balance — начальное сальдо, если нужно
+    """
+
+    opening_balance = float(opening_balance or 0)
+
+    if df.empty:
+        return {
+            "rows": [],
+            "total_accruals": 0.0,
+            "total_payments": 0.0,
+            "closing_balance": opening_balance,
+            "current_accruals": 0.0,
+            "current_payments": 0.0,
+            "current_balance": opening_balance,
+            "closing_balance_status": balance_status(opening_balance),
+            "closing_balance_comment": balance_comment(opening_balance),
+            "closing_balance_status_class": balance_status_class(opening_balance),
+            "current_balance_status": balance_status(opening_balance),
+            "current_balance_comment": balance_comment(opening_balance),
+            "current_balance_status_class": balance_status_class(opening_balance),
+        }
+
+    df = df.copy()
+
+    for col in ["accrual", "payment", "loan_issue", "loan_principal_return"]:
+        if col not in df.columns:
+            df[col] = 0.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
+    df["row_date"] = pd.to_datetime(df["row_date"], errors="coerce").dt.date
+    df = df.sort_values(by=["row_date", "sort_order", "description"], kind="stable")
+
+    # Баланс по всем строкам
+    df["balance"] = opening_balance + (df["accrual"] - df["payment"]).cumsum()
+
+    # Срез на текущую дату
+    current_df = df[df["row_date"] <= report_date].copy()
+
+    total_accruals = float(df["accrual"].sum())
+    total_payments = float(df["payment"].sum())
+    closing_balance = float(opening_balance + total_accruals - total_payments)
+
+    current_accruals = float(current_df["accrual"].sum()) if not current_df.empty else 0.0
+    current_payments = float(current_df["payment"].sum()) if not current_df.empty else 0.0
+    current_balance = float(opening_balance + current_accruals - current_payments)
+
+    return {
+        "rows": df.to_dict(orient="records"),
+        "total_accruals": total_accruals,
+        "total_payments": total_payments,
+        "closing_balance": closing_balance,
+        "current_accruals": current_accruals,
+        "current_payments": current_payments,
+        "current_balance": current_balance,
+        "closing_balance_status": balance_status(closing_balance),
+        "closing_balance_comment": balance_comment(closing_balance),
+        "closing_balance_status_class": balance_status_class(closing_balance),
+        "current_balance_status": balance_status(current_balance),
+        "current_balance_comment": balance_comment(current_balance),
+        "current_balance_status_class": balance_status_class(current_balance),
+    }
+
+#####-------------------------------------#####
 
 @staff_member_required
 def condition_accruals_preview(request, condition_id: int):
@@ -55,31 +147,6 @@ def condition_accruals_preview(request, condition_id: int):
         "fn_title": result.get("title"),
     }
     return TemplateResponse(request, "admin/contracts/accruals_print.html", context)
-
-# Нужно потом в SQL функцию перетащий; Это порнография какая то получается
-# 1 запрос и все
-# def get_sql(pid):
-#     return f"""
-#     SELECT
-#     case when cr=0 then round((dt-cr)/100,2)::numeric else 0 end as accrual,
-#     0 as balance,
-#     description as comment,
-#     'ХЗ' as description,
-#     'Выписки но блин не хочу' as doc_label,
-#     0 as loan_issue,
-#     0 as loan_principal_return,
-#     case when dt = 0 then round((cr-dt)/100,2)::numeric else 0 end as payment,
-#     null as period_from,
-#     null as period_to,
-#     date_from as row_date,
-#     case when cr = 0 then 'accrual' else 'payment' end as row_type,
-#     case when cr = 0 then 'Начисление' else 'Оплата' end as row_type_label,
-#     case when cr = 0 then 1 else 2 end as sort_order
-#     from gl.mv_accurals
-#     where pid_id = {pid} and date_from::date <= current_date
-#     order by date_from
-#     """
-
 
 
 def get_sql():
@@ -178,11 +245,9 @@ def get_sql():
 
     FROM gl.mv_accurals
     WHERE pid_id = %s
-      AND date_from::date <= current_date
+      -- AND date_from::date <= current_date
     ORDER BY date_from::date, sort_order, description
     """
-    
-    
     
 
 @staff_member_required
@@ -191,7 +256,7 @@ def contract_reconciliation_preview(request, contract_id: int):
         Contracts.objects.select_related("cp", "title"),
         pk=contract_id
     )
-    
+
     date_from_str = request.GET.get("date_from")
     date_to_str = request.GET.get("date_to")
 
@@ -230,20 +295,9 @@ def contract_reconciliation_preview(request, contract_id: int):
     if date_to < date_from:
         date_to = date_from
 
-    result = build_contract_reconciliation(
-        contract=contract,
-        date_from=date_from,
-        date_to=date_to,
-        report_date=report_date,
-    )
-    
-    # ------------------------------------------
-    # ### ВСЕ ПРЕВЬЮ В ТРИ СТРОЧКИ!!! ЗАКОМЕНТЬ ПОТОМ ЕСЛИ ЧТО ЭТО ОТ ПАШИ
-    # #ВАЖНО СЧИТАЕМ ПО PID
     root_id = contract.pid_id or contract.id
-    # df = pd.read_sql(get_sql(root_id),connection)
     df = pd.read_sql(get_sql(), connection, params=[root_id])
-    
+
     contract_name_from_mv = None
     if not df.empty and "contract_name" in df.columns:
         non_empty_names = df["contract_name"].dropna().astype(str).str.strip()
@@ -251,67 +305,207 @@ def contract_reconciliation_preview(request, contract_id: int):
         if not non_empty_names.empty:
             contract_name_from_mv = non_empty_names.iloc[0]
 
-    
-    #Делаем сверку    
-    # rows_new = {
-    # "rows": df.to_dict(orient="records")
-    # }    
-    # #ХОД КОНЕМ ЧТО БЫ НЕ КОПАТЬСЯ В 2 тыс срок services
-    # result["rows"] = rows_new["rows"]
-    # result["total_accruals"] = df['accrual'].sum()
-    # result["total_payments"] = df['payment'].sum()    
-    # result["current_accruals"] = df['accrual'].sum()  ### Не увенер просто так сделал
-    # result["current_balance"] = df['accrual'].sum() - df['payment'].sum() 
-    # result["closing_balance"] = df['accrual'].sum() - df['payment'].sum() 
-    # ВСЕ ОСТАЛЬНОЕ МОЖНО ЧЕРЕЗ DF найти и передать в шаблон.
-    # #ДЖАНГО НЕ ЮЗАЕМ В РАСЧЕТАХ
-    
-    if df.empty:
-        df = pd.DataFrame(columns=[
-            "accrual", "balance", "comment", "description", "doc_label",
-            "loan_issue", "loan_principal_return", "payment",
-            "period_from", "period_to", "row_date",
-            "row_type", "row_type_label", "sort_order"
-        ])
+    prepared = prepare_reconciliation_df(
+        df=df,
+        report_date=report_date,
+        opening_balance=0.0,
+    )
 
-    for col in ["accrual", "payment", "loan_issue", "loan_principal_return"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
-    df["balance"] = (df["accrual"] - df["payment"]).cumsum()
-
-    result["rows"] = df.to_dict(orient="records")
-    result["total_accruals"] = df["accrual"].sum()
-    result["total_payments"] = df["payment"].sum()
-    result["current_accruals"] = df["accrual"].sum()
-    result["current_payments"] = df["payment"].sum()
-    result["current_balance"] = df["accrual"].sum() - df["payment"].sum()
-    result["closing_balance"] = df["accrual"].sum() - df["payment"].sum()
-    
-    
-    result["closing_balance_status"] = get_balance_status(result["closing_balance"])
-    result["closing_balance_comment"] = get_balance_comment(result["closing_balance"])
-    result["closing_balance_status_class"] = get_balance_status_class(result["closing_balance"])
-
-    result["current_balance_status"] = get_balance_status(result["current_balance"])
-    result["current_balance_comment"] = get_balance_comment(result["current_balance"])
-    result["current_balance_status_class"] = get_balance_status_class(result["current_balance"])
-    # ------------------------------------------
-    
-    
     has_loan = Conditions.objects.filter(
-            contract=contract,
-            accrual_fn__in=LOAN_ACCRUAL_FNS,
-        ).exists()
-    
+        contract=contract,
+        accrual_fn__in=LOAN_ACCRUAL_FNS,
+    ).exists()
+
     context = {
-        **result,
         "contract": contract,
-        "result": result,
+        "date_from": date_from,
+        "date_to": date_to,
+        "report_date": report_date,
+        "opening_balance": 0.0,
+
+        "rows": prepared["rows"],
+        "total_accruals": prepared["total_accruals"],
+        "total_payments": prepared["total_payments"],
+        "closing_balance": prepared["closing_balance"],
+        "closing_balance_status": prepared["closing_balance_status"],
+        "closing_balance_comment": prepared["closing_balance_comment"],
+        "closing_balance_status_class": prepared["closing_balance_status_class"],
+
+        "current_accruals": prepared["current_accruals"],
+        "current_payments": prepared["current_payments"],
+        "current_balance": prepared["current_balance"],
+        "current_balance_status": prepared["current_balance_status"],
+        "current_balance_comment": prepared["current_balance_comment"],
+        "current_balance_status_class": prepared["current_balance_status_class"],
+
         "has_loan": has_loan,
-         "contract_name_from_mv": contract_name_from_mv,
+        "contract_name_from_mv": contract_name_from_mv,
+
+        "loan_issued_total": 0.0,
+        "loan_principal_returned_total": 0.0,
+        "loan_principal_outstanding": 0.0,
+        "loan_interest_accrued_total": 0.0,
+        "loan_interest_paid_total": 0.0,
+        "loan_ndfl_withheld_total": 0.0,
+        "loan_interest_outstanding": 0.0,
+        "total_loan_issue": 0.0,
+        "total_loan_principal_return": 0.0,
     }
-    
-    
 
     return TemplateResponse(request, "admin/contracts/reconciliation_print.html", context)
+
+     
+
+# @staff_member_required
+# def contract_reconciliation_preview(request, contract_id: int):
+#     contract = get_object_or_404(
+#         Contracts.objects.select_related("cp", "title"),
+#         pk=contract_id
+#     )
+    
+#     date_from_str = request.GET.get("date_from")
+#     date_to_str = request.GET.get("date_to")
+
+#     report_date = date.today()
+
+#     if date_from_str:
+#         date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+#     else:
+#         cond_agg = Conditions.objects.filter(contract=contract).aggregate(
+#             min_start=Min("date_start"),
+#         )
+
+#         cf_agg = CfData.objects.filter(contract=contract).aggregate(
+#             min_date=Min("date"),
+#         )
+
+#         split_agg = CfSplits.objects.filter(contract=contract).aggregate(
+#             min_date=Min("transaction__date"),
+#         )
+
+#         candidate_starts = [
+#             cond_agg.get("min_start"),
+#             cf_agg.get("min_date"),
+#             split_agg.get("min_date"),
+#             contract.date,
+#         ]
+#         candidate_starts = [d for d in candidate_starts if d]
+
+#         date_from = min(candidate_starts) if candidate_starts else (contract.date or date.today())
+
+#     if date_to_str:
+#         date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+#     else:
+#         date_to = get_contract_full_horizon_date(contract)
+
+#     if date_to < date_from:
+#         date_to = date_from
+
+#     result = build_contract_reconciliation(
+#         contract=contract,
+#         date_from=date_from,
+#         date_to=date_to,
+#         report_date=report_date,
+#     )
+    
+#     # ------------------------------------------
+#     # ### ВСЕ ПРЕВЬЮ В ТРИ СТРОЧКИ!!! ЗАКОМЕНТЬ ПОТОМ ЕСЛИ ЧТО ЭТО ОТ ПАШИ
+#     # #ВАЖНО СЧИТАЕМ ПО PID
+#     root_id = contract.pid_id or contract.id
+#     # df = pd.read_sql(get_sql(root_id),connection)
+#     df = pd.read_sql(get_sql(), connection, params=[root_id])
+    
+#     contract_name_from_mv = None
+#     if not df.empty and "contract_name" in df.columns:
+#         non_empty_names = df["contract_name"].dropna().astype(str).str.strip()
+#         non_empty_names = non_empty_names[non_empty_names != ""]
+#         if not non_empty_names.empty:
+#             contract_name_from_mv = non_empty_names.iloc[0]
+
+    
+#     #Делаем сверку    
+#     # rows_new = {
+#     # "rows": df.to_dict(orient="records")
+#     # }    
+#     # #ХОД КОНЕМ ЧТО БЫ НЕ КОПАТЬСЯ В 2 тыс срок services
+#     # result["rows"] = rows_new["rows"]
+#     # result["total_accruals"] = df['accrual'].sum()
+#     # result["total_payments"] = df['payment'].sum()    
+#     # result["current_accruals"] = df['accrual'].sum()  ### Не увенер просто так сделал
+#     # result["current_balance"] = df['accrual'].sum() - df['payment'].sum() 
+#     # result["closing_balance"] = df['accrual'].sum() - df['payment'].sum() 
+#     # ВСЕ ОСТАЛЬНОЕ МОЖНО ЧЕРЕЗ DF найти и передать в шаблон.
+#     # #ДЖАНГО НЕ ЮЗАЕМ В РАСЧЕТАХ
+    
+#     if df.empty:
+#         df = pd.DataFrame(columns=[
+#             "accrual", "balance", "comment", "description", "doc_label",
+#             "loan_issue", "loan_principal_return", "payment",
+#             "period_from", "period_to", "row_date",
+#             "row_type", "row_type_label", "sort_order", "contract_name"
+#         ])
+
+#     for col in ["accrual", "payment", "loan_issue", "loan_principal_return"]:
+#         if col in df.columns:
+#             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+#     if "row_date" in df.columns:
+#         df["row_date"] = pd.to_datetime(df["row_date"], errors="coerce").dt.date
+
+#     # 1. Полный период — всё, что есть в базе
+#     full_df = df.copy()
+
+#     # 2. Срез на текущую дату
+#     current_df = df[df["row_date"] <= report_date].copy()
+
+#     # Считаем бегущее сальдо для таблицы за весь период
+#     if not full_df.empty:
+#         full_df["balance"] = result.get("opening_balance", 0) + (full_df["accrual"] - full_df["payment"]).cumsum()
+#     else:
+#         full_df["balance"] = pd.Series(dtype="float64")
+
+#     # Считаем сальдо на текущую дату
+#     if not current_df.empty:
+#         current_df["balance"] = result.get("opening_balance", 0) + (current_df["accrual"] - current_df["payment"]).cumsum()
+#     else:
+#         current_df["balance"] = pd.Series(dtype="float64")
+
+#     # Данные для таблицы — за весь период
+#     result["rows"] = full_df.to_dict(orient="records")
+
+#     # Итого за весь период
+#     result["total_accruals"] = full_df["accrual"].sum()
+#     result["total_payments"] = full_df["payment"].sum()
+#     result["closing_balance"] = result.get("opening_balance", 0) + result["total_accruals"] - result["total_payments"]
+
+#     # На текущую дату
+#     result["current_accruals"] = current_df["accrual"].sum()
+#     result["current_payments"] = current_df["payment"].sum()
+#     result["current_balance"] = result.get("opening_balance", 0) + result["current_accruals"] - result["current_payments"]
+    
+#     # result["closing_balance_status"] = get_balance_status(result["closing_balance"])
+#     # result["closing_balance_comment"] = get_balance_comment(result["closing_balance"])
+#     # result["closing_balance_status_class"] = get_balance_status_class(result["closing_balance"])
+
+#     # result["current_balance_status"] = get_balance_status(result["current_balance"])
+#     # result["current_balance_comment"] = get_balance_comment(result["current_balance"])
+#     # result["current_balance_status_class"] = get_balance_status_class(result["current_balance"])
+#     # ------------------------------------------
+    
+    
+#     has_loan = Conditions.objects.filter(
+#             contract=contract,
+#             accrual_fn__in=LOAN_ACCRUAL_FNS,
+#         ).exists()
+    
+#     context = {
+#         **result,
+#         "contract": contract,
+#         "result": result,
+#         "has_loan": has_loan,
+#          "contract_name_from_mv": contract_name_from_mv,
+#     }
+    
+    
+
+#     return TemplateResponse(request, "admin/contracts/reconciliation_print.html", context)
