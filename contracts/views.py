@@ -22,10 +22,59 @@ from contracts.accruals.engine import preview_accruals
 from django.db import connection
 from pprint import pprint
 
+from django.http import JsonResponse
+from django.urls import reverse
+from django.db.models import Q
+
+
 import pandas as pd
 import numpy as np
 
 
+#####-----ДЛЯ КОЛОКОЛЬЧИКА - ЕСЛИ НЕ ЗАПОЛНЕЕНЫ СТАТЬИ У ДОГОВОРОВ-----#####
+from django.http import JsonResponse
+from django.db.models import Q
+from .models import Contracts
+
+
+def contracts_issues_status(request):
+    qs = Contracts.objects.all()
+
+    no_accrual_total = qs.filter(conditions__isnull=True).distinct().count()
+
+    missing_bs_total = qs.filter(bs_id__isnull=True).count()
+    missing_pl_total = qs.filter(pl_id__isnull=True).count()
+    missing_subconto_pl_total = qs.filter(subconto_pl_id__isnull=True).count()
+
+    missing_distribution_total = qs.filter(
+        Q(bs_id__isnull=True) |
+        Q(pl_id__isnull=True) |
+        Q(subconto_pl_id__isnull=True)
+    ).distinct().count()
+
+    return JsonResponse({
+        "ok": True,
+        "no_accrual_fn": {
+            "total": no_accrual_total,
+            "admin_url": "/admin/contracts/contracts/?has_accrual_fn=no",
+        },
+        "missing_distribution": {
+            "total": missing_distribution_total,
+            "admin_url": "/admin/contracts/contracts/?missing_distribution=any",
+        },
+        "missing_bs": {
+            "total": missing_bs_total,
+            "admin_url": "/admin/contracts/contracts/?missing_distribution=bs",
+        },
+        "missing_pl": {
+            "total": missing_pl_total,
+            "admin_url": "/admin/contracts/contracts/?missing_distribution=pl",
+        },
+        "missing_subconto_pl": {
+            "total": missing_subconto_pl_total,
+            "admin_url": "/admin/contracts/contracts/?missing_distribution=subconto_pl",
+        },
+    })
 #####-----СТАТУСЫ ПО ДОЛГАМ-----#####
 def balance_status(balance: float) -> str:
     if balance > 2:

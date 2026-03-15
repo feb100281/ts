@@ -3,8 +3,9 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path,include
 
-from .views import fx_status, cp_issues_status, treasury_status, contracts_issues_status
+from .views import fx_status, cp_issues_status, treasury_status
 from .admin_exports import export_pl_for_csv, export_arap_to_date
+from contracts.views import contracts_issues_status
 
 login_view = auth_views.LoginView.as_view(
     template_name="admin/landing.html",

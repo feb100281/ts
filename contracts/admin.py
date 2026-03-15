@@ -380,6 +380,51 @@ class ContractFilesInline(admin.StackedInline):
     document.short_description = "Текущий документ"
 
 
+from django.db.models import Q
+
+def get_missing_distribution_queryset(queryset, mode=None):
+    if mode == "any":
+        return queryset.filter(
+            Q(bs_id__isnull=True) |
+            Q(pl_id__isnull=True) |
+            Q(subconto_pl_id__isnull=True)
+        )
+
+    if mode == "bs":
+        return queryset.filter(bs_id__isnull=True)
+
+    if mode == "pl":
+        return queryset.filter(pl_id__isnull=True)
+
+    if mode == "subconto_pl":
+        return queryset.filter(subconto_pl_id__isnull=True)
+
+    if mode == "all":
+        return queryset.filter(
+            bs_id__isnull=True,
+            pl_id__isnull=True,
+            subconto_pl_id__isnull=True,
+        )
+
+    return queryset
+
+class MissingDistributionFilter(admin.SimpleListFilter):
+    title = "Распределения"
+    parameter_name = "missing_distribution"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("any", "Не заполнено хотя бы одно"),
+            ("bs", "Не заполнен Счет ST"),
+            ("pl", "Не заполнен Счет PL"),
+            ("subconto_pl", "Не заполнено Субконто PL"),
+            ("all", "Не заполнены все три"),
+        )
+
+    def queryset(self, request, queryset):
+        return get_missing_distribution_queryset(queryset, self.value())
+
+
 @admin.register(Contracts)
 class ContractsAdmin(admin.ModelAdmin):
     inlines = (
@@ -428,6 +473,7 @@ class ContractsAdmin(admin.ModelAdmin):
         AccountingMethodFilter,
         PayTimingFilter,
         HasAccrualFunctionFilter,
+        MissingDistributionFilter,
     )
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")

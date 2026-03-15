@@ -381,7 +381,7 @@ document.addEventListener("click", function (event) {
 
   background: var(--jm-bg);
   border: 1px solid var(--jm-border);
-  border-radius: 12px;
+  border-radius: 4px;
   box-shadow: var(--jm-shadow);
 
   max-height: min(520px, 70vh);
@@ -439,7 +439,7 @@ document.addEventListener("click", function (event) {
   gap: 10px;
   margin: 8px 0 10px 0;
   padding: 11px 12px;
-  border-radius: 12px;
+  border-radius: 2px;
   text-decoration:none;
 
   color: var(--jm-fg);
@@ -724,43 +724,109 @@ document.addEventListener("click", function (event) {
 
 
         // 3) Договоры
-    try {
-      const resp = await fetch("/admin/contracts-issues-status/", { credentials: "same-origin" });
-      if (resp.ok) {
-        const data = await resp.json();
+try {
+  const resp = await fetch("/admin/contracts-issues-status/", { credentials: "same-origin" });
+  if (resp.ok) {
+    const data = await resp.json();
 
-        const noAccrual = data.no_accrual_fn || {};
-        const totalNoAccrual = num(noAccrual.total);
 
-        const items = [];
+    const noAccrual = data.no_accrual_fn || {};
+    const missingDistribution = data.missing_distribution || {};
+    const missingBs = data.missing_bs || {};
+    const missingPl = data.missing_pl || {};
+    const missingSubcontoPl = data.missing_subconto_pl || {};
 
-        if (totalNoAccrual === 0) {
-          items.push({
-            status: "ok",
-            title: "Договоры без функции начисления",
-            sub: "Пусто",
-            badge: "OK",
-            href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
-          });
-        } else {
-          problems += 1;
-          items.push({
-            status: "danger",
-            title: "Договоры без функции начисления",
-            sub: "Нужно добавить условия начисления",
-            badge: String(totalNoAccrual),
-            href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
-          });
-        }
+    const totalNoAccrual = num(noAccrual.total);
+    const totalMissingDistribution = num(missingDistribution.total);
+    const totalMissingBs = num(missingBs.total);
+    const totalMissingPl = num(missingPl.total);
+    const totalMissingSubcontoPl = num(missingSubcontoPl.total);
 
-        sections.push({ title: "Договоры", items });
-      }
-    } catch (e) {
-      console.warn("contracts issues status error", e);
+    const items = [];
+
+    if (totalNoAccrual === 0) {
+      items.push({
+        status: "ok",
+        title: "Договоры без функции начисления",
+        sub: "Пусто",
+        badge: "OK",
+        href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Договоры без функции начисления",
+        sub: "Нужно добавить условия начисления",
+        badge: String(totalNoAccrual),
+        href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
+      });
     }
 
 
 
+    if (totalMissingBs === 0) {
+      items.push({
+        status: "ok",
+        title: "Не заполнен Счет ST",
+        sub: "Пусто",
+        badge: "OK",
+        href: missingBs.admin_url || "/admin/contracts/contracts/?missing_distribution=bs",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Не заполнен Счет ST",
+        sub: "Нужно заполнить поле Счет ST",
+        badge: String(totalMissingBs),
+        href: missingBs.admin_url || "/admin/contracts/contracts/?missing_distribution=bs",
+      });
+    }
+
+    if (totalMissingPl === 0) {
+      items.push({
+        status: "ok",
+        title: "Не заполнен Счет PL",
+        sub: "Пусто",
+        badge: "OK",
+        href: missingPl.admin_url || "/admin/contracts/contracts/?missing_distribution=pl",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Не заполнен Счет PL",
+        sub: "Нужно заполнить поле Счет PL",
+        badge: String(totalMissingPl),
+        href: missingPl.admin_url || "/admin/contracts/contracts/?missing_distribution=pl",
+      });
+    }
+
+    if (totalMissingSubcontoPl === 0) {
+      items.push({
+        status: "ok",
+        title: "Не заполнено Субконто PL",
+        sub: "Пусто",
+        badge: "OK",
+        href: missingSubcontoPl.admin_url || "/admin/contracts/contracts/?missing_distribution=subconto_pl",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Не заполнено Субконто PL",
+        sub: "Нужно заполнить поле Субконто PL",
+        badge: String(totalMissingSubcontoPl),
+        href: missingSubcontoPl.admin_url || "/admin/contracts/contracts/?missing_distribution=subconto_pl",
+      });
+    }
+
+    sections.push({ title: "Договоры", items });
+  }
+} catch (e) {
+  console.warn("contracts issues status error", e);
+}
 
 
 

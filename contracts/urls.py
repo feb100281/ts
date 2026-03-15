@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 from contracts.accruals.report import accruals_report
 from contracts.reconciliation.portfolio_report import debt_report
+from .views import contracts_issues_status
 
 
 app_name = "contracts"
@@ -29,4 +30,7 @@ urlpatterns = [
             debt_report,
             name="debt_report",
         ),
+     
+    path("contracts-issues-status/", contracts_issues_status, name="contracts_issues_status"),
+
 ]
