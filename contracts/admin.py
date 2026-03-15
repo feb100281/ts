@@ -1,3 +1,4 @@
+# contracts/admin.py
 from django.contrib import admin
 from django.contrib.admin import RelatedOnlyFieldListFilter
 from django.db.models import Count, Prefetch, Q
@@ -8,6 +9,8 @@ import json
 import os
 from datetime import date
 from django.urls import reverse
+
+from corporate.models import COA, CfItems
 
 from contracts.accruals.registry import ACCRUAL_REGISTRY
 from django.template.response import TemplateResponse
@@ -634,24 +637,59 @@ class ContractsAdmin(admin.ModelAdmin):
             cr_txt,
         )
 
+    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    #     field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    #     if db_field.name == "pid":
+    #         obj_id = request.resolver_match.kwargs.get("object_id")
+    #         if obj_id:
+    #             try:
+    #                 obj = Contracts.objects.select_related("cp").get(pk=obj_id)
+    #                 field.queryset = Contracts.objects.filter(cp=obj.cp).order_by(
+    #                     "-date"
+    #                 )
+    #                 # если хочешь выбирать только “основные” договоры:
+    #                 # field.queryset = field.queryset.filter(pid__isnull=True)
+    #             except Contracts.DoesNotExist:
+    #                 field.queryset = Contracts.objects.none()
+    #         else:
+    #             # форма создания: пока cp не выбран — скрываем варианты
+    #             field.queryset = Contracts.objects.none()
+
+    #     return field
+    
+    
+    
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         field = super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+        # Связанный договор для допсоглашения
         if db_field.name == "pid":
             obj_id = request.resolver_match.kwargs.get("object_id")
             if obj_id:
                 try:
                     obj = Contracts.objects.select_related("cp").get(pk=obj_id)
-                    field.queryset = Contracts.objects.filter(cp=obj.cp).order_by(
-                        "-date"
-                    )
-                    # если хочешь выбирать только “основные” договоры:
-                    # field.queryset = field.queryset.filter(pid__isnull=True)
+                    field.queryset = Contracts.objects.filter(cp=obj.cp).order_by("-date")
                 except Contracts.DoesNotExist:
                     field.queryset = Contracts.objects.none()
             else:
-                # форма создания: пока cp не выбран — скрываем варианты
                 field.queryset = Contracts.objects.none()
+
+        # Счет ST -> только счета, начинающиеся на 7
+        elif db_field.name == "bs":
+            field.queryset = COA.objects.filter(code__startswith="7").order_by("code")
+
+        # Счет PL -> только счета, начинающиеся на 4, 5 или 6
+        elif db_field.name == "pl":
+            field.queryset = COA.objects.filter(
+                Q(code__startswith="4") |
+                Q(code__startswith="5") |
+                Q(code__startswith="6")
+            ).order_by("code")
+
+        # Субконто PL -> только статьи ДС, начинающиеся на 5
+        elif db_field.name == "subconto_pl":
+            field.queryset = CfItems.objects.filter(code__startswith="5").order_by("code")
 
         return field
 

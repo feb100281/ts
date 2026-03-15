@@ -69,7 +69,9 @@ document.addEventListener("click", function (event) {
     Контрагенты: "fa-solid fa-handshake",
     Договоры: "fa-solid fa-file-signature",
     Выписки: "fa-solid fa-receipt",
-    'Запустить GL ETL': "fa-solid fa-gears"
+    'Запустить GL ETL': "fa-solid fa-gears",
+    'Скачать GL CSV': "fa-solid fa-file-csv",
+    'Скачать дебиторы/кредиторы CSV': "fa-solid fa-money-bill-transfer"
   };
 
   function enhanceTopMenu() {
@@ -103,6 +105,228 @@ document.addEventListener("click", function (event) {
   document.addEventListener("DOMContentLoaded", boot);
   document.addEventListener("pjax:end", boot);
 })();
+
+
+// -------------------------------------------------
+// 2.1) Topmenu dropdown: Экспорт
+// -------------------------------------------------
+(function () {
+  function injectExportMenuStylesOnce() {
+    if (document.getElementById("jmExportMenuStyles")) return;
+
+    const st = document.createElement("style");
+    st.id = "jmExportMenuStyles";
+    st.textContent = `
+  .jm-export-wrap {
+    position: relative;
+  }
+
+  .jm-export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+
+  .jm-export-btn .jm-export-label {
+    white-space: nowrap;
+  }
+
+  .jm-export-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 340px;
+    z-index: 9999;
+
+    background: #ffffff;
+    border: 1px solid #cfcfcf;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+    transition: opacity .12s ease, transform .12s ease;
+  }
+
+  .jm-export-menu.is-open {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .jm-export-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 35px;
+    padding: 0 18px;
+    text-decoration: none;
+    color: #2f2f2f;
+    font-size: 12px;
+    font-weight: 300;
+    line-height: 1.2;
+    background: #ffffff;
+    border-bottom: 1px solid #d9d9d9;
+  }
+
+  .jm-export-item:last-child {
+    border-bottom: none;
+  }
+
+  .jm-export-item:hover {
+    background: #f7f7f7;
+    color: #2f2f2f;
+    text-decoration: none;
+  }
+
+  .jm-export-item:focus-visible {
+    outline: none;
+    background: #f3f3f3;
+  }
+
+  .jm-export-item i {
+    width: 20px;
+    text-align: center;
+    color: #4b5563;
+    font-size: 14px;
+    flex: 0 0 20px;
+  }
+
+  .jm-export-item span {
+    display: block;
+    color: #2f2f2f;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+`;
+    document.head.appendChild(st);
+  }
+
+  function buildExportDropdown() {
+    const nav = document.querySelector(".main-header .navbar-nav");
+    if (!nav) return;
+    if (document.getElementById("jmExportWrap")) return;
+
+    const links = Array.from(document.querySelectorAll(".main-header .navbar-nav .nav-link"));
+
+    const glLink = links.find((a) => {
+      const title = (a.getAttribute("title") || "").trim();
+      return title === "Скачать GL CSV";
+    });
+
+    const arapLink = links.find((a) => {
+      const title = (a.getAttribute("title") || "").trim();
+      return title === "Скачать дебиторы/кредиторы CSV";
+    });
+
+    if (!glLink && !arapLink) return;
+
+    injectExportMenuStylesOnce();
+
+    const glLi = glLink ? glLink.closest(".nav-item") : null;
+    const arapLi = arapLink ? arapLink.closest(".nav-item") : null;
+
+    const insertBeforeNode = glLi || arapLi;
+
+    [glLi, arapLi].forEach((li) => {
+      if (li) li.remove();
+    });
+
+    const li = document.createElement("li");
+    li.className = "nav-item jm-export-wrap";
+    li.id = "jmExportWrap";
+
+    li.innerHTML = `
+      <a href="#" class="nav-link jm-export-btn" id="jmExportBtn" title="Экспорт">
+        <span class="jm-ico">
+          <i class="fa-solid fa-download" aria-hidden="true"></i>
+        </span>
+        <span class="jm-export-label">Экспорт</span>
+      </a>
+      <div class="jm-export-menu" id="jmExportMenu" aria-hidden="true"></div>
+    `;
+
+    if (insertBeforeNode && insertBeforeNode.parentNode) {
+      insertBeforeNode.parentNode.insertBefore(li, insertBeforeNode);
+    } else {
+      nav.appendChild(li);
+    }
+
+    const menu = li.querySelector("#jmExportMenu");
+
+    const items = [
+        glLink
+          ? {
+              href: glLink.getAttribute("href") || "#",
+              label: "Главная книга (GL)",
+              icon: "fa-solid fa-file-csv",
+            }
+          : null,
+        arapLink
+          ? {
+              href: arapLink.getAttribute("href") || "#",
+              label: "Дебиторы / кредиторы (ARAP)",
+              icon: "fa-solid fa-file-csv",
+            }
+          : null,
+      ].filter(Boolean);
+
+    items.forEach((item) => {
+      const a = document.createElement("a");
+      a.className = "jm-export-item";
+      a.href = item.href;
+      a.innerHTML = `
+        <i class="${item.icon}" aria-hidden="true"></i>
+        <span>${item.label}</span>
+      `;
+      menu.appendChild(a);
+    });
+
+    const btn = li.querySelector("#jmExportBtn");
+
+    function closeMenu() {
+      menu.classList.remove("is-open");
+      menu.setAttribute("aria-hidden", "true");
+    }
+
+    function toggleMenu() {
+      const isOpen = menu.classList.contains("is-open");
+      if (isOpen) closeMenu();
+      else {
+        menu.classList.add("is-open");
+        menu.setAttribute("aria-hidden", "false");
+      }
+    }
+
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMenu();
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!li.contains(e.target)) closeMenu();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeMenu();
+    });
+  }
+
+  function boot() {
+    buildExportDropdown();
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("pjax:end", boot);
+})();
+
+
+
 
 // -------------------------------------------------
 // 3) Bell: секции + строки уведомлений (масштабируемо)
