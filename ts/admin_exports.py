@@ -11,8 +11,7 @@ def export_sql_to_csv(request, sql: str, filename_prefix: str):
 
     # BOM для Excel
     response.write("\ufeff")
-
-    writer = csv.writer(response, delimiter=";")
+    writer = csv.writer(response, delimiter="|")
 
     with connection.cursor() as cursor:
         cursor.execute(sql)
