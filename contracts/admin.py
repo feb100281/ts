@@ -739,19 +739,7 @@ class ContractsAdmin(admin.ModelAdmin):
         js = ("js/conditions_inline_collapse.js",)
 
 
-# @admin.register(AccuralFn)
-# class AccuralFnAdmin(admin.ModelAdmin):
-#     list_display = ("name", "accounting_method", "description")
-#     formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
-
-#     class Media:
-#         css = {
-#             "all": (
-#                 "fonts/glyphs.css",
-#                 "css/admin_overrides.css",
-#             )
-#         }
-
+#####-----ФУНКЦИИ-----#####
 
 @admin.register(AccuralFn)
 class AccuralFnAdmin(admin.ModelAdmin):
@@ -764,7 +752,7 @@ class AccuralFnAdmin(admin.ModelAdmin):
         "python_path_short",
         "server_path_short",
         "template_size",
-        "description_short",
+        # "description_short",
     )
     list_display_links = ("name_badge",)
     list_filter = ("accounting_method",)
@@ -873,19 +861,7 @@ class AccuralFnAdmin(admin.ModelAdmin):
             len(data),
         )
 
-    @admin.display(description="Описание")
-    def description_short(self, obj):
-        if not obj.description:
-            return format_html('<span style="color:#94a3b8;">—</span>')
 
-        txt = obj.description.strip()
-        if len(txt) > 90:
-            txt = txt[:90].rstrip() + "…"
-
-        return format_html(
-            '<span style="color:#475569;">{}</span>',
-            txt,
-        )
 
     class Media:
         css = {
