@@ -69,7 +69,9 @@ document.addEventListener("click", function (event) {
     Контрагенты: "fa-solid fa-handshake",
     Договоры: "fa-solid fa-file-signature",
     Выписки: "fa-solid fa-receipt",
-    'Запустить GL ETL': "fa-solid fa-gears"
+    'Запустить GL ETL': "fa-solid fa-gears",
+    'Скачать GL CSV': "fa-solid fa-file-csv",
+    'Скачать дебиторы/кредиторы CSV': "fa-solid fa-money-bill-transfer"
   };
 
   function enhanceTopMenu() {
@@ -103,6 +105,228 @@ document.addEventListener("click", function (event) {
   document.addEventListener("DOMContentLoaded", boot);
   document.addEventListener("pjax:end", boot);
 })();
+
+
+// -------------------------------------------------
+// 2.1) Topmenu dropdown: Экспорт
+// -------------------------------------------------
+(function () {
+  function injectExportMenuStylesOnce() {
+    if (document.getElementById("jmExportMenuStyles")) return;
+
+    const st = document.createElement("style");
+    st.id = "jmExportMenuStyles";
+    st.textContent = `
+  .jm-export-wrap {
+    position: relative;
+  }
+
+  .jm-export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+  }
+
+  .jm-export-btn .jm-export-label {
+    white-space: nowrap;
+  }
+
+  .jm-export-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 340px;
+    z-index: 9999;
+
+    background: #ffffff;
+    border: 1px solid #cfcfcf;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+    transition: opacity .12s ease, transform .12s ease;
+  }
+
+  .jm-export-menu.is-open {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .jm-export-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 35px;
+    padding: 0 18px;
+    text-decoration: none;
+    color: #2f2f2f;
+    font-size: 12px;
+    font-weight: 300;
+    line-height: 1.2;
+    background: #ffffff;
+    border-bottom: 1px solid #d9d9d9;
+  }
+
+  .jm-export-item:last-child {
+    border-bottom: none;
+  }
+
+  .jm-export-item:hover {
+    background: #f7f7f7;
+    color: #2f2f2f;
+    text-decoration: none;
+  }
+
+  .jm-export-item:focus-visible {
+    outline: none;
+    background: #f3f3f3;
+  }
+
+  .jm-export-item i {
+    width: 20px;
+    text-align: center;
+    color: #4b5563;
+    font-size: 14px;
+    flex: 0 0 20px;
+  }
+
+  .jm-export-item span {
+    display: block;
+    color: #2f2f2f;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+`;
+    document.head.appendChild(st);
+  }
+
+  function buildExportDropdown() {
+    const nav = document.querySelector(".main-header .navbar-nav");
+    if (!nav) return;
+    if (document.getElementById("jmExportWrap")) return;
+
+    const links = Array.from(document.querySelectorAll(".main-header .navbar-nav .nav-link"));
+
+    const glLink = links.find((a) => {
+      const title = (a.getAttribute("title") || "").trim();
+      return title === "Скачать GL CSV";
+    });
+
+    const arapLink = links.find((a) => {
+      const title = (a.getAttribute("title") || "").trim();
+      return title === "Скачать дебиторы/кредиторы CSV";
+    });
+
+    if (!glLink && !arapLink) return;
+
+    injectExportMenuStylesOnce();
+
+    const glLi = glLink ? glLink.closest(".nav-item") : null;
+    const arapLi = arapLink ? arapLink.closest(".nav-item") : null;
+
+    const insertBeforeNode = glLi || arapLi;
+
+    [glLi, arapLi].forEach((li) => {
+      if (li) li.remove();
+    });
+
+    const li = document.createElement("li");
+    li.className = "nav-item jm-export-wrap";
+    li.id = "jmExportWrap";
+
+    li.innerHTML = `
+      <a href="#" class="nav-link jm-export-btn" id="jmExportBtn" title="Экспорт">
+        <span class="jm-ico">
+          <i class="fa-solid fa-download" aria-hidden="true"></i>
+        </span>
+        <span class="jm-export-label">Экспорт</span>
+      </a>
+      <div class="jm-export-menu" id="jmExportMenu" aria-hidden="true"></div>
+    `;
+
+    if (insertBeforeNode && insertBeforeNode.parentNode) {
+      insertBeforeNode.parentNode.insertBefore(li, insertBeforeNode);
+    } else {
+      nav.appendChild(li);
+    }
+
+    const menu = li.querySelector("#jmExportMenu");
+
+    const items = [
+        glLink
+          ? {
+              href: glLink.getAttribute("href") || "#",
+              label: "Главная книга (GL)",
+              icon: "fa-solid fa-file-csv",
+            }
+          : null,
+        arapLink
+          ? {
+              href: arapLink.getAttribute("href") || "#",
+              label: "Дебиторы / кредиторы (ARAP)",
+              icon: "fa-solid fa-file-csv",
+            }
+          : null,
+      ].filter(Boolean);
+
+    items.forEach((item) => {
+      const a = document.createElement("a");
+      a.className = "jm-export-item";
+      a.href = item.href;
+      a.innerHTML = `
+        <i class="${item.icon}" aria-hidden="true"></i>
+        <span>${item.label}</span>
+      `;
+      menu.appendChild(a);
+    });
+
+    const btn = li.querySelector("#jmExportBtn");
+
+    function closeMenu() {
+      menu.classList.remove("is-open");
+      menu.setAttribute("aria-hidden", "true");
+    }
+
+    function toggleMenu() {
+      const isOpen = menu.classList.contains("is-open");
+      if (isOpen) closeMenu();
+      else {
+        menu.classList.add("is-open");
+        menu.setAttribute("aria-hidden", "false");
+      }
+    }
+
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMenu();
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!li.contains(e.target)) closeMenu();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeMenu();
+    });
+  }
+
+  function boot() {
+    buildExportDropdown();
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("pjax:end", boot);
+})();
+
+
+
 
 // -------------------------------------------------
 // 3) Bell: секции + строки уведомлений (масштабируемо)
@@ -157,7 +381,7 @@ document.addEventListener("click", function (event) {
 
   background: var(--jm-bg);
   border: 1px solid var(--jm-border);
-  border-radius: 12px;
+  border-radius: 4px;
   box-shadow: var(--jm-shadow);
 
   max-height: min(520px, 70vh);
@@ -215,7 +439,7 @@ document.addEventListener("click", function (event) {
   gap: 10px;
   margin: 8px 0 10px 0;
   padding: 11px 12px;
-  border-radius: 12px;
+  border-radius: 2px;
   text-decoration:none;
 
   color: var(--jm-fg);
@@ -500,43 +724,109 @@ document.addEventListener("click", function (event) {
 
 
         // 3) Договоры
-    try {
-      const resp = await fetch("/admin/contracts-issues-status/", { credentials: "same-origin" });
-      if (resp.ok) {
-        const data = await resp.json();
+try {
+  const resp = await fetch("/admin/contracts-issues-status/", { credentials: "same-origin" });
+  if (resp.ok) {
+    const data = await resp.json();
 
-        const noAccrual = data.no_accrual_fn || {};
-        const totalNoAccrual = num(noAccrual.total);
 
-        const items = [];
+    const noAccrual = data.no_accrual_fn || {};
+    const missingDistribution = data.missing_distribution || {};
+    const missingBs = data.missing_bs || {};
+    const missingPl = data.missing_pl || {};
+    const missingSubcontoPl = data.missing_subconto_pl || {};
 
-        if (totalNoAccrual === 0) {
-          items.push({
-            status: "ok",
-            title: "Договоры без функции начисления",
-            sub: "Пусто",
-            badge: "OK",
-            href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
-          });
-        } else {
-          problems += 1;
-          items.push({
-            status: "danger",
-            title: "Договоры без функции начисления",
-            sub: "Нужно добавить условия начисления",
-            badge: String(totalNoAccrual),
-            href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
-          });
-        }
+    const totalNoAccrual = num(noAccrual.total);
+    const totalMissingDistribution = num(missingDistribution.total);
+    const totalMissingBs = num(missingBs.total);
+    const totalMissingPl = num(missingPl.total);
+    const totalMissingSubcontoPl = num(missingSubcontoPl.total);
 
-        sections.push({ title: "Договоры", items });
-      }
-    } catch (e) {
-      console.warn("contracts issues status error", e);
+    const items = [];
+
+    if (totalNoAccrual === 0) {
+      items.push({
+        status: "ok",
+        title: "Договоры без функции начисления",
+        sub: "Пусто",
+        badge: "OK",
+        href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Договоры без функции начисления",
+        sub: "Нужно добавить условия начисления",
+        badge: String(totalNoAccrual),
+        href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
+      });
     }
 
 
 
+    if (totalMissingBs === 0) {
+      items.push({
+        status: "ok",
+        title: "Не заполнен Счет ST",
+        sub: "Пусто",
+        badge: "OK",
+        href: missingBs.admin_url || "/admin/contracts/contracts/?missing_distribution=bs",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Не заполнен Счет ST",
+        sub: "Нужно заполнить поле Счет ST",
+        badge: String(totalMissingBs),
+        href: missingBs.admin_url || "/admin/contracts/contracts/?missing_distribution=bs",
+      });
+    }
+
+    if (totalMissingPl === 0) {
+      items.push({
+        status: "ok",
+        title: "Не заполнен Счет PL",
+        sub: "Пусто",
+        badge: "OK",
+        href: missingPl.admin_url || "/admin/contracts/contracts/?missing_distribution=pl",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Не заполнен Счет PL",
+        sub: "Нужно заполнить поле Счет PL",
+        badge: String(totalMissingPl),
+        href: missingPl.admin_url || "/admin/contracts/contracts/?missing_distribution=pl",
+      });
+    }
+
+    if (totalMissingSubcontoPl === 0) {
+      items.push({
+        status: "ok",
+        title: "Не заполнено Субконто PL",
+        sub: "Пусто",
+        badge: "OK",
+        href: missingSubcontoPl.admin_url || "/admin/contracts/contracts/?missing_distribution=subconto_pl",
+      });
+    } else {
+      problems += 1;
+      items.push({
+        status: "danger",
+        title: "Не заполнено Субконто PL",
+        sub: "Нужно заполнить поле Субконто PL",
+        badge: String(totalMissingSubcontoPl),
+        href: missingSubcontoPl.admin_url || "/admin/contracts/contracts/?missing_distribution=subconto_pl",
+      });
+    }
+
+    sections.push({ title: "Договоры", items });
+  }
+} catch (e) {
+  console.warn("contracts issues status error", e);
+}
 
 
 

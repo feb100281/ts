@@ -361,6 +361,18 @@ class Conditions(models.Model):
             models.Index(fields=["contract"]),
             models.Index(fields=["date_start", "date_finish"]),
         ]
+        
+        
+    
+    @property
+    def resolved_accounting_method(self):
+        if self.accounting_method:
+            return self.accounting_method
+
+        if self.fn_id and self.fn and self.fn.accounting_method:
+            return self.fn.accounting_method
+
+        return None
 
     # def __str__(self):
     #     return f"Условия: {self.contract} ({self.date_start} - {self.date_finish or '∞'})"

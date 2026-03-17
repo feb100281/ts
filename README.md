@@ -40,9 +40,10 @@ ssh -N -L 5433:localhost:5432 daria@82.202.197.94
 
 
 
+ДОСТУП НА СКАЧИВАНИЕ ТАБЛИЦ ИЗ БАЗЫ ДАННЫХ
 
-
-
+sudo -u postgres psql -d ts_db -c "GRANT SELECT ON public.pl_for_csv TO ts_user;"
+sudo -u postgres psql -d ts_db -c "GRANT SELECT ON public.arap_to_date TO ts_user;"
 
 
 # Начало работы

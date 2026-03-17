@@ -35,13 +35,13 @@
           <div class="party-name">
             {{ contract.cp|default:"—" }}
           </div>
-          <div class="contract-name">
-            {% if contract.number %}
-              Договор № {{ contract.number }}
-            {% else %}
-              Договор не указан
-            {% endif %}
-          </div>
+         <div class="contract-name">
+  {% if contract_name_from_mv %}
+    {{ contract_name_from_mv }}
+  {% else %}
+    Договор не указан
+  {% endif %}
+</div>
         </div>
 
         <div class="report-period">
@@ -99,26 +99,39 @@
           </div>
         </div>
 
-        <div class="balance-note">
-          <div class="balance-note-title">
-            Состояние на {{ report_date|date_ru }}
-          </div>
 
-          <div class="summary-list" style="margin-top: 12px;">
-            <div class="summary-row total">
-              <div class="summary-key">Сальдо на текущую дату</div>
-              <div class="summary-val summary-money strong">{{ current_balance|money_ru }}</div>
-            </div>
+          <div class="balance-note">
+                <div class="balance-note-title">
+                  Состояние на {{ report_date|date_ru }}
+                </div>
 
-            <div class="summary-row">
-              <div class="summary-key">Статус на текущую дату</div>
-              <div class="summary-val">
-                <span class="status-badge {{ current_balance_status_class }}">
-                  {{ current_balance_status }}
-                </span>
-              </div>
-            </div>
-          </div>
+                <div class="summary-list" style="margin-top: 12px;">
+                  <div class="summary-row">
+                    <div class="summary-key">Начислено на текущую дату</div>
+                    <div class="summary-val summary-money">{{ current_accruals|money_ru }}</div>
+                  </div>
+
+                  <div class="summary-row">
+                    <div class="summary-key">Оплачено на текущую дату</div>
+                    <div class="summary-val summary-money">{{ current_payments|money_ru }}</div>
+                  </div>
+
+                  <div class="summary-row total">
+                    <div class="summary-key">Сальдо на текущую дату</div>
+                    <div class="summary-val summary-money strong">{{ current_balance|money_ru }}</div>
+                  </div>
+
+                  <div class="summary-row">
+                    <div class="summary-key">Статус на текущую дату</div>
+                    <div class="summary-val">
+                      <span class="status-badge {{ current_balance_status_class }}">
+                        {{ current_balance_status }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+
 
           <div class="balance-note-text">
             {{ current_balance_comment }}
@@ -193,7 +206,7 @@
             <thead>
               <tr>
                 <th class="col-date">Дата</th>
-                <th class="col-doc">Основание</th>
+                {% comment %} <th class="col-doc">Основание</th> {% endcomment %}
                 <th class="col-desc">Описание</th>
 
                 {% if has_loan %}
@@ -213,9 +226,9 @@
                   <tr>
                     <td class="date-cell">{{ r.row_date|date_ru }}</td>
 
-                    <td class="doc-cell">
+                    {% comment %} <td class="doc-cell">
                       {{ r.doc_label|default:"—" }}
-                    </td>
+                    </td> {% endcomment %}
 
                     <td class="desc-cell">
                       <div class="desc-main">{{ r.description|default:"—" }}</div>
@@ -227,9 +240,9 @@
                       {% endif %}
 
                       {% if r.comment %}
-                        <div class="desc-sub">
-                          {{ r.comment }}
-                        </div>
+                      <div class="desc-sub">
+                        {{ r.comment|linebreaksbr }}
+                      </div>
                       {% endif %}
                     </td>
 
@@ -283,7 +296,7 @@
 
             <tfoot>
               <tr>
-                <td colspan="3" class="tfoot-label">Итого по всем периодам</td>
+                <td colspan="2" class="tfoot-label">Итого по всем периодам</td>
 
                 {% if has_loan %}
                   <td class="money-cell">{{ total_loan_issue|money_ru }}</td>
