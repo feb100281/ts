@@ -598,7 +598,7 @@ class AccountAdmin(DraggableMPTTAdmin):
 class CashFlowItemAdmin(DraggableMPTTAdmin):
     mptt_level_indent = 32
 
-    list_display = ("tree_actions", "indented_title",  "active_badge", "children_badge")
+    list_display = ("tree_actions", "indented_title",  "active_badge", "children_badge","id")
     list_display_links = ("indented_title",)
 
     search_fields = ("code", "name")
