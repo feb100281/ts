@@ -239,6 +239,7 @@ JAZZMIN_SETTINGS = {
         {"name": "Запустить GL ETL", "url": "run_gl_etl", "new_window": False},
         {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
         {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
+        {"name": "Скачать проверку договоров GL/PL/BS CSV", "url": "export_contracts_gl_check"},
     ],
     
     # "usermenu_links": [
