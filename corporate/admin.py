@@ -21,6 +21,7 @@ from mptt.admin import DraggableMPTTAdmin
 from django.db.models.functions import Cast
 from django.db.models import IntegerField
 
+from .models import COAFn, ConditionsCOA
 
 from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 
@@ -28,6 +29,11 @@ from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
 from counterparties.models import Glyph
 from counterparties.helpers.glyph_fields import GlyphChoiceField, char_to_code, code_to_char
 from .models import Subconto
+
+
+from jsoneditor.forms import JSONEditor
+
+from django.db import models
 
 
 #---------- ФОРМЫ ---------#
@@ -405,6 +411,46 @@ class BankAccountAdmin(admin.ModelAdmin):
     def bank_name(self, obj):
         return obj.bank.name if obj.bank else "—"
 
+#Новые инлай для функций плана счетов
+
+class ConditionsCOAInline(admin.StackedInline):
+    model = ConditionsCOA
+    extra = 0
+    fk_name = "coa"
+    show_change_link = True
+    formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
+    # autocomplete_fields = ("accounting_method", "tax")
+    # template = "admin/contracts/inlines/conditions_stacked_inline.html"
+
+    fieldsets = (
+        (
+            "Начисление",
+            {
+                "fields": (
+                    "fn",
+                    "param_json",
+                    "acc_pl",
+                    "subconto_pl",
+                    "acc_bs",
+                    "subconto_bs",
+                )
+            },
+        ),
+        
+    )
+    verbose_name = mark_safe("<b>✅ Списания</b>")
+    verbose_name_plural = mark_safe("✅<b>Списания</b>")
+
+    class Meta:
+        model = ConditionsCOA
+        fields = "__all__"
+        widgets = {
+            "param_json": JSONEditor,
+            "vat_json": JSONEditor,
+        }
+
+
+
 
 # ----- ПЛАН СЧЕТОВ ---- #
 
@@ -426,6 +472,7 @@ class AccountAdmin(DraggableMPTTAdmin):
     # list_filter = ("is_active",)
     ordering = ("code",)
     preserve_filters = True
+    inlines = [ConditionsCOAInline,]
     
     
     def _step_for_parent(self, parent_level: int) -> int:
@@ -1019,3 +1066,30 @@ class SubcontoAdmin(DraggableMPTTAdmin):
                 "css/mptt_pretty.css"
             )
         }
+
+@admin.register(COAFn)
+class COAFnAdmin(admin.ModelAdmin):
+    change_list_template = "admin/contracts/accuralfn/change_list.html"
+    change_form_template = "admin/contracts/accuralfn/change_form.html"
+
+    list_display = (
+        "name",
+        "python_path",
+        "server_path",
+        "description",
+        # "description_short",
+    )
+    
+
+    formfield_overrides = {
+        models.JSONField: {"widget": JSONEditor},
+    }
+
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",
+            )
+        }
+        
