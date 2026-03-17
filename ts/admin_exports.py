@@ -38,3 +38,10 @@ def export_arap_to_date(request):
         sql="SELECT * FROM public.arap_to_date",
         filename_prefix="arap_data"
     )
+    
+def export_contracts_gl_check(request):
+    return export_sql_to_csv(
+        request,
+        sql="SELECT * FROM public.contracts_gl_check",
+        filename_prefix="contracts_gl_check"
+    )

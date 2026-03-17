@@ -71,7 +71,8 @@ document.addEventListener("click", function (event) {
     Выписки: "fa-solid fa-receipt",
     'Запустить GL ETL': "fa-solid fa-gears",
     'Скачать GL CSV': "fa-solid fa-file-csv",
-    'Скачать дебиторы/кредиторы CSV': "fa-solid fa-money-bill-transfer"
+    'Скачать дебиторы/кредиторы CSV': "fa-solid fa-money-bill-transfer",
+    'Скачать проверку договоров GL/PL/BS CSV': "fa-solid fa-scale-balanced"
   };
 
   function enhanceTopMenu() {
@@ -206,6 +207,13 @@ document.addEventListener("click", function (event) {
     document.head.appendChild(st);
   }
 
+  function getLinkLabel(a) {
+    return (
+      (a.getAttribute("title") || "").trim() ||
+      (a.textContent || "").replace(/\s+/g, " ").trim()
+    );
+  }
+
   function buildExportDropdown() {
     const nav = document.querySelector(".main-header .navbar-nav");
     if (!nav) return;
@@ -213,26 +221,25 @@ document.addEventListener("click", function (event) {
 
     const links = Array.from(document.querySelectorAll(".main-header .navbar-nav .nav-link"));
 
-    const glLink = links.find((a) => {
-      const title = (a.getAttribute("title") || "").trim();
-      return title === "Скачать GL CSV";
-    });
+    const glLink = links.find((a) => getLinkLabel(a) === "Скачать GL CSV");
 
-    const arapLink = links.find((a) => {
-      const title = (a.getAttribute("title") || "").trim();
-      return title === "Скачать дебиторы/кредиторы CSV";
-    });
+    const arapLink = links.find((a) => getLinkLabel(a) === "Скачать дебиторы/кредиторы CSV");
 
-    if (!glLink && !arapLink) return;
+    const contractsCheckLink = links.find(
+      (a) => getLinkLabel(a) === "Скачать проверку договоров GL/PL/BS CSV"
+    );
+
+    if (!glLink && !arapLink && !contractsCheckLink) return;
 
     injectExportMenuStylesOnce();
 
     const glLi = glLink ? glLink.closest(".nav-item") : null;
     const arapLi = arapLink ? arapLink.closest(".nav-item") : null;
+    const contractsCheckLi = contractsCheckLink ? contractsCheckLink.closest(".nav-item") : null;
 
-    const insertBeforeNode = glLi || arapLi;
+    const insertBeforeNode = glLi || arapLi || contractsCheckLi;
 
-    [glLi, arapLi].forEach((li) => {
+    [glLi, arapLi, contractsCheckLi].forEach((li) => {
       if (li) li.remove();
     });
 
@@ -259,21 +266,28 @@ document.addEventListener("click", function (event) {
     const menu = li.querySelector("#jmExportMenu");
 
     const items = [
-        glLink
-          ? {
-              href: glLink.getAttribute("href") || "#",
-              label: "Главная книга (GL)",
-              icon: "fa-solid fa-file-csv",
-            }
-          : null,
-        arapLink
-          ? {
-              href: arapLink.getAttribute("href") || "#",
-              label: "Дебиторы / кредиторы (ARAP)",
-              icon: "fa-solid fa-file-csv",
-            }
-          : null,
-      ].filter(Boolean);
+      glLink
+        ? {
+            href: glLink.getAttribute("href") || "#",
+            label: "Главная книга (GL)",
+            icon: "fa-solid fa-file-csv",
+          }
+        : null,
+      arapLink
+        ? {
+            href: arapLink.getAttribute("href") || "#",
+            label: "Дебиторы / кредиторы (ARAP)",
+            icon: "fa-solid fa-file-csv",
+          }
+        : null,
+      contractsCheckLink
+        ? {
+            href: contractsCheckLink.getAttribute("href") || "#",
+            label: "Проверка договоров на списание в PL",
+            icon: "fa-solid fa-scale-balanced",
+          }
+        : null,
+    ].filter(Boolean);
 
     items.forEach((item) => {
       const a = document.createElement("a");
