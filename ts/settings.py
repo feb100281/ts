@@ -235,13 +235,16 @@ JAZZMIN_SETTINGS = {
         {"model": "macro.CalendarExceptions"},
         {"model": "counterparties.Counterparty"},
         {"model": "contracts.Contracts"},
-         {"model": "treasury.BankStatements"},
-         {"name": "Запустить GL ETL", "url": "run_gl_etl", "new_window": False},
-
-        
-        # {"name": "Помощь", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
-
+        {"model": "treasury.BankStatements"},
+        {"name": "Запустить GL ETL", "url": "run_gl_etl", "new_window": False},
+        {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
+        {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
     ],
+    
+    # "usermenu_links": [
+    #     {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
+    #     {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
+    # ],
 
     "show_collapse": True,
 

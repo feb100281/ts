@@ -1,3 +1,4 @@
+# core/views.py
 import subprocess
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required

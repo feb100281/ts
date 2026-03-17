@@ -1,6 +1,7 @@
+# contracts/admin.py
 from django.contrib import admin
 from django.contrib.admin import RelatedOnlyFieldListFilter
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django import forms
@@ -8,6 +9,8 @@ import json
 import os
 from datetime import date
 from django.urls import reverse
+
+from corporate.models import COA, CfItems
 
 from contracts.accruals.registry import ACCRUAL_REGISTRY
 from django.template.response import TemplateResponse
@@ -100,7 +103,10 @@ class AccountingMethodFilter(admin.SimpleListFilter):
         val = self.value()
         if not val:
             return queryset
-        return queryset.filter(conditions__accounting_method_id=val).distinct()
+        return queryset.filter(
+            Q(conditions__accounting_method_id=val) |
+            Q(conditions__fn__accounting_method_id=val)
+        ).distinct()
 
 
 class PayTimingFilter(admin.SimpleListFilter):
@@ -374,6 +380,51 @@ class ContractFilesInline(admin.StackedInline):
     document.short_description = "Текущий документ"
 
 
+from django.db.models import Q
+
+def get_missing_distribution_queryset(queryset, mode=None):
+    if mode == "any":
+        return queryset.filter(
+            Q(bs_id__isnull=True) |
+            Q(pl_id__isnull=True) |
+            Q(subconto_pl_id__isnull=True)
+        )
+
+    if mode == "bs":
+        return queryset.filter(bs_id__isnull=True)
+
+    if mode == "pl":
+        return queryset.filter(pl_id__isnull=True)
+
+    if mode == "subconto_pl":
+        return queryset.filter(subconto_pl_id__isnull=True)
+
+    if mode == "all":
+        return queryset.filter(
+            bs_id__isnull=True,
+            pl_id__isnull=True,
+            subconto_pl_id__isnull=True,
+        )
+
+    return queryset
+
+class MissingDistributionFilter(admin.SimpleListFilter):
+    title = "Распределения"
+    parameter_name = "missing_distribution"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("any", "Не заполнено хотя бы одно"),
+            ("bs", "Не заполнен Счет ST"),
+            ("pl", "Не заполнен Счет PL"),
+            ("subconto_pl", "Не заполнено Субконто PL"),
+            ("all", "Не заполнены все три"),
+        )
+
+    def queryset(self, request, queryset):
+        return get_missing_distribution_queryset(queryset, self.value())
+
+
 @admin.register(Contracts)
 class ContractsAdmin(admin.ModelAdmin):
     inlines = (
@@ -422,6 +473,7 @@ class ContractsAdmin(admin.ModelAdmin):
         AccountingMethodFilter,
         PayTimingFilter,
         HasAccrualFunctionFilter,
+        MissingDistributionFilter,
     )
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
@@ -494,6 +546,8 @@ class ContractsAdmin(admin.ModelAdmin):
                 ),
                 "conditions",
                 "conditions__accounting_method",
+                "conditions__fn",
+                "conditions__fn__accounting_method",
             )
         )
 
@@ -537,14 +591,16 @@ class ContractsAdmin(admin.ModelAdmin):
     @admin.display(description="Метод")
     def method_icon(self, obj):
         cond = get_current_condition(obj)
-        m = getattr(cond, "accounting_method", None) if cond else None
+        m = cond.resolved_accounting_method if cond else None
         if not m:
             return "—"
+
         icon = (m.icon or "").strip() or "🧩"
         return format_html(
-            '<span style="font-size:18px; line-height:1;">{}</span>', icon
+            '<span style="font-size:18px; line-height:1;">{}</span>',
+            icon
         )
-
+        
     @admin.display(description="Окончание")
     def contract_end_date(self, obj):
         cond = get_current_condition(obj)
@@ -627,24 +683,59 @@ class ContractsAdmin(admin.ModelAdmin):
             cr_txt,
         )
 
+    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    #     field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    #     if db_field.name == "pid":
+    #         obj_id = request.resolver_match.kwargs.get("object_id")
+    #         if obj_id:
+    #             try:
+    #                 obj = Contracts.objects.select_related("cp").get(pk=obj_id)
+    #                 field.queryset = Contracts.objects.filter(cp=obj.cp).order_by(
+    #                     "-date"
+    #                 )
+    #                 # если хочешь выбирать только “основные” договоры:
+    #                 # field.queryset = field.queryset.filter(pid__isnull=True)
+    #             except Contracts.DoesNotExist:
+    #                 field.queryset = Contracts.objects.none()
+    #         else:
+    #             # форма создания: пока cp не выбран — скрываем варианты
+    #             field.queryset = Contracts.objects.none()
+
+    #     return field
+    
+    
+    
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         field = super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+        # Связанный договор для допсоглашения
         if db_field.name == "pid":
             obj_id = request.resolver_match.kwargs.get("object_id")
             if obj_id:
                 try:
                     obj = Contracts.objects.select_related("cp").get(pk=obj_id)
-                    field.queryset = Contracts.objects.filter(cp=obj.cp).order_by(
-                        "-date"
-                    )
-                    # если хочешь выбирать только “основные” договоры:
-                    # field.queryset = field.queryset.filter(pid__isnull=True)
+                    field.queryset = Contracts.objects.filter(cp=obj.cp).order_by("-date")
                 except Contracts.DoesNotExist:
                     field.queryset = Contracts.objects.none()
             else:
-                # форма создания: пока cp не выбран — скрываем варианты
                 field.queryset = Contracts.objects.none()
+
+        # Счет ST -> только счета, начинающиеся на 7
+        elif db_field.name == "bs":
+            field.queryset = COA.objects.filter(code__startswith="7").order_by("code")
+
+        # Счет PL -> только счета, начинающиеся на 4, 5 или 6
+        elif db_field.name == "pl":
+            field.queryset = COA.objects.filter(
+                Q(code__startswith="4") |
+                Q(code__startswith="5") |
+                Q(code__startswith="6")
+            ).order_by("code")
+
+        # Субконто PL -> только статьи ДС, начинающиеся на 5
+        elif db_field.name == "subconto_pl":
+            field.queryset = CfItems.objects.filter(code__startswith="5").order_by("code")
 
         return field
 
@@ -732,19 +823,7 @@ class ContractsAdmin(admin.ModelAdmin):
         js = ("js/conditions_inline_collapse.js",)
 
 
-# @admin.register(AccuralFn)
-# class AccuralFnAdmin(admin.ModelAdmin):
-#     list_display = ("name", "accounting_method", "description")
-#     formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
-
-#     class Media:
-#         css = {
-#             "all": (
-#                 "fonts/glyphs.css",
-#                 "css/admin_overrides.css",
-#             )
-#         }
-
+#####-----ФУНКЦИИ-----#####
 
 @admin.register(AccuralFn)
 class AccuralFnAdmin(admin.ModelAdmin):
@@ -757,7 +836,7 @@ class AccuralFnAdmin(admin.ModelAdmin):
         "python_path_short",
         "server_path_short",
         "template_size",
-        "description_short",
+        # "description_short",
     )
     list_display_links = ("name_badge",)
     list_filter = ("accounting_method",)
@@ -866,19 +945,7 @@ class AccuralFnAdmin(admin.ModelAdmin):
             len(data),
         )
 
-    @admin.display(description="Описание")
-    def description_short(self, obj):
-        if not obj.description:
-            return format_html('<span style="color:#94a3b8;">—</span>')
 
-        txt = obj.description.strip()
-        if len(txt) > 90:
-            txt = txt[:90].rstrip() + "…"
-
-        return format_html(
-            '<span style="color:#475569;">{}</span>',
-            txt,
-        )
 
     class Media:
         css = {
