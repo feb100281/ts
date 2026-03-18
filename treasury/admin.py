@@ -1007,10 +1007,11 @@ class CfDataAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
         return qs.select_related(
             "cp_final", "contract", "cfitem", "bs", "owner", "ba"
-        ).prefetch_related(
-            "splits__cfitem",
-            "splits__contract",
         )
+        # .prefetch_related(
+        #     "splits__cfitem",
+        #     "splits__contract",
+        # )
 
     # -------------------- Колонки списка --------------------
     def _currency_code(self, obj) -> str:
