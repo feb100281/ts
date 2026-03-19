@@ -205,21 +205,59 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
     
     ts_inn = ts_inn if ts_inn else ts_inn_default
 
-    payer_src = (
-        "ПлательщикСчет"
-        if "ПлательщикСчет" in init_df.columns
-        else "ПлательщикРасчСчет"
-    )
-    reciver_src = (
-        "ПолучательСчет"
-        if "ПолучательСчет" in init_df.columns
-        else "ПолучательРасчСчет"
-    )
+    # payer_src = (
+    #     "ПлательщикСчет"
+    #     if "ПлательщикСчет" in init_df.columns
+    #     else "ПлательщикРасчСчет"
+    # )
+    # reciver_src = (
+    #     "ПолучательСчет"
+    #     if "ПолучательСчет" in init_df.columns
+    #     else "ПолучательРасчСчет"
+    # )
 
-    init_df["payer_account"] = init_df[payer_src]
-    init_df["reciver_account"] = init_df[reciver_src]
+    # init_df["payer_account"] = init_df[payer_src]
+    # init_df["reciver_account"] = init_df[reciver_src]
+    
+    
+    payer_src = None
+    if "ПлательщикСчет" in init_df.columns:
+        payer_src = "ПлательщикСчет"
+    elif "ПлательщикРасчСчет" in init_df.columns:
+        payer_src = "ПлательщикРасчСчет"
+
+    reciver_src = None
+    if "ПолучательСчет" in init_df.columns:
+        reciver_src = "ПолучательСчет"
+    elif "ПолучательРасчСчет" in init_df.columns:
+        reciver_src = "ПолучательРасчСчет"
+
+    init_df["payer_account"] = init_df[payer_src] if payer_src else pd.NA
+    init_df["reciver_account"] = init_df[reciver_src] if reciver_src else pd.NA
 
     init_df = init_df.rename(columns=FIELDS_LIST)
+    
+    # гарантируем наличие колонок, которые могут отсутствовать в выписке
+    required_cols = [
+        "date_paid",
+        "recieve_date",
+        "payer_tax_id",
+        "reciver_tax_id",
+        "payer",
+        "payer1",
+        "reciver",
+        "reciver1",
+        "temp",
+        "doc_date",
+    ]
+
+    for col in required_cols:
+        if col not in init_df.columns:
+            init_df[col] = pd.NA
+            
+            
+            
+            
 
     def fix_str_amount(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -245,17 +283,30 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
     df["dt"] = np.where(df.payer_account != account_id, df.amount, 0.0)
     df["cr"] = np.where(df.payer_account == account_id, df.amount, 0.0)
 
+    # # Конвертируем даты
+    # df["date"] = np.where(df["date_paid"].isna(), df.recieve_date, df.date_paid)
+
+    # s = df["date"]
+
+    # # если строки/объекты — чистим пробелы и превращаем пустые в NA
+    # s = s.astype("string").str.replace("\xa0", " ", regex=False).str.strip()
+    # s = s.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+
+    # df["date"] = s.combine_first(df["doc_date"].astype("string"))
+    # df.date = pd.to_datetime(df.date, errors="coerce", dayfirst=True)
+    
+    
     # Конвертируем даты
-    df["date"] = np.where(df["date_paid"].isna(), df.recieve_date, df.date_paid)
+    df["date"] = df["date_paid"].combine_first(df["recieve_date"])
 
-    s = df["date"]
-
-    # если строки/объекты — чистим пробелы и превращаем пустые в NA
-    s = s.astype("string").str.replace("\xa0", " ", regex=False).str.strip()
+    s = df["date"].astype("string").str.replace("\xa0", " ", regex=False).str.strip()
     s = s.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
 
-    df["date"] = s.combine_first(df["doc_date"].astype("string"))
-    df.date = pd.to_datetime(df.date, errors="coerce", dayfirst=True)
+    doc_date_s = df["doc_date"].astype("string").str.replace("\xa0", " ", regex=False).str.strip()
+    doc_date_s = doc_date_s.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+
+    df["date"] = s.combine_first(doc_date_s)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce", dayfirst=True)
 
     # ИНН Контрагента проставляем
     df["tax_id"] = np.where(df.dt == 0, df.reciver_tax_id, df.payer_tax_id)
@@ -279,10 +330,17 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
 
 
     # Выделяем контрагента по выписки
-    if 'reciver1' in df.columns:
-        df["cp_bs_name"] = np.where(df.dt == 0, df.reciver1, df.payer1)
-    if 'reciver' in df.columns:
-        df["cp_bs_name"] = np.where(df.dt == 0, df.reciver, df.payer)
+    # if 'reciver1' in df.columns:
+    #     df["cp_bs_name"] = np.where(df.dt == 0, df.reciver1, df.payer1)
+    # if 'reciver' in df.columns:
+    #     df["cp_bs_name"] = np.where(df.dt == 0, df.reciver, df.payer)
+    
+    if "reciver" in df.columns and "payer" in df.columns:
+        df["cp_bs_name"] = np.where(df["dt"] == 0, df["reciver"], df["payer"])
+    elif "reciver1" in df.columns and "payer1" in df.columns:
+        df["cp_bs_name"] = np.where(df["dt"] == 0, df["reciver1"], df["payer1"])
+    else:
+        df["cp_bs_name"] = pd.NA
     
     
     s = df["temp"].fillna("").str.lower()
