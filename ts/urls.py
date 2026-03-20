@@ -4,8 +4,12 @@ from django.contrib.auth import views as auth_views
 from django.urls import path,include
 
 from .views import fx_status, cp_issues_status, treasury_status
-from .admin_exports import export_pl_for_csv, export_arap_to_date
 from contracts.views import contracts_issues_status
+from .admin_exports import (
+    export_pl_for_csv,
+    export_arap_to_date,
+    export_contracts_gl_check,
+)
 
 login_view = auth_views.LoginView.as_view(
     template_name="admin/landing.html",
@@ -19,6 +23,7 @@ urlpatterns = [
     path("admin/contracts-issues-status/", contracts_issues_status, name="contracts_issues_status"),
     path("admin/export/pl-for-csv/", admin.site.admin_view(export_pl_for_csv), name="export_pl_for_csv",),
     path("admin/export/arap-to-date/", admin.site.admin_view(export_arap_to_date), name="export_arap_to_date",),
+    path("admin/export/contracts-gl-check/",admin.site.admin_view(export_contracts_gl_check), name="export_contracts_gl_check",),
     path("apps/", include('django_plotly_dash.urls')),
 
     path("admin/", admin.site.urls),
