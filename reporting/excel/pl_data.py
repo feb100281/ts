@@ -24,6 +24,13 @@ def get_pl_report(date_to=None):
             EXTRACT(YEAR FROM %s::date)::int AS current_year
     ),
 
+    profit_tax AS (
+        SELECT id AS tax_id
+        FROM public.macro_taxeslist
+        WHERE tax_name = 'Налог на прибыль'
+        LIMIT 1
+    ),
+
     base AS (
         SELECT
             p.date_from,
@@ -120,170 +127,277 @@ def get_pl_report(date_to=None):
         GROUP BY b.year
     ),
 
+    tax_rates_by_year AS (
+        SELECT
+            y.year,
+
+            (
+                SELECT r.rate
+                FROM public.macro_taxrates r
+                CROSS JOIN profit_tax pt
+                CROSS JOIN current_params p
+                WHERE r.tax_id = pt.tax_id
+                  AND r.date <= LEAST(make_date(y.year, 12, 31), p.max_date)
+                ORDER BY r.date DESC, r.id DESC
+                LIMIT 1
+            ) AS fye_tax_rate,
+
+            (
+                SELECT r.rate
+                FROM public.macro_taxrates r
+                CROSS JOIN profit_tax pt
+                CROSS JOIN current_params p
+                WHERE r.tax_id = pt.tax_id
+                  AND r.date <= make_date(
+                        y.year,
+                        EXTRACT(MONTH FROM p.max_date)::int,
+                        LEAST(
+                            EXTRACT(DAY FROM p.max_date)::int,
+                            EXTRACT(DAY FROM (
+                                date_trunc('month', make_date(y.year, EXTRACT(MONTH FROM p.max_date)::int, 1))
+                                + interval '1 month - 1 day'
+                            ))::int
+                        )
+                  )
+                ORDER BY r.date DESC, r.id DESC
+                LIMIT 1
+            ) AS ytd_tax_rate,
+
+            (
+                SELECT r.rate
+                FROM public.macro_taxrates r
+                CROSS JOIN profit_tax pt
+                CROSS JOIN current_params p
+                WHERE r.tax_id = pt.tax_id
+                  AND r.date <= make_date(
+                        y.year,
+                        EXTRACT(MONTH FROM p.max_date)::int,
+                        LEAST(
+                            EXTRACT(DAY FROM p.max_date)::int,
+                            EXTRACT(DAY FROM (
+                                date_trunc('month', make_date(y.year, EXTRACT(MONTH FROM p.max_date)::int, 1))
+                                + interval '1 month - 1 day'
+                            ))::int
+                        )
+                  )
+                ORDER BY r.date DESC, r.id DESC
+                LIMIT 1
+            ) AS mtd_tax_rate
+
+        FROM (
+            SELECT DISTINCT year FROM base
+        ) y
+    ),
+
     fye_rows AS (
         SELECT year, 'FYE'::text AS period_type, 'Выручка от основной деятельности'::text AS row_name, revenue::numeric AS value FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Себестоимость проданных товаров', cogs_goods FROM fye_pivot
+        SELECT year, 'FYE', 'Себестоимость проданных товаров', cogs_goods::numeric FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Себестоимость реализации', cogs_real FROM fye_pivot
+        SELECT year, 'FYE', 'Себестоимость реализации', cogs_real::numeric FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Валовая прибыль', revenue + cogs_goods + cogs_real FROM fye_pivot
+        SELECT year, 'FYE', 'Валовая прибыль', (revenue + cogs_goods + cogs_real)::numeric FROM fye_pivot
         UNION ALL
         SELECT year, 'FYE', 'Рентабельность продаж',
-               CASE WHEN revenue = 0 THEN NULL ELSE (revenue + cogs_goods + cogs_real) / revenue END
+               CASE WHEN revenue = 0 THEN NULL ELSE ((revenue + cogs_goods + cogs_real) / revenue)::numeric END
         FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Накладные расходы', overhead FROM fye_pivot
+        SELECT year, 'FYE', 'Накладные расходы', overhead::numeric FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Корпоративные расходы (G&A)', ga FROM fye_pivot
+        SELECT year, 'FYE', 'Корпоративные расходы (G&A)', ga::numeric FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'EBITDA', revenue + cogs_goods + cogs_real + overhead + ga FROM fye_pivot
+        SELECT year, 'FYE', 'EBITDA', (revenue + cogs_goods + cogs_real + overhead + ga)::numeric FROM fye_pivot
         UNION ALL
         SELECT year, 'FYE', 'EBITDA MARGIN',
-               CASE WHEN revenue = 0 THEN NULL ELSE (revenue + cogs_goods + cogs_real + overhead + ga) / revenue END
+               CASE WHEN revenue = 0 THEN NULL ELSE ((revenue + cogs_goods + cogs_real + overhead + ga) / revenue)::numeric END
         FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Прочие доходы и расходы', other_income_expense FROM fye_pivot
+        SELECT year, 'FYE', 'Прочие доходы и расходы', other_income_expense::numeric FROM fye_pivot
         UNION ALL
         SELECT year, 'FYE', 'EBITDA Adjusted',
-               revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense
+               (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense)::numeric
         FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Финансовые расходы', fin_expense FROM fye_pivot
+        SELECT year, 'FYE', 'Финансовые расходы', fin_expense::numeric FROM fye_pivot
         UNION ALL
-        SELECT year, 'FYE', 'Налог на прибыль',
-               CASE
-                   WHEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) > 0
-                   THEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) * -0.25
-                   ELSE 0
-               END
-        FROM fye_pivot
+        SELECT
+            f.year,
+            'FYE',
+            'Налог на прибыль',
+            CASE
+                WHEN (f.revenue + f.cogs_goods + f.cogs_real + f.overhead + f.ga + f.other_income_expense + f.fin_expense) > 0
+                THEN (
+                    (f.revenue + f.cogs_goods + f.cogs_real + f.overhead + f.ga + f.other_income_expense + f.fin_expense)::numeric
+                    * (-COALESCE(t.fye_tax_rate, 0)::numeric / 100::numeric)
+                )
+                ELSE 0::numeric
+            END
+        FROM fye_pivot f
+        LEFT JOIN tax_rates_by_year t
+            ON t.year = f.year
         UNION ALL
-        SELECT year, 'FYE', 'Чистая прибыль / убыток',
-               (
-                   revenue + cogs_goods + cogs_real + overhead + ga
-                   + other_income_expense
-                   + fin_expense
-                   + CASE
-                       WHEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) > 0
-                       THEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) * -0.25
-                       ELSE 0
-                     END
-               )
-        FROM fye_pivot
+        SELECT
+            f.year,
+            'FYE',
+            'Чистая прибыль / убыток',
+            (
+                (f.revenue + f.cogs_goods + f.cogs_real + f.overhead + f.ga + f.other_income_expense + f.fin_expense)::numeric
+                +
+                CASE
+                    WHEN (f.revenue + f.cogs_goods + f.cogs_real + f.overhead + f.ga + f.other_income_expense + f.fin_expense) > 0
+                    THEN (
+                        (f.revenue + f.cogs_goods + f.cogs_real + f.overhead + f.ga + f.other_income_expense + f.fin_expense)::numeric
+                        * (-COALESCE(t.fye_tax_rate, 0)::numeric / 100::numeric)
+                    )
+                    ELSE 0::numeric
+                END
+            )
+        FROM fye_pivot f
+        LEFT JOIN tax_rates_by_year t
+            ON t.year = f.year
     ),
 
     ytd_rows AS (
         SELECT year, 'YTD'::text AS period_type, 'Выручка от основной деятельности'::text AS row_name, revenue::numeric AS value FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Себестоимость проданных товаров', cogs_goods FROM ytd_pivot
+        SELECT year, 'YTD', 'Себестоимость проданных товаров', cogs_goods::numeric FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Себестоимость реализации', cogs_real FROM ytd_pivot
+        SELECT year, 'YTD', 'Себестоимость реализации', cogs_real::numeric FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Валовая прибыль', revenue + cogs_goods + cogs_real FROM ytd_pivot
+        SELECT year, 'YTD', 'Валовая прибыль', (revenue + cogs_goods + cogs_real)::numeric FROM ytd_pivot
         UNION ALL
         SELECT year, 'YTD', 'Рентабельность продаж',
-               CASE WHEN revenue = 0 THEN NULL ELSE (revenue + cogs_goods + cogs_real) / revenue END
+               CASE WHEN revenue = 0 THEN NULL ELSE ((revenue + cogs_goods + cogs_real) / revenue)::numeric END
         FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Накладные расходы', overhead FROM ytd_pivot
+        SELECT year, 'YTD', 'Накладные расходы', overhead::numeric FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Корпоративные расходы (G&A)', ga FROM ytd_pivot
+        SELECT year, 'YTD', 'Корпоративные расходы (G&A)', ga::numeric FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'EBITDA', revenue + cogs_goods + cogs_real + overhead + ga FROM ytd_pivot
+        SELECT year, 'YTD', 'EBITDA', (revenue + cogs_goods + cogs_real + overhead + ga)::numeric FROM ytd_pivot
         UNION ALL
         SELECT year, 'YTD', 'EBITDA MARGIN',
-               CASE WHEN revenue = 0 THEN NULL ELSE (revenue + cogs_goods + cogs_real + overhead + ga) / revenue END
+               CASE WHEN revenue = 0 THEN NULL ELSE ((revenue + cogs_goods + cogs_real + overhead + ga) / revenue)::numeric END
         FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Прочие доходы и расходы', other_income_expense FROM ytd_pivot
+        SELECT year, 'YTD', 'Прочие доходы и расходы', other_income_expense::numeric FROM ytd_pivot
         UNION ALL
         SELECT year, 'YTD', 'EBITDA Adjusted',
-               revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense
+               (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense)::numeric
         FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Финансовые расходы', fin_expense FROM ytd_pivot
+        SELECT year, 'YTD', 'Финансовые расходы', fin_expense::numeric FROM ytd_pivot
         UNION ALL
-        SELECT year, 'YTD', 'Налог на прибыль',
-               CASE
-                   WHEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) > 0
-                   THEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) * -0.25
-                   ELSE 0
-               END
-        FROM ytd_pivot
+        SELECT
+            y.year,
+            'YTD',
+            'Налог на прибыль',
+            CASE
+                WHEN (y.revenue + y.cogs_goods + y.cogs_real + y.overhead + y.ga + y.other_income_expense + y.fin_expense) > 0
+                THEN (
+                    (y.revenue + y.cogs_goods + y.cogs_real + y.overhead + y.ga + y.other_income_expense + y.fin_expense)::numeric
+                    * (-COALESCE(t.ytd_tax_rate, 0)::numeric / 100::numeric)
+                )
+                ELSE 0::numeric
+            END
+        FROM ytd_pivot y
+        LEFT JOIN tax_rates_by_year t
+            ON t.year = y.year
         UNION ALL
-        SELECT year, 'YTD', 'Чистая прибыль / убыток',
-               (
-                   revenue + cogs_goods + cogs_real + overhead + ga
-                   + other_income_expense
-                   + fin_expense
-                   + CASE
-                       WHEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) > 0
-                       THEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) * -0.25
-                       ELSE 0
-                     END
-               )
-        FROM ytd_pivot
+        SELECT
+            y.year,
+            'YTD',
+            'Чистая прибыль / убыток',
+            (
+                (y.revenue + y.cogs_goods + y.cogs_real + y.overhead + y.ga + y.other_income_expense + y.fin_expense)::numeric
+                +
+                CASE
+                    WHEN (y.revenue + y.cogs_goods + y.cogs_real + y.overhead + y.ga + y.other_income_expense + y.fin_expense) > 0
+                    THEN (
+                        (y.revenue + y.cogs_goods + y.cogs_real + y.overhead + y.ga + y.other_income_expense + y.fin_expense)::numeric
+                        * (-COALESCE(t.ytd_tax_rate, 0)::numeric / 100::numeric)
+                    )
+                    ELSE 0::numeric
+                END
+            )
+        FROM ytd_pivot y
+        LEFT JOIN tax_rates_by_year t
+            ON t.year = y.year
     ),
 
     mtd_rows AS (
         SELECT year, 'MTD'::text AS period_type, 'Выручка от основной деятельности'::text AS row_name, revenue::numeric AS value FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Себестоимость проданных товаров', cogs_goods FROM mtd_pivot
+        SELECT year, 'MTD', 'Себестоимость проданных товаров', cogs_goods::numeric FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Себестоимость реализации', cogs_real FROM mtd_pivot
+        SELECT year, 'MTD', 'Себестоимость реализации', cogs_real::numeric FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Валовая прибыль', revenue + cogs_goods + cogs_real FROM mtd_pivot
+        SELECT year, 'MTD', 'Валовая прибыль', (revenue + cogs_goods + cogs_real)::numeric FROM mtd_pivot
         UNION ALL
         SELECT year, 'MTD', 'Рентабельность продаж',
-               CASE WHEN revenue = 0 THEN NULL ELSE (revenue + cogs_goods + cogs_real) / revenue END
+               CASE WHEN revenue = 0 THEN NULL ELSE ((revenue + cogs_goods + cogs_real) / revenue)::numeric END
         FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Накладные расходы', overhead FROM mtd_pivot
+        SELECT year, 'MTD', 'Накладные расходы', overhead::numeric FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Корпоративные расходы (G&A)', ga FROM mtd_pivot
+        SELECT year, 'MTD', 'Корпоративные расходы (G&A)', ga::numeric FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'EBITDA', revenue + cogs_goods + cogs_real + overhead + ga FROM mtd_pivot
+        SELECT year, 'MTD', 'EBITDA', (revenue + cogs_goods + cogs_real + overhead + ga)::numeric FROM mtd_pivot
         UNION ALL
         SELECT year, 'MTD', 'EBITDA MARGIN',
-               CASE WHEN revenue = 0 THEN NULL ELSE (revenue + cogs_goods + cogs_real + overhead + ga) / revenue END
+               CASE WHEN revenue = 0 THEN NULL ELSE ((revenue + cogs_goods + cogs_real + overhead + ga) / revenue)::numeric END
         FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Прочие доходы и расходы', other_income_expense FROM mtd_pivot
+        SELECT year, 'MTD', 'Прочие доходы и расходы', other_income_expense::numeric FROM mtd_pivot
         UNION ALL
         SELECT year, 'MTD', 'EBITDA Adjusted',
-               revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense
+               (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense)::numeric
         FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Финансовые расходы', fin_expense FROM mtd_pivot
+        SELECT year, 'MTD', 'Финансовые расходы', fin_expense::numeric FROM mtd_pivot
         UNION ALL
-        SELECT year, 'MTD', 'Налог на прибыль',
-               CASE
-                   WHEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) > 0
-                   THEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) * -0.25
-                   ELSE 0
-               END
-        FROM mtd_pivot
+        SELECT
+            m.year,
+            'MTD',
+            'Налог на прибыль',
+            CASE
+                WHEN (m.revenue + m.cogs_goods + m.cogs_real + m.overhead + m.ga + m.other_income_expense + m.fin_expense) > 0
+                THEN (
+                    (m.revenue + m.cogs_goods + m.cogs_real + m.overhead + m.ga + m.other_income_expense + m.fin_expense)::numeric
+                    * (-COALESCE(t.mtd_tax_rate, 0)::numeric / 100::numeric)
+                )
+                ELSE 0::numeric
+            END
+        FROM mtd_pivot m
+        LEFT JOIN tax_rates_by_year t
+            ON t.year = m.year
         UNION ALL
-        SELECT year, 'MTD', 'Чистая прибыль / убыток',
-               (
-                   revenue + cogs_goods + cogs_real + overhead + ga
-                   + other_income_expense
-                   + fin_expense
-                   + CASE
-                       WHEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) > 0
-                       THEN (revenue + cogs_goods + cogs_real + overhead + ga + other_income_expense + fin_expense) * -0.25
-                       ELSE 0
-                     END
-               )
-        FROM mtd_pivot
+        SELECT
+            m.year,
+            'MTD',
+            'Чистая прибыль / убыток',
+            (
+                (m.revenue + m.cogs_goods + m.cogs_real + m.overhead + m.ga + m.other_income_expense + m.fin_expense)::numeric
+                +
+                CASE
+                    WHEN (m.revenue + m.cogs_goods + m.cogs_real + m.overhead + m.ga + m.other_income_expense + m.fin_expense) > 0
+                    THEN (
+                        (m.revenue + m.cogs_goods + m.cogs_real + m.overhead + m.ga + m.other_income_expense + m.fin_expense)::numeric
+                        * (-COALESCE(t.mtd_tax_rate, 0)::numeric / 100::numeric)
+                    )
+                    ELSE 0::numeric
+                END
+            )
+        FROM mtd_pivot m
+        LEFT JOIN tax_rates_by_year t
+            ON t.year = m.year
     )
 
     SELECT
         row_name,
         period_type,
         year,
-        ROUND(value, 4) AS value
+        ROUND(value::numeric, 4) AS value
     FROM (
         SELECT * FROM fye_rows
         UNION ALL
@@ -340,7 +454,6 @@ def get_pl_report(date_to=None):
     result = result[fye_cols + ytd_cols + mtd_cols]
     result.insert(0, "Note", "")
 
-    # YTD diff
     if len(ytd_cols) >= 2:
         prev_ytd = ytd_cols[-2]
         curr_ytd = ytd_cols[-1]
@@ -356,7 +469,6 @@ def get_pl_report(date_to=None):
         result["Diff abs"] = None
         result["Diff rel"] = None
 
-    # MTD diff
     if len(mtd_cols) >= 2:
         prev_mtd = mtd_cols[-2]
         curr_mtd = mtd_cols[-1]

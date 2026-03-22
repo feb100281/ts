@@ -9,6 +9,9 @@ from openpyxl.utils import column_index_from_string
 from openpyxl.utils.cell import coordinate_from_string
 from django.db import connection
 
+from .styles.style_helpers import draw_nav_button
+from .styles.drill_down import style_drilldown_sheet
+
 from .styles.treasury import style_sheet_2_1
 from .styles.toc import build_toc_sheet
 
@@ -17,6 +20,20 @@ from .treasure import get_treasury_report, get_wb_balance
 from .pl_data import get_pl_report
 from .styles.pl import style_pl_sheet
 
+from .cogs_realization_data import get_cogs_realization_report
+from .styles.cogs_realization import style_cogs_realization_sheet
+
+from .overhead_expenses_data import get_overhead_expenses_report
+from .styles.overhead_expenses import style_overhead_expenses_sheet
+
+from .corporate_expenses_data import get_corporate_expenses_report
+from .styles.corporate_expenses import style_corporate_expenses_sheet
+
+from .other_income_expenses_data import get_other_income_expenses_report
+from .styles.other_income_expenses import style_other_income_expenses_sheet
+
+from .financial_expenses_data import get_financial_expenses_report
+from .styles.financial_expenses import style_financial_expenses_sheet
 
 
 TEMPLATE_PATH = Path("reporting/excel/template.xlsx")
@@ -142,7 +159,7 @@ def build_manpack(date_to=None, output_path=None):
 
     style_sheet_2_1(ws, ba_df, wb_df)
 
-
+    # TOC
     ws_toc = wb["TOC"]
     build_toc_sheet(
         ws_toc,
@@ -150,10 +167,188 @@ def build_manpack(date_to=None, output_path=None):
         version="Stand alone",
     )
     
-    
+    # PL
     pl_df = get_pl_report(date_to)
     ws_pl = wb["PL"]
     style_pl_sheet(ws_pl, pl_df, date_to=date_to)
+    
+    # 1.3 COGS realization
+    cogs_real_payload = get_cogs_realization_report(date_to)
+    ws_cogs_real = wb["1.3"]
+    style_cogs_realization_sheet(
+        ws_cogs_real,
+        cogs_real_payload,
+        date_to=date_to,
+    )
+    
+    
+    # 1.4 Накладные расходы
+    overhead_payload = get_overhead_expenses_report(date_to)
+    ws_overhead = wb["1.4"]
+    style_overhead_expenses_sheet(
+        ws_overhead,
+        overhead_payload,
+        date_to=date_to,
+    )
+    
+    # 1.5 Корпоративные расходы (G&A)
+    corporate_payload = get_corporate_expenses_report(date_to)
+    ws_corporate = wb["1.5"]
+    style_corporate_expenses_sheet(
+        ws_corporate,
+        corporate_payload,
+        date_to=date_to,
+    )
+    
+    # 1.6 Прочие доходы и расходы
+    other_ie_payload = get_other_income_expenses_report(date_to)
+    ws_other_ie = wb["1.6"]
+    style_other_income_expenses_sheet(
+        ws_other_ie,
+        other_ie_payload,
+        date_to=date_to,
+    )
+    
+    # 1.7 Финансовые расходы
+    financial_expenses_payload = get_financial_expenses_report(date_to)
+    ws_financial_expenses = wb["1.7"]
+    style_financial_expenses_sheet(
+        ws_financial_expenses,
+        financial_expenses_payload,
+        date_to=date_to,
+    )
+    
+    
+    
+    # Навигация на drill-down листах
+    ws_13_drill = wb["1.3_drill_down"]
+    draw_nav_button(
+        ws_13_drill,
+        cell="C1",
+        text="← Вернуться в 1.3",
+        target_sheet="1.3",
+        target_cell="A1",
+    )
+    draw_nav_button(
+        ws_13_drill,
+        cell="D1",
+        text="← Вернуться в P&L",
+        target_sheet="PL",
+        target_cell="A1",
+    )
+
+    ws_14_drill = wb["1.4_drill_down"]
+    draw_nav_button(
+        ws_14_drill,
+        cell="C1",
+        text="← Вернуться в 1.4",
+        target_sheet="1.4",
+        target_cell="A1",
+    )
+    draw_nav_button(
+        ws_14_drill,
+        cell="D1",
+        text="← Вернуться в P&L",
+        target_sheet="PL",
+        target_cell="A1",
+    )
+    
+    # стиль для drill-down 1.3
+    ws_13_drill = wb["1.3_drill_down"]
+    style_drilldown_sheet(
+        ws_13_drill,
+        title="1.3 ДЕТАЛИЗАЦИЯ",
+        subtitle="Себестоимость реализации",
+    )
+
+    # стиль для drill-down 1.4
+    ws_14_drill = wb["1.4_drill_down"]
+    style_drilldown_sheet(
+        ws_14_drill,
+        title="1.4 ДЕТАЛИЗАЦИЯ",
+        subtitle="Накладные расходы",
+    )
+    
+    ws_15_drill = wb["1.5_drill_down"]
+    draw_nav_button(
+        ws_15_drill,
+        cell="C1",
+        text="← Вернуться в 1.5",
+        target_sheet="1.5",
+        target_cell="A1",
+    )
+    draw_nav_button(
+        ws_15_drill,
+        cell="D1",
+        text="← Вернуться в P&L",
+        target_sheet="PL",
+        target_cell="A1",
+    )
+
+    style_drilldown_sheet(
+        ws_15_drill,
+        title="1.5 ДЕТАЛИЗАЦИЯ",
+        subtitle="Корпоративные расходы (G&A)",
+    )
+    
+    ws_16_drill = wb["1.6_drill_down"]
+    draw_nav_button(
+        ws_16_drill,
+        cell="C1",
+        text="← Вернуться в 1.6",
+        target_sheet="1.6",
+        target_cell="A1",
+    )
+    draw_nav_button(
+        ws_16_drill,
+        cell="D1",
+        text="← Вернуться в P&L",
+        target_sheet="PL",
+        target_cell="A1",
+    )
+
+    style_drilldown_sheet(
+        ws_16_drill,
+        title="1.6 ДЕТАЛИЗАЦИЯ",
+        subtitle="Прочие доходы и расходы",
+    )
+    
+    ws_17_drill = wb["1.7_drill_down"]
+    draw_nav_button(
+        ws_17_drill,
+        cell="C1",
+        text="← Вернуться в 1.7",
+        target_sheet="1.7",
+        target_cell="A1",
+    )
+    draw_nav_button(
+        ws_17_drill,
+        cell="D1",
+        text="← Вернуться в P&L",
+        target_sheet="PL",
+        target_cell="A1",
+    )
+
+    style_drilldown_sheet(
+        ws_17_drill,
+        title="1.7 ДЕТАЛИЗАЦИЯ",
+        subtitle="Финансовые расходы",
+    )
+    
+    
+    # Открывать книгу с листа TOC
+    if "TOC" in wb.sheetnames:
+        ws_toc = wb["TOC"]
+
+        # снять выделение с других листов
+        for ws in wb.worksheets:
+            ws.sheet_view.tabSelected = False
+
+        # сделать TOC активным
+        wb.active = wb.index(ws_toc)
+        ws_toc.sheet_view.tabSelected = True
+        ws_toc.sheet_view.selection[0].activeCell = "A1"
+        ws_toc.sheet_view.selection[0].sqref = "A1"
 
 
     wb.security = None

@@ -87,6 +87,62 @@ def draw_toc_button(ws, cell="A1", text="← Оглавление"):
         bottom=Side(style="thin", color=COLORS["border_gray"]),
     )
     
+#### ---- КНОПКА НА ЛИСТ PL -----######
+def draw_back_to_pl_button(ws, cell="A1", text="← Вернуться в P&L", target_sheet="PL"):
+    ws[cell] = text
+
+    # ссылка на лист P&L
+    ws[cell].hyperlink = f"#'{target_sheet}'!A1"
+
+    ws[cell].font = FONTS["back"]
+    ws[cell].alignment = ALIGNMENTS["left"]
+
+    ws[cell].fill = FILLS["back"]
+    ws[cell].border = Border(
+        left=Side(style="thin", color=COLORS["border_gray"]),
+        right=Side(style="thin", color=COLORS["border_gray"]),
+        top=Side(style="thin", color=COLORS["border_gray"]),
+        bottom=Side(style="thin", color=COLORS["border_gray"]),
+    )
+    
+    
+#### ----  DRILL DOWN -----######
+def draw_nav_link_row(
+    ws,
+    row,
+    text="Перейти к детализации →",
+    target_sheet="1.3_drill_down",
+    target_cell="A1",
+):
+    cell = ws.cell(row=row, column=1, value=text)
+    cell.hyperlink = f"#'{target_sheet}'!{target_cell}"
+    cell.font = FONTS["back"]
+    cell.alignment = ALIGNMENTS["left"]
+    cell.fill = FILLS["back"]
+    cell.border = Border(
+        left=Side(style="thin", color=COLORS["border_gray"]),
+        right=Side(style="thin", color=COLORS["border_gray"]),
+        top=Side(style="thin", color=COLORS["border_gray"]),
+        bottom=Side(style="thin", color=COLORS["border_gray"]),
+    )
+    
+    
+  #### ----  КНОПКИ ДВУХ УРОВНЕНЫЗ ДЛЯ pivot возврат-----######  
+def draw_nav_button(ws, cell="A1", text="Перейти", target_sheet="TOC", target_cell="A1"):
+    ws[cell] = text
+    ws[cell].hyperlink = f"#'{target_sheet}'!{target_cell}"
+    ws[cell].font = FONTS["back"]
+    ws[cell].alignment = ALIGNMENTS["left"]
+    ws[cell].fill = FILLS["back"]
+    ws[cell].border = Border(
+        left=Side(style="thin", color=COLORS["border_gray"]),
+        right=Side(style="thin", color=COLORS["border_gray"]),
+        top=Side(style="thin", color=COLORS["border_gray"]),
+        bottom=Side(style="thin", color=COLORS["border_gray"]),
+    )
+    
+    
+    
 #### ---- НАЗВАНИЕ ЛИСТА -----######
 def draw_sheet_header(ws, title, subtitle, currency):
     ws["A2"] = title
