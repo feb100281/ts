@@ -69,9 +69,12 @@ def clear_range_below_table(ws, data_end_row, row_end, col_start, col_end):
             
 
 
-#### ---- КНОПКА НАЗАД -----######
-def draw_back_button(ws, cell="A1", text="← назад"):
+#### ---- КНОПКА ОГЛАВЛЕНИЕ -----######
+def draw_toc_button(ws, cell="A1", text="← Оглавление"):
     ws[cell] = text
+
+    # ссылка на лист TOC
+    ws[cell].hyperlink = "#'TOC'!A1"
 
     ws[cell].font = FONTS["back"]
     ws[cell].alignment = ALIGNMENTS["left"]

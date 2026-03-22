@@ -1,5 +1,6 @@
 # reporting/excel/styles/treasury.py
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+from datetime import date, datetime
 
 from reporting.excel.styles.theme import FILLS, FONTS, BORDERS, ALIGNMENTS, FORMATS
 from reporting.excel.styles.style_helpers import (
@@ -10,10 +11,20 @@ from reporting.excel.styles.style_helpers import (
     draw_section_title,
     draw_table_header,
     style_zebra_row,
-    draw_back_button,
+    draw_toc_button,
     draw_sheet_header,
     draw_summary_block,
 )
+
+
+def _safe_str_date(dt):
+    if dt is None:
+        return ""
+    if isinstance(dt, datetime):
+        return dt.strftime("%d.%m.%Y")
+    if isinstance(dt, date):
+        return dt.strftime("%d.%m.%Y")
+    return str(dt)
 
 
 def style_sheet_2_1(ws, ba_df, wb_df):
@@ -64,13 +75,14 @@ def style_sheet_2_1(ws, ba_df, wb_df):
     # =========================
     # HEADER
     # =========================
-    draw_back_button(ws)
+    draw_toc_button(ws)
 
     draw_sheet_header(
         ws,
         title="ОТЧЕТ ОБ ОСТАТКАХ",
         subtitle="Управленческая отчетность (management pack)",
-        currency="Российский рубль (RUB)",
+        currency = "Российский рубль (RUB)"
+
 )
 
     

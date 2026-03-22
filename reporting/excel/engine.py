@@ -14,6 +14,10 @@ from .styles.toc import build_toc_sheet
 
 from .treasure import get_treasury_report, get_wb_balance
 
+from .pl_data import get_pl_report
+from .styles.pl import style_pl_sheet
+
+
 
 TEMPLATE_PATH = Path("reporting/excel/template.xlsx")
 
@@ -145,7 +149,11 @@ def build_manpack(date_to=None, output_path=None):
         report_date=date_to.strftime("%d.%m.%Y"),
         version="Stand alone",
     )
-
+    
+    
+    pl_df = get_pl_report(date_to)
+    ws_pl = wb["PL"]
+    style_pl_sheet(ws_pl, pl_df, date_to=date_to)
 
 
     wb.security = None
