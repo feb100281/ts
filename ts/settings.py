@@ -215,12 +215,15 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "Добро пожаловать в панель управления",
     "show_ui_builder": True,
     "navigation_expanded": False,
-    "custom_css": "css/custom.css",
     # "site_logo": "/img/logo_short.png",
     "site_logo": None,
     # "site_favicon": "/img/logo_short.png",
     "custom_css": "css/custom.css",
     "custom_js": "js/custom.js",
+    # "custom_js": [
+    #     "js/custom.js",
+    #     "js/manpack_export.js",
+    # ],
     
     "changeform_format": "horizontal_tabs",
 
@@ -240,6 +243,7 @@ JAZZMIN_SETTINGS = {
         {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
         {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
         {"name": "Скачать проверку договоров GL/PL/BS CSV", "url": "export_contracts_gl_check"},
+        {"name": "Скачать ManPack", "url": "export_manpack", "new_window": False},
     ],
     
     # "usermenu_links": [
