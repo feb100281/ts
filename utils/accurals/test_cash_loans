@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-
-# Функция рассчета депозита по кэшу
 
 import psycopg
 from psycopg.rows import dict_row
@@ -10,7 +7,7 @@ from pprint import pprint
 from psycopg import Connection
 
 
-# Подключаемся к базе данных
+
 def connect_db():
     return psycopg.connect(
         dbname="ts_db",  # DB_NAME
@@ -20,9 +17,8 @@ def connect_db():
         port="5433",  # DB_PORT
         connect_timeout=10,
     )
-
-
-# Загружаем строку для теста
+    
+    
 def load_row_for_test(conn, condition_id):
     sql = f"""
         SELECT *
@@ -35,8 +31,7 @@ def load_row_for_test(conn, condition_id):
         return cur.fetchall()
 
 
-def update_gl(bs_acc, pl_acc, deposit_sc_id, contract_id, conn: Connection):
-
+def update_cash_loans(contract_id, pl_acc, pl_subconto, sc_filter, st_acc, conn:Connection):
     sql = """
     with src as (
         SELECT
@@ -64,9 +59,9 @@ def update_gl(bs_acc, pl_acc, deposit_sc_id, contract_id, conn: Connection):
         s.cr as dt,
         s.dt as cr,
         s.description,
-        s.subconto_id,
+        %s subconto_id,
         s.company_id,
-        'PL deposits' as chapter
+        'PL cb BANK LOAN' as chapter
         from src s
         where subconto_id = %s
 
@@ -83,9 +78,9 @@ def update_gl(bs_acc, pl_acc, deposit_sc_id, contract_id, conn: Connection):
         s.description,
         s.subconto_id,
         s.company_id,
-        'BS deposits' as chapter
+        'ST cb Bankloan' as chapter
         from src s
-        where subconto_id <> %s
+        
 
         ),
 
@@ -184,42 +179,44 @@ def update_gl(bs_acc, pl_acc, deposit_sc_id, contract_id, conn: Connection):
             EXCLUDED.chapter);
             """
     with conn.cursor() as cur:
-        cur.execute(sql, (contract_id, pl_acc, deposit_sc_id, bs_acc, deposit_sc_id))
+        cur.execute(sql, (contract_id, pl_acc, pl_subconto,sc_filter,st_acc,conn))
     conn.commit()
+    
+    
+    
 
-
-def cashbased_deposits(conn, **args):
+def destribute_loans(conn, args):
     param = args.get("params_json", None)
+    contract_id = args['contract_id']
+    pl_acc = args['acc_pl_id']
+    pl_subconto = args['subconto_pl_id']
+    sc_filter = param['subconto проценты']
+    st_acc = args['acc_st_id']
+    
+    print(contract_id, pl_acc, pl_subconto, sc_filter, st_acc)
 
-    # Получаем счет для начислений
-    acc_bs_id = args.get("acc_bs_id", None)
-    subconto_bs_id = args.get("subconto_bs_id", None)
-
-    acc_pl_id = args.get("acc_bs_id", None)
-    acc_pl_id = args.get("subconto_pl_id", None)
-
-    contract_id = args.get("contract_id", None)
-
-    q_filter = param.get("Субконто процентов", None)
-
-    # Что бы не падало не выполняем функцию если нет условий и счета
-    if not param or not q_filter:
-        return "Не указаны ключевые параметры param, Субконто процентов"
-
-    update_gl(
-        bs_acc=acc_bs_id,
-        pl_acc=acc_pl_id,
-        deposit_sc_id=q_filter,
-        contract_id=contract_id,
-        conn=conn,
+    update_cash_loans(
+        contract_id,
+        pl_acc,
+        pl_subconto,
+        sc_filter,
+        st_acc,
+        conn
     )
-
-    return "депозиты разнесены"
-
+    
+    return "cash loans updated ok"
 
 def main():
     conn = connect_db()
 
+    
+    
+    args = load_row_for_test(conn, 293)
+    pprint(args)
+    destribute_loans(conn, args[0])
+    
+    
+    
     # df = annual_fixed(conn,**rows[0])
     # df.to_excel('rp.xlsx')
 

@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "sales",
     "grossbook",
     "wb",
+    "budget",
     "mptt",    
     "jsoneditor",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",

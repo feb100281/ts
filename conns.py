@@ -2,6 +2,10 @@ import os
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 
+import psycopg
+from psycopg.rows import dict_row
+from psycopg import Connection
+
 load_dotenv()
 
 DB_USER = os.getenv("DB_USER")
@@ -21,6 +25,21 @@ ENGINE = create_engine(
     pool_pre_ping=True
 )
 
+def connect_db():
+    return psycopg.connect(
+        dbname=os.getenv("DB_NAME"),  # DB_NAME
+        user=os.getenv("DB_USER"),  # DB_USER
+        password=os.getenv("DB_PASSWORD"),  # DB_PASSWORD
+        host=os.getenv("DB_HOST", "localhost"),  # DB_HOST
+        port=os.getenv("DB_PORT", "5432"),  # DB_PORT
+        connect_timeout=10,
+    )
 
-
-
+def get_duckdb_conn_str():
+    return (
+        f"host={os.getenv('DB_HOST', 'localhost')} "
+        f"port={os.getenv('DB_PORT', '5432')} "
+        f"dbname={os.getenv('DB_NAME')} "
+        f"user={os.getenv('DB_USER')} "
+        f"password={os.getenv('DB_PASSWORD')}"
+    )
