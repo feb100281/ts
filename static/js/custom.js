@@ -72,7 +72,8 @@ document.addEventListener("click", function (event) {
     'Запустить GL ETL': "fa-solid fa-gears",
     'Скачать GL CSV': "fa-solid fa-file-csv",
     'Скачать дебиторы/кредиторы CSV': "fa-solid fa-money-bill-transfer",
-    'Скачать проверку договоров GL/PL/BS CSV': "fa-solid fa-scale-balanced"
+    'Скачать проверку договоров GL/PL/BS CSV': "fa-solid fa-scale-balanced",
+    'Скачать ManPack': "fa-solid fa-file-excel",
   };
 
   function enhanceTopMenu() {
@@ -229,17 +230,22 @@ document.addEventListener("click", function (event) {
       (a) => getLinkLabel(a) === "Скачать проверку договоров GL/PL/BS CSV"
     );
 
-    if (!glLink && !arapLink && !contractsCheckLink) return;
+    const manpackLink = links.find(
+      (a) => getLinkLabel(a) === "Скачать ManPack"
+    );
+
+    if (!glLink && !arapLink && !contractsCheckLink && !manpackLink) return;
 
     injectExportMenuStylesOnce();
 
     const glLi = glLink ? glLink.closest(".nav-item") : null;
     const arapLi = arapLink ? arapLink.closest(".nav-item") : null;
     const contractsCheckLi = contractsCheckLink ? contractsCheckLink.closest(".nav-item") : null;
+    const manpackLi = manpackLink ? manpackLink.closest(".nav-item") : null;
 
-    const insertBeforeNode = glLi || arapLi || contractsCheckLi;
+    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi;
 
-    [glLi, arapLi, contractsCheckLi].forEach((li) => {
+    [glLi, arapLi, contractsCheckLi, manpackLi].forEach((li) => {
       if (li) li.remove();
     });
 
@@ -265,7 +271,7 @@ document.addEventListener("click", function (event) {
 
     const menu = li.querySelector("#jmExportMenu");
 
-    const items = [
+   const items = [
       glLink
         ? {
             href: glLink.getAttribute("href") || "#",
@@ -287,18 +293,26 @@ document.addEventListener("click", function (event) {
             icon: "fa-solid fa-scale-balanced",
           }
         : null,
+      manpackLink
+        ? {
+            href: manpackLink.getAttribute("href") || "#",
+            label: "Management Pack",
+            icon: "fa-solid fa-file-excel",
+            className: "jm-manpack-trigger",
+          }
+        : null,
     ].filter(Boolean);
 
     items.forEach((item) => {
-      const a = document.createElement("a");
-      a.className = "jm-export-item";
-      a.href = item.href;
-      a.innerHTML = `
-        <i class="${item.icon}" aria-hidden="true"></i>
-        <span>${item.label}</span>
-      `;
-      menu.appendChild(a);
-    });
+        const a = document.createElement("a");
+        a.className = `jm-export-item ${item.className || ""}`.trim();
+        a.href = item.href;
+        a.innerHTML = `
+          <i class="${item.icon}" aria-hidden="true"></i>
+          <span>${item.label}</span>
+        `;
+        menu.appendChild(a);
+      });
 
     const btn = li.querySelector("#jmExportBtn");
 
@@ -953,6 +967,307 @@ try {
   function boot() {
     refreshBell();
     setInterval(refreshBell, 60 * 1000);
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("pjax:end", boot);
+})();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+console.log("✅ manpack_export.js loaded");
+
+(function () {
+  function injectStylesOnce() {
+    if (document.getElementById("jmManpackStyles")) return;
+
+    const st = document.createElement("style");
+    st.id = "jmManpackStyles";
+    st.textContent = `
+      .jm-manpack-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.45);
+        z-index: 20000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .jm-manpack-backdrop.is-open {
+        display: flex;
+      }
+
+      .jm-manpack-modal {
+        width: 100%;
+        max-width: 460px;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        box-shadow: 0 20px 50px rgba(17, 24, 39, 0.18);
+        padding: 20px;
+      }
+
+      .jm-manpack-title {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      .jm-manpack-subtitle {
+        margin: 0 0 16px 0;
+        font-size: 13px;
+        color: #6b7280;
+        line-height: 1.45;
+      }
+
+      .jm-manpack-label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #111827;
+      }
+
+      .jm-manpack-input {
+        width: 100%;
+        height: 40px;
+        border: 1px solid #d1d5db;
+        padding: 0 12px;
+        font-size: 14px;
+        color: #111827;
+        outline: none;
+        box-sizing: border-box;
+        background: #fff;
+      }
+
+      .jm-manpack-input:focus {
+        border-color: #111827;
+      }
+
+      .jm-manpack-quick {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+      }
+
+      .jm-manpack-quick-btn {
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #111827;
+        height: 34px;
+        padding: 0 12px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .jm-manpack-quick-btn:hover {
+        background: #f9fafb;
+      }
+
+      .jm-manpack-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .jm-manpack-btn {
+        min-width: 110px;
+        height: 38px;
+        padding: 0 14px;
+        border: 1px solid #d1d5db;
+        background: #fff;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .jm-manpack-btn:hover {
+        background: #f9fafb;
+      }
+
+      .jm-manpack-btn--primary {
+        background: #111827;
+        color: #ffffff;
+        border-color: #111827;
+      }
+
+      .jm-manpack-btn--primary:hover {
+        background: #0b1220;
+      }
+
+      .jm-manpack-error {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #b91c1c;
+        display: none;
+      }
+
+      .jm-manpack-error.is-visible {
+        display: block;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function formatDateToYmd(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function getTodayYmd() {
+    return formatDateToYmd(new Date());
+  }
+
+  function getEndOfPrevMonthYmd() {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(0);
+    return formatDateToYmd(d);
+  }
+
+  function ensureModal() {
+    injectStylesOnce();
+
+    let backdrop = document.getElementById("jmManpackBackdrop");
+    if (backdrop) return backdrop;
+
+    backdrop = document.createElement("div");
+    backdrop.className = "jm-manpack-backdrop";
+    backdrop.id = "jmManpackBackdrop";
+
+    backdrop.innerHTML = `
+      <div class="jm-manpack-modal" role="dialog" aria-modal="true" aria-labelledby="jmManpackTitle">
+        <h3 class="jm-manpack-title" id="jmManpackTitle">Скачать ManPack</h3>
+        <div class="jm-manpack-subtitle">
+          Выберите дату отчетности. Можно указать любую дату вручную.
+        </div>
+
+        <label class="jm-manpack-label" for="jmManpackDate">Дата отчетности</label>
+        <input type="date" id="jmManpackDate" class="jm-manpack-input" />
+
+        <div class="jm-manpack-quick">
+          <button type="button" class="jm-manpack-quick-btn" id="jmManpackToday">
+            Сегодня
+          </button>
+          <button type="button" class="jm-manpack-quick-btn" id="jmManpackPrevMonthEnd">
+            Конец прошлого месяца
+          </button>
+        </div>
+
+        <div class="jm-manpack-error" id="jmManpackError">
+          Пожалуйста, выберите дату.
+        </div>
+
+        <div class="jm-manpack-actions">
+          <button type="button" class="jm-manpack-btn" id="jmManpackCancel">Отмена</button>
+          <button type="button" class="jm-manpack-btn jm-manpack-btn--primary" id="jmManpackDownload">Скачать</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    const dateInput = backdrop.querySelector("#jmManpackDate");
+    const btnToday = backdrop.querySelector("#jmManpackToday");
+    const btnPrevMonthEnd = backdrop.querySelector("#jmManpackPrevMonthEnd");
+    const btnCancel = backdrop.querySelector("#jmManpackCancel");
+    const btnDownload = backdrop.querySelector("#jmManpackDownload");
+    const errorBox = backdrop.querySelector("#jmManpackError");
+
+    function open() {
+      errorBox.classList.remove("is-visible");
+      if (!dateInput.value) {
+        dateInput.value = getTodayYmd();
+      }
+      backdrop.classList.add("is-open");
+    }
+
+    function close() {
+      backdrop.classList.remove("is-open");
+      errorBox.classList.remove("is-visible");
+    }
+
+    btnToday.addEventListener("click", function () {
+      dateInput.value = getTodayYmd();
+      errorBox.classList.remove("is-visible");
+    });
+
+    btnPrevMonthEnd.addEventListener("click", function () {
+      dateInput.value = getEndOfPrevMonthYmd();
+      errorBox.classList.remove("is-visible");
+    });
+
+    btnCancel.addEventListener("click", close);
+
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) close();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && backdrop.classList.contains("is-open")) {
+        close();
+      }
+    });
+
+    btnDownload.addEventListener("click", function () {
+      const reportDate = dateInput.value;
+
+      if (!reportDate) {
+        errorBox.classList.add("is-visible");
+        return;
+      }
+
+      errorBox.classList.remove("is-visible");
+
+      const baseUrl = "/admin/export/manpack/";
+      const url = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}`;
+
+      close();
+      window.location.href = url;
+    });
+
+    backdrop._openManpackModal = open;
+    backdrop._closeManpackModal = close;
+
+    return backdrop;
+  }
+
+  function bindTriggers() {
+    const backdrop = ensureModal();
+    const triggers = document.querySelectorAll(".jm-manpack-trigger");
+
+    triggers.forEach((el) => {
+      if (el.dataset.manpackBound === "1") return;
+      el.dataset.manpackBound = "1";
+
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        backdrop._openManpackModal();
+      });
+    });
+  }
+
+  function boot() {
+    ensureModal();
+    bindTriggers();
   }
 
   document.addEventListener("DOMContentLoaded", boot);

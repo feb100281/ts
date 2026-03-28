@@ -1,3 +1,4 @@
+# reporting/excel/treasure.py
 from django.db import connection
 import pandas as pd
 import warnings
@@ -12,7 +13,7 @@ def get_treasury_report(date_to):
     min(date_from) as "Начальная дата",
     max(date_from) as "Последняя дата",
     ba.currency as "Валюта",
-    case when ba.is_active = True then '✅' else '❌' end as "Действующий счет",
+    case when ba.is_active = True then 'Активный' else '🔒 Закрыт' end as "Действующий счет",
     sum("Поступления") as "Поступления",
     sum("Расход") as "Расход",
     sum("Обороты") as "Остаток"
@@ -20,7 +21,7 @@ def get_treasury_report(date_to):
     join public.corporate_bankaccount as ba on ba.bs_acc_id = t.acc_id
     where date_from <= %s
     group by "Банковский счет", ba.currency, "Действующий счет"
-    order by "Остаток" DESC       
+    order by "Действующий счет", "Остаток" DESC       
     """
     
     #Баланс WB
