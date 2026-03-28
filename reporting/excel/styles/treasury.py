@@ -27,7 +27,7 @@ def _safe_str_date(dt):
     return str(dt)
 
 
-def style_sheet_2_1(ws, ba_df, wb_df):
+def style_sheet_2_1(ws, ba_df, wb_df, date_to=None):
     align_left = ALIGNMENTS["left"]
     align_center = ALIGNMENTS["center"]
     align_right = ALIGNMENTS["right"]
@@ -77,13 +77,16 @@ def style_sheet_2_1(ws, ba_df, wb_df):
     # =========================
     draw_toc_button(ws)
 
+    currency = "Российский рубль (RUB)"
+    if date_to:
+        currency = f"{currency} • дата отчета: {_safe_str_date(date_to)}"
+
     draw_sheet_header(
         ws,
         title="ОТЧЕТ ОБ ОСТАТКАХ",
         subtitle="Управленческая отчетность (management pack)",
-        currency = "Российский рубль (RUB)"
-
-)
+        currency=currency,
+    )
 
     
     # =========================

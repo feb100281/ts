@@ -157,7 +157,7 @@ def build_manpack(date_to=None, output_path=None):
     ws["A10"] = "БЕССРОЧНЫЕ ДЕПОЗИТЫ"
     ws["A11"] = "ИТОГО:"
 
-    style_sheet_2_1(ws, ba_df, wb_df)
+    style_sheet_2_1(ws, ba_df, wb_df, date_to=date_to)
 
     # TOC
     ws_toc = wb["TOC"]
