@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
+import tempfile
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -519,9 +520,20 @@ def analyze_osv_45(input_file: Path, output_file: Path) -> None:
                 )
 
 
+# def run_account_45(input_file_path: str) -> str:
+#     input_path = Path(input_file_path)
+#     output_path = input_path.with_name(input_path.stem + "_analysis.xlsx")
+
+#     analyze_osv_45(input_path, output_path)
+
+#     return str(output_path)
+
+
 def run_account_45(input_file_path: str) -> str:
     input_path = Path(input_file_path)
-    output_path = input_path.with_name(input_path.stem + "_analysis.xlsx")
+
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        output_path = Path(tmp.name)
 
     analyze_osv_45(input_path, output_path)
 
