@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "grossbook",
     'accounting_analysis',
     "wb",
+    "budget",
     "mptt",    
     "jsoneditor",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
@@ -496,7 +497,7 @@ EMAIL_HOST_USER = "manunotify@yandex.ru"
 EMAIL_HOST_PASSWORD = "ntnmbmvvmqcchowo"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
-
+ANALYTICS_DB_PATH = BASE_DIR / "analytics" / "analytics.duckdb"
 
 # TENANT_PORTAL_SUPPORT_EMAIL = "help@yourcompany.ru"
 # TENANT_PORTAL_SUPPORT_TELEGRAM = "Daria_Voiten"

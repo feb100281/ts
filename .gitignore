@@ -18,3 +18,7 @@ __pycache__/
 .Trashes
 ehthumbs.db
 Thumbs.db
+*.parquet
+*.duckdb
+*.db
+/data/

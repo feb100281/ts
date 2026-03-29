@@ -152,8 +152,6 @@ class COAFn(models.Model):
 
 #----- CHART OF ACCOUNTS ----#
 
-
-
 six_digits = RegexValidator(
     regex=r"^\d{6}$",
     message="Код должен состоять ровно из 6 цифр",
