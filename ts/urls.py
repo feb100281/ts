@@ -1,7 +1,9 @@
 # ts/urls.py
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.urls import path,include
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 from .views import fx_status, cp_issues_status, treasury_status
 from contracts.views import contracts_issues_status
@@ -49,4 +51,7 @@ urlpatterns = [
     path("contracts/", include("contracts.urls", namespace="contracts")),
     path("tools/", include("core.urls")),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
