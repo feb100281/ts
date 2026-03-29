@@ -2,6 +2,9 @@
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Border, Side
 from openpyxl.formatting.rule import CellIsRule
+from copy import copy
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 
 from .theme import FILLS, FONTS, BORDERS, ALIGNMENTS, FORMATS, COLORS
 
@@ -184,3 +187,91 @@ def insert_section_row(ws, row, title, col_start=1, col_end=3):
             cell.value = None
 
     ws.row_dimensions[row].height = 22
+    
+    
+    
+def draw_conclusion_block(
+    ws,
+    start_row: int,
+    col_start: int,
+    col_end: int,
+    title: str,
+    conclusions: list[dict],
+) -> int:
+    # Заголовок блока
+    for col in range(col_start, col_end + 1):
+        cell = ws.cell(row=start_row, column=col)
+        cell.fill = FILLS["section"]
+        cell.border = BORDERS["conclusion_box"]
+
+        if col == col_start:
+            cell.value = title
+            cell.font = FONTS["conclusion_title"]
+            cell.alignment = ALIGNMENTS["left"]
+        else:
+            cell.value = None
+
+    ws.row_dimensions[start_row].height = 22
+
+    current_row = start_row + 1
+
+    normal_inline = InlineFont(
+        rFont="Roboto",
+        sz=10,
+        color=COLORS["black"],
+    )
+
+    accent_inline = InlineFont(
+        rFont="Roboto",
+        sz=10,
+        b=True,
+        color=COLORS["red_text"],
+    )
+
+    for item in conclusions:
+        # merge на всю ширину блока
+        ws.merge_cells(
+            start_row=current_row,
+            start_column=col_start,
+            end_row=current_row,
+            end_column=col_end,
+        )
+
+        cell = ws.cell(row=current_row, column=col_start)
+        cell.fill = FILLS["conclusion"]
+        cell.border = BORDERS["conclusion_box"]
+        cell.alignment = ALIGNMENTS["left_wrap"]
+
+        # т.к. после merge border/fill нужно продублировать по всем ячейкам диапазона
+        for col in range(col_start, col_end + 1):
+            merged_cell = ws.cell(row=current_row, column=col)
+            merged_cell.fill = FILLS["conclusion"]
+            merged_cell.border = BORDERS["conclusion_box"]
+
+        if isinstance(item, str):
+            cell.value = f"• {item}"
+            cell.font = FONTS["conclusion_text"]
+
+        elif item.get("type") == "rich":
+            prefix = item.get("prefix", "")
+            highlight = item.get("highlight", "")
+            suffix = item.get("suffix", "")
+
+            rich_value = CellRichText(
+                "• ",
+                TextBlock(normal_inline, prefix),
+                TextBlock(accent_inline, highlight),
+                TextBlock(normal_inline, suffix),
+            )
+            cell.value = rich_value
+            cell.font = FONTS["conclusion_text"]
+
+        else:
+            text = item.get("text", "")
+            cell.value = f"• {text}"
+            cell.font = FONTS["conclusion_text"]
+
+        ws.row_dimensions[current_row].height = 42
+        current_row += 1
+
+    return current_row

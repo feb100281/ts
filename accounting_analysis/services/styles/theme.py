@@ -17,6 +17,8 @@ COLORS = {
     "red_text": "7A2E2E",
     "yellow_soft": "FFF7DB",
     "yellow_text": "8A6D1D",
+    "conclusion_fill": "F4F8F6",
+    "conclusion_border": "9DB7AC",
 }
 
 FILLS = {
@@ -29,6 +31,7 @@ FILLS = {
     "danger": PatternFill("solid", fgColor=COLORS["red_soft"]),
     "warning": PatternFill("solid", fgColor=COLORS["yellow_soft"]),
     "none": PatternFill(fill_type=None),
+    "conclusion": PatternFill("solid", fgColor=COLORS["conclusion_fill"]),
 }
 
 FONTS = {
@@ -41,11 +44,15 @@ FONTS = {
     "total": Font(name="Roboto", size=11, bold=True, color=COLORS["black"]),
     "danger": Font(name="Roboto", size=10, color=COLORS["red_text"]),
     "warning": Font(name="Roboto", size=10, bold=True, color=COLORS["yellow_text"]),
+    "conclusion_title": Font(name="Roboto", size=11, bold=True, color=COLORS["dark_green"]),
+    "conclusion_text": Font(name="Roboto", size=10, color=COLORS["black"]),
+    "danger_bold": Font(name="Roboto", size=10, bold=True, color=COLORS["red_text"]),
 }
 
 thin = Side(style="thin", color=COLORS["border_gray"])
 medium_dark = Side(style="medium", color=COLORS["dark_green"])
 dashed_green = Side(style="dashed", color=COLORS["dark_green"])
+conclusion_side = Side(style="thin", color=COLORS["conclusion_border"])
 
 BORDERS = {
     "thin": Border(left=thin, right=thin, top=thin, bottom=thin),
@@ -54,6 +61,8 @@ BORDERS = {
     "top_bottom_medium": Border(top=medium_dark, bottom=medium_dark),
     "top_bottom_dashed": Border(top=dashed_green, bottom=dashed_green),
     "none": Border(),
+    "conclusion_box": Border(left=conclusion_side, right=conclusion_side, top=conclusion_side, bottom=conclusion_side,
+    ),
 }
 
 ALIGNMENTS = {

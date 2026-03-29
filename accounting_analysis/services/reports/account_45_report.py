@@ -12,6 +12,10 @@ from accounting_analysis.services.styles.theme import (
     BORDERS,
     COLORS,
 )
+
+
+from accounting_analysis.services.scripts.account_45_conclusions import build_account_45_conclusions
+
 from accounting_analysis.services.styles.excel_helpers import (
     hide_grid_and_freeze,
     set_column_widths,
@@ -27,7 +31,8 @@ from accounting_analysis.services.styles.excel_helpers import (
     add_back_to_summary_link,
     set_tab_color,
     insert_section_row,
-    style_total_row
+    style_total_row,
+    draw_conclusion_block,
 )
 
 
@@ -110,7 +115,12 @@ def _remove_default_sheet(writer):
         wb.remove(ws)
 
 
-def _write_summary_sheet(ws, summary_df: pd.DataFrame):
+def _write_summary_sheet(
+    ws,
+    summary_df: pd.DataFrame,
+    items_df: pd.DataFrame,
+    meta: dict | None = None,
+):
     draw_sheet_header(
         ws,
         title="Анализ ОСВ счета 45",
@@ -318,6 +328,28 @@ def _write_summary_sheet(ws, summary_df: pd.DataFrame):
             c.border = BORDERS["none"]
             c.value = None
         current_row += 1
+        
+        
+    
+    conclusions = build_account_45_conclusions(
+                items_df=items_df,
+                summary_df=summary_df,
+                meta=meta,
+            )
+
+    if conclusions:
+            ws.row_dimensions[current_row].height = 10
+            current_row += 1
+
+            current_row = draw_conclusion_block(
+                ws,
+                start_row=current_row,
+                col_start=1,
+                col_end=3,
+                title="Заключение",
+                conclusions=conclusions,
+            )
+
 
     set_column_widths(ws, SUMMARY_WIDTHS)
     set_row_heights(ws, {2: 24, 3: 18, 4: 22, 8: 26, 9: 26})
@@ -441,6 +473,8 @@ def _write_table_sheet(
 def build_account_45_report(
     writer,
     summary_df: pd.DataFrame,
+    items_df: pd.DataFrame,
+    meta: dict | None,
     items_output: pd.DataFrame,
     negative_output: pd.DataFrame,
     qty_no_amount_output: pd.DataFrame,
@@ -463,7 +497,12 @@ def build_account_45_report(
 
     _remove_default_sheet(writer)
 
-    _write_summary_sheet(ws_summary, summary_df)
+    _write_summary_sheet(
+        ws_summary,
+        summary_df=summary_df,
+        items_df=items_df,
+        meta=meta,
+    )
 
     _write_table_sheet(
         ws_all_items,

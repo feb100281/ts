@@ -506,15 +506,17 @@ def analyze_osv_45(input_file: Path, output_file: Path) -> None:
 
 
     with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
-        build_account_45_report(
-            writer=writer,
-            summary_df=summary_df,
-            items_output=items_output,
-            negative_output=negative_output,
-            qty_no_amount_output=qty_no_amount_output,
-            negative_amount_output=negative_amount_output,
-            amount_no_qty_output=amount_no_qty_output,
-        )
+            build_account_45_report(
+                    writer=writer,
+                    summary_df=summary_df,
+                    items_df=items_df,
+                    meta=meta,
+                    items_output=items_output,
+                    negative_output=negative_output,
+                    qty_no_amount_output=qty_no_amount_output,
+                    negative_amount_output=negative_amount_output,
+                    amount_no_qty_output=amount_no_qty_output,
+                )
 
 
 def run_account_45(input_file_path: str) -> str:
