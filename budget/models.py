@@ -24,13 +24,15 @@ def revenue_json():
 
 def wbcost_json():
     return {
-        "Discount VAT share": [{"12M calculation": True, "Manual": 0.0}],
-        "Marketplace Comission": [{"12M calculation": True, "Manual": 0.0}],
-        "Cost Per Unit": 0.0,
-        "Average Unit Price": [{"12M calculation": True, "Manual": 0.0}],
-        "Delivery Fee costs per unit sold": [{"12M calculation": True, "Manual": 0.0}],
-        "Storage Fee costs per unit sold": [{"12M calculation": True, "Manual": 0.0}],
-        "Marketplace cost escalator": 0.0,
+        "discout_vat_share": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],
+        "marketplace_comission": [{"historical": True, "n_monthes": 6,"Manual": 0.0}],
+        "buyback_share": [{"historical": True, "n_monthes": 6,"Manual": 0.0}],
+        "cost_per_unit": 0.0,
+        "average_unit_price": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],
+        "delivery_unit_cost": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],
+        "storage_unit_costs": [{"historical": True, "n_monthes": 6, "Manual": 0.0}], 
+        "penalty_unit_costs": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],  
+        "deduction": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],               
     }
 
 

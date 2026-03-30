@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
 from psycopg import Connection
+import duckdb
 
 load_dotenv()
 
@@ -35,7 +36,7 @@ def connect_db():
         connect_timeout=10,
     )
 
-def get_duckdb_conn_str():
+def get_psql_conn_str():
     return (
         f"host={os.getenv('DB_HOST', 'localhost')} "
         f"port={os.getenv('DB_PORT', '5432')} "
@@ -43,3 +44,22 @@ def get_duckdb_conn_str():
         f"user={os.getenv('DB_USER')} "
         f"password={os.getenv('DB_PASSWORD')}"
     )
+
+
+
+
+def get_duckdb_conn()->duckdb.DuckDBPyConnection:
+    db_path = os.getenv("DUCKDB_PATH")
+
+    print(f"Using DuckDB: {db_path}")
+
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+    con = duckdb.connect(db_path)
+    con.execute("INSTALL postgres;")
+    con.execute("LOAD postgres;")
+
+    conn_str = get_psql_conn_str()
+    con.execute(f"ATTACH '{conn_str}' AS pg (TYPE postgres);")
+
+    return con

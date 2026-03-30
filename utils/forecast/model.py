@@ -44,3 +44,4 @@ def make_forecast(data, end_date, forecast_date, prophet_params, freq="D"):
     forecast["yhat_upper"] = forecast["yhat_upper"].clip(lower=0)
 
     return model, forecast
+
