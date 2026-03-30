@@ -45,6 +45,10 @@ ssh -N -L 5433:localhost:5432 daria@82.202.197.94
 sudo -u postgres psql -d ts_db -c "GRANT SELECT ON public.pl_for_csv TO ts_user;"
 sudo -u postgres psql -d ts_db -c "GRANT SELECT ON public.arap_to_date TO ts_user;"
 
+# как скачать файл аналитики
+
+scp daria@82.202.197.94:/home/daria/ts/data/analytics.duckdb /Users/????/ts/data/analytics.duckdb
+
 
 # Начало работы
 

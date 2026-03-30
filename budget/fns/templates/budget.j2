@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>{{ report["title"] }}</title>
+</head>
+<body>
+
+  <h1>{{ report["title"] }}</h1>
+
+  {% for b in report["blocks"] %}
+    <div class="block {{ b.get('class', '') }}">
+
+      {% if b["type"] == "heading" %}
+        <h{{ b.get("level", 2) }} class="{{ b.get('class', '') }}">
+          {{ b["text"] }}
+        </h{{ b.get("level", 2) }}>
+
+      {% elif b["type"] == "paragraph" %}
+        <p class="{{ b.get('class', '') }}">{{ b["text"] }}</p>
+
+      {% elif b["type"] == "list" %}
+        {% if b.get("title") %}
+          <h3>{{ b["title"] }}</h3>
+        {% endif %}
+
+        {% if b.get("ordered") %}
+          <ol class="{{ b.get('class', '') }}">
+            {% for item in b["items"] %}
+              <li>{{ item }}</li>
+            {% endfor %}
+          </ol>
+        {% else %}
+          <ul class="{{ b.get('class', '') }}">
+            {% for item in b["items"] %}
+              <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+      {% elif b["type"] == "table" %}
+        {% if b.get("title") %}
+          <h3>{{ b["title"] }}</h3>
+        {% endif %}
+        <table class="{{ b.get('class', '') }}">
+          <thead>
+            <tr>
+              {% for col in b["columns"] %}
+                <th>{{ col["label"] }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in b["rows"] %}
+              <tr>
+                {% for col in b["columns"] %}
+                  <td>{{ row[col["key"]] if row[col["key"]] is not none else "" }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      {% elif b["type"] == "svg" %}
+        {% if b.get("title") %}
+          <h3>{{ b["title"] }}</h3>
+        {% endif %}
+        <div class="svg-wrap {{ b.get('class', '') }}">
+          {{ b["content"] | safe }}
+        </div>
+
+      {% elif b["type"] == "page_break" %}
+        <div class="page-break"></div>
+
+      {% endif %}
+
+    </div>
+  {% endfor %}
+
+</body>
+</html>

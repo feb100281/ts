@@ -1,0 +1,114 @@
+@page {
+  size: A4;
+  margin: 20mm;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #222;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 12px 0;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 18px 0 8px 0;
+}
+
+h3 {
+  font-size: 14px;
+  margin: 14px 0 6px 0;
+}
+
+p {
+  margin: 8px 0;
+}
+
+.block {
+  margin-bottom: 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  table-layout: fixed;
+}
+
+th,
+td {
+  border: 1px solid #999;
+  padding: 5px;
+  vertical-align: top;
+  word-wrap: break-word;
+}
+
+th {
+  background: #eee;
+  text-align: left;
+}
+
+tr {
+  page-break-inside: avoid;
+}
+
+svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px 0;
+}
+
+ul,
+ol {
+  margin: 8px 0 12px 20px;
+  padding: 0;
+}
+
+li {
+  margin: 3px 0;
+}
+
+.page-break {
+  page-break-before: always;
+  break-before: page;
+}
+
+/* твои кастомные классы */
+.p-small {
+  font-size: 11px;
+  color: #666;
+}
+
+.p-comment {
+  color: #666;
+  font-style: italic;
+}
+
+.p-strong {
+  font-weight: 700;
+}
+
+.table-compact th,
+.table-compact td {
+  padding: 3px 4px;
+  font-size: 11px;
+}
+
+.table-no-border th,
+.table-no-border td {
+  border: none;
+}
+
+.svg-small svg {
+  width: 60%;
+}
+
+.svg-center {
+  text-align: center;
+}
