@@ -3,58 +3,9 @@
 from prophet import Prophet
 import pandas as pd
 import numpy as np
-from conns import get_duckdb_conn, connect_db
+from conns import get_duckdb_conn
 from duckdb import DuckDBPyConnection
-import duckdb
 from pprint import pprint
-import datetime
-
-# Делаем экземпляры классов разделов отчета о планировании
-
-
-test = {'budget_type': 'baseline',
- 'date_from': datetime.date(2026, 4, 1),
- 'date_to': datetime.date(2026, 12, 31),
- 'description': 'ффф',
- 'id': 3,
- 'number': '33',
- 'revenue_param': {'add_monthly_seasonality': True,
-                   'changepoint_prior_scale': 0.08,
-                   'daily_seasonality': False,
-                   'holidays_prior_scale': 10.0,
-                   'interval_width': 0.8,
-                   'monthly_fourier_order': 5,
-                   'monthly_period': 30.5,
-                   'seasonality_mode': 'multiplicative',
-                   'seasonality_prior_scale': 10.0,
-                   'weekly_seasonality': True,
-                   'yearly_seasonality': True},
- 'wb_costs_params': {'average_unit_price': [{'Manual': 0.0,
-                                             'historical': True,
-                                             'n_monthes': 6}],
-                     'buyback_share': [{'Manual': 0.0,
-                                        'historical': True,
-                                        'n_monthes': 6}],
-                     'cost_per_unit': 0.0,
-                     'delivery_unit_cost': [{'Manual': 0.0,
-                                             'historical': True,
-                                             'n_monthes': 3}],
-                     'discout_vat_share': [{'Manual': 0.0,
-                                            'historical': True,
-                                            'n_monthes': 6}],
-                     'marketplace_comission': [{'Manual': 0.0,
-                                                'historical': True,
-                                                'n_monthes': 6}],
-                     'storage_unit_costs': [{'Manual': 0.0,
-                                             'historical': False,
-                                             'n_monthes': 6}],
-                    "penalty_unit_costs": [{"historical": True, 
-                                            "n_monthes": 6, "Manual": 0.0}], 
-                    "deduction": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],  
-                    "cashback_commision": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],
-                    "cashback_commision_programm_ratio": 10.0,         
- },
- }
 
 
 def calculation(frc:pd.DataFrame,stats:dict,dt_from):
@@ -716,9 +667,9 @@ def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
 
     return model, forecast
 
-def main(**args):
+def main(conn,**args):
     ddb_con = get_duckdb_conn()
-    psql_con = connect_db()
+    psql_con = conn
     
     model, forecast = make_forecast(
         ddb_con,
@@ -734,6 +685,6 @@ def main(**args):
     d = calculation(forecast,stat, args['date_from'])
     write_forecast(d,args['id'],psql_con)
     
+    ddb_con.close()
     
-# main(**test)
 
