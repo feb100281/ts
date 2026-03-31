@@ -7,6 +7,7 @@ import json
 
 # Дефолтные JSON
 
+
 def cf_json():
     sql = """
     WITH base AS (
@@ -156,6 +157,12 @@ class BudgetVersion(models.Model):
         default=cf_json,
         verbose_name="Параметры планирования CF",
     )
+    report = models.JSONField(
+        null=True, blank=True,
+        verbose_name="Отчет по бюджету",
+    )
+    
+    
 
 
     class Meta:
