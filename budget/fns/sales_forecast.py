@@ -129,7 +129,7 @@ def calculation(frc:pd.DataFrame,stats:dict,dt_from):
     #Хранение
     
     
-    dic:dict = stats['storege']
+    dic:dict = stats['storage']
     mp_store = dic.get(1) or 0
     buyback_store = dic.get(2) or 0 
     
