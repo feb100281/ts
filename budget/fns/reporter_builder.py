@@ -90,4 +90,3 @@ class Report:
             "title": self.title,
             "blocks": blocks
         }
-

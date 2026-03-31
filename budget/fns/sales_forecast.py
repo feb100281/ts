@@ -9,7 +9,6 @@ from pprint import pprint
 
 
 def calculation(frc:pd.DataFrame,stats:dict,dt_from):
-    pprint(stats)
     
     dt_fr = pd.to_datetime(dt_from)    
     forecast = frc.copy()
@@ -324,7 +323,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             ) x
            """,params=[first_date]                    
        )
-       wa_price.show()
+    #    wa_price.show()
        wa_p = wa_price.fetchall()
        wa_p = {r[0]: r[1] for r in wa_p}
        stats['wa_prices'] = wa_p
@@ -495,7 +494,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
         logst = {r[0]: r[1] for r in logst}
         stats['storage'] = logst
     else:
-        stats['storege'] = {1:storage['Manual'],2:storage['Manual']}
+        stats['storage'] = {1:storage['Manual'],2:storage['Manual']}
     
     #Штрафы
     penalty = wb['penalty_unit_costs'][0]
@@ -590,7 +589,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             """, params=[first_date]
         )
         
-        cbc.show()
+        # cbc.show()
         logst = cbc.fetchall()
         logst = {r[0]: r[1] for r in logst}
         stats['cashback_commision'] = logst
@@ -667,24 +666,35 @@ def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
 
     return model, forecast
 
-def main(conn,**args):
-    ddb_con = get_duckdb_conn()
+def main(conn, **args):
+    ddb_con = None
     psql_con = conn
-    
-    model, forecast = make_forecast(
-        ddb_con,
-        args['date_from'],
-        args['date_to'],
-        args['revenue_param'],    
-    )
-    stat = stats(
-        ddb_con,
-        args['date_from'],
-        args['wb_costs_params']        
-    )
-    d = calculation(forecast,stat, args['date_from'])
-    write_forecast(d,args['id'],psql_con)
-    
-    ddb_con.close()
+
+    try:
+        ddb_con = get_duckdb_conn()
+
+        model, forecast = make_forecast(
+            ddb_con,
+            args["date_from"],
+            args["date_to"],
+            args["revenue_param"],
+        )
+
+        stat = stats(
+            ddb_con,
+            args["date_from"],
+            args["wb_costs_params"],
+        )
+
+        d = calculation(forecast, stat, args["date_from"])
+        write_forecast(d, args["id"], psql_con)
+
+    finally:
+        if ddb_con is not None:
+            try:
+                ddb_con.execute("DETACH pg")
+            except Exception:
+                pass
+            ddb_con.close()
     
 

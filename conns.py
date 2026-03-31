@@ -55,7 +55,7 @@ def get_duckdb_conn()->duckdb.DuckDBPyConnection:
 
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path, read_only=True)
     con.execute("INSTALL postgres;")
     con.execute("LOAD postgres;")
 
