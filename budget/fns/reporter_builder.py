@@ -155,4 +155,3 @@ class Report:
             },
             "blocks": blocks
         }
-
