@@ -5,6 +5,8 @@ from weasyprint import HTML, CSS
 
 from reporter_builder import Section, Report, P, T
 
+import pandas as pd
+
 
 def render_pdf(report: dict, output_name: str = "report.pdf") -> Path:
     base_dir = Path(__file__).resolve().parent

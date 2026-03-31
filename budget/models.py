@@ -1,10 +1,89 @@
-from django.db import models
+from django.db import models, connection
 from corporate.models import COA, CfItems
 from contracts.models import Contracts 
+import json
 
 
 
 # Дефолтные JSON
+
+def cf_json():
+    sql = """
+    WITH base AS (
+    SELECT
+        CASE
+            WHEN item = '122000 Зачет расходов на реализацию WB' THEN 45
+            ELSE 3
+        END AS acc_id,
+        subconto_id,
+        item,
+        regexp_replace(trim(subitem), '\s+', ' ', 'g') AS subitem,
+        COALESCE(SUM(amount) FILTER (
+            WHERE date_from >= current_date - interval '1 month'
+        ), 0) AS m1,
+        COALESCE(SUM(amount) FILTER (
+            WHERE date_from >= current_date - interval '3 months'
+        ) / 3.0, 0) AS m3,
+        COALESCE(SUM(amount) FILTER (
+            WHERE date_from >= current_date - interval '6 months'
+        ) / 6.0, 0) AS m6
+    FROM public.cf_to_csv
+    GROUP BY
+        subconto_id,
+        item,
+        regexp_replace(trim(subitem), '\s+', ' ', 'g')
+),
+subitems_json AS (
+    SELECT
+        item,
+        jsonb_object_agg(
+            subconto_id::text || ' | ' || subitem,
+            jsonb_build_object(
+                'acc_id', acc_id,
+                'subconto_id', subconto_id,
+                'subitem', subitem,
+                'use', false,
+                'means', jsonb_build_object(
+                    '1M', jsonb_build_object('value', round(m1, 2), 'use', false),
+                    '3M', jsonb_build_object('value', round(m3, 2), 'use', false),
+                    '6M', jsonb_build_object('value', round(m6, 2), 'use', false),
+                    'M fixed', jsonb_build_object('value', 0.0, 'use', false),
+                    'Manual', jsonb_build_object(
+                    'value', jsonb_build_array(
+                        jsonb_build_object('2026-01-01', 0.0)
+                    ),
+                    'use', false
+                )
+                )
+            )
+        ) AS subitems
+    FROM base
+    GROUP BY item
+)
+SELECT jsonb_object_agg(
+    item,
+    jsonb_build_object(
+        'use', false,
+        'subitems', subitems
+    )
+)
+FROM subitems_json;
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql)
+        row = cursor.fetchone()
+
+    data = row[0] if row else []
+
+    if data is None:
+        return []
+
+    if isinstance(data, str):
+        return json.loads(data)
+
+    return data
+
 
 def revenue_json():
     return {
@@ -32,7 +111,9 @@ def wbcost_json():
         "delivery_unit_cost": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],
         "storage_unit_costs": [{"historical": True, "n_monthes": 6, "Manual": 0.0}], 
         "penalty_unit_costs": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],  
-        "deduction": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],               
+        "deduction": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],  
+        "cashback_commision": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],
+        "cashback_commision_programm_ratio": 10.0,           
     }
 
 
@@ -71,6 +152,11 @@ class BudgetVersion(models.Model):
         default=wbcost_json,
         verbose_name="Параметры расходной части WB",
     )
+    cf_params = models.JSONField(
+        default=cf_json,
+        verbose_name="Параметры планирования CF",
+    )
+
 
     class Meta:
         verbose_name = "Версия бюджета"
