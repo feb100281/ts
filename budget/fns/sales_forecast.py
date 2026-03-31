@@ -2,30 +2,19 @@
 
 from prophet import Prophet
 import pandas as pd
-# from conns import get_duckdb_conn
+import numpy as np
+from conns import get_duckdb_conn, connect_db
 from duckdb import DuckDBPyConnection
 import duckdb
 from pprint import pprint
 import datetime
-from reporter_builder import Section, P, T
 
 # Делаем экземпляры классов разделов отчета о планировании
 
-revenue_settings = Section(1,"Исходные данные для планирование доходной части")
-
-def intro_text(date_from, date_to, revenue_params, wb_params):
-    
-    intro = (
-        "Для планирования доходной части бюджета были использованы следуюшие "
-        "исходные данные:"
-    )
-    
-dfs = []
-
 
 test = {'budget_type': 'baseline',
- 'date_from': datetime.date(2026, 3, 20),
- 'date_to': datetime.date(2027, 3, 28),
+ 'date_from': datetime.date(2026, 4, 1),
+ 'date_to': datetime.date(2026, 12, 31),
  'description': 'ффф',
  'id': 3,
  'number': '33',
@@ -49,7 +38,7 @@ test = {'budget_type': 'baseline',
                      'cost_per_unit': 0.0,
                      'delivery_unit_cost': [{'Manual': 0.0,
                                              'historical': True,
-                                             'n_monthes': 6}],
+                                             'n_monthes': 3}],
                      'discout_vat_share': [{'Manual': 0.0,
                                             'historical': True,
                                             'n_monthes': 6}],
@@ -57,15 +46,282 @@ test = {'budget_type': 'baseline',
                                                 'historical': True,
                                                 'n_monthes': 6}],
                      'storage_unit_costs': [{'Manual': 0.0,
-                                             'historical': True,
+                                             'historical': False,
                                              'n_monthes': 6}],
                     "penalty_unit_costs": [{"historical": True, 
-                                            "n_monthes": 6, "Manual": 0.0}],  
+                                            "n_monthes": 6, "Manual": 0.0}], 
+                    "deduction": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],  
+                    "cashback_commision": [{"historical": True, "n_monthes": 6, "Manual": 0.0}],
+                    "cashback_commision_programm_ratio": 10.0,         
  },
  }
 
 
+def calculation(frc:pd.DataFrame,stats:dict,dt_from):
+    pprint(stats)
+    
+    dt_fr = pd.to_datetime(dt_from)    
+    forecast = frc.copy()
+    forecast['ds'] = pd.to_datetime(forecast['ds'])
+    forecast = forecast[forecast['ds'] >= dt_fr]
+    
+    date_from = forecast['ds'].to_numpy()
+    tot_revenue = forecast['yhat'].to_numpy(dtype=int)
+    
+    #Выручка
+    wa_shear = stats['wb_share']    
+    buyback_revenue: np.ndarray = (
+    (tot_revenue * wa_shear / 100)
+    .round(0)
+    .astype(int)
+    )
+    mp_revenue = tot_revenue - buyback_revenue
+    mp_av_price = stats['wa_prices'][1]    
+    buyback_av_price = stats['wa_prices'][2]
+    
+    #Количество
+    mp_qty: np.ndarray = (
+    (mp_revenue / mp_av_price)
+    .round(0)
+    .astype(int)
+    )
+    buyback_qty: np.ndarray = (
+    (buyback_revenue / buyback_av_price)
+    .round(0)
+    .astype(int)
+    )
+    
+    #Комисия
+    dic:dict = stats['wb_comm']
+    mp_coms = dic.get(1) or 0
+    buyback_coms = dic.get(2) or 0  
+    
+    mp_com_costs: np.ndarray = (
+    (mp_revenue * mp_coms / 100)
+    .round(0)
+    .astype(int)
+    )
+    buyback_com_costs: np.ndarray = (
+    (buyback_revenue * buyback_coms / 100)
+    .round(0)
+    .astype(int)
+    )
+    
+    #Логистика
+    
+    dic:dict = stats['logistic']
+    mp_logs = dic.get(1) or 0
+    buyback_logs = dic.get(2) or 0 
+    
+    
+    
+    mp_log_costs: np.ndarray = (
+    (mp_qty * mp_logs)
+    .round(0)
+    .astype(int)
+    )
+    buyback_log_costs: np.ndarray = (
+    (buyback_qty * buyback_logs)
+    .round(0)
+    .astype(int)
+    )
+    
+    #Хранение
+    
+    
+    dic:dict = stats['storege']
+    mp_store = dic.get(1) or 0
+    buyback_store = dic.get(2) or 0 
+    
+    
+    
+    mp_storage_costs: np.ndarray = (
+    (mp_qty * mp_store)
+    .round(0)
+    .astype(int)
+    )
+    buyback_storage_costs: np.ndarray = (
+    (buyback_qty * buyback_store)
+    .round(0)
+    .astype(int)
+    )
+    
+    #штрафы
+    mp_penalties = stats['penalty'][1]      
+    
+    mp_penalties_costs: np.ndarray = (
+    (mp_qty * mp_penalties)
+    .round(0)
+    .astype(int)
+    )
+    
+    #cashback_commision
+    mp_cashback_commision = stats['cashback_commision'][1]      
+    mp_cashback_commision_costs: np.ndarray = (
+    (mp_qty * mp_cashback_commision)
+    .round(0)
+    .astype(int)
+    )
+    
+    mp_loyality = stats['loyality'] 
+    mp_loyality_costs: np.ndarray = (
+    (mp_cashback_commision_costs * mp_loyality)
+    
+   
+    )
+    
+    
+    #deduction
+    weekly_deduction = stats['deduction'][1]
+    n = len(date_from)
+    mask = (np.arange(1, n + 1) % 7 == 0).astype(int)
+    
+    mp_deduction_costs = mask * weekly_deduction
+    
+    # Делаем словарь для df
+    d = {
+        "date_from":date_from,
+        "total_revenue":tot_revenue,
+        "mp_revenue":mp_revenue,
+        "purchase_revenue":buyback_revenue,        
+        "mp_qty":mp_qty,
+        "purchase_qty":buyback_qty,
+        "mp_comission":mp_com_costs,
+        "purchase_comission":buyback_com_costs,
+        "mp_logistic":mp_log_costs,
+        "purchase_logistic":buyback_log_costs,
+        "mp_storage_fee":mp_storage_costs,
+        "purchase_storage_fee":buyback_storage_costs,
+        "mp_penalties":mp_penalties_costs,
+        "mp_cashback_comission":mp_cashback_commision_costs,
+        "mp_loyality":mp_loyality_costs,
+        "mp_deduction":mp_deduction_costs
+    }
+    df = pd.DataFrame(d)
+    df = df.set_index('date_from')
+    cols = df.columns
+    df = df / 100
+    df['mp_qty'] =  df['mp_qty'] * 100
+    df['purchase_qty'] =  df['purchase_qty'] * 100
+    df = df.reset_index()
+    df['ME'] = pd.to_datetime(df['date_from']) + pd.offsets.MonthEnd(0)
+    
+    monthes_df = df.pivot_table(
+        index='ME',
+        values=cols,
+        aggfunc='sum'
+    ).reset_index()
+    
+    monthes_df['ME'] = pd.to_datetime(monthes_df['ME'])
+    monthes_df['ME'] = monthes_df['ME'].dt.strftime('%b %Y')
+    monthes_df = monthes_df[['ME','total_revenue','mp_revenue','purchase_revenue','mp_qty',
+                             'purchase_qty','mp_comission','purchase_comission','mp_logistic',
+                             'purchase_logistic','mp_storage_fee','purchase_storage_fee',
+                             'mp_penalties','mp_deduction','mp_cashback_comission','mp_loyality'
+                             ]]
+    
+    
+    
+    monthes_df.to_excel('tr.xlsx')
+    
+    return d
+    
 
+def del_version(conn, instance_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM budget_gl WHERE version_id = %s",
+            (instance_id,)
+        )
+
+    conn.commit() 
+
+
+def insert_results(conn,rows,instance_id):
+    
+    with conn.cursor() as cur:
+        with cur.copy(
+            """
+            COPY public.budget_gl (
+                "date",
+                dt,
+                cr,
+                description,
+                chapter,
+                acc_id,
+                contract_id,
+                subconto_id,
+                version_id
+            )
+            FROM STDIN
+            """
+            
+        ) as copy:
+            for row in rows:
+                copy.write_row(row)
+
+    conn.commit()
+
+def write_forecast(d:dict,instance_id,conn):
+    date_from = d['date_from']
+    n = len(date_from)
+    
+    mapping = {
+        "mp_revenue":{"st_acc":45,"st_sc":52},
+        "purchase_revenue":{"st_acc":45,"st_sc":87},
+        
+        "mp_comission":{"st_acc":45,"st_sc":77},
+        "purchase_comission":{"st_acc":45,"st_sc":96},
+        
+        "mp_logistic":{"st_acc":45,"st_sc":78},
+        "purchase_logistic":{"st_acc":45,"st_sc":97},
+        
+        "mp_storage_fee":{"st_acc":45,"st_sc":79},
+        "purchase_storage_fee":{"st_acc":45,"st_sc":98},
+        
+        "mp_penalties":{"st_acc":45,"st_sc":82},
+        "mp_deduction":{"st_acc":45,"st_sc":81},
+        "mp_cashback_comission":{"st_acc":45,"st_sc":84},
+        "mp_loyality":{"st_acc":45,"st_sc":85},        
+    }
+    
+    del_version(conn, instance_id)
+    
+    for item in mapping:
+        if item.endswith("revenue"):
+           rows = [
+               (
+                   str(date_from[i]),
+                   int(d[item][i]),
+                   0,
+                   str(item),
+                   "Прогноз выручки",
+                   int(mapping[item]['st_acc']),
+                   109,
+                   int(mapping[item]['st_sc']),
+                   int(instance_id)
+               )
+               for i in range(n)
+           ] 
+        else:
+            rows = [
+               (
+                   str(date_from[i]),
+                   0,
+                   int(d[item][i]),                
+                   str(item),
+                   "Прогноз выручки",
+                   int(mapping[item]['st_acc']),
+                   109,
+                   int(mapping[item]['st_sc']),
+                   int(instance_id)
+               )
+               for i in range(n)
+           ]
+        
+        insert_results(conn,rows,instance_id) 
+    
+ 
 
 # Делаем статистику и находим основные параметры для рассчетов
 def stats(conn:DuckDBPyConnection,date_from,wb):
@@ -98,7 +354,10 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
            """
            SELECT
            x.report_type,
-           round(x.amount / x.quant,0)::bigint as wa_price
+           round(x.amount / x.quant,0)::bigint as wa_price,
+           x.quant,
+           x.amount
+           
            FROM(
            SELECT  
             report_type,         
@@ -109,11 +368,12 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             count(value) filter (where field = 'retail_price' and dtn_id = 1) 
             as quant  
             from rel
-            where date_from < ?
+            where date_from >= ?
             group by report_type
             ) x
            """,params=[first_date]                    
        )
+       wa_price.show()
        wa_p = wa_price.fetchall()
        wa_p = {r[0]: r[1] for r in wa_p}
        stats['wa_prices'] = wa_p
@@ -135,7 +395,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
                     sum(value) FILTER (WHERE field = 'retail_price' AND dtn_id = 1) AS amount
                 FROM rel
                 WHERE report_type = 2
-                AND date_from < ?
+                AND date_from >= ?
             )
 
             SELECT 
@@ -145,7 +405,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
                     sum(value) FILTER (WHERE field = 'retail_price' AND dtn_id = 2) -
                     sum(value) FILTER (WHERE field = 'retail_price' AND dtn_id = 1) AS amount
                 FROM rel
-                WHERE date_from < ?
+                WHERE date_from >= ?
             ) x, a
             """,
             [first_date, first_date]
@@ -175,10 +435,10 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             sum(value) filter (where field = 'retail_price' and dtn_id = 2) -
             sum(value) filter (where field = 'retail_price' and dtn_id = 1) 
             from rel  
-            where date_from < ?          
+            where date_from >= ?          
             ) as tot_amount          
             from rel
-            where date_from < ? and vat_rate = 1
+            where date_from >= ? and vat_rate = 1
             group by report_type
             ) x
            
@@ -211,7 +471,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             sum(value) filter (where field = 'ppvz_for_pay' and dtn_id = 1) 
             as to_pay  
             from rel
-            where date_from < ?
+            where date_from >= ?
             group by report_type
             ) x
             """, params=[first_date]
@@ -244,7 +504,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             count(value) filter (where field = 'retail_price' and dtn_id = 1) 
             as qty  
             from rel
-            where date_from < ?
+            where date_from >= ?
             group by report_type
             ) x
             """, params=[first_date]
@@ -275,7 +535,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             count(value) filter (where field = 'retail_price' and dtn_id = 1) 
             as qty  
             from rel
-            where date_from < ?
+            where date_from >= ?
             group by report_type
             ) x
             """, params=[first_date]
@@ -306,7 +566,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
             count(value) filter (where field = 'retail_price' and dtn_id = 1) 
             as qty  
             from rel
-            where date_from < ?
+            where date_from >= ?
             group by report_type
             ) x
             """, params=[first_date]
@@ -318,18 +578,79 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
     else:
         stats['penalty'] = {1:penalty['Manual'],2:penalty['Manual']}
     
+    #Удержания
+    deduction = wb['deduction'][0]
+    if deduction['historical']:
+        n_month =  deduction['n_monthes']
+        first_date = (pd_date - pd.DateOffset(months=n_month)).date() 
+        # fields = conn.sql("select distinct field from rel")
+        # pprint(fields.fetchall())
+        deduct = conn.sql(
+            """ 
+            SELECT
+                x.report_type,
+                round(avg(x.deduction), 0)::bigint AS deduction
+            FROM (
+                SELECT  
+                    report_type,
+                    date_trunc('week', date_from) AS week,         
+                    sum(value) FILTER (WHERE field = 'deduction') AS deduction           
+                FROM rel
+                WHERE date_from >= ?
+                GROUP BY week, report_type
+            ) x
+            GROUP BY report_type
+            """,
+            params=[first_date]
+        )
+        
+        logst = deduct.fetchall()
+        logst = {r[0]: r[1] for r in logst}
+        stats['deduction'] = logst
+    else:
+        stats['deduction'] = {1:deduction['Manual'],2:deduction['Manual']}
     
+    #Cashback commisioning charge
+    cashback_commision = wb['cashback_commision'][0]
+    if cashback_commision['historical']:
+        n_month =  cashback_commision['n_monthes']
+        first_date = (pd_date - pd.DateOffset(months=n_month)).date() 
+        
+        cbc = conn.sql(
+           """ 
+           SELECT
+           x.report_type,
+           x.amount / x.qty as comm,
+           x.amount,
+           x.qty
+           FROM(
+           SELECT  
+            report_type,         
+            sum(value) filter (where field = 'cashback_commission_change' and dtn_id = 2) -
+            sum(value) filter (where field = 'cashback_commission_change' and dtn_id = 1) 
+            as amount,
+            count(value) filter (where field = 'retail_price' and dtn_id = 2) -
+            count(value) filter (where field = 'retail_price' and dtn_id = 1) 
+            as qty  
+            from rel
+            where date_from >= ?
+            group by report_type
+            ) x
+            """, params=[first_date]
+        )
+        
+        cbc.show()
+        logst = cbc.fetchall()
+        logst = {r[0]: r[1] for r in logst}
+        stats['cashback_commision'] = logst
+    else:
+        stats['cashback_commision'] = {1:cashback_commision['Manual'],2:cashback_commision['Manual']}
     
+    #Добавляем wb_херн
+    loyality = wb['cashback_commision_programm_ratio']
+    stats['loyality'] = loyality
     
-    
-    pprint(stats) 
-     
-       
-       
-       
-    
-    
-
+    return stats
 
 # Берем данные для анализа
 def get_forecast_data(conn:DuckDBPyConnection,date_from):
@@ -396,20 +717,23 @@ def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
     return model, forecast
 
 def main(**args):
-    ddb_con = duckdb.connect('/Users/pavelustenko/ts/data/analytics.duckdb')
-    pprint(args)
-    # model, forecast = make_forecast(
-    #     ddb_con,
-    #     args['date_from'],
-    #     args['date_to'],
-    #     args['revenue_param'],    
-    # )
-    stats(
+    ddb_con = get_duckdb_conn()
+    psql_con = connect_db()
+    
+    model, forecast = make_forecast(
+        ddb_con,
+        args['date_from'],
+        args['date_to'],
+        args['revenue_param'],    
+    )
+    stat = stats(
         ddb_con,
         args['date_from'],
         args['wb_costs_params']        
     )
+    d = calculation(forecast,stat, args['date_from'])
+    write_forecast(d,args['id'],psql_con)
     
     
-main(**test)
+# main(**test)
 
