@@ -1,7 +1,7 @@
 import duckdb
 import pandas as pd
 
-file = '/Users/pavelustenko/Library/CloudStorage/Dropbox/Remark_app/ATTENTION/Оборотно-сальдовая ведомость по счету 45.01 за Январь 2026 г..xlsx'
+file = '/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/ОСВ/сч 45/2026-01 ОСВ_45.xlsx'
 
 # без создания файла базы: соединение только в памяти
 con = duckdb.connect()
@@ -17,7 +17,7 @@ rel = con.sql("""
         FROM read_xlsx(
             ?,
             sheet = 'Лист_1',
-            range = 'A9:G91254', -- меняй или находи автоматом
+            range = 'A13:G91254', -- меняй или находи автоматом
             header = false -- лучще не ставить
         )
     )

@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "treasury",
     "sales",
     "grossbook",
+    'accounting_analysis',
     "wb",
     "budget",
     "mptt",    
@@ -352,6 +353,13 @@ JAZZMIN_SETTINGS = {
         "treasury.BankStatements": "fa-solid fa-receipt",
         "treasury.CfData": "fa-solid fa-arrows-rotate",
         "treasury.ContractsRexex": "fa-solid fa-robot",
+        
+        
+        # --- АНАЛИЗ ФАЙЛОВ БУХГАЛТЕРИИ ---
+        "accounting_analysis": "fa-solid fa-magnifying-glass-chart",
+        "accounting_analysis.AccountingAnalysis": "fa-solid fa-calculator",
+        "accounting_analysis.AnalysisScript": "fa-solid fa-gears",
+        "accounting_analysis.AccountingMetric": "fa-solid fa-chart-line",
     
 
 
@@ -385,7 +393,8 @@ JAZZMIN_SETTINGS = {
         'sales',           # Продажи 
         'treasury',        # Казначейство 
         'grossbook',       # Главная книга
-        
+        'accounting_analysis' # Анализ файло бухгалтерии
+,        
         "auth",            # Пользователи и группы
 
         "botconfig",
