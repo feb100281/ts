@@ -8,20 +8,21 @@
 
   {% if report.get("show_cover") %}
   <section class="cover-page">
-
+    <!-- Фоновые акценты -->
+    <div class="bg-accent"></div>
+    
     <div class="cover-top">
-        {% if report.get("logo_svg") %}
-          <div class="cover-logo">
-            {{ report["logo_svg"] | safe }}
-          </div>
-        {% endif %}
-
       {% if report.get("company") %}
         <div class="cover-company">{{ report["company"] }}</div>
       {% endif %}
 
       {% if report.get("cover_system") %}
         <div class="cover-system">{{ report["cover_system"] }}</div>
+      {% endif %}
+
+      
+      {% if report.get("cover_sub_system") %}
+        <div class="cover-system">{{ report["cover_sub_system"] }}</div>
       {% endif %}
     </div>
 
@@ -121,9 +122,7 @@
   {% for b in report["blocks"] %}
 
     {% if b["type"] == "page_break" %}
-
       <div class="page-break"></div>
-
     {% else %}
 
       <div class="block {{ b.get('class', '') }}">

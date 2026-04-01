@@ -8,29 +8,51 @@
   padding: 18mm 12mm 12mm 12mm;
   box-sizing: border-box;
   position: relative;
+  background: #ffffff;
+  overflow: hidden;
 }
 
+/* Декоративный элемент в фирменном цвете сверху */
+.cover-page::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, #1e3a5f 0%, #2c5282 50%, #1e3a5f 100%);
+  z-index: 2;
+}
 
+/* Легкий фоновый акцент в фирменном цвете */
+.cover-page::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(30, 58, 95, 0.03) 0%, rgba(30, 58, 95, 0.01) 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Второй фоновый акцент для баланса */
+.cover-page .bg-accent {
+  position: absolute;
+  top: 20%;
+  left: -100px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(30, 58, 95, 0.02) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
 
 .cover-top {
   text-align: center;
   position: relative;
-  z-index: 1;
-}
-
-.cover-logo {
-  margin-bottom: 24px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.logo-img {
-  max-width: 120px;
-  max-height: 80px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
+  z-index: 2;
 }
 
 .cover-company {
@@ -40,14 +62,86 @@
   letter-spacing: 0.18em;
   color: #1e3a5f;
   margin-bottom: 8px;
+  position: relative;
+  display: inline-block;
+  padding: 0 12px;
+}
+
+.cover-company::before,
+.cover-company::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #1e3a5f);
+}
+
+.cover-company::before {
+  left: -24px;
+}
+
+.cover-company::after {
+  right: -24px;
+  transform: rotate(180deg);
 }
 
 .cover-system {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
-  color: #7b8794;
   font-weight: 500;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+/* Улучшенный контейнер логотипа */
+.cover-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 8px 0 20px 0;
+  position: relative;
+}
+
+/* Декоративная рамка для логотипа */
+.cover-logo::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% + 40px);
+  height: calc(100% + 24px);
+  border: 1px solid rgba(30, 58, 95, 0.1);
+  border-radius: 16px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.cover-logo::after {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% + 32px);
+  height: calc(100% + 16px);
+  background: rgba(30, 58, 95, 0.02);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.cover-logo-img {
+  display: block;
+  max-width: 220px;
+  max-height: 110px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.08));
+  transition: all 0.2s ease;
 }
 
 .cover-center {
@@ -55,15 +149,15 @@
   margin-top: auto;
   margin-bottom: auto;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .cover-type {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.2em;
   color: #4b5563;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   font-weight: 500;
 }
 
@@ -77,6 +171,7 @@
   max-width: 80%;
   margin-left: auto;
   margin-right: auto;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .cover-subtitle {
@@ -95,7 +190,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin: 28px 0 20px 0;
+  margin: 32px 0 20px 0;
 }
 
 .cover-divider span {
@@ -110,7 +205,19 @@
   height: 8px;
   background: #1e3a5f;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(30,58,95,0.2);
+  box-shadow: 0 0 0 2px rgba(30, 58, 95, 0.2);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
 }
 
 .cover-period {
@@ -118,18 +225,19 @@
   color: #6b7280;
   margin-top: 8px;
   font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .cover-bottom {
   margin-top: 32px;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .cover-meta-grid {
   width: 100%;
   border-top: 2px solid #e5e9f0;
-  padding-top: 20px;
+  padding-top: 22px;
   display: table;
   table-layout: fixed;
   margin-bottom: 16px;
@@ -140,6 +248,22 @@
   vertical-align: top;
   padding-right: 16px;
   text-align: center;
+  position: relative;
+}
+
+.meta-block:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 30px;
+  background: linear-gradient(180deg, transparent, #e5e9f0, transparent);
+}
+
+.meta-block:last-child {
+  padding-right: 0;
 }
 
 .meta-label {
@@ -183,26 +307,28 @@
   clear: both;
 }
 
-
-.cover-logo svg {
-  width: 120px;
-  height: auto;
-  display: block;
-  margin: 0 auto;
-}
-
-/* Адаптация для разных размеров логотипа */
 @media print {
-  .logo-img {
-    max-width: 100px;
-    max-height: 70px;
+  .cover-logo-img {
+    max-width: 200px;
+    max-height: 100px;
   }
-  
+
   .cover-title {
     font-size: 38px;
   }
-  
+
   .cover-subtitle {
     font-size: 16px;
+  }
+  
+  .cover-logo::before,
+  .cover-logo::after {
+    display: none;
+  }
+  
+  @keyframes pulse {
+    0%, 100% {
+      transform: scale(1);
+    }
   }
 }
