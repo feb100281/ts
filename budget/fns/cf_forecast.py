@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 from pprint import pprint
 
+
+
+
 def insert_results(conn, rows):
     with conn.cursor() as cur:
         with cur.copy(

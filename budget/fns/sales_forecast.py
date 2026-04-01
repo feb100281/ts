@@ -6,7 +6,7 @@ import numpy as np
 from conns import get_duckdb_conn
 from duckdb import DuckDBPyConnection
 from pprint import pprint
-
+from reporting.report_buider.reporter_builder import P,T, Section,Report
 
 def calculation(frc:pd.DataFrame,stats:dict,dt_from):
     
@@ -666,9 +666,14 @@ def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
 
     return model, forecast
 
+def add_forecats_section(revenue_param):
+    pass
+
 def main(conn, **args):
     ddb_con = None
     psql_con = conn
+    
+    SECTIONS = []
 
     try:
         ddb_con = get_duckdb_conn()
