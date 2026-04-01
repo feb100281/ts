@@ -6,75 +6,191 @@
 </head>
 <body>
 
-  <h1>{{ report["title"] }}</h1>
+  {% if report.get("show_cover") %}
+  <section class="cover-page">
 
-  {% for b in report["blocks"] %}
-    <div class="block {{ b.get('class', '') }}">
-
-      {% if b["type"] == "heading" %}
-        <h{{ b.get("level", 2) }} class="{{ b.get('class', '') }}">
-          {{ b["text"] }}
-        </h{{ b.get("level", 2) }}>
-
-      {% elif b["type"] == "paragraph" %}
-        <p class="{{ b.get('class', '') }}">{{ b["text"] }}</p>
-
-      {% elif b["type"] == "list" %}
-        {% if b.get("title") %}
-          <h3>{{ b["title"] }}</h3>
+    <div class="cover-top">
+        {% if report.get("logo_svg") %}
+          <div class="cover-logo">
+            {{ report["logo_svg"] | safe }}
+          </div>
         {% endif %}
 
-        {% if b.get("ordered") %}
-          <ol class="{{ b.get('class', '') }}">
-            {% for item in b["items"] %}
-              <li>{{ item }}</li>
-            {% endfor %}
-          </ol>
-        {% else %}
-          <ul class="{{ b.get('class', '') }}">
-            {% for item in b["items"] %}
-              <li>{{ item }}</li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-
-      {% elif b["type"] == "table" %}
-        {% if b.get("title") %}
-          <h3>{{ b["title"] }}</h3>
-        {% endif %}
-        <table class="{{ b.get('class', '') }}">
-          <thead>
-            <tr>
-              {% for col in b["columns"] %}
-                <th>{{ col["label"] }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in b["rows"] %}
-              <tr>
-                {% for col in b["columns"] %}
-                  <td>{{ row[col["key"]] if row[col["key"]] is not none else "" }}</td>
-                {% endfor %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-
-      {% elif b["type"] == "svg" %}
-        {% if b.get("title") %}
-          <h3>{{ b["title"] }}</h3>
-        {% endif %}
-        <div class="svg-wrap {{ b.get('class', '') }}">
-          {{ b["content"] | safe }}
-        </div>
-
-      {% elif b["type"] == "page_break" %}
-        <div class="page-break"></div>
-
+      {% if report.get("company") %}
+        <div class="cover-company">{{ report["company"] }}</div>
       {% endif %}
 
+      {% if report.get("cover_system") %}
+        <div class="cover-system">{{ report["cover_system"] }}</div>
+      {% endif %}
     </div>
+
+    <div class="cover-center">
+      {% if report.get("cover_type") %}
+        <div class="cover-type">{{ report["cover_type"] }}</div>
+      {% endif %}
+
+      <h1 class="cover-title">
+        {{ report.get("cover_title", report["title"]) }}
+      </h1>
+
+      {% if report.get("cover_subtitle") %}
+        <div class="cover-subtitle">{{ report["cover_subtitle"] }}</div>
+      {% endif %}
+
+      <div class="cover-divider">
+        <span></span>
+        <span class="dot"></span>
+        <span></span>
+      </div>
+
+      {% if report.get("period") %}
+        <div class="cover-period">{{ report["period"] }}</div>
+      {% endif %}
+    </div>
+
+    <div class="cover-bottom">
+      <div class="cover-meta-grid">
+
+        {% if report.get("created_at") %}
+        <div class="meta-block">
+          <div class="meta-label">Дата отчёта</div>
+          <div class="meta-value">{{ report["created_at"] }}</div>
+        </div>
+        {% endif %}
+
+        {% if report.get("author") %}
+        <div class="meta-block">
+          <div class="meta-label">Исполнитель</div>
+          <div class="meta-value">{{ report["author"] }}</div>
+        </div>
+        {% endif %}
+
+        {% if report.get("report_type") %}
+        <div class="meta-block">
+          <div class="meta-label">Тип отчёта</div>
+          <div class="meta-value">{{ report["report_type"] }}</div>
+        </div>
+        {% endif %}
+
+        {% if report.get("period_end") %}
+        <div class="meta-block">
+          <div class="meta-label">Период окончания</div>
+          <div class="meta-value">{{ report["period_end"] }}</div>
+        </div>
+        {% endif %}
+
+      </div>
+
+      <div class="cover-footer">
+        <div class="cover-copyright">
+          © {{ report.get("company", "") }}
+        </div>
+
+        {% if report.get("confidential") %}
+        <div class="cover-conf">Конфиденциально</div>
+        {% endif %}
+      </div>
+    </div>
+
+  </section>
+
+  <div class="page-break"></div>
+  {% endif %}
+
+  <div class="report-header">
+    {% if report.get("company") %}
+      <div class="report-company">{{ report["company"] }}</div>
+    {% endif %}
+
+    <h1 class="report-title">{{ report["title"] }}</h1>
+
+    {% if report.get("subtitle") %}
+      <div class="report-subtitle">{{ report["subtitle"] }}</div>
+    {% endif %}
+
+    {% if report.get("period") %}
+      <div class="report-period">Период: {{ report["period"] }}</div>
+    {% endif %}
+
+    {% if report.get("author") %}
+      <div class="report-period">Автор: {{ report["author"] }}</div>
+    {% endif %}
+  </div>
+
+  {% for b in report["blocks"] %}
+
+    {% if b["type"] == "page_break" %}
+
+      <div class="page-break"></div>
+
+    {% else %}
+
+      <div class="block {{ b.get('class', '') }}">
+
+        {% if b["type"] == "heading" %}
+          <h{{ b.get("level", 2) }} class="{{ b.get('class', '') }}">
+            {{ b["text"] }}
+          </h{{ b.get("level", 2) }}>
+
+        {% elif b["type"] == "paragraph" %}
+          <p class="{{ b.get('class', '') }}">{{ b["text"] }}</p>
+
+        {% elif b["type"] == "list" %}
+          {% if b.get("title") %}
+            <h3>{{ b["title"] }}</h3>
+          {% endif %}
+
+          {% if b.get("ordered") %}
+            <ol class="{{ b.get('class', '') }}">
+              {% for item in b["items"] %}
+                <li>{{ item }}</li>
+              {% endfor %}
+            </ol>
+          {% else %}
+            <ul class="{{ b.get('class', '') }}">
+              {% for item in b["items"] %}
+                <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+        {% elif b["type"] == "table" %}
+          {% if b.get("title") %}
+            <h3>{{ b["title"] }}</h3>
+          {% endif %}
+          <table class="{{ b.get('class', '') }}">
+            <thead>
+              <tr>
+                {% for col in b["columns"] %}
+                  <th>{{ col["label"] }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in b["rows"] %}
+                <tr>
+                  {% for col in b["columns"] %}
+                    <td>{{ row[col["key"]] if row[col["key"]] is not none else "" }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+        {% elif b["type"] == "svg" %}
+          {% if b.get("title") %}
+            <h3>{{ b["title"] }}</h3>
+          {% endif %}
+          <div class="svg-wrap {{ b.get('class', '') }}">
+            {{ b["content"] | safe }}
+          </div>
+        {% endif %}
+
+      </div>
+
+    {% endif %}
+
   {% endfor %}
 
 </body>
