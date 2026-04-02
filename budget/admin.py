@@ -37,7 +37,7 @@ class BudgetVersionAdmin(admin.ModelAdmin):
                 "number",
                 "budget_type",
                 "description",
-                ("date_from", "date_to"),
+                "date_from", "date_to",
             )
         }),
         ("Модель доходов", {

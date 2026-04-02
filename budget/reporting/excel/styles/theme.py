@@ -14,6 +14,8 @@ COLORS = {
     "black": "1F1F1F",
     "back_text_green": "1F5E4E",
     "negative_brown": "7A4E4E",
+    "delta_red": "FBEAEA",
+    "delta_green": "EAF6EE",
     
 
 }
@@ -25,7 +27,10 @@ FILLS = {
     "total": PatternFill("solid", fgColor=COLORS["total_green"]),
     "summary": PatternFill("solid", fgColor=COLORS["summary_fill"]),
     "back": PatternFill("solid", fgColor=COLORS["light_green"]),
+    "delta_red": PatternFill("solid", fgColor=COLORS["delta_red"]),
+    "delta_green": PatternFill("solid", fgColor=COLORS["delta_green"]),
     "none": PatternFill(fill_type=None),
+
 }
 
 

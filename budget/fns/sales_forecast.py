@@ -363,7 +363,7 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
         wb_s = wb_s.fetchone()[0]
         stats['wb_share'] = wb_s
     else:
-        stats['buyback_share'] = wb_share['Manual']
+        stats['wb_share'] = wb_share['Manual']
     
     #Считаем долю НДС в расчетах
     discout_vat =  wb['discout_vat_share'][0]
@@ -644,20 +644,53 @@ def build_prophet_model(params: dict) -> Prophet:
     return model
 
 # делаем план по выручке
-def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
-    end_date = pd.to_datetime(date_from)
-    forecast_date = pd.to_datetime(date_to)
+# def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
+#     end_date = pd.to_datetime(date_from)
+#     forecast_date = pd.to_datetime(date_to)
     
-    data = get_forecast_data(conn,date_from)
+#     data = get_forecast_data(conn,date_from)
 
-    periods = (forecast_date - end_date).days
+#     periods = (forecast_date - end_date).days
+#     if periods < 0:
+#         raise ValueError("forecast_date должен быть позже или равен last_actual_date")
+
+#     model = build_prophet_model(prophet_params)
+#     model.fit(data)
+
+#     future = model.make_future_dataframe(periods=periods, freq=freq, include_history=True)
+#     forecast = model.predict(future)
+
+#     forecast["yhat"] = forecast["yhat"].clip(lower=0)
+#     forecast["yhat_lower"] = forecast["yhat_lower"].clip(lower=0)
+#     forecast["yhat_upper"] = forecast["yhat_upper"].clip(lower=0)
+
+#     return model, forecast
+
+
+
+def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
+    plan_start = pd.to_datetime(date_from)
+    plan_end = pd.to_datetime(date_to)
+
+    data = get_forecast_data(conn, date_from)
+    if data.empty:
+        raise ValueError("Нет исторических данных для построения прогноза")
+
+    data["ds"] = pd.to_datetime(data["ds"])
+    last_actual_date = data["ds"].max()
+
+    periods = (plan_end - last_actual_date).days
     if periods < 0:
-        raise ValueError("forecast_date должен быть позже или равен last_actual_date")
+        raise ValueError("date_to раньше последней фактической даты")
 
     model = build_prophet_model(prophet_params)
     model.fit(data)
 
-    future = model.make_future_dataframe(periods=periods, freq=freq, include_history=True)
+    future = model.make_future_dataframe(
+        periods=periods,
+        freq=freq,
+        include_history=True
+    )
     forecast = model.predict(future)
 
     forecast["yhat"] = forecast["yhat"].clip(lower=0)

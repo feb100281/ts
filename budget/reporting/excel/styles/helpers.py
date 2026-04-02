@@ -118,3 +118,16 @@ def apply_int_money(cell):
 def apply_date(cell):
     cell.number_format = FORMATS["date"]
     cell.alignment = ALIGNMENTS["center"]
+    
+    
+def get_delta_fill(value, default_fill, FILLS):
+    try:
+        value = float(value or 0)
+    except (TypeError, ValueError):
+        return default_fill
+
+    if value < 0:
+        return FILLS["delta_red"]
+    elif value > 0:
+        return FILLS["delta_green"]
+    return default_fill
