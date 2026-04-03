@@ -1,3 +1,4 @@
+# budget/reporting/excel/compare_exporter.py
 from io import BytesIO
 
 from django.http import HttpResponse
@@ -13,11 +14,11 @@ def build_budget_compare_excel_response(versions):
     output.seek(0)
 
     if versions:
-        date_from = min(v.date_from for v in versions if v.date_from)
-        date_to = max(v.date_to for v in versions if v.date_to)
+        valid_date_from = [v.date_from for v in versions if v.date_from]
+        valid_date_to = [v.date_to for v in versions if v.date_to]
 
-        if date_from and date_to:
-            period_str = f"{date_from.strftime('%Y_%m')}-{date_to.strftime('%Y_%m')}"
+        if valid_date_from and valid_date_to:
+            period_str = f"{min(valid_date_from).strftime('%Y_%m')}-{max(valid_date_to).strftime('%Y_%m')}"
         else:
             period_str = "compare"
     else:

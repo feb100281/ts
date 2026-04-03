@@ -28,51 +28,6 @@ def _set_row_fill(ws, row_idx, fill, col_from=1, col_to=4):
         ws.cell(row=row_idx, column=col).fill = fill
 
 
-# def _draw_title_block(ws, version):
-#     _merge(ws, 2, 1, 4)
-#     _merge(ws, 3, 1, 4)
-
-#     title = ws["A2"]
-#     title.value = "БЮДЖЕТ"
-#     title.font = FONTS["title"]
-#     title.alignment = ALIGNMENTS["left"]
-
-#     subtitle = ws["A3"]
-#     subtitle.value = "Сводная информация и навигация по файлу"
-#     subtitle.font = FONTS["subtitle"]
-#     subtitle.alignment = ALIGNMENTS["left"]
-
-#     _set_row_border(ws, 4, BORDERS["bottom_medium"])
-
-#     ws["A5"] = "Версия бюджета"
-#     ws["A6"] = "Тип"
-#     ws["A7"] = "Дата начала"
-#     ws["A8"] = "Дата окончания"
-#     ws["A9"] = "Описание"
-
-#     ws["B5"] = version.get("number") or "—"
-#     ws["B6"] = version.get("budget_type") or "—"
-#     ws["B7"] = version.get("date_from") or "—"
-#     ws["B8"] = version.get("date_to") or "—"
-#     ws["B9"] = version.get("description") or "—"
-
-#     for row_idx in range(5, 10):
-#         ws.cell(row=row_idx, column=1).font = FONTS["bold"]
-#         ws.cell(row=row_idx, column=2).font = FONTS["normal"]
-#         ws.cell(row=row_idx, column=1).alignment = ALIGNMENTS["left"]
-#         ws.cell(row=row_idx, column=2).alignment = ALIGNMENTS["left"]
-
-#         _set_row_border(ws, row_idx, BORDERS["bottom_thin"])
-
-#     if hasattr(ws["B7"].value, "year"):
-#         ws["B7"].number_format = FORMATS["date"]
-
-#     if hasattr(ws["B8"].value, "year"):
-#         ws["B8"].number_format = FORMATS["date"]
-
-
-
-
 def _draw_title_block(ws, version, revenue_param):
     _merge(ws, 2, 1, 4)
     _merge(ws, 3, 1, 4)
