@@ -1,3 +1,4 @@
+# budget/fns/sales_forecast.py
 #Это функции для расчета выручки
 
 from prophet import Prophet
@@ -699,6 +700,38 @@ def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
 
     return model, forecast
 
+# def main(conn, **args):
+#     ddb_con = None
+#     psql_con = conn
+
+#     try:
+#         ddb_con = get_duckdb_conn()
+
+#         model, forecast = make_forecast(
+#             ddb_con,
+#             args["date_from"],
+#             args["date_to"],
+#             args["revenue_param"],
+#         )
+
+#         stat = stats(
+#             ddb_con,
+#             args["date_from"],
+#             args["wb_costs_params"],
+#         )
+
+#         d = calculation(forecast, stat, args["date_from"])
+#         write_forecast(d, args["id"], psql_con)
+
+#     finally:
+#         if ddb_con is not None:
+#             try:
+#                 ddb_con.execute("DETACH pg")
+#             except Exception:
+#                 pass
+#             ddb_con.close()
+    
+
 def main(conn, **args):
     ddb_con = None
     psql_con = conn
@@ -711,6 +744,17 @@ def main(conn, **args):
             args["date_from"],
             args["date_to"],
             args["revenue_param"],
+        )
+
+        forecast = apply_monthly_adjustments(
+            forecast,
+            args["revenue_param"].get("monthly_adjustments", {}),
+        )
+
+        forecast = apply_scenario(
+            forecast,
+            args["revenue_param"].get("scenario", "base"),
+            args["revenue_param"].get("scenarios", {}),
         )
 
         stat = stats(
@@ -729,5 +773,72 @@ def main(conn, **args):
             except Exception:
                 pass
             ddb_con.close()
-    
+            
+            
 
+
+def apply_monthly_adjustments(forecast: pd.DataFrame, adjustments: dict) -> pd.DataFrame:
+    """
+    Ручные корректировки прогноза по месяцам.
+    Пример:
+    adjustments = {
+        "7": 1.2,
+        "8": 1.15,
+        "11": 1.1
+    }
+    """
+    if not adjustments:
+        return forecast
+
+    forecast = forecast.copy()
+    forecast["ds"] = pd.to_datetime(forecast["ds"])
+    forecast["month"] = forecast["ds"].dt.month
+
+    for month, coef in adjustments.items():
+        try:
+            month_int = int(month)
+            coef_float = float(coef)
+        except (TypeError, ValueError):
+            continue
+
+        forecast.loc[forecast["month"] == month_int, "yhat"] *= coef_float
+
+        if "yhat_lower" in forecast.columns:
+            forecast.loc[forecast["month"] == month_int, "yhat_lower"] *= coef_float
+
+        if "yhat_upper" in forecast.columns:
+            forecast.loc[forecast["month"] == month_int, "yhat_upper"] *= coef_float
+
+    return forecast.drop(columns=["month"])
+
+
+def apply_scenario(forecast: pd.DataFrame, scenario_name: str, scenarios: dict) -> pd.DataFrame:
+    """
+    Применение сценария ко всему прогнозу.
+    Пример:
+    scenario_name = "optimistic"
+    scenarios = {
+        "base": 1.0,
+        "optimistic": 1.15,
+        "conservative": 0.9
+    }
+    """
+    forecast = forecast.copy()
+
+    if not scenarios:
+        return forecast
+
+    try:
+        coef = float(scenarios.get(scenario_name, 1.0))
+    except (TypeError, ValueError):
+        coef = 1.0
+
+    forecast["yhat"] *= coef
+
+    if "yhat_lower" in forecast.columns:
+        forecast["yhat_lower"] *= coef
+
+    if "yhat_upper" in forecast.columns:
+        forecast["yhat_upper"] *= coef
+
+    return forecast

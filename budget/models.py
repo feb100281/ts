@@ -1,5 +1,6 @@
 # budget/models.py
 from django.db import models, connection
+from django.conf import settings
 from corporate.models import COA, CfItems
 from contracts.models import Contracts 
 import json
@@ -100,6 +101,18 @@ def revenue_json():
         "add_monthly_seasonality": True,
         "monthly_period": 30.5,
         "monthly_fourier_order": 5,
+        "monthly_adjustments": {
+            "7": 1.20,
+            "8": 1.10,
+            "11": 1.10
+        },
+
+        "scenario": "base",
+        "scenarios": {
+            "base": 1.0,
+            "optimistic": 1.10,
+            "conservative": 0.90
+        }
     }
 
 
@@ -119,11 +132,72 @@ def wbcost_json():
     }
 
 
+# class BudgetVersion(models.Model):
+#     class BudgetType(models.TextChoices):
+#         BASELINE = "baseline", "Базовый план"
+#         ROLLING = "rolling", "Текущий прогноз"
+#         ADHOC = "adhoc", "Ad-hoc"
+
+#     number = models.CharField(
+#         max_length=250,
+#         unique=True,
+#         verbose_name="Версия бюджета",
+#     )
+#     budget_type = models.CharField(
+#         max_length=20,
+#         choices=BudgetType.choices,
+#         default=BudgetType.BASELINE,
+#         verbose_name="Тип бюджета",
+#     )
+#     description = models.TextField(
+#         blank=True,
+#         verbose_name="Описание",
+#     )
+#     date_from = models.DateField(
+#         verbose_name="Дата начала",
+#     )
+#     date_to = models.DateField(
+#         verbose_name="Дата окончания",
+#     )
+#     revenue_param = models.JSONField(
+#         default=revenue_json,
+#         verbose_name="Параметры доходной части",
+#     )
+#     wb_costs_params = models.JSONField(
+#         default=wbcost_json,
+#         verbose_name="Параметры расходной части WB",
+#     )
+#     cf_params = models.JSONField(
+#         default=cf_json,
+#         verbose_name="Параметры планирования CF",
+#     )
+#     report = models.JSONField(
+#         null=True, blank=True,
+#         verbose_name="Отчет по бюджету",
+#     )
+    
+    
+
+
+#     class Meta:
+#         verbose_name = "Версия бюджета"
+#         verbose_name_plural = "Версии бюджетов"
+#         ordering = ["-date_from", "number"]
+
+#     def __str__(self):
+#         return f"{self.number} | {self.get_budget_type_display()} | {self.date_from} - {self.date_to}"
+
+
 class BudgetVersion(models.Model):
     class BudgetType(models.TextChoices):
         BASELINE = "baseline", "Базовый план"
         ROLLING = "rolling", "Текущий прогноз"
         ADHOC = "adhoc", "Ad-hoc"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Черновик"
+        APPROVED = "approved", "Утвержден"
+        ARCHIVED = "archived", "Архив"
 
     number = models.CharField(
         max_length=250,
@@ -135,6 +209,12 @@ class BudgetVersion(models.Model):
         choices=BudgetType.choices,
         default=BudgetType.BASELINE,
         verbose_name="Тип бюджета",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        verbose_name="Статус",
     )
     description = models.TextField(
         blank=True,
@@ -162,9 +242,23 @@ class BudgetVersion(models.Model):
         null=True, blank=True,
         verbose_name="Отчет по бюджету",
     )
-    
-    
-
+    needs_recalculation = models.BooleanField(
+        default=False,
+        verbose_name="Требует пересчета",
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Дата утверждения",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="approved_budget_versions",
+        verbose_name="Утвердил",
+    )
 
     class Meta:
         verbose_name = "Версия бюджета"
@@ -172,7 +266,11 @@ class BudgetVersion(models.Model):
         ordering = ["-date_from", "number"]
 
     def __str__(self):
-        return f"{self.number} | {self.get_budget_type_display()} | {self.date_from} - {self.date_to}"
+        return (
+            f"{self.number} | {self.get_budget_type_display()} | "
+            f"{self.get_status_display()} | {self.date_from} - {self.date_to}"
+        )
+
 
 
 class Gl(models.Model):
