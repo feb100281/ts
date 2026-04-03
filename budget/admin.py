@@ -348,11 +348,13 @@ class BudgetVersionAdmin(admin.ModelAdmin):
         "approve_budget_versions",
         "archive_budget_versions",
         "return_to_draft",
+        "export_compare_excel",
     ]
 
     list_display = (
         "number",
         "budget_type",
+        "scenario_display",
         "colored_status",
         # "recalculation_badge",
         "date_from",
@@ -409,6 +411,33 @@ class BudgetVersionAdmin(admin.ModelAdmin):
         }
         
         
+    
+    @admin.action(description="Сравнить выбранные бюджеты (Excel)")
+    def export_compare_excel(self, request, queryset):
+        count = queryset.count()
+
+        if count < 2:
+            self.message_user(
+                request,
+                "Для сравнения нужно выбрать минимум 2 версии бюджета.",
+                level=messages.WARNING,
+            )
+            return
+
+        if count > 3:
+            self.message_user(
+                request,
+                "Для сравнения можно выбрать не более 3 версий бюджета.",
+                level=messages.WARNING,
+            )
+            return
+
+        versions = list(queryset.order_by("date_from", "id"))
+
+        from budget.reporting.excel.compare_exporter import build_budget_compare_excel_response
+        return build_budget_compare_excel_response(versions)
+        
+        
     @admin.action(description="Вернуть выбранные версии в черновик")
     def return_to_draft(self, request, queryset):
         updated = 0
@@ -448,6 +477,8 @@ class BudgetVersionAdmin(admin.ModelAdmin):
             )
 
         return base_readonly
+    
+    
 
     def save_model(self, request, obj, form, change):
         if change and obj.status != BudgetVersion.Status.APPROVED:
@@ -476,6 +507,29 @@ class BudgetVersionAdmin(admin.ModelAdmin):
             index += 1
 
         return candidate
+    
+    
+    
+    @admin.display(description="Сценарий")
+    def scenario_display(self, obj):
+        scenario_raw = (obj.revenue_param or {}).get("scenario", "base")
+
+        scenario_map = {
+            "base": ("#dbeafe", "#1d4ed8", "Базовый"),
+            "optimistic": ("#dcfce7", "#166534", "Оптимистичный"),
+            "conservative": ("#fef3c7", "#92400e", "Консервативный"),
+        }
+
+        bg, color, label = scenario_map.get(
+            str(scenario_raw).lower(),
+            ("#f3f4f6", "#374151", str(scenario_raw))
+        )
+
+        return format_html(
+            '<span style="padding:3px 8px;border-radius:2px;'
+            'background:{};color:{};font-size:11px;font-weight:700;">{}</span>',
+            bg, color, label
+        )
 
     @admin.action(description="Дублировать выбранные версии бюджета")
     def duplicate_budget_versions(self, request, queryset):

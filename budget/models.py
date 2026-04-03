@@ -190,7 +190,7 @@ def wbcost_json():
 
 class BudgetVersion(models.Model):
     class BudgetType(models.TextChoices):
-        BASELINE = "baseline", "Базовый план"
+        BASELINE = "baseline", "План"
         ROLLING = "rolling", "Текущий прогноз"
         ADHOC = "adhoc", "Ad-hoc"
 
