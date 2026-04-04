@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>{{ title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 10mm 8mm 10mm 8mm;
+        }
+
+        body {
+            font-family: DejaVu Sans, Arial, sans-serif;
+            font-size: 11px;
+            color: #1f1f1f;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header {
+            margin-bottom: 16px;
+            border-bottom: 1px solid #d9d9d9;
+            padding-bottom: 10px;
+        }
+
+        .title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            font-size: 10px;
+            color: #666666;
+            line-height: 1.5;
+        }
+
+        .generated {
+            margin-top: 4px;
+            font-size: 10px;
+            color: #7a7a7a;
+        }
+
+        .cards {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 8px 0;
+            margin: 14px 0 20px 0;
+        }
+
+        .card {
+            border: 1px solid #d9d9d9;
+            background: #fbfbfb;
+            border-radius: 6px;
+            padding: 10px;
+            vertical-align: top;
+        }
+
+        .card-title {
+            font-size: 10px;
+            color: #666666;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .card-value {
+            font-size: 17px;
+            font-weight: 700;
+            color: #2f6656;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin: 18px 0 10px 0;
+        }
+
+        table.data {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin-top: 8px;
+        }
+
+        table.data th,
+            table.data td {
+                border: 1px solid #d9d9d9;
+                padding: 4px 5px;
+                font-size: 9px;
+                vertical-align: middle;
+                box-sizing: border-box;
+            }
+
+        table.data th {
+            background: #2f6656;
+            color: #ffffff;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        table.data tbody tr:nth-child(even) {
+            background: #f7f7f7;
+        }
+
+        .left {
+            text-align: left;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        .positive {
+            color: #1f5e4e;
+            font-weight: 700;
+        }
+
+        .negative {
+            color: #7a4e4e;
+            font-weight: 700;
+        }
+
+        .comment-box {
+            margin-top: 18px;
+            padding: 12px 14px;
+            border: 1px solid #d9d9d9;
+            background: #fbfbfb;
+            border-left: 4px solid #2f6656;
+            font-size: 10px;
+            line-height: 1.6;
+        }
+
+        .label-cell {
+            white-space: normal;
+        }
+
+        .row-activity {
+            font-weight: 700;
+            background: #dcece6 !important;
+        }
+
+        .row-operation {
+            font-weight: 700;
+        }
+
+        .row-item {
+            font-weight: 400;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="title">{{ title }}</div>
+        <div class="subtitle">{{ subtitle }}</div>
+        <div class="generated">Дата формирования: {{ generated_at }}</div>
+    </div>
+
+    <table class="cards">
+        <tr>
+            <td class="card">
+                <div class="card-title">План</div>
+                <div class="card-value">{{ summary.plan_total }}</div>
+            </td>
+            <td class="card">
+                <div class="card-title">Факт</div>
+                <div class="card-value">{{ summary.fact_total }}</div>
+            </td>
+            <td class="card">
+                <div class="card-title">Отклонение</div>
+                <div class="card-value {{ summary.delta_class }}">{{ summary.delta_total }}</div>
+            </td>
+            <td class="card">
+                <div class="card-title">% выполнения</div>
+                <div class="card-value">{{ summary.execution_total }}</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="section-title">Итоги по месяцам</div>
+    <table class="data">
+        <thead>
+            <tr>
+                <th style="width:16%;">Месяц</th>
+                <th style="width:28%;">План</th>
+                <th style="width:28%;">Факт</th>
+                <th style="width:14%;">Δ</th>
+                <th style="width:14%;">% вып.</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in monthly_rows %}
+            <tr>
+                <td class="left">{{ row.month }}</td>
+                <td class="right">{{ row.plan }}</td>
+                <td class="right">{{ row.fact }}</td>
+                <td class="right {{ row.delta_class }}">{{ row.delta }}</td>
+                <td class="center">{{ row.execution }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="section-title">
+            Структура бюджета{% if detail_month %} за {{ detail_month }}{% endif %}
+        </div>
+        <table class="data">
+            <thead>
+                <tr>
+                    <th style="width:38%;">Статья</th>
+                    <th style="width:20%;">План</th>
+                    <th style="width:20%;">Факт</th>
+                    <th style="width:14%;">Δ</th>
+                    <th style="width:8%;">% вып.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail_rows_month %}
+                <tr class="row-{{ row.row_type }}">
+                    <td class="left label-cell" style="padding-left: {{ row.indent_px }}px;">
+                        {{ row.label }}
+                    </td>
+                    <td class="right">{{ row.plan_total }}</td>
+                    <td class="right">{{ row.fact_total }}</td>
+                    <td class="right {{ row.delta_class }}">{{ row.delta_total }}</td>
+                    <td class="center">{{ row.execution_total }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+
+        <div class="section-title">Структура бюджета за весь период</div>
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:38%;">Статья</th>
+            <th style="width:20%;">План</th>
+            <th style="width:20%;">Факт</th>
+            <th style="width:14%;">Δ</th>
+            <th style="width:8%;">% вып.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in detail_rows_total %}
+        <tr class="row-{{ row.row_type }}">
+            <td class="left label-cell" style="padding-left: {{ row.indent_px }}px;">
+                {{ row.label }}
+            </td>
+            <td class="right">{{ row.plan_total }}</td>
+            <td class="right">{{ row.fact_total }}</td>
+            <td class="right {{ row.delta_class }}">{{ row.delta_total }}</td>
+            <td class="center">{{ row.execution_total }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+    <div class="section-title">Комментарий</div>
+    <div class="comment-box">
+        {{ comment_text }}
+    </div>
+
+</body>
+</html>

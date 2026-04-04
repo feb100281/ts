@@ -457,10 +457,8 @@ class BudgetVersionAdmin(admin.ModelAdmin):
         if obj is None:
             raise Http404("BudgetVersion not found")
 
-        response = HttpResponse(content_type="application/pdf")
-        response["Content-Disposition"] = f'attachment; filename="budget_{obj.id}.pdf"'
-        response.write(b"%PDF-1.4\n% test pdf\n")
-        return response
+        from budget.reporting.pdf.exporter import build_budget_pdf_response
+        return build_budget_pdf_response(obj)
 
     def export_excel(self, request, object_id):
         obj = self.get_object(request, object_id)
