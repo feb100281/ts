@@ -1,0 +1,336 @@
+@page {
+    size: A4;
+    margin: 10mm 8mm 10mm 8mm;
+}
+
+body {
+    font-family: DejaVu Sans, Arial, sans-serif;
+    font-size: 11px;
+    color: #1f1f1f;
+    margin: 0;
+    padding: 0;
+}
+
+.header {
+    margin-bottom: 16px;
+    border-bottom: 1px solid #d9d9d9;
+    padding-bottom: 10px;
+}
+
+.title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    line-height: 1.2;
+}
+
+.subtitle {
+    font-size: 10px;
+    color: #666666;
+    line-height: 1.5;
+}
+
+.generated {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #7a7a7a;
+}
+
+.cards {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 8px 0;
+    margin: 14px 0 20px 0;
+}
+
+.card {
+    border: 1px solid #d9d9d9;
+    background: #fbfbfb;
+    border-radius: 6px;
+    padding: 10px;
+    vertical-align: top;
+}
+
+.card-title {
+    font-size: 10px;
+    color: #666666;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    line-height: 1.3;
+}
+
+.card-value {
+    font-size: 17px;
+    font-weight: 700;
+    color: #2f6656;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.section-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin: 18px 0 10px 0;
+    line-height: 1.3;
+}
+
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin-top: 8px;
+}
+
+table.data th,
+table.data td {
+    border: 1px solid #d9d9d9;
+    padding: 4px 5px;
+    font-size: 9px;
+    vertical-align: middle;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+table.data th {
+    background: #2f6656;
+    color: #ffffff;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.3;
+}
+
+table.data td {
+    line-height: 1.35;
+}
+
+table.data tbody tr:nth-child(even) {
+    background: #f7f7f7;
+}
+
+.left {
+    text-align: left;
+}
+
+.right {
+    text-align: right;
+}
+
+.center {
+    text-align: center;
+}
+
+.positive,
+.up {
+    color: #1f5e4e;
+    font-weight: 700;
+}
+
+.negative,
+.down {
+    color: #7a4e4e;
+    font-weight: 700;
+}
+
+.flat {
+    color: #666666;
+    font-weight: 700;
+}
+
+.comment-box,
+.sales-summary-box {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid #d9d9d9;
+    background: #fbfbfb;
+    border-left: 4px solid #2f6656;
+    font-size: 10px;
+    line-height: 1.6;
+}
+
+.label-cell {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.row-activity {
+    font-weight: 700;
+    background: #dcece6 !important;
+}
+
+.row-operation {
+    font-weight: 700;
+}
+
+.row-item {
+    font-weight: 400;
+}
+
+.page-break {
+    page-break-before: always;
+}
+
+.kpi-grid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 8px;
+    margin: 10px 0 18px 0;
+}
+
+.kpi-grid td {
+    width: 25%;
+    border: 1px solid #d9d9d9;
+    background: #fbfbfb;
+    border-radius: 6px;
+    padding: 10px;
+    vertical-align: top;
+}
+
+.kpi-label {
+    font-size: 9px;
+    color: #666666;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    line-height: 1.3;
+}
+
+.kpi-main {
+    font-size: 15px;
+    font-weight: 700;
+    color: #2f6656;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.kpi-sub {
+    margin-top: 4px;
+    font-size: 9px;
+    color: #666666;
+    line-height: 1.35;
+}
+
+.chart-box {
+    margin-top: 10px;
+    border: 1px solid #d9d9d9;
+    padding: 8px;
+    background: #ffffff;
+    page-break-inside: avoid;
+}
+
+.chart-box img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.small-note {
+    font-size: 9px;
+    color: #777777;
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.nowrap {
+    white-space: nowrap;
+}
+
+.keep-together {
+    page-break-inside: avoid;
+}
+
+.muted {
+    color: #7a7a7a;
+}
+
+.text-small {
+    font-size: 9px;
+}
+
+.text-xs {
+    font-size: 8px;
+}
+
+.mt-4 {
+    margin-top: 4px;
+}
+
+.mt-8 {
+    margin-top: 8px;
+}
+
+.mt-12 {
+    margin-top: 12px;
+}
+
+.mt-16 {
+    margin-top: 16px;
+}
+
+.mb-4 {
+    margin-bottom: 4px;
+}
+
+.mb-8 {
+    margin-bottom: 8px;
+}
+
+.mb-12 {
+    margin-bottom: 12px;
+}
+
+.mb-16 {
+    margin-bottom: 16px;
+}
+
+
+
+
+.insight-box {
+    margin-top: 10px;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid #d9d9d9;
+    background: #f8fbfa;
+    border-left: 4px solid #1f6f5f;
+    font-size: 10px;
+    line-height: 1.6;
+    page-break-inside: avoid;
+}
+
+.chart-box-narrow {
+    max-width: 860px;
+}
+
+table.data td.up,
+table.data td.down,
+table.data td.flat,
+table.data .up,
+table.data .down,
+table.data .flat {
+    font-weight: 700;
+}
+
+.chart-box,
+.chart-box-narrow,
+.kpi-grid,
+.cards,
+.comment-box,
+.sales-summary-box,
+.insight-box {
+    page-break-inside: avoid;
+}
+
+
+
+.chart-box img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.insight-box strong {
+    color: #1f1f1f;
+}
+
+
