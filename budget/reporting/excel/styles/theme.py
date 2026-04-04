@@ -16,6 +16,8 @@ COLORS = {
     "negative_brown": "7A4E4E",
     "delta_red": "FBEAEA",
     "delta_green": "EAF6EE",
+    "counterparty_green": "5F7F75",
+    "counterparty_gray": "7A7A7A"
     
 
 }
@@ -48,6 +50,9 @@ FONTS = {
     "negative": Font(name="Roboto", size=10, color=COLORS["negative_brown"]),
     "negative_bold": Font(name="Roboto", size=10, bold=True, color=COLORS["negative_brown"]),
     "negative_total": Font(name="Roboto", size=11, bold=True, color=COLORS["negative_brown"]),
+    
+    "counterparty": Font(name="Roboto", size=10, italic=True, color=COLORS["counterparty_gray"]),
+    "counterparty_negative": Font(name="Roboto", size=10, color=COLORS["counterparty_gray"]),
 }
 
 thin = Side(style="thin", color=COLORS["border_gray"])
@@ -58,6 +63,8 @@ BORDERS = {
     "bottom_thin": Border(bottom=thin),
     "bottom_medium": Border(bottom=medium_dark),
     "none": Border(),
+    "left_sublevel": Border(left=thin),
+
 }
 
 ALIGNMENTS = {

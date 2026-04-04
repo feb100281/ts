@@ -714,7 +714,7 @@ def _build_total_sheet(wb, versions_data, compare_rows):
         ws,
         title="СРАВНЕНИЕ БЮДЖЕТОВ",
         subtitle="Постатейное сравнение выбранных версий — итог за период",
-        note="База сравнения определяется автоматически. Белые колонки визуально отделяют каждый бюджет.",
+        note="",
     )
 
     _paint_vertical_spacer(ws, 3, 1, max(7, ws.max_row + 50))
@@ -874,7 +874,7 @@ def build_compare_articles_sheet(wb, versions_data, detail_sheet_map):
         sheet_name="MONTHS_COMPARE",
         title="СРАВНЕНИЕ БЮДЖЕТОВ ПО МЕСЯЦАМ",
         subtitle="Постатейное сравнение выбранных версий по месяцам",
-        note="Показаны все месяцы, которые есть хотя бы в одной выбранной версии. Белые колонки отделяют месячные блоки.",
+        note="",
         versions_data=versions_data,
         compare_rows=compare_rows,
         period_type="months",
@@ -888,7 +888,7 @@ def build_compare_articles_sheet(wb, versions_data, detail_sheet_map):
         sheet_name="QUARTERS_COMPARE",
         title="СРАВНЕНИЕ БЮДЖЕТОВ ПО КВАРТАЛАМ",
         subtitle="Постатейное сравнение выбранных версий по кварталам",
-        note="Показаны все кварталы, которые есть хотя бы в одной выбранной версии. Белые колонки отделяют квартальные блоки.",
+        note="",
         versions_data=versions_data,
         compare_rows=compare_rows,
         period_type="quarters",
