@@ -31,4 +31,9 @@
         {% include "budget/appendices/_appendix_a_certificates.html" %}
     {% endif %}
 
+    {% if vat_context.mtd_category_breakdown or vat_context.ytd_category_breakdown %}
+        <div class="page-break"></div>
+        {% include "budget/appendices/_appendix_b_vat_reduced_rate.html" %}
+    {% endif %}
+
 {% endblock %}

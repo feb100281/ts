@@ -15,10 +15,17 @@
     <div class="subsection-title">Общий комментарий по НДС</div>
 </div>
 
-{% if vat_comment %}
+{% if vat_context.vat_comment %}
 <div class="insight-box">
     <strong>Комментарий по НДС:</strong><br>
-    {{ vat_comment.comment }}
+    {{ vat_context.vat_comment.comment }}
+</div>
+{% endif %}
+
+{% if vat_context.vat_category_comment %}
+<div class="insight-box">
+    <strong>Комментарий по категориям:</strong><br>
+    {{ vat_context.vat_category_comment }}
 </div>
 {% endif %}
 
@@ -214,5 +221,16 @@
     </tbody>
 </table>
 {% endif %}
+
+
+<div class="subsection-header">
+    <span class="subsection-number">I.7.7</span>
+    <div class="subsection-title">Льготная ставка НДС (10%)</div>
+</div>
+
+<div class="insight-box">
+    Детальная информация по категориям и товарам, облагаемым по льготной ставке НДС 10%,
+    приведена в <a href="#appendix-b-vat-reduced-rate">Приложении Б</a>.
+</div>
 
 {% endif %}

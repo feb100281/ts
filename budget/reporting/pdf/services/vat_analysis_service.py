@@ -118,12 +118,37 @@ def _resolve_standard_vat_rate(dt: pd.Timestamp, intervals: list[VatRateInterval
 # База продаж по дням
 # =========================
 
+def _get_latest_sales_date() -> pd.Timestamp | None:
+    """
+    Возвращает последнюю дату, по которой есть данные по продажам/возвратам
+    в таблице sales для retail_price.
+    """
+    conn = get_duckdb_conn()
+
+    query = """
+        SELECT MAX(CAST(date_from AS DATE)) AS max_dt
+        FROM sales
+        WHERE field = 'retail_price'
+          AND dtn_id IN (1, 2)
+          AND value IS NOT NULL
+    """
+
+    df = conn.execute(query).df()
+    conn.close()
+
+    if df.empty or pd.isna(df.loc[0, "max_dt"]):
+        return None
+
+    return pd.Timestamp(df.loc[0, "max_dt"]).normalize()
+
+
 def _get_vat_daily_base(
     date_from: date | str,
     date_to: date | str,
 ) -> pd.DataFrame:
     """
-    Забираем из DuckDB продажи / возвраты по дням и ставке vat_rate из product.
+    Забираем из DuckDB продажи / возвраты по дням, ставке vat_rate из product
+    и категории subjectName из cards.
 
     ВАЖНО:
     - sales.value по retail_price трактуем как сумму с НДС
@@ -136,24 +161,32 @@ def _get_vat_daily_base(
         WITH product_dim AS (
             SELECT
                 nm_id,
-                ANY_VALUE(vat_rate) AS vat_rate,
-                ANY_VALUE(title) AS title,
-                ANY_VALUE(brand) AS brand
+                ANY_VALUE(vat_rate) AS vat_rate
             FROM product
+            GROUP BY nm_id
+        ),
+        cards_dim AS (
+            SELECT
+                nm_id,
+                ANY_VALUE(json_extract_string(payload_raw, '$.subjectName')) AS subject_name
+            FROM cards
             GROUP BY nm_id
         )
         SELECT
             CAST(s.date_from AS DATE) AS dt,
             p.vat_rate AS vat_rate,
+            COALESCE(c.subject_name, 'Не указана') AS subject_name,
             SUM(CASE WHEN s.dtn_id = 2 AND s.field = 'retail_price' THEN s.value ELSE 0 END) / 100.0 AS sales_gross,
             SUM(CASE WHEN s.dtn_id = 1 AND s.field = 'retail_price' THEN s.value ELSE 0 END) / 100.0 AS returns_gross
         FROM sales s
         LEFT JOIN product_dim p
             ON p.nm_id = s.nm_id
+        LEFT JOIN cards_dim c
+            ON c.nm_id = s.nm_id
         WHERE s.field = 'retail_price'
           AND CAST(s.date_from AS DATE) BETWEEN ? AND ?
-        GROUP BY 1, 2
-        ORDER BY 1, 2
+        GROUP BY 1, 2, 3
+        ORDER BY 1, 2, 3
     """
 
     df = conn.execute(query, [date_from, date_to]).df()
@@ -164,6 +197,7 @@ def _get_vat_daily_base(
             columns=[
                 "dt",
                 "vat_rate",
+                "subject_name",
                 "sales_gross",
                 "returns_gross",
             ]
@@ -172,6 +206,7 @@ def _get_vat_daily_base(
     df["dt"] = pd.to_datetime(df["dt"])
     df["sales_gross"] = df["sales_gross"].astype(float)
     df["returns_gross"] = df["returns_gross"].astype(float)
+    df["subject_name"] = df["subject_name"].fillna("Не указана")
 
     return df
 
@@ -352,6 +387,64 @@ def _build_rate_breakdown(df: pd.DataFrame) -> list[dict[str, Any]]:
     return rows
 
 
+def _build_category_breakdown(
+    df: pd.DataFrame,
+    vat_rate: float | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Разбивка по категориям subject_name.
+    Если vat_rate передан, оставляем только строки с этой эффективной ставкой НДС.
+    Возвращаем все категории без ограничения top_n.
+    """
+    if df.empty:
+        return []
+
+    df = df.copy()
+
+    if vat_rate is not None:
+        df = df[df["effective_vat_rate"] == vat_rate].copy()
+
+    if df.empty:
+        return []
+
+    grouped_all = (
+        df.groupby("subject_name", dropna=False)[
+            ["sales_gross", "returns_gross", "sales_vat", "returns_vat", "net_gross", "net_vat", "net_no_vat"]
+        ]
+        .sum()
+        .reset_index()
+        .sort_values("net_gross", ascending=False)
+    )
+
+    total_net_gross = float(grouped_all["net_gross"].sum()) or 0.0
+    total_net_vat = float(grouped_all["net_vat"].sum()) or 0.0
+
+    rows: list[dict[str, Any]] = []
+    for _, row in grouped_all.iterrows():
+        net_gross = float(row["net_gross"] or 0)
+        net_vat = float(row["net_vat"] or 0)
+
+        revenue_share_pct = (net_gross / total_net_gross * 100.0) if total_net_gross else 0.0
+        vat_share_pct = (net_vat / total_net_vat * 100.0) if total_net_vat else 0.0
+
+        item = {
+            "subject_name": row["subject_name"] or "Не указана",
+            "sales_gross": float(row["sales_gross"] or 0),
+            "returns_gross": float(row["returns_gross"] or 0),
+            "sales_vat": float(row["sales_vat"] or 0),
+            "returns_vat": float(row["returns_vat"] or 0),
+            "net_gross": net_gross,
+            "net_vat": net_vat,
+            "net_no_vat": float(row["net_no_vat"] or 0),
+            "revenue_share_pct": revenue_share_pct,
+            "revenue_share_pct_fmt": f"{revenue_share_pct:.2f}%",
+            "vat_share_pct": vat_share_pct,
+            "vat_share_pct_fmt": f"{vat_share_pct:.2f}%",
+        }
+        rows.append(_add_format_fields(item))
+
+    return rows
+
 # =========================
 # Основной публичный метод
 # =========================
@@ -363,8 +456,30 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
     - YTD
     - кварталы текущего года и прошлого года
     - разбивка по ставкам для MTD / YTD
+    - разбивка по категориям для MTD / YTD
+
+    Логика определения даты отчета:
+    - если report_date передан -> используем его
+    - если не передан -> берём последнюю дату, по которой есть продажи/возвраты
     """
-    as_of = pd.Timestamp(report_date or date.today()).normalize()
+    if report_date is not None:
+        as_of = pd.Timestamp(report_date).normalize()
+    else:
+        latest_sales_date = _get_latest_sales_date()
+        if latest_sales_date is None:
+            return {
+                "as_of_date": None,
+                "mtd": None,
+                "ytd": None,
+                "quarter_rows": [],
+                "mtd_rate_breakdown": [],
+                "ytd_rate_breakdown": [],
+                "mtd_category_breakdown": [],
+                "ytd_category_breakdown": [],
+                "vat_comment": None,
+                "vat_category_comment": None,
+            }
+        as_of = latest_sales_date
 
     current_year_start = pd.Timestamp(year=as_of.year, month=1, day=1)
     prev_year_same_day = as_of - pd.DateOffset(years=1)
@@ -373,7 +488,6 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
     current_month_start = pd.Timestamp(year=as_of.year, month=as_of.month, day=1)
     prev_month_same_start = current_month_start - pd.DateOffset(years=1)
 
-    # Берём диапазон с прошлого года, чтобы хватило на LY MTD / LY YTD и кварталы
     load_from = min(prev_year_start, prev_month_same_start).date()
     load_to = as_of.date()
 
@@ -389,7 +503,10 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
             "quarter_rows": [],
             "mtd_rate_breakdown": [],
             "ytd_rate_breakdown": [],
+            "mtd_category_breakdown": [],
+            "ytd_category_breakdown": [],
             "vat_comment": None,
+            "vat_category_comment": None,
         }
 
     # ============
@@ -502,12 +619,27 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
     mtd_rate_breakdown = _build_rate_breakdown(current_mtd_df)
     ytd_rate_breakdown = _build_rate_breakdown(current_ytd_df)
 
+    mtd_category_breakdown = _build_category_breakdown(
+    current_mtd_df,
+    vat_rate=10,
+)
+
+    ytd_category_breakdown = _build_category_breakdown(
+        current_ytd_df,
+        vat_rate=10,
+    )
+    
     vat_comment = build_vat_comment(
         mtd=mtd,
         ytd=ytd,
         mtd_rate_breakdown=mtd_rate_breakdown,
         ytd_rate_breakdown=ytd_rate_breakdown,
         as_of=as_of,
+    )
+
+    vat_category_comment = build_vat_category_comment(
+        mtd_category_breakdown=mtd_category_breakdown,
+        ytd_category_breakdown=ytd_category_breakdown,
     )
 
     return {
@@ -517,12 +649,15 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
         "quarter_rows": quarter_rows,
         "mtd_rate_breakdown": mtd_rate_breakdown,
         "ytd_rate_breakdown": ytd_rate_breakdown,
+        "mtd_category_breakdown": mtd_category_breakdown,
+        "ytd_category_breakdown": ytd_category_breakdown,
         "vat_comment": vat_comment,
+        "vat_category_comment": vat_category_comment,
     }
 
 
 # =========================
-# Комментарий по НДС
+# Комментарии
 # =========================
 
 def build_vat_comment(
@@ -594,3 +729,32 @@ def build_vat_comment(
         "comment": comment,
         "class": trend_class,
     }
+
+
+def build_vat_category_comment(
+    mtd_category_breakdown: list[dict[str, Any]] | None,
+    ytd_category_breakdown: list[dict[str, Any]] | None,
+) -> str | None:
+    if not mtd_category_breakdown and not ytd_category_breakdown:
+        return None
+
+    parts: list[str] = []
+
+    if mtd_category_breakdown:
+        top_mtd = mtd_category_breakdown[0]
+        parts.append(
+            f"В MTD наибольший вклад в выручку формирует категория "
+            f"«{top_mtd['subject_name']}» — {top_mtd['net_gross_fmt']} руб. "
+            f"({top_mtd['revenue_share_pct_fmt']} от выручки топ-категорий) и "
+            f"{top_mtd['net_vat_fmt']} руб. НДС ({top_mtd['vat_share_pct_fmt']})."
+        )
+
+    if ytd_category_breakdown:
+        top_ytd = ytd_category_breakdown[0]
+        parts.append(
+            f"По YTD лидирующей категорией также является "
+            f"«{top_ytd['subject_name']}» — {top_ytd['net_gross_fmt']} руб. "
+            f"и {top_ytd['net_vat_fmt']} руб. НДС."
+        )
+
+    return " ".join(parts) if parts else None

@@ -1,0 +1,88 @@
+<div id="appendix-b-vat-reduced-rate"></div>
+<div class="page-break"></div>
+
+<!-- Приложение Б: Категории с льготной ставкой НДС 10% -->
+<div class="appendix-page">
+    <div class="section-header">
+        <span class="section-number">Б.</span>
+        <div class="section-title-with-num">Категории с льготной ставкой НДС 10%</div>
+    </div>
+
+    <div class="small-note">
+        Период анализа: MTD и YTD по состоянию на {{ vat_context.as_of_date|date:"d.m.Y" }}
+    </div>
+
+    <!-- MTD -->
+    <div class="subsection-header">
+        <span class="subsection-number">Б.1</span>
+        <div class="subsection-title">Структура НДС по категориям (льготная ставка 10%) — MTD</div>
+    </div>
+
+    {% if vat_context.mtd_category_breakdown %}
+    <table class="data">
+        <thead>
+            <tr>
+                <th style="width:24%;">Категория</th>
+                <th style="width:16%;">Валовая выручка</th>
+                <th style="width:14%;">Возвраты</th>
+                <th style="width:14%;">НДС</th>
+                <th style="width:16%;">Выручка без НДС</th>
+                <th style="width:8%;">Доля выручки</th>
+                <th style="width:8%;">Доля НДС</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in vat_context.mtd_category_breakdown %}
+            <tr>
+                <td class="left">{{ row.subject_name }}</td>
+                <td class="right">{{ row.net_gross_fmt }} руб.</td>
+                <td class="right negative">{{ row.returns_gross_fmt }} руб.</td>
+                <td class="right">{{ row.net_vat_fmt }} руб.</td>
+                <td class="right">{{ row.net_no_vat_fmt }} руб.</td>
+                <td class="center">{{ row.revenue_share_pct_fmt }}</td>
+                <td class="center">{{ row.vat_share_pct_fmt }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="small-note">Данные по категориям за MTD отсутствуют.</div>
+    {% endif %}
+
+    <!-- YTD -->
+    <div class="subsection-header">
+        <span class="subsection-number">Б.2</span>
+        <div class="subsection-title">Структура НДС по категориям (льготная ставка 10%) — YTD</div>
+    </div>
+
+    {% if vat_context.ytd_category_breakdown %}
+    <table class="data">
+        <thead>
+            <tr>
+                <th style="width:24%;">Категория</th>
+                <th style="width:16%;">Валовая выручка</th>
+                <th style="width:14%;">Возвраты</th>
+                <th style="width:14%;">НДС</th>
+                <th style="width:16%;">Выручка без НДС</th>
+                <th style="width:8%;">Доля выручки</th>
+                <th style="width:8%;">Доля НДС</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in vat_context.ytd_category_breakdown %}
+            <tr>
+                <td class="left">{{ row.subject_name }}</td>
+                <td class="right">{{ row.net_gross_fmt }} руб.</td>
+                <td class="right negative">{{ row.returns_gross_fmt }} руб.</td>
+                <td class="right">{{ row.net_vat_fmt }} руб.</td>
+                <td class="right">{{ row.net_no_vat_fmt }} руб.</td>
+                <td class="center">{{ row.revenue_share_pct_fmt }}</td>
+                <td class="center">{{ row.vat_share_pct_fmt }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="small-note">Данные по категориям за YTD отсутствуют.</div>
+    {% endif %}
+</div>

@@ -139,17 +139,31 @@
         </div>
 
         {% if certificate_risks %}
-        <div class="toc-section">
-            <div class="toc-item">
-                <div class="toc-item-left">
-                    <a href="#appendix-a-certificates" class="toc-link">
-                        <span class="toc-num">A.</span>
-                        <span class="toc-text">Приложение A. Детализация рисков по сертификатам</span>
-                    </a>
-                </div>
-                <div class="toc-dots"></div>
-            </div>
+<div class="toc-section">
+    <div class="toc-item">
+        <div class="toc-item-left">
+            <a href="#appendix-a-certificates" class="toc-link">
+                <span class="toc-num">A.</span>
+                <span class="toc-text">Приложение A. Детализация рисков по сертификатам</span>
+            </a>
         </div>
-        {% endif %}
+        <div class="toc-dots"></div>
+    </div>
+</div>
+{% endif %}
+
+{% if vat_context.mtd_category_breakdown or vat_context.ytd_category_breakdown %}
+<div class="toc-section">
+    <div class="toc-item">
+        <div class="toc-item-left">
+            <a href="#appendix-b-vat-reduced-rate" class="toc-link">
+                <span class="toc-num">Б.</span>
+                <span class="toc-text">Приложение Б. Категории с льготной ставкой НДС 10%</span>
+            </a>
+        </div>
+        <div class="toc-dots"></div>
+    </div>
+</div>
+{% endif %}
     </div>
 </div>
