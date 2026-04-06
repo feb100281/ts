@@ -1,3 +1,4 @@
+# budget/reporting/pdf/context/sales_context.py
 from budget.reporting.pdf.analytics.sales_analytics import (
     build_daily_correlation_context,
     build_qty_price_auto_comment,
@@ -120,9 +121,18 @@ def build_sales_pdf_block() -> dict:
     price_stats_by_category = category_data.get("price_stats_by_category", [])
     overall_price_stats = category_data.get("overall_price_stats")
 
+    total_net_base = None
+    for row in category_rows:
+        net_amount = float(row.get("net_amount") or 0)
+        share_pct = float(row.get("revenue_share_pct") or 0)
+        if net_amount > 0 and share_pct > 0:
+            total_net_base = net_amount / (share_pct / 100)
+            break
+
     category_summary = build_category_summary(
         category_rows,
         segment_rows=segment_rows,
+        total_net_base=total_net_base,
     )
 
     category_revenue_chart_base64 = build_category_revenue_chart_base64(category_rows)

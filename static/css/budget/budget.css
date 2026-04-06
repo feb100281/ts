@@ -520,7 +520,243 @@ table.data .flat {
 
 
 
+/* ============================================
+   ДОБАВИТЬ В КОНЕЦ ФАЙЛА budget.css
+   Стили для нумерации разделов согласно оглавлению
+   ============================================ */
+
+/* Заголовки разделов с нумерацией */
+.section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 20px 0 12px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #d9d9d9;
+}
+
+.section-number {
+    font-size: 13px;
+    font-weight: 700;
+    color: #2f6656;
+    min-width: 42px;
+    letter-spacing: 0.3px;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}
+
+.section-title-with-num {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    color: #1a3f3a;
+    letter-spacing: 0.3px;
+}
+
+.section-subtitle {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 16px 0 10px 0;
+    color: #2f6656;
+    padding-left: 0;
+}
+
+/* Альтернативный вариант с номером в самом заголовке */
+.section-number-inline {
+    color: #2f6656;
+    font-weight: 700;
+    margin-right: 10px;
+    font-size: 14px;
+}
+
+/* Для подразделов внутри секции */
+.subsection-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 16px 0 10px 0;
+}
+
+.subsection-number {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6f8f86;
+    min-width: 38px;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}
+
+.subsection-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    color: #3a5a52;
+}
+
+/* Для третьего уровня (I.1.1 и т.д.) */
+.subsubsection-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 12px 0 8px 0;
+}
+
+.subsubsection-number {
+    font-size: 11px;
+    font-weight: 500;
+    color: #8a9e98;
+    min-width: 35px;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}
+
+.subsubsection-title {
+    font-size: 12px;
+    font-weight: 500;
+    margin: 0;
+    color: #5b6b66;
+}
+
+/* Альтернатива — используем существующий section-title */
+.section-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 24px 0 12px 0;
+    padding-top: 8px;
+    border-top: 1px solid #d9d9d9;
+    color: #1a3f3a;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Для встроенной нумерации внутри существующего section-title */
+.section-title .section-number-inline {
+    font-size: 15px;
+}
+
+
+/* ============================================
+   РАСЧЕТ ФАКТОРОВ (I.2.3) - ДЕЛОВОЙ СТИЛЬ
+   ============================================ */
+
+.calculation-details {
+    margin-top: 12px;
+    padding: 0;
+}
+
+.calc-period {
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6656;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #d9d9d9;
+}
+
+.calc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+}
+
+.calc-table th,
+.calc-table td {
+    padding: 6px 8px;
+    text-align: left;
+    border: 1px solid #e8e8e8;
+}
+
+.calc-table th {
+    background: #eef4f2;
+    font-weight: 700;
+    color: #1a3f3a;
+}
+
+.formula {
+    font-family: 'DejaVu Sans Mono', monospace;
+    font-size: 9px;
+    color: #666;
+}
+
+.result {
+    text-align: right;
+    font-weight: 700;
+    font-family: 'DejaVu Sans Mono', monospace;
+}
+
+.result.positive {
+    color: #1f5e4e;
+}
+
+.result.negative {
+    color: #7a4e4e;
+}
+
+.calc-total {
+    background: #eef4f2;
+}
+
+.calc-total td {
+    font-weight: 700;
+}
 
 
 
 
+
+/* ============================================
+   КАРТОЧКИ МЕТРИК (ДЕЛОВОЙ СТИЛЬ)
+   ============================================ */
+
+.metrics-grid {
+    display: flex;
+    gap: 16px;
+    margin: 12px 0 20px 0;
+    flex-wrap: wrap;
+}
+
+.metric-card {
+    flex: 1;
+    min-width: 140px;
+    border: 1px solid #d9d9d9;
+    background: #ffffff;
+    padding: 12px 10px;
+    border-radius: 4px;
+}
+
+.metric-label {
+    font-size: 9px;
+    color: #666666;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 8px;
+}
+
+.metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a3f3a;
+    margin-bottom: 4px;
+}
+
+.metric-sub {
+    font-size: 9px;
+    color: #888888;
+}
+
+/* Альтернативный вариант — без рамок, только с легким фоном */
+.metric-card-light {
+    flex: 1;
+    min-width: 140px;
+    background: #f8f9fa;
+    padding: 10px 12px;
+    border-radius: 4px;
+}
+
+.metric-card-light .metric-label {
+    color: #666666;
+}
+
+.metric-card-light .metric-value {
+    color: #2f6656;
+}

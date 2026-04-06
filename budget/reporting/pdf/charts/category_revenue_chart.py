@@ -1,3 +1,4 @@
+# budget/reporting/pdf/charts/category_revenue_chart.py
 from __future__ import annotations
 
 import base64
@@ -5,6 +6,7 @@ from io import BytesIO
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.ticker import FuncFormatter  # 👈 добавили
 
 from budget.reporting.pdf.charts.styles import (
     COLOR_BG,
@@ -12,9 +14,12 @@ from budget.reporting.pdf.charts.styles import (
     COLOR_MUTED,
     COLOR_GRID,
     COLOR_PRIMARY,
-    COLOR_LINE,
     COLOR_NEGATIVE,
+    COLOR_CATEGORY_LOW_RISK,      
+    COLOR_CATEGORY_MEDIUM_RISK,  
+    COLOR_CATEGORY_HIGH_RISK, 
 )
+
 
 def _to_numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").fillna(0)
@@ -30,10 +35,10 @@ def _fmt_money_short(v: float) -> str:
 
 def _risk_color(return_rate: float) -> str:
     if return_rate <= 10:
-        return COLOR_PRIMARY
-    if return_rate <= 15:
-        return COLOR_LINE
-    return COLOR_NEGATIVE
+        return COLOR_CATEGORY_LOW_RISK
+    if return_rate <= 18:
+        return COLOR_CATEGORY_MEDIUM_RISK
+    return COLOR_CATEGORY_HIGH_RISK
 
 
 def build_category_revenue_chart_base64(rows: list[dict]) -> str | None:
@@ -56,7 +61,7 @@ def build_category_revenue_chart_base64(rows: list[dict]) -> str | None:
 
     colors = df["return_rate_pct"].apply(_risk_color).tolist()
 
-    fig_h = max(6.2, 0.42 * len(df) + 2.4)
+    fig_h = max(4.5, 0.30 * len(df) + 2.4)
     fig, ax = plt.subplots(figsize=(11.6, fig_h), dpi=180)
     fig.patch.set_facecolor(COLOR_BG)
     ax.set_facecolor(COLOR_BG)
@@ -67,7 +72,7 @@ def build_category_revenue_chart_base64(rows: list[dict]) -> str | None:
         color=colors,
         edgecolor="white",
         linewidth=0.8,
-        alpha=0.95,
+        alpha=0.92,
         zorder=3,
     )
 
@@ -80,11 +85,16 @@ def build_category_revenue_chart_base64(rows: list[dict]) -> str | None:
     )
     ax.set_xlabel("Чистая выручка, руб.", fontsize=10, color=COLOR_TEXT)
 
-    ax.grid(axis="x", linestyle="--", color=COLOR_GRID, alpha=0.45, zorder=1)
+    # 🔥 ВАЖНО: убираем экспоненту и задаём свой формат
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: _fmt_money_short(x)))
+
+    ax.grid(axis="x", linestyle="-", linewidth=0.5, color=COLOR_GRID, alpha=0.35, zorder=1)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_color(COLOR_GRID)
+    ax.spines["left"].set_linewidth(0.5)
     ax.spines["bottom"].set_color(COLOR_GRID)
+    ax.spines["bottom"].set_linewidth(0.5)
 
     ax.tick_params(axis="x", labelsize=9, colors=COLOR_MUTED)
     ax.tick_params(axis="y", labelsize=9, colors=COLOR_TEXT)
@@ -112,15 +122,19 @@ def build_category_revenue_chart_base64(rows: list[dict]) -> str | None:
             color=COLOR_TEXT,
         )
 
-    ax.text(
-        0.01,
-        0.02,
-        "Цвет столбца показывает уровень возвратов: зеленый — низкий, желтый — средний, красный — высокий.",
-        transform=ax.transAxes,
-        fontsize=8,
-        color=COLOR_MUTED,
-        ha="left",
-        va="bottom",
+    legend_elements = [
+        plt.Rectangle((0, 0), 1, 1, facecolor=COLOR_CATEGORY_LOW_RISK, edgecolor='none', alpha=0.88, label='≤10% — низкая возвратность'),
+        plt.Rectangle((0, 0), 1, 1, facecolor=COLOR_CATEGORY_MEDIUM_RISK, edgecolor='none', alpha=0.88, label='11-18% — средняя возвратность'),
+        plt.Rectangle((0, 0), 1, 1, facecolor=COLOR_CATEGORY_HIGH_RISK, edgecolor='none', alpha=0.88, label='>18% — высокая возвратность'),
+    ]
+
+    ax.legend(
+        handles=legend_elements,
+        loc='lower center',
+        bbox_to_anchor=(0.5, -0.1),
+        ncol=3,
+        fontsize=7.5,
+        frameon=False,
     )
 
     plt.tight_layout()

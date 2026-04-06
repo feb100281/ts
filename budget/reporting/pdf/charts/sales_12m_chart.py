@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
+from datetime import datetime
 
 from budget.reporting.pdf.charts.base import fig_to_base64, remove_inner_frame
 from budget.reporting.pdf.charts.helpers import (
@@ -26,11 +27,41 @@ from budget.reporting.pdf.charts.styles import (
 )
 
 
+# 🔥 Добавляем словарь месяцев
+MONTHS_RU = {
+    "01": "Янв",
+    "02": "Фев",
+    "03": "Мар",
+    "04": "Апр",
+    "05": "Май",
+    "06": "Июн",
+    "07": "Июл",
+    "08": "Авг",
+    "09": "Сен",
+    "10": "Окт",
+    "11": "Ноя",
+    "12": "Дек",
+}
+
+
+def format_month_label(label: str) -> str:
+    """
+    Преобразует '04.2025' -> 'Апр 2025'
+    """
+    try:
+        month, year = label.split(".")
+        return f"{MONTHS_RU.get(month, month)} {year}"
+    except Exception:
+        return label
+
+
 def build_sales_12m_chart_base64(month_rows: list[dict]) -> str | None:
     if not month_rows:
         return None
 
-    labels = [row["month_label"] for row in month_rows]
+    # 🔥 ВАЖНО: применяем форматирование
+    labels = [format_month_label(row["month_label"]) for row in month_rows]
+
     net_values = [float(row["net_amount"] or 0) for row in month_rows]
     avg_prices = [float(row["avg_price"] or 0) for row in month_rows]
     pct_changes = calc_pct_changes(net_values)
@@ -58,7 +89,10 @@ def build_sales_12m_chart_base64(month_rows: list[dict]) -> str | None:
     )
     ax1.set_ylabel("Чистая выручка, руб.", fontsize=10, color=COLOR_TEXT)
     ax1.set_xticks(x)
+
+    # 👇 теперь здесь уже нормальные подписи
     ax1.set_xticklabels(labels, rotation=35, ha="right", fontsize=8.5, color=COLOR_TEXT)
+
     ax1.yaxis.set_major_formatter(FuncFormatter(format_money_axis_ru))
     ax1.tick_params(axis="y", labelsize=8.5, colors=COLOR_TEXT, length=0)
     ax1.grid(axis="y", linestyle="-", linewidth=0.6, color=COLOR_GRID, alpha=0.45, zorder=0)
@@ -110,9 +144,11 @@ def build_sales_12m_chart_base64(month_rows: list[dict]) -> str | None:
         markersize=6.4,
         zorder=4,
     )
+
     ax2.set_ylabel("Средняя цена, руб./шт.", fontsize=10, color=COLOR_TEXT)
     ax2.yaxis.set_major_formatter(FuncFormatter(format_price_axis_ru))
     ax2.tick_params(axis="y", labelsize=8.5, colors=COLOR_TEXT)
+
     ax2.spines["top"].set_visible(False)
     ax2.spines["left"].set_visible(False)
     ax2.spines["bottom"].set_visible(False)

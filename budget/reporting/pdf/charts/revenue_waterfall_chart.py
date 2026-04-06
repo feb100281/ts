@@ -24,7 +24,13 @@ def build_revenue_waterfall_base64(waterfall_data: dict | None) -> str | None:
 
     start_value = float(waterfall_data["start_value"] or 0)
     end_value = float(waterfall_data["end_value"] or 0)
-    steps = waterfall_data["steps"]
+
+    # Убираем шаг "Прочие/округление", даже если он пришел в данных
+    raw_steps = waterfall_data.get("steps", [])
+    steps = [
+        s for s in raw_steps
+        if str(s.get("label", "")).strip().lower() not in {"прочие/округление", "прочие / округление"}
+    ]
 
     labels = [waterfall_data["start_label"]] + [s["label"] for s in steps] + [waterfall_data["end_label"]]
     heights = [start_value] + [float(s["value"] or 0) for s in steps] + [end_value]
@@ -48,7 +54,14 @@ def build_revenue_waterfall_base64(waterfall_data: dict | None) -> str | None:
     ax.set_facecolor(COLOR_BG)
 
     x = np.arange(len(labels))
-    bars = ax.bar(x, [abs(v) for v in heights], bottom=bottoms, color=colors, width=0.72, zorder=3)
+    bars = ax.bar(
+        x,
+        [abs(v) for v in heights],
+        bottom=bottoms,
+        color=colors,
+        width=0.72,
+        zorder=3,
+    )
 
     for i in range(1, len(labels) - 1):
         ax.plot(
@@ -59,7 +72,12 @@ def build_revenue_waterfall_base64(waterfall_data: dict | None) -> str | None:
             zorder=2,
         )
 
-    ax.set_title("Waterfall: изменение чистой выручки к предыдущему месяцу", fontsize=12, color=COLOR_TEXT, pad=12)
+    ax.set_title(
+        "Waterfall: изменение чистой выручки к предыдущему месяцу",
+        fontsize=12,
+        color=COLOR_TEXT,
+        pad=12,
+    )
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=8.5, color=COLOR_TEXT)
     ax.yaxis.set_major_formatter(FuncFormatter(format_money_axis_ru))

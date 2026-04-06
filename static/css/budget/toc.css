@@ -1,3 +1,7 @@
+/* ============================================
+   СТРАНИЦА СОДЕРЖАНИЯ — ДЕЛОВОЙ СТИЛЬ
+   ============================================ */
+
 /* Страница содержания — отдельная, строгий стиль */
 .toc-page {
     position: relative;
@@ -25,6 +29,7 @@
     background: var(--cover-primary);
 }
 
+/* Шапка оглавления */
 .toc-header {
     margin-bottom: 12mm;
 }
@@ -51,18 +56,26 @@
     margin-bottom: 12mm;
 }
 
+/* Контейнер всех элементов */
 .toc-items {
     display: flex;
     flex-direction: column;
-    gap: 6mm;
+    gap: 5mm;
 }
 
+/* Группа: раздел + его подразделы */
+.toc-section {
+    margin-bottom: 2mm;
+}
+
+/* Основной пункт (раздел) */
 .toc-item {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    border-bottom: 1px dotted var(--cover-line);
-    padding-bottom: 2mm;
+    border-bottom: 1px solid var(--cover-line);
+    padding-bottom: 2.5mm;
+    margin-bottom: 2.5mm;
 }
 
 .toc-item-left {
@@ -75,13 +88,13 @@
     font-size: 12px;
     font-weight: 700;
     color: var(--cover-primary);
-    min-width: 25px;
+    min-width: 28px;
     letter-spacing: 0.5px;
 }
 
 .toc-text {
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--cover-ink);
     letter-spacing: 0.2px;
 }
@@ -93,12 +106,9 @@
     height: 1px;
 }
 
-/* Альтернатива с точками вместо линии */
 .toc-item:hover .toc-dots {
     border-bottom-color: var(--cover-primary);
 }
-
-
 
 .toc-link {
     text-decoration: none;
@@ -113,9 +123,81 @@
     color: var(--cover-primary);
 }
 
+/* ============================================
+   ПОДПУНКТЫ — АККУРАТНОЕ ВЫРАВНИВАНИЕ
+   ============================================ */
 
+.toc-subitems {
+    margin-left: 36px;  /* Отступ относительно номера раздела */
+    margin-bottom: 3mm;
+}
 
-/* Убедись, что нет лишних границ */
+.toc-subitem {
+    display: flex;
+    align-items: center;
+    padding: 2px 0;
+    border-left: 2px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.toc-subitem:hover {
+    border-left-color: var(--cover-primary);
+}
+
+.toc-subitem .toc-link {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    padding: 2px 0 2px 12px;
+}
+
+.toc-subnum {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--cover-muted);
+    min-width: 32px;
+    letter-spacing: 0.3px;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}
+
+.toc-subtext {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--cover-ink-light);
+    letter-spacing: 0.15px;
+    line-height: 1.4;
+}
+
+.toc-subitem:hover .toc-subnum {
+    color: var(--cover-primary);
+}
+
+.toc-subitem:hover .toc-subtext {
+    color: var(--cover-ink);
+    font-weight: 450;
+}
+
+/* Для подпунктов без точек — добавляем пунктирную линию справа */
+.toc-subitem .toc-link::after {
+    content: "";
+    flex: 1;
+    margin-left: 12px;
+    border-bottom: 1px dotted var(--cover-line);
+    height: 1px;
+    align-self: center;
+}
+
+/* При ховере линия становится заметнее */
+.toc-subitem:hover .toc-link::after {
+    border-bottom-color: var(--cover-primary);
+}
+
+/* ============================================
+   УТИЛИТЫ И ОЧИСТКА
+   ============================================ */
+
 .toc-page {
     border: none;
 }
@@ -124,6 +206,13 @@
     border: none;
 }
 
-.toc-item:last-child {
+.toc-section:last-child .toc-item:last-child {
     border-bottom: none;
+}
+
+/* Для PDF-печати */
+@media print {
+    .toc-subitem .toc-link::after {
+        border-bottom-style: dotted;
+    }
 }

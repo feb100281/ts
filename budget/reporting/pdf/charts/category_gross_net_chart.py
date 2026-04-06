@@ -1,3 +1,4 @@
+# budget/reporting/pdf/charts/category_gross_net_chart.py
 from __future__ import annotations
 
 import base64
@@ -6,6 +7,8 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+
+from matplotlib.ticker import FuncFormatter
 
 from budget.reporting.pdf.charts.styles import (
     COLOR_BG,
@@ -101,6 +104,10 @@ def build_category_gross_net_chart_base64(rows: list[dict]) -> str | None:
 
     max_x = float(df["sales_amount"].max()) if not df.empty else 0
     ax.set_xlim(0, max_x * 1.30 if max_x > 0 else 1)
+
+    ax.xaxis.set_major_formatter(
+        FuncFormatter(lambda x, _: f"{int(x):,}".replace(",", " "))
+    )
 
     for i, (_, row) in enumerate(df.iterrows()):
         sales = float(row["sales_amount"])

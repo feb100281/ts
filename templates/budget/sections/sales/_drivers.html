@@ -1,0 +1,112 @@
+<div id="section-sales-drivers"></div>
+
+<div class="page-break"></div>
+
+<!-- Раздел I.2: Драйверы изменения выручки -->
+<div class="section-header">
+    <span class="section-number">I.2</span>
+    <div class="section-title-with-num">Драйверы изменения выручки</div>
+</div>
+
+{% if sales_block.driver_rows %}
+<!-- Подраздел I.2.1: Таблица драйверов -->
+<div class="subsection-header">
+    <span class="subsection-number">I.2.1</span>
+    <div class="subsection-title">Факторный анализ по месяцам</div>
+</div>
+
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:16%;">Период</th>
+            <th style="width:16%;">Δ количества</th>
+            <th style="width:16%;">Δ средней цены</th>
+            <th style="width:16%;">Δ чистой выручки</th>
+            <th style="width:18%;">Изменение, руб.</th>
+            <th style="width:18%;">Ключевой драйвер</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in sales_block.driver_rows %}
+        <tr>
+            <td class="left">{{ row.month_label }}</td>
+            <td class="center {{ row.delta_qty_class }}">{{ row.delta_qty_pct_fmt }}</td>
+            <td class="center {{ row.delta_price_class }}">{{ row.delta_price_pct_fmt }}</td>
+            <td class="center {{ row.delta_net_class }}">{{ row.delta_net_pct_fmt }}</td>
+            <td class="right">{{ row.delta_net_abs_fmt }}</td>
+            <td class="center {{ row.driver_class }}">{{ row.driver }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="small-note">
+    Таблица показывает, за счет какого фактора в каждом месяце в большей степени менялась чистая выручка.
+</div>
+{% endif %}
+
+{% if sales_block.waterfall_data %}
+<!-- Подраздел I.2.2: Waterfall график -->
+<div class="subsection-header">
+    <span class="subsection-number">I.2.2</span>
+    <div class="subsection-title">Факторный анализ изменения чистой выручки</div>
+</div>
+
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ revenue_waterfall_base64 }}" alt="Waterfall выручки">
+</div>
+
+<!-- Подраздел I.2.3: Расчет влияния факторов -->
+<div class="subsection-header">
+    <span class="subsection-number">I.2.3</span>
+    <div class="subsection-title">Расчет влияния факторов</div>
+</div>
+
+<div class="calculation-details">
+    {% with wd=sales_block.waterfall_data %}
+    
+    <div class="calc-period">{{ wd.start_label }} → {{ wd.end_label }}</div>
+    
+    <table class="calc-table">
+        <thead>
+            <tr>
+                <th>Фактор</th>
+                <th>Формула</th>
+                <th>Расчет</th>
+                <th>Результат</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Эффект объема</td>
+                <td class="formula">(Q₁ - Q₀) × P₀</td>
+                <td class="formula">({{ wd.current_qty|floatformat:0 }} - {{ wd.prev_qty|floatformat:0 }}) × {{ wd.prev_price|floatformat:2 }}</td>
+                <td class="result positive">{{ wd.volume_effect|floatformat:2 }} руб.</td>
+            </tr>
+            <tr>
+                <td>Эффект цены</td>
+                <td class="formula">Q₁ × (P₁ - P₀)</td>
+                <td class="formula">{{ wd.current_qty|floatformat:0 }} × ({{ wd.current_price|floatformat:2 }} - {{ wd.prev_price|floatformat:2 }})</td>
+                <td class="result positive">{{ wd.price_effect|floatformat:2 }} руб.</td>
+            </tr>
+            <tr>
+                <td>Эффект возвратов</td>
+                <td class="formula">-(Возвраты₁ - Возвраты₀)</td>
+                <td class="formula">-({{ wd.current_returns|floatformat:2 }} - {{ wd.prev_returns|floatformat:2 }})</td>
+                <td class="result negative">{{ wd.returns_effect|floatformat:2 }} руб.</td>
+            </tr>
+            <tr class="calc-total">
+                <td colspan="3"><strong>Итого изменение</strong></td>
+                <td class="result positive"><strong>{{ wd.total_change|floatformat:2 }} руб.</strong></td>
+            </tr>
+        </tbody>
+    </table>
+    
+    {% endwith %}
+</div>
+
+<div class="small-note margin-top-12">
+    График показывает вклад основных факторов в изменение чистой выручки последнего месяца
+    относительно предыдущего: объема продаж, средней цены и возвратов.
+</div>
+{% endif %}
