@@ -1,0 +1,129 @@
+/* Страница содержания — отдельная, строгий стиль */
+.toc-page {
+    position: relative;
+    box-sizing: border-box;
+    background: var(--cover-surface);
+    margin-top: calc(-1 * var(--page-margin-top));
+    margin-right: calc(-1 * var(--page-margin-right));
+    margin-bottom: calc(-1 * var(--page-margin-bottom));
+    margin-left: calc(-1 * var(--page-margin-left));
+    width: calc(100% + var(--page-margin-left) + var(--page-margin-right));
+    height: 277mm;
+    padding: calc(25mm + var(--page-margin-top)) calc(20mm + var(--page-margin-right)) calc(14mm + var(--page-margin-bottom)) calc(20mm + var(--page-margin-left));
+    page-break-after: always;
+    border-radius: 0;
+}
+
+/* Левая акцентная полоса (как на обложке) */
+.toc-page::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    background: var(--cover-primary);
+}
+
+.toc-header {
+    margin-bottom: 12mm;
+}
+
+.toc-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--cover-primary-dark);
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    margin-bottom: 3mm;
+}
+
+.toc-date {
+    font-size: 9px;
+    color: var(--cover-muted);
+    letter-spacing: 0.3px;
+}
+
+.toc-divider {
+    height: 2px;
+    background: var(--cover-primary);
+    width: 40px;
+    margin-bottom: 12mm;
+}
+
+.toc-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6mm;
+}
+
+.toc-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px dotted var(--cover-line);
+    padding-bottom: 2mm;
+}
+
+.toc-item-left {
+    display: flex;
+    align-items: baseline;
+    gap: 8mm;
+}
+
+.toc-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--cover-primary);
+    min-width: 25px;
+    letter-spacing: 0.5px;
+}
+
+.toc-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--cover-ink);
+    letter-spacing: 0.2px;
+}
+
+.toc-dots {
+    flex: 1;
+    margin-left: 8mm;
+    border-bottom: 1px dotted var(--cover-line-strong);
+    height: 1px;
+}
+
+/* Альтернатива с точками вместо линии */
+.toc-item:hover .toc-dots {
+    border-bottom-color: var(--cover-primary);
+}
+
+
+
+.toc-link {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    align-items: baseline;
+    gap: 8mm;
+    flex: 1;
+}
+
+.toc-link:hover {
+    color: var(--cover-primary);
+}
+
+
+
+/* Убедись, что нет лишних границ */
+.toc-page {
+    border: none;
+}
+
+.toc-items {
+    border: none;
+}
+
+.toc-item:last-child {
+    border-bottom: none;
+}

@@ -1,0 +1,76 @@
+<div class="toc-page keep-together">
+    <div class="toc-header">
+        <div class="toc-title">Содержание</div>
+        <div class="toc-date">Дата формирования: {{ generated_at }}</div>
+    </div>
+
+    <div class="toc-divider"></div>
+
+    <div class="toc-items">
+        {% if sales_block %}
+        <div class="toc-item">
+            <div class="toc-item-left">
+                <a href="#section-sales" class="toc-link">
+                    <span class="toc-num">I.</span>
+                    <span class="toc-text">Операционные показатели продаж</span>
+                </a>
+            </div>
+            <div class="toc-dots"></div>
+        </div>
+        {% endif %}
+
+        <div class="toc-item">
+            <div class="toc-item-left">
+                <a href="#section-summary" class="toc-link">
+                    <span class="toc-num">{% if sales_block %}II.{% else %}I.{% endif %}</span>
+                    <span class="toc-text">Сводные итоги исполнения бюджета</span>
+                </a>
+            </div>
+            <div class="toc-dots"></div>
+        </div>
+
+        <div class="toc-item">
+            <div class="toc-item-left">
+                <a href="#section-detail-month" class="toc-link">
+                    <span class="toc-num">{% if sales_block %}III.{% else %}II.{% endif %}</span>
+                    <span class="toc-text">Структура бюджета за месяц</span>
+                </a>
+            </div>
+            <div class="toc-dots"></div>
+        </div>
+
+        <div class="toc-item">
+            <div class="toc-item-left">
+                <a href="#section-detail-total" class="toc-link">
+                    <span class="toc-num">{% if sales_block %}IV.{% else %}III.{% endif %}</span>
+                    <span class="toc-text">Структура бюджета за весь период</span>
+                </a>
+            </div>
+            <div class="toc-dots"></div>
+        </div>
+
+        <div class="toc-item">
+            <div class="toc-item-left">
+                <a href="#section-comment" class="toc-link">
+                    <span class="toc-num">{% if sales_block %}V.{% else %}IV.{% endif %}</span>
+                    <span class="toc-text">Комментарий</span>
+                </a>
+            </div>
+            <div class="toc-dots"></div>
+        </div>
+
+
+
+<div class="toc-item">
+    <div class="toc-item-left">
+        <a href="#appendix-a-certificates" class="toc-link">
+            <span class="toc-num">A.</span>
+            <span class="toc-text">Приложение A. Детализация рисков по сертификатам</span>
+        </a>
+    </div>
+    <div class="toc-dots"></div>
+</div>
+
+
+    </div>
+</div>

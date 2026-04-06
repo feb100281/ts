@@ -91,12 +91,16 @@ def render_pdf(report: dict, output_name: str = "report.pdf") -> Path:
     html = template.render(report=report)
 
     output_path = current_dir / output_name
+    
+    # ✅ Пути к CSS файлам
     css_path = templates_dir / "budget.css"
     cover_css_path = templates_dir / "cover.css"
+    toc_css_path = templates_dir / "toc.css"
 
     stylesheets = [
         CSS(filename=str(css_path)),
-        CSS(filename=str(cover_css_path))
+        CSS(filename=str(cover_css_path)),
+        CSS(filename=str(toc_css_path))  
     ]
 
     HTML(string=html, base_url=str(project_dir)).write_pdf(

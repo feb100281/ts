@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% comment %} <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="utf-8">
@@ -424,6 +424,39 @@
     <div class="comment-box">
         {{ comment_text }}
     </div>
+
+</body>
+</html> {% endcomment %}
+
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>{{ title }}</title>
+</head>
+<body>
+
+    {% if show_cover %}
+        {% include "budget/partials/_cover.html" %}
+        <div class="page-break"></div>
+    {% endif %}
+
+    {% if show_toc %}
+        {% include "budget/partials/_toc.html" %}
+        <div class="page-break"></div>
+    {% endif %}
+
+
+
+    {% if sales_block %}
+        {% include "budget/sections/_sales_section.html" %}
+    {% endif %}
+
+    {% include "budget/sections/_budget_summary_section.html" %}
+    {% include "budget/sections/_budget_detail_month_section.html" %}
+    {% include "budget/sections/_budget_detail_total_section.html" %}
+    {% include "budget/partials/_comment_box.html" %}
 
 </body>
 </html>
