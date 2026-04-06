@@ -1,0 +1,218 @@
+<div id="section-vat"></div>
+<div class="page-break"></div>
+
+<!-- Раздел I.7: Анализ НДС -->
+<div class="section-header">
+    <span class="section-number">I.7</span>
+    <div class="section-title-with-num">Анализ НДС</div>
+</div>
+
+{% if vat_context %}
+
+<!-- Подраздел I.7.1: Общий комментарий по НДС -->
+<div class="subsection-header">
+    <span class="subsection-number">I.7.1</span>
+    <div class="subsection-title">Общий комментарий по НДС</div>
+</div>
+
+{% if vat_comment %}
+<div class="insight-box">
+    <strong>Комментарий по НДС:</strong><br>
+    {{ vat_comment.comment }}
+</div>
+{% endif %}
+
+<!-- Подраздел I.7.2: Показатели MTD -->
+<div class="subsection-header">
+    <span class="subsection-number">I.7.2</span>
+    <div class="subsection-title">Показатели MTD</div>
+</div>
+
+{% if vat_context.mtd %}
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:30%;">Показатель</th>
+            <th style="width:25%;">Текущий период</th>
+            <th style="width:25%;">Аналогичный период прошлого года</th>
+            <th style="width:20%;">Изменение</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="left">Валовая выручка</td>
+            <td class="right">{{ vat_context.mtd.current.net_gross_fmt }} руб.</td>
+            <td class="right">{{ vat_context.mtd.previous.net_gross_fmt }} руб.</td>
+            <td class="center">{{ vat_context.mtd.net_gross_change_pct_fmt }}</td>
+        </tr>
+        <tr>
+            <td class="left">НДС</td>
+            <td class="right">{{ vat_context.mtd.current.net_vat_fmt }} руб.</td>
+            <td class="right">{{ vat_context.mtd.previous.net_vat_fmt }} руб.</td>
+            <td class="center">{{ vat_context.mtd.net_vat_change_pct_fmt }}</td>
+        </tr>
+        <tr>
+            <td class="left">Выручка без НДС</td>
+            <td class="right">{{ vat_context.mtd.current.net_no_vat_fmt }} руб.</td>
+            <td class="right">{{ vat_context.mtd.previous.net_no_vat_fmt }} руб.</td>
+            <td class="center">{{ vat_context.mtd.net_no_vat_change_pct_fmt }}</td>
+        </tr>
+        <tr>
+            <td class="left">Возвраты (с НДС)</td>
+            <td class="right negative">{{ vat_context.mtd.current.returns_gross_fmt }} руб.</td>
+            <td class="right negative">{{ vat_context.mtd.previous.returns_gross_fmt }} руб.</td>
+            <td class="center">—</td>
+        </tr>
+    </tbody>
+</table>
+{% endif %}
+
+<!-- Подраздел I.7.3: Показатели YTD -->
+<div class="subsection-header">
+    <span class="subsection-number">I.7.3</span>
+    <div class="subsection-title">Показатели YTD</div>
+</div>
+
+{% if vat_context.ytd %}
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:30%;">Показатель</th>
+            <th style="width:25%;">Текущий период</th>
+            <th style="width:25%;">Аналогичный период прошлого года</th>
+            <th style="width:20%;">Изменение</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="left">Валовая выручка</td>
+            <td class="right">{{ vat_context.ytd.current.net_gross_fmt }} руб.</td>
+            <td class="right">{{ vat_context.ytd.previous.net_gross_fmt }} руб.</td>
+            <td class="center">{{ vat_context.ytd.net_gross_change_pct_fmt }}</td>
+        </tr>
+        <tr>
+            <td class="left">НДС</td>
+            <td class="right">{{ vat_context.ytd.current.net_vat_fmt }} руб.</td>
+            <td class="right">{{ vat_context.ytd.previous.net_vat_fmt }} руб.</td>
+            <td class="center">{{ vat_context.ytd.net_vat_change_pct_fmt }}</td>
+        </tr>
+        <tr>
+            <td class="left">Выручка без НДС</td>
+            <td class="right">{{ vat_context.ytd.current.net_no_vat_fmt }} руб.</td>
+            <td class="right">{{ vat_context.ytd.previous.net_no_vat_fmt }} руб.</td>
+            <td class="center">{{ vat_context.ytd.net_no_vat_change_pct_fmt }}</td>
+        </tr>
+        <tr>
+            <td class="left">Возвраты (с НДС)</td>
+            <td class="right negative">{{ vat_context.ytd.current.returns_gross_fmt }} руб.</td>
+            <td class="right negative">{{ vat_context.ytd.previous.returns_gross_fmt }} руб.</td>
+            <td class="center">—</td>
+        </tr>
+    </tbody>
+</table>
+{% endif %}
+
+<!-- Подраздел I.7.4: Квартальная динамика НДС -->
+<div class="subsection-header">
+    <span class="subsection-number">I.7.4</span>
+    <div class="subsection-title">Квартальная динамика НДС</div>
+</div>
+
+{% if vat_context.quarter_rows %}
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:15%;">Квартал</th>
+            <th style="width:25%;">Период</th>
+            <th style="width:18%;">НДС, текущий год</th>
+            <th style="width:18%;">НДС, прошлый год</th>
+            <th style="width:12%;">Изменение</th>
+            <th style="width:12%;">Выручка без НДС</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in vat_context.quarter_rows %}
+        <tr>
+            <td class="left">{{ row.quarter }} {{ row.year }}</td>
+            <td class="left">{{ row.current_start|date:"d.m.Y" }} – {{ row.current_end|date:"d.m.Y" }}</td>
+            <td class="right">{{ row.current_net_vat_fmt }} руб.</td>
+            <td class="right">{{ row.previous_net_vat_fmt }} руб.</td>
+            <td class="center">{{ row.net_vat_change_pct_fmt }}</td>
+            <td class="right">{{ row.current_net_no_vat_fmt }} руб.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="small-note">
+    По кварталам показатели сопоставлены с аналогичными периодами прошлого года.
+    Для незавершенного квартала используется накопленный результат по состоянию на {{ vat_context.as_of_date|date:"d.m.Y" }}.
+</div>
+{% endif %}
+
+<!-- Подраздел I.7.5: Структура НДС по ставкам — MTD -->
+<div class="subsection-header">
+    <span class="subsection-number">I.7.5</span>
+    <div class="subsection-title">Структура НДС по ставкам — MTD</div>
+</div>
+
+{% if vat_context.mtd_rate_breakdown %}
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:15%;">Ставка НДС</th>
+            <th style="width:17%;">Валовая выручка</th>
+            <th style="width:17%;">Возвраты</th>
+            <th style="width:17%;">НДС</th>
+            <th style="width:17%;">Выручка без НДС</th>
+            <th style="width:17%;">Доля в НДС</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in vat_context.mtd_rate_breakdown %}
+        <tr>
+            <td class="left">{{ row.vat_rate_label }}</td>
+            <td class="right">{{ row.net_gross_fmt }} руб.</td>
+            <td class="right negative">{{ row.returns_gross_fmt }} руб.</td>
+            <td class="right">{{ row.net_vat_fmt }} руб.</td>
+            <td class="right">{{ row.net_no_vat_fmt }} руб.</td>
+            <td class="center">{{ row.share_pct_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<!-- Подраздел I.7.6: Структура НДС по ставкам — YTD -->
+<div class="subsection-header">
+    <span class="subsection-number">I.7.6</span>
+    <div class="subsection-title">Структура НДС по ставкам — YTD</div>
+</div>
+
+{% if vat_context.ytd_rate_breakdown %}
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:15%;">Ставка НДС</th>
+            <th style="width:17%;">Валовая выручка</th>
+            <th style="width:17%;">Возвраты</th>
+            <th style="width:17%;">НДС</th>
+            <th style="width:17%;">Выручка без НДС</th>
+            <th style="width:17%;">Доля в НДС</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in vat_context.ytd_rate_breakdown %}
+        <tr>
+            <td class="left">{{ row.vat_rate_label }}</td>
+            <td class="right">{{ row.net_gross_fmt }} руб.</td>
+            <td class="right negative">{{ row.returns_gross_fmt }} руб.</td>
+            <td class="right">{{ row.net_vat_fmt }} руб.</td>
+            <td class="right">{{ row.net_no_vat_fmt }} руб.</td>
+            <td class="center">{{ row.share_pct_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% endif %}

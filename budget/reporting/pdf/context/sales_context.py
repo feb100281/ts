@@ -72,6 +72,10 @@ from budget.reporting.pdf.charts.category_gross_net_chart import (build_category
 
 from budget.reporting.pdf.services.sales_kpi_service import build_sales_kpi_context
 
+from budget.reporting.pdf.services.vat_analysis_service import (
+    get_vat_analysis_context,
+)
+
 
 def build_sales_pdf_block() -> dict:
     sales_context = build_sales_kpi_context()
@@ -163,6 +167,9 @@ def build_sales_pdf_block() -> dict:
         sales_by_country,
         label_mode="share",
     )
+    
+    
+    vat_context = get_vat_analysis_context()
 
     return {
         "sales_block": sales_block,
@@ -208,4 +215,7 @@ def build_sales_pdf_block() -> dict:
         "weekly_qty_chart_base64": weekly_qty_chart_base64,
         "weekly_avg_price_chart_base64": weekly_avg_price_chart_base64,
         "sales_country_map_base64": sales_country_map_base64,
+        
+        "vat_context": vat_context,
+        "vat_comment": vat_context.get("vat_comment"),
     }
