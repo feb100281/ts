@@ -4,11 +4,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
-
+import json
 import pandas as pd
 from django.db import connection
 
 from budget.reporting.pdf.services.sales_data_service import get_duckdb_conn
+from budget.reporting.pdf.charts.vat_rate_pie_chart import build_vat_rate_pie_chart_base64
+from budget.reporting.pdf.charts.vat_quarterly_trend_chart import build_vat_quarterly_trend_chart_base64
+from budget.reporting.pdf.services.vat_validation_service import get_vat_validation_report
 
 
 # =========================
@@ -149,11 +152,6 @@ def _get_vat_daily_base(
     """
     Забираем из DuckDB продажи / возвраты по дням, ставке vat_rate из product
     и категории subjectName из cards.
-
-    ВАЖНО:
-    - sales.value по retail_price трактуем как сумму с НДС
-    - dtn_id = 2 -> продажа
-    - dtn_id = 1 -> возврат
     """
     conn = get_duckdb_conn()
 
@@ -174,6 +172,7 @@ def _get_vat_daily_base(
         )
         SELECT
             CAST(s.date_from AS DATE) AS dt,
+            s.nm_id,
             p.vat_rate AS vat_rate,
             COALESCE(c.subject_name, 'Не указана') AS subject_name,
             SUM(CASE WHEN s.dtn_id = 2 AND s.field = 'retail_price' THEN s.value ELSE 0 END) / 100.0 AS sales_gross,
@@ -185,8 +184,8 @@ def _get_vat_daily_base(
             ON c.nm_id = s.nm_id
         WHERE s.field = 'retail_price'
           AND CAST(s.date_from AS DATE) BETWEEN ? AND ?
-        GROUP BY 1, 2, 3
-        ORDER BY 1, 2, 3
+        GROUP BY 1, 2, 3, 4
+        ORDER BY 1, 2, 3, 4
     """
 
     df = conn.execute(query, [date_from, date_to]).df()
@@ -196,6 +195,7 @@ def _get_vat_daily_base(
         return pd.DataFrame(
             columns=[
                 "dt",
+                "nm_id",
                 "vat_rate",
                 "subject_name",
                 "sales_gross",
@@ -241,17 +241,50 @@ def _apply_effective_vat_rate(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# def _calculate_vat_columns(df: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Из суммы с НДС выделяем:
+#     - НДС
+#     - выручку без НДС
+#     """
+#     if df.empty:
+#         return df
+
+#     df = df.copy()
+
+#     rate_factor = df["effective_vat_rate"] / (100.0 + df["effective_vat_rate"])
+
+#     df["sales_vat"] = df["sales_gross"] * rate_factor
+#     df["returns_vat"] = df["returns_gross"] * rate_factor
+
+#     df["sales_net_no_vat"] = df["sales_gross"] - df["sales_vat"]
+#     df["returns_net_no_vat"] = df["returns_gross"] - df["returns_vat"]
+
+#     df["net_gross"] = df["sales_gross"] - df["returns_gross"]
+#     df["net_vat"] = df["sales_vat"] - df["returns_vat"]
+#     df["net_no_vat"] = df["sales_net_no_vat"] - df["returns_net_no_vat"]
+
+#     return df
+
+
+
+
 def _calculate_vat_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Из суммы с НДС выделяем:
-    - НДС
+    - фактический НДС
     - выручку без НДС
+    - эффект по НДС относительно льготной ставки 10%
+      (при условии, что gross-выручка остается той же)
     """
     if df.empty:
         return df
 
     df = df.copy()
 
+    # =========================
+    # Фактический НДС
+    # =========================
     rate_factor = df["effective_vat_rate"] / (100.0 + df["effective_vat_rate"])
 
     df["sales_vat"] = df["sales_gross"] * rate_factor
@@ -263,6 +296,37 @@ def _calculate_vat_columns(df: pd.DataFrame) -> pd.DataFrame:
     df["net_gross"] = df["sales_gross"] - df["returns_gross"]
     df["net_vat"] = df["sales_vat"] - df["returns_vat"]
     df["net_no_vat"] = df["sales_net_no_vat"] - df["returns_net_no_vat"]
+
+    # =========================
+    # Сценарий: если бы была ставка 10%
+    # при той же gross-выручке
+    # =========================
+    reduced_rate = 10.0
+    reduced_rate_factor = reduced_rate / (100.0 + reduced_rate)
+
+    df["sales_vat_at_10"] = df["sales_gross"] * reduced_rate_factor
+    df["returns_vat_at_10"] = df["returns_gross"] * reduced_rate_factor
+
+    df["sales_net_no_vat_at_10"] = df["sales_gross"] - df["sales_vat_at_10"]
+    df["returns_net_no_vat_at_10"] = df["returns_gross"] - df["returns_vat_at_10"]
+
+    df["net_vat_at_10"] = df["sales_vat_at_10"] - df["returns_vat_at_10"]
+    df["net_no_vat_at_10"] = df["sales_net_no_vat_at_10"] - df["returns_net_no_vat_at_10"]
+
+    # =========================
+    # Эффект:
+    # сколько НДС переплачено относительно 10%
+    # =========================
+    df["sales_vat_effect_vs_10"] = df["sales_vat"] - df["sales_vat_at_10"]
+    df["returns_vat_effect_vs_10"] = df["returns_vat"] - df["returns_vat_at_10"]
+    df["net_vat_effect_vs_10"] = df["net_vat"] - df["net_vat_at_10"]
+
+    # Эффект только там, где фактическая ставка выше 10%
+    mask_no_effect = df["effective_vat_rate"] <= 10.0
+
+    df.loc[mask_no_effect, "sales_vat_effect_vs_10"] = 0.0
+    df.loc[mask_no_effect, "returns_vat_effect_vs_10"] = 0.0
+    df.loc[mask_no_effect, "net_vat_effect_vs_10"] = 0.0
 
     return df
 
@@ -394,7 +458,6 @@ def _build_category_breakdown(
     """
     Разбивка по категориям subject_name.
     Если vat_rate передан, оставляем только строки с этой эффективной ставкой НДС.
-    Возвращаем все категории без ограничения top_n.
     """
     if df.empty:
         return []
@@ -445,22 +508,177 @@ def _build_category_breakdown(
 
     return rows
 
+
+def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
+    """
+    Собирает данные о товарах для валидации НДС.
+    """
+    if not nm_ids:
+        return pd.DataFrame()
+
+    conn = get_duckdb_conn()
+    nm_ids_str = ",".join(str(int(nid)) for nid in nm_ids)
+
+    query = f"""
+        SELECT
+            p.nm_id,
+            p.vat_rate,
+            c.payload_raw
+        FROM product p
+        LEFT JOIN cards c
+            ON c.nm_id = p.nm_id
+        WHERE p.nm_id IN ({nm_ids_str})
+    """
+
+    df = conn.execute(query).df()
+    conn.close()
+
+    if df.empty:
+        return df
+
+    tnved_list = []
+    description_list = []
+    subject_name_list = []
+    title_list = []
+
+    for _, row in df.iterrows():
+        payload_raw = row.get("payload_raw")
+        payload = None
+
+        tnved = None
+        description = None
+        subject_name = None
+        title = None
+
+        if payload_raw:
+            try:
+                payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+            except (json.JSONDecodeError, TypeError):
+                payload = None
+
+        if isinstance(payload, dict):
+            subject_name = payload.get("subjectName")
+            title = payload.get("title")
+            description = payload.get("description")
+
+            chars = payload.get("characteristics", []) or []
+            for char in chars:
+                name = str(char.get("name", "")).strip().lower()
+                value = char.get("value", [])
+
+                first_value = None
+                if isinstance(value, list) and value:
+                    first_value = value[0]
+                elif value not in (None, "", []):
+                    first_value = value
+
+                if name == "тнвэд" and first_value is not None:
+                    tnved = str(first_value)
+
+                if ("описание" in name or name == "description") and first_value is not None and not description:
+                    description = str(first_value)
+
+        tnved_list.append(tnved)
+        description_list.append(description)
+        subject_name_list.append(subject_name)
+        title_list.append(title)
+
+    df["tnved_code"] = tnved_list
+    df["description"] = description_list
+    df["subject_name"] = subject_name_list
+    df["title"] = title_list
+
+    return df
+
+
+def _get_product_sales_by_year(nm_ids: list[int]) -> pd.DataFrame:
+    """
+    Продажи по товарам по годам.
+    Берем net gross: продажи - возвраты.
+    """
+    if not nm_ids:
+        return pd.DataFrame()
+
+    conn = get_duckdb_conn()
+    nm_ids_str = ",".join(str(int(nid)) for nid in nm_ids)
+
+    query = f"""
+        SELECT
+            s.nm_id,
+            EXTRACT(YEAR FROM CAST(s.date_from AS DATE)) AS sale_year,
+            MAX(CAST(s.date_from AS DATE)) AS last_sale_date,
+            SUM(
+                CASE
+                    WHEN s.dtn_id = 2 AND s.field = 'retail_price' THEN s.value
+                    WHEN s.dtn_id = 1 AND s.field = 'retail_price' THEN -s.value
+                    ELSE 0
+                END
+            ) / 100.0 AS net_sales_gross
+        FROM sales s
+        WHERE s.field = 'retail_price'
+          AND s.nm_id IN ({nm_ids_str})
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+    """
+
+    df = conn.execute(query).df()
+    conn.close()
+
+    if df.empty:
+        return df
+
+    df["sale_year"] = df["sale_year"].astype(int)
+    df["net_sales_gross"] = df["net_sales_gross"].astype(float)
+    df["last_sale_date"] = pd.to_datetime(df["last_sale_date"])
+
+    return df
+
+
+def _get_product_quantity_sales_by_year(nm_ids: list[int]) -> pd.DataFrame:
+    """
+    Продажи по товарам по годам в штуках.
+    Используем COUNT(*) вместо field = 'quantity'
+    """
+    if not nm_ids:
+        return pd.DataFrame()
+
+    conn = get_duckdb_conn()
+    nm_ids_str = ",".join(str(int(nid)) for nid in nm_ids)
+
+    query = f"""
+        SELECT
+            s.nm_id,
+            EXTRACT(YEAR FROM CAST(s.date_from AS DATE)) AS sale_year,
+            COUNT(*) FILTER (WHERE s.dtn_id = 2 AND s.field = 'retail_price') AS sales_quantity,
+            COUNT(*) FILTER (WHERE s.dtn_id = 1 AND s.field = 'retail_price') AS returns_quantity
+        FROM sales s
+        WHERE s.field = 'retail_price'
+          AND s.nm_id IN ({nm_ids_str})
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+    """
+
+    df = conn.execute(query).df()
+    conn.close()
+
+    if df.empty:
+        return df
+
+    df["sale_year"] = df["sale_year"].astype(int)
+    df["sales_quantity"] = df["sales_quantity"].astype(float)
+    df["returns_quantity"] = df["returns_quantity"].astype(float)
+    df["net_quantity"] = df["sales_quantity"] - df["returns_quantity"]
+
+    return df
+
+
 # =========================
 # Основной публичный метод
 # =========================
 
 def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
     """
-    Возвращает контекст для раздела анализа НДС:
-    - MTD
-    - YTD
-    - кварталы текущего года и прошлого года
-    - разбивка по ставкам для MTD / YTD
-    - разбивка по категориям для MTD / YTD
-
-    Логика определения даты отчета:
-    - если report_date передан -> используем его
-    - если не передан -> берём последнюю дату, по которой есть продажи/возвраты
+    Возвращает контекст для раздела анализа НДС.
     """
     if report_date is not None:
         as_of = pd.Timestamp(report_date).normalize()
@@ -508,6 +726,76 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
             "vat_comment": None,
             "vat_category_comment": None,
         }
+    
+    # Валидация НДС
+    nm_ids = base_df["nm_id"].dropna().unique().tolist() if "nm_id" in base_df.columns else []
+
+    if nm_ids:
+        products_df = _get_products_vat_data(nm_ids)
+
+        if not products_df.empty:
+            sales_year_df = _get_product_sales_by_year(nm_ids)
+            quantity_year_df = _get_product_quantity_sales_by_year(nm_ids)
+
+            # Собираем продажи по годам
+            if not sales_year_df.empty:
+                sales_pivot = (
+                    sales_year_df
+                    .pivot_table(
+                        index="nm_id",
+                        columns="sale_year",
+                        values="net_sales_gross",
+                        aggfunc="sum",
+                        fill_value=0.0,
+                    )
+                    .reset_index()
+                )
+
+                sales_pivot.columns = [
+                    "nm_id" if col == "nm_id" else f"sales_{int(col)}"
+                    for col in sales_pivot.columns
+                ]
+
+                products_df = products_df.merge(sales_pivot, on="nm_id", how="left")
+
+                # Последняя дата продажи
+                last_sales = (
+                    sales_year_df
+                    .groupby("nm_id", as_index=False)["last_sale_date"]
+                    .max()
+                )
+                products_df = products_df.merge(last_sales, on="nm_id", how="left")
+
+            # Собираем количество по годам
+
+            if not quantity_year_df.empty:
+                quantity_pivot = (
+                    quantity_year_df
+                    .pivot_table(
+                        index="nm_id",
+                        columns="sale_year",
+                        values="net_quantity",  # ← точно net_quantity?
+                        aggfunc="sum",
+                        fill_value=0.0,
+                    )
+                    .reset_index()
+                )
+
+                quantity_pivot.columns = [
+                    "nm_id" if col == "nm_id" else f"quantity_{int(col)}"
+                    for col in quantity_pivot.columns
+                ]
+
+                products_df = products_df.merge(quantity_pivot, on="nm_id", how="left")
+
+            vat_validation = get_vat_validation_report(
+                products_df,
+                report_year=as_of.year,
+            )
+        else:
+            vat_validation = None
+    else:
+        vat_validation = None
 
     # ============
     # MTD
@@ -619,15 +907,8 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
     mtd_rate_breakdown = _build_rate_breakdown(current_mtd_df)
     ytd_rate_breakdown = _build_rate_breakdown(current_ytd_df)
 
-    mtd_category_breakdown = _build_category_breakdown(
-    current_mtd_df,
-    vat_rate=10,
-)
-
-    ytd_category_breakdown = _build_category_breakdown(
-        current_ytd_df,
-        vat_rate=10,
-    )
+    mtd_category_breakdown = _build_category_breakdown(current_mtd_df, vat_rate=10)
+    ytd_category_breakdown = _build_category_breakdown(current_ytd_df, vat_rate=10)
     
     vat_comment = build_vat_comment(
         mtd=mtd,
@@ -641,6 +922,22 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
         mtd_category_breakdown=mtd_category_breakdown,
         ytd_category_breakdown=ytd_category_breakdown,
     )
+    
+    # ============
+    # Графики
+    # ============
+    mtd_pie_chart = build_vat_rate_pie_chart_base64(
+        mtd_rate_breakdown,
+        title="Структура НДС по ставкам, MTD"
+    )
+    
+    ytd_pie_chart = build_vat_rate_pie_chart_base64(
+        ytd_rate_breakdown,
+        title="Структура НДС по ставкам, YTD"
+    )
+    
+    quarterly_trend_chart = build_vat_quarterly_trend_chart_base64(quarter_rows, as_of.date())
+    current_quarter = (as_of.month - 1) // 3 + 1
 
     return {
         "as_of_date": as_of.date(),
@@ -653,6 +950,11 @@ def get_vat_analysis_context(report_date: date | None = None) -> dict[str, Any]:
         "ytd_category_breakdown": ytd_category_breakdown,
         "vat_comment": vat_comment,
         "vat_category_comment": vat_category_comment,
+        "mtd_pie_chart": mtd_pie_chart,
+        "ytd_pie_chart": ytd_pie_chart,
+        "quarterly_trend_chart": quarterly_trend_chart,
+        "current_quarter": current_quarter,
+        "vat_validation": vat_validation,
     }
 
 
@@ -734,27 +1036,55 @@ def build_vat_comment(
 def build_vat_category_comment(
     mtd_category_breakdown: list[dict[str, Any]] | None,
     ytd_category_breakdown: list[dict[str, Any]] | None,
-) -> str | None:
+) -> dict[str, Any] | None:
+    """
+    Комментарий по категориям, облагаемым по льготной ставке НДС 10%.
+    """
     if not mtd_category_breakdown and not ytd_category_breakdown:
         return None
 
     parts: list[str] = []
+    
+    intro = "Анализ категорий товаров, облагаемых по льготной ставке НДС 10%:"
+    parts.append(intro)
 
     if mtd_category_breakdown:
         top_mtd = mtd_category_breakdown[0]
         parts.append(
-            f"В MTD наибольший вклад в выручку формирует категория "
+            f"В MTD наибольший вклад в выручку по льготной ставке формирует категория "
             f"«{top_mtd['subject_name']}» — {top_mtd['net_gross_fmt']} руб. "
-            f"({top_mtd['revenue_share_pct_fmt']} от выручки топ-категорий) и "
+            f"({top_mtd['revenue_share_pct_fmt']} от выручки по льготной ставке) и "
             f"{top_mtd['net_vat_fmt']} руб. НДС ({top_mtd['vat_share_pct_fmt']})."
         )
+        
+        if len(mtd_category_breakdown) > 1:
+            second_mtd = mtd_category_breakdown[1]
+            parts.append(
+                f"Второй по значимости категорией является "
+                f"«{second_mtd['subject_name']}» — {second_mtd['net_gross_fmt']} руб. выручки "
+                f"и {second_mtd['net_vat_fmt']} руб. НДС."
+            )
 
     if ytd_category_breakdown:
         top_ytd = ytd_category_breakdown[0]
         parts.append(
-            f"По YTD лидирующей категорией также является "
+            f"По YTD лидирующей категорией по льготной ставке также является "
             f"«{top_ytd['subject_name']}» — {top_ytd['net_gross_fmt']} руб. "
             f"и {top_ytd['net_vat_fmt']} руб. НДС."
         )
+    
+    total_categories = len(set(
+        [c.get('subject_name') for c in (mtd_category_breakdown or [])] +
+        [c.get('subject_name') for c in (ytd_category_breakdown or [])]
+    ))
+    
+    if total_categories > 0:
+        parts.append(
+            f"Всего в отчетном периоде представлено {total_categories} категорий товаров, "
+            f"облагаемых по льготной ставке НДС 10%."
+        )
 
-    return " ".join(parts) if parts else None
+    return {
+        "comment": " ".join(parts),
+        "has_data": bool(mtd_category_breakdown or ytd_category_breakdown),
+    }

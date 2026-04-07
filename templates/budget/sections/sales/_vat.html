@@ -22,10 +22,10 @@
 </div>
 {% endif %}
 
-{% if vat_context.vat_category_comment %}
+{% if vat_context.vat_category_comment and vat_context.vat_category_comment.has_data %}
 <div class="insight-box">
-    <strong>Комментарий по категориям:</strong><br>
-    {{ vat_context.vat_category_comment }}
+    <strong>Комментарий по категориям с льготной ставкой НДС 10%:</strong><br>
+    {{ vat_context.vat_category_comment.comment }}
 </div>
 {% endif %}
 
@@ -125,12 +125,20 @@
     <div class="subsection-title">Квартальная динамика НДС</div>
 </div>
 
+{% if vat_context.quarterly_trend_chart %}
+<div style="text-align: center; margin: 15px 0;">
+    <img src="data:image/png;base64,{{ vat_context.quarterly_trend_chart }}" 
+         alt="Динамика НДС по кварталам" 
+         style="width: 340px; max-width: 340px; height: auto; display: inline-block;">
+</div>
+{% endif %}
+
 {% if vat_context.quarter_rows %}
-<table class="data">
+<table class="data" style="font-size: 11px;">
     <thead>
         <tr>
-            <th style="width:15%;">Квартал</th>
-            <th style="width:25%;">Период</th>
+            <th style="width:12%;">Квартал</th>
+            <th style="width:28%;">Период</th>
             <th style="width:18%;">НДС, текущий год</th>
             <th style="width:18%;">НДС, прошлый год</th>
             <th style="width:12%;">Изменение</th>
@@ -139,28 +147,64 @@
     </thead>
     <tbody>
         {% for row in vat_context.quarter_rows %}
+        {# Показываем только кварталы с ненулевыми значениями или завершенные #}
+        {% if row.current_net_vat > 0 or row.previous_net_vat > 0 or forloop.counter <= current_quarter %}
         <tr>
             <td class="left">{{ row.quarter }} {{ row.year }}</td>
             <td class="left">{{ row.current_start|date:"d.m.Y" }} – {{ row.current_end|date:"d.m.Y" }}</td>
-            <td class="right">{{ row.current_net_vat_fmt }} руб.</td>
-            <td class="right">{{ row.previous_net_vat_fmt }} руб.</td>
-            <td class="center">{{ row.net_vat_change_pct_fmt }}</td>
-            <td class="right">{{ row.current_net_no_vat_fmt }} руб.</td>
+            <td class="right">
+                {% if row.current_net_vat > 0 %}
+                    {{ row.current_net_vat_fmt }} руб.
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td class="right">
+                {% if row.previous_net_vat > 0 %}
+                    {{ row.previous_net_vat_fmt }} руб.
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td class="center {% if row.net_vat_change_pct > 0 %}positive{% elif row.net_vat_change_pct < 0 %}negative{% endif %}">
+                {% if row.current_net_vat > 0 or row.previous_net_vat > 0 %}
+                    {{ row.net_vat_change_pct_fmt }}
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td class="right">
+                {% if row.current_net_no_vat > 0 %}
+                    {{ row.current_net_no_vat_fmt }} руб.
+                {% else %}
+                    —
+                {% endif %}
+            </td>
         </tr>
+        {% endif %}
         {% endfor %}
     </tbody>
 </table>
 <div class="small-note">
-    По кварталам показатели сопоставлены с аналогичными периодами прошлого года.
-    Для незавершенного квартала используется накопленный результат по состоянию на {{ vat_context.as_of_date|date:"d.m.Y" }}.
+    По кварталам показатели сопоставлены с аналогичными периодами прошлого года.<br>
+    «—» означает отсутствие продаж в данном периоде. Данные приведены по состоянию на {{ vat_context.as_of_date|date:"d.m.Y" }}.
 </div>
 {% endif %}
 
 <!-- Подраздел I.7.5: Структура НДС по ставкам — MTD -->
+ <div class="page-break"></div>
 <div class="subsection-header">
     <span class="subsection-number">I.7.5</span>
     <div class="subsection-title">Структура НДС по ставкам — MTD</div>
 </div>
+
+{% if vat_context.mtd_pie_chart %}
+<div style="text-align: center; margin: 12px 0;">
+    <img src="data:image/png;base64,{{ vat_context.mtd_pie_chart }}" 
+         alt="Структура НДС по ставкам MTD" 
+         style="width: 340px; max-width: 340px; height: auto; display: inline-block;">
+</div>
+{% endif %}
 
 {% if vat_context.mtd_rate_breakdown %}
 <table class="data">
@@ -195,6 +239,14 @@
     <div class="subsection-title">Структура НДС по ставкам — YTD</div>
 </div>
 
+{% if vat_context.ytd_pie_chart %}
+<div style="text-align: center; margin: 12px 0;">
+    <img src="data:image/png;base64,{{ vat_context.ytd_pie_chart }}" 
+         alt="Структура НДС по ставкам YTD" 
+         style="width: 340px; max-width: 340px; height: auto; display: inline-block;">
+</div>
+{% endif %}
+
 {% if vat_context.ytd_rate_breakdown %}
 <table class="data">
     <thead>
@@ -222,7 +274,7 @@
 </table>
 {% endif %}
 
-
+<!-- Подраздел I.7.7: Льготная ставка НДС (10%) -->
 <div class="subsection-header">
     <span class="subsection-number">I.7.7</span>
     <div class="subsection-title">Льготная ставка НДС (10%)</div>
@@ -232,5 +284,102 @@
     Детальная информация по категориям и товарам, облагаемым по льготной ставке НДС 10%,
     приведена в <a href="#appendix-b-vat-reduced-rate">Приложении Б</a>.
 </div>
+
+
+
+
+
+<!-- Подраздел I.7.8: Валидация ставок НДС -->
+ <div class="page-break"></div>
+<div class="subsection-header">
+    <span class="subsection-number">I.7.8</span>
+    <div class="subsection-title">Контроль корректности ставок НДС</div>
+</div>
+
+{% if vat_context.vat_validation and vat_context.vat_validation.total_items > 0 %}
+<div class="insight-box" style="background: {% if vat_context.vat_validation.has_issues %}#FFF8E8{% else %}#F0F7F0{% endif %};">
+    <strong>Результаты проверки:</strong><br>
+    {{ vat_context.vat_validation.summary }}
+</div>
+
+{% if vat_context.vat_validation.issue_items %}
+<div style="margin-top: 10px;">
+    {% for item in vat_context.vat_validation.issue_items %}
+    <div style="
+        margin-bottom: 10px;
+        padding: 10px 12px;
+        border: 1px solid #D9C27A;
+        background: #FFFDF7;
+        page-break-inside: avoid;
+    ">
+        
+        <div style="font-size: 10px; font-weight: 700; margin-bottom: 4px; color: #333;">
+            {{ forloop.counter }}. {{ item.title|default:"Без названия" }}
+        </div>
+
+        <div style="font-size: 9px; color: #555; margin-bottom: 4px;">
+
+            nm_id: {{ item.nm_id|stringformat:"d" }}
+            {% if item.tnved_code %} | ТН ВЭД: {{ item.tnved_code }}{% endif %}
+            | Текущая ставка: {{ item.current_rate_fmt }}
+        </div>
+
+        {% if item.message_short %}
+        <div style="font-size: 9px; color: #8A5A00; margin-bottom: 6px;">
+            {{ item.message_short }}
+        </div>
+        {% endif %}
+
+        {% if item.sales_lines %}
+        <div style="font-size: 9px; margin-bottom: 4px;">
+            <strong>Продажи:</strong>
+            {% for sale in item.sales_lines %}
+                {{ sale.year|stringformat:"d" }} — 
+                <strong>{{ sale.amount_fmt }}</strong>
+                {% if sale.quantity_fmt %}· {{ sale.quantity_fmt }} шт.{% endif %}
+                {% if not forloop.last %}; {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if item.vat_delta_lines %}
+        <div style="font-size: 9px; margin-bottom: 4px;">
+            <strong>Эффект по НДС:</strong>
+            {% for delta in item.vat_delta_lines %}
+                {{ delta.year|stringformat:"d" }} ({{ delta.actual_rate_fmt }}→10%) — 
+                <span class="result {{ delta.delta_class }}" style="font-weight: 600;">
+                    {{ delta.amount_fmt }}
+                </span>
+                {% if not forloop.last %}; {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if item.total_vat_delta != 0 %}
+        <div style="font-size: 9px; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #E0D5B5;">
+            <strong>Общий эффект за 3 года:</strong>
+            <span class="result {{ item.total_delta_class }}" style="font-weight: 700;">
+                {{ item.total_vat_delta_fmt }}
+            </span>
+        </div>
+        {% endif %}
+
+        {% if item.last_sale_date_fmt %}
+        <div style="font-size: 9px; color: #666; margin-top: 4px;">
+            📅 Последняя продажа: {{ item.last_sale_date_fmt }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="small-note" style="margin-top: 8px;">
+    * Проверка основана на анализе кодов ТН ВЭД. Показаны только проблемные товары с льготным ТН ВЭД, у которых ставка НДС не равна 10%.<br>
+    Продажи выводятся за последние 3 года от даты отчета; годы с нулевыми продажами не отображаются.<br>
+    Для расчета эффекта по НДС используется фактическая ставка из карточки (или основная 20%/22% если не указана) и ожидаемая льготная ставка 10%.<br>
+</div>
+{% endif %}
+
 
 {% endif %}
