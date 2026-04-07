@@ -289,7 +289,7 @@
 
 
 
-<!-- Подраздел I.7.8: Валидация ставок НДС -->
+{% comment %} <!-- Подраздел I.7.8: Валидация ставок НДС -->
  <div class="page-break"></div>
 <div class="subsection-header">
     <span class="subsection-number">I.7.8</span>
@@ -379,7 +379,28 @@
     Продажи выводятся за последние 3 года от даты отчета; годы с нулевыми продажами не отображаются.<br>
     Для расчета эффекта по НДС используется фактическая ставка из карточки (или основная 20%/22% если не указана) и ожидаемая льготная ставка 10%.<br>
 </div>
-{% endif %}
+{% endif %} {% endcomment %}
+
+
+
+<!-- Подраздел I.7.8: Валидация ставок НДС -->
+<div class="subsection-header">
+    <span class="subsection-number">I.7.8</span>
+    <div class="subsection-title">Контроль корректности ставок НДС</div>
+</div>
+
+<div class="insight-box">
+    Детальный анализ корректности ставок НДС для товаров с льготным ТН ВЭД и детским полом 
+    приведен в <a href="#appendix-c-vat-validation">Приложении В</a>.
+    
+    {% if vat_context.vat_validation and vat_context.vat_validation.has_issues %}
+        <br><br>
+        <strong>Краткий итог:</strong> {{ vat_context.vat_validation.summary }}
+    {% else %}
+        <br><br>
+        ✅ Нарушений не обнаружено.
+    {% endif %}
+</div>
 
 
 {% endif %}

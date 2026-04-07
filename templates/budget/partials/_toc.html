@@ -49,12 +49,6 @@
                     </a>
                 </div>
 
-                {% comment %} <div class="toc-subitem">
-                    <a href="#section-sales-top-products" class="toc-link">
-                        <span class="toc-subnum">I.5</span>
-                        <span class="toc-subtext">Топ-товары</span>
-                    </a>
-                </div> {% endcomment %}
 
                 <div class="toc-subitem">
                     <a href="#section-sales-categories" class="toc-link">
@@ -165,5 +159,22 @@
     </div>
 </div>
 {% endif %}
+
+
+
+{% if vat_context.vat_validation and vat_context.vat_validation.issue_items %}
+<div class="toc-section">
+    <div class="toc-item">
+        <div class="toc-item-left">
+            <a href="#appendix-c-vat-validation" class="toc-link">
+                <span class="toc-num">В.</span>
+                <span class="toc-text">Приложение В. Контроль корректности ставок НДС</span>
+            </a>
+        </div>
+        <div class="toc-dots"></div>
+    </div>
+</div>
+{% endif %}
+
     </div>
 </div>

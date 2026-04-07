@@ -14,6 +14,8 @@ from budget.reporting.pdf.charts.vat_quarterly_trend_chart import build_vat_quar
 from budget.reporting.pdf.services.vat_validation_service import get_vat_validation_report
 
 
+
+
 # =========================
 # Форматирование
 # =========================
@@ -509,6 +511,181 @@ def _build_category_breakdown(
     return rows
 
 
+# def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
+#     """
+#     Собирает данные о товарах для валидации НДС.
+#     """
+#     if not nm_ids:
+#         return pd.DataFrame()
+
+#     conn = get_duckdb_conn()
+#     nm_ids_str = ",".join(str(int(nid)) for nid in nm_ids)
+
+#     query = f"""
+#         SELECT
+#             p.nm_id,
+#             p.vat_rate,
+#             c.payload_raw
+#         FROM product p
+#         LEFT JOIN cards c
+#             ON c.nm_id = p.nm_id
+#         WHERE p.nm_id IN ({nm_ids_str})
+#     """
+
+#     df = conn.execute(query).df()
+#     conn.close()
+
+#     if df.empty:
+#         return df
+
+#     tnved_list = []
+#     description_list = []
+#     subject_name_list = []
+#     title_list = []
+
+#     for _, row in df.iterrows():
+#         payload_raw = row.get("payload_raw")
+#         payload = None
+
+#         tnved = None
+#         description = None
+#         subject_name = None
+#         title = None
+
+#         if payload_raw:
+#             try:
+#                 payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+#             except (json.JSONDecodeError, TypeError):
+#                 payload = None
+
+#         if isinstance(payload, dict):
+#             subject_name = payload.get("subjectName")
+#             title = payload.get("title")
+#             description = payload.get("description")
+
+#             chars = payload.get("characteristics", []) or []
+#             for char in chars:
+#                 name = str(char.get("name", "")).strip().lower()
+#                 value = char.get("value", [])
+
+#                 first_value = None
+#                 if isinstance(value, list) and value:
+#                     first_value = value[0]
+#                 elif value not in (None, "", []):
+#                     first_value = value
+
+#                 if name == "тнвэд" and first_value is not None:
+#                     tnved = str(first_value)
+
+#                 if ("описание" in name or name == "description") and first_value is not None and not description:
+#                     description = str(first_value)
+
+#         tnved_list.append(tnved)
+#         description_list.append(description)
+#         subject_name_list.append(subject_name)
+#         title_list.append(title)
+
+#     df["tnved_code"] = tnved_list
+#     df["description"] = description_list
+#     df["subject_name"] = subject_name_list
+#     df["title"] = title_list
+
+#     return df
+
+
+
+
+
+# def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
+#     """
+#     Собирает данные о товарах для валидации НДС.
+#     """
+#     if not nm_ids:
+#         return pd.DataFrame()
+
+#     conn = get_duckdb_conn()
+#     nm_ids_str = ",".join(str(int(nid)) for nid in nm_ids)
+
+#     query = f"""
+#         SELECT
+#             p.nm_id,
+#             p.vat_rate,
+#             c.payload_raw
+#         FROM product p
+#         LEFT JOIN cards c
+#             ON c.nm_id = p.nm_id
+#         WHERE p.nm_id IN ({nm_ids_str})
+#     """
+
+#     df = conn.execute(query).df()
+#     conn.close()
+
+#     if df.empty:
+#         return df
+
+#     tnved_list = []
+#     description_list = []
+#     subject_name_list = []
+#     title_list = []
+#     characteristics_list = []  # ← ДОБАВИТЬ
+
+#     for _, row in df.iterrows():
+#         payload_raw = row.get("payload_raw")
+#         payload = None
+
+#         tnved = None
+#         description = None
+#         subject_name = None
+#         title = None
+#         characteristics = None  # ← ДОБАВИТЬ
+
+#         if payload_raw:
+#             try:
+#                 payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+#             except (json.JSONDecodeError, TypeError):
+#                 payload = None
+
+#         if isinstance(payload, dict):
+#             subject_name = payload.get("subjectName")
+#             title = payload.get("title")
+#             description = payload.get("description")
+#             characteristics = payload.get("characteristics", []) or []  # ← ДОБАВИТЬ
+
+#             chars = payload.get("characteristics", []) or []
+#             for char in chars:
+#                 name = str(char.get("name", "")).strip().lower()
+#                 value = char.get("value", [])
+
+#                 first_value = None
+#                 if isinstance(value, list) and value:
+#                     first_value = value[0]
+#                 elif value not in (None, "", []):
+#                     first_value = value
+
+#                 if name == "тнвэд" and first_value is not None:
+#                     tnved = str(first_value)
+
+#                 if ("описание" in name or name == "description") and first_value is not None and not description:
+#                     description = str(first_value)
+
+#         tnved_list.append(tnved)
+#         description_list.append(description)
+#         subject_name_list.append(subject_name)
+#         title_list.append(title)
+#         characteristics_list.append(characteristics)  # ← ДОБАВИТЬ
+
+#     df["tnved_code"] = tnved_list
+#     df["description"] = description_list
+#     df["subject_name"] = subject_name_list
+#     df["title"] = title_list
+#     df["characteristics"] = characteristics_list  # ← ДОБАВИТЬ
+
+#     return df
+
+
+
+
+
 def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
     """
     Собирает данные о товарах для валидации НДС.
@@ -523,6 +700,7 @@ def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
         SELECT
             p.nm_id,
             p.vat_rate,
+            p.brand,
             c.payload_raw
         FROM product p
         LEFT JOIN cards c
@@ -540,6 +718,9 @@ def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
     description_list = []
     subject_name_list = []
     title_list = []
+    characteristics_list = []
+    photo_url_list = []
+    brand_list = []
 
     for _, row in df.iterrows():
         payload_raw = row.get("payload_raw")
@@ -549,6 +730,9 @@ def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
         description = None
         subject_name = None
         title = None
+        characteristics = None
+        photo_url = None
+        brand = row.get("brand")
 
         if payload_raw:
             try:
@@ -560,6 +744,13 @@ def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
             subject_name = payload.get("subjectName")
             title = payload.get("title")
             description = payload.get("description")
+            characteristics = payload.get("characteristics", []) or []
+            
+            # Получаем фото
+            photos = payload.get("photos", [])
+            if photos and len(photos) > 0:
+                # Берем первое фото в размере big или hq
+                photo_url = photos[0].get("big") or photos[0].get("hq")
 
             chars = payload.get("characteristics", []) or []
             for char in chars:
@@ -582,11 +773,17 @@ def _get_products_vat_data(nm_ids: list[int]) -> pd.DataFrame:
         description_list.append(description)
         subject_name_list.append(subject_name)
         title_list.append(title)
+        characteristics_list.append(characteristics)
+        photo_url_list.append(photo_url)
+        brand_list.append(brand)
 
     df["tnved_code"] = tnved_list
     df["description"] = description_list
     df["subject_name"] = subject_name_list
     df["title"] = title_list
+    df["characteristics"] = characteristics_list
+    df["photo_url"] = photo_url_list
+    df["brand"] = brand_list
 
     return df
 
