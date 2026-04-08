@@ -1,53 +1,76 @@
 document.addEventListener("DOMContentLoaded", function () {
-    const rows = document.querySelectorAll("#result_list tbody tr");
+    const rows = Array.from(document.querySelectorAll("#result_list tbody tr"));
+    if (!rows.length) return;
 
-    let prevKey = null;
-    let groupIndex = 0;
+    const groups = new Map();
 
+    // Клик по строке
     rows.forEach((row) => {
-        const cells = row.querySelectorAll("td");
-        if (!cells.length) return;
+        const link = row.querySelector("th a");
+        if (link) {
+            row.style.cursor = "pointer";
 
-        // Важно: индексы зависят от list_display
-        // 0 = checkbox
-        // 1 = id_col
-        // 2 = date_col
-        // 3 = group_marker
-        // 4 = owner_col
-        // 5 = contract_col
-        // ...
-        const dateCell = cells[1];
-        const groupCell = cells[2];
-        const contractCell = cells[4];
+            row.addEventListener("click", function (e) {
+                if (e.target.closest("a")) return;
+                if (e.target.closest("input")) return;
+                if (e.target.closest("select")) return;
+                if (e.target.closest("button")) return;
+                if (e.target.closest("label")) return;
+                if (e.target.closest("form")) return;
 
-        if (!dateCell || !groupCell || !contractCell) return;
+                window.location.href = link.href;
+            });
+        }
+    });
 
-        const dateText = dateCell.innerText.trim();
-        const contractText = contractCell.innerText.trim().split("\n")[0].trim();
-        const groupText = groupCell.innerText.trim();
-
-        const isGrouped = groupText !== "—";
-
-        if (!isGrouped) {
+    // Собираем строки по server-side ключу группы
+    rows.forEach((row) => {
+        const contractCell = row.querySelector(".manual-contract-cell");
+        if (!contractCell) {
             row.classList.add("manual-row-single");
-            prevKey = null;
             return;
         }
 
-        const key = `${dateText}__${contractText}`;
+        const groupKey = contractCell.dataset.groupKey || "";
+        const groupCount = parseInt(contractCell.dataset.groupCount || "1", 10);
 
-        if (key !== prevKey) {
-            groupIndex += 1;
-            prevKey = key;
+        if (!groupKey || groupCount <= 1) {
+            row.classList.add("manual-row-single");
+            return;
         }
 
-        row.dataset.groupKey = key;
-        row.dataset.groupIndex = groupIndex;
-
-        if (groupIndex % 2 === 0) {
-            row.classList.add("manual-row-group-even");
-        } else {
-            row.classList.add("manual-row-group-odd");
+        if (!groups.has(groupKey)) {
+            groups.set(groupKey, []);
         }
+
+        groups.get(groupKey).push(row);
+    });
+
+    // Красим группы
+    let groupIndex = 0;
+
+    groups.forEach((groupRows, groupKey) => {
+        if (groupRows.length <= 1) {
+            groupRows.forEach((row) => row.classList.add("manual-row-single"));
+            return;
+        }
+
+        groupIndex += 1;
+        const parityClass = groupIndex % 2 === 0
+            ? "manual-row-group-even"
+            : "manual-row-group-odd";
+
+        groupRows.forEach((row, idx) => {
+            row.dataset.groupKey = groupKey;
+            row.dataset.groupIndex = String(groupIndex);
+            row.classList.add(parityClass);
+
+            if (idx === 0) {
+                row.classList.add("group-start");
+            }
+            if (idx === groupRows.length - 1) {
+                row.classList.add("group-end");
+            }
+        });
     });
 });

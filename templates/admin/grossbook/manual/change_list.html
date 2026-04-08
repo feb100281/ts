@@ -128,7 +128,7 @@
             padding:10px 12px;
         ">
           Здесь хранятся ручные проводки по договорам. В списке удобно контролировать дату,
-          счёт, договор, дебет, кредит и итоговую сумму по строке.
+          счёт, договор, дебет, кредит и комментарий по строке.
         </div>
       </div>
     </div>
@@ -166,103 +166,6 @@
 {% block extrahead %}
   {{ block.super }}
 
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
-    const rows = Array.from(document.querySelectorAll('#result_list tbody tr'));
-
-    let prevKey = null;
-    let groupIndex = 0;
-    let prevGroupedRow = null;
-
-    rows.forEach(function (row, idx) {
-      const link = row.querySelector('th a');
-      if (link) {
-        row.style.cursor = 'pointer';
-
-        row.addEventListener('click', function (e) {
-          if (e.target.closest('a')) return;
-          if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
-          if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
-          if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-          if (e.target.closest('form')) return;
-          window.location.href = link.href;
-        });
-      }
-
-      const cells = row.querySelectorAll('td');
-      if (!cells.length) return;
-
-      const dateCell = cells[1];
-      const groupCell = cells[2];
-      const contractCell = cells[4];
-
-      if (!dateCell || !groupCell || !contractCell) return;
-
-      const dateText = dateCell.innerText.trim();
-      const groupText = groupCell.innerText.trim();
-      const contractMainText = contractCell.innerText.trim().split('\n')[0].trim();
-
-      const isGrouped = groupText !== '—' && groupText !== '';
-
-      if (!isGrouped) {
-        row.classList.add('manual-row-single');
-        prevKey = null;
-        prevGroupedRow = null;
-        return;
-      }
-
-      const key = dateText + '__' + contractMainText;
-
-      if (key !== prevKey) {
-        groupIndex += 1;
-        row.classList.add('group-start');
-
-        if (prevGroupedRow) {
-          prevGroupedRow.classList.add('group-end');
-        }
-      }
-
-      row.dataset.groupKey = key;
-      row.dataset.groupIndex = groupIndex;
-
-      if (groupIndex % 2 === 0) {
-        row.classList.add('manual-row-group-even');
-      } else {
-        row.classList.add('manual-row-group-odd');
-      }
-
-      prevKey = key;
-      prevGroupedRow = row;
-
-      const nextRow = rows[idx + 1];
-      if (!nextRow) {
-        row.classList.add('group-end');
-      } else {
-        const nextCells = nextRow.querySelectorAll('td');
-        if (nextCells.length) {
-          const nextDateCell = nextCells[1];
-          const nextGroupCell = nextCells[2];
-          const nextContractCell = nextCells[4];
-
-          if (nextDateCell && nextGroupCell && nextContractCell) {
-            const nextGroupText = nextGroupCell.innerText.trim();
-            const nextIsGrouped = nextGroupText !== '—' && nextGroupText !== '';
-            const nextKey = nextDateCell.innerText.trim() + '__' + nextContractCell.innerText.trim().split('\n')[0].trim();
-
-            if (!nextIsGrouped || nextKey !== key) {
-              row.classList.add('group-end');
-            }
-          } else {
-            row.classList.add('group-end');
-          }
-        } else {
-          row.classList.add('group-end');
-        }
-      }
-    });
-  });
-</script>
-
   <style>
   #changelist #toolbar {
     border-radius: 2px;
@@ -286,7 +189,7 @@
   }
 
   #result_list thead {
-    box-shadow: 0 2px 0 rgba(0,0,0,.06);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, .06);
   }
 
   #result_list tbody td,
@@ -301,7 +204,7 @@
     background: #ffffff;
   }
 
-  /* Группы: заметная зебра */
+  /* Группы: один цвет на всю группу */
   #result_list tbody tr.manual-row-group-odd td,
   #result_list tbody tr.manual-row-group-odd th {
     background: #eaf3ff !important;
@@ -312,34 +215,34 @@
     background: #eef2f7 !important;
   }
 
-  /* Левая цветная полоса у всей группы */
-  #result_list tbody tr.manual-row-group-odd td.action-checkbox,
-  #result_list tbody tr.manual-row-group-odd th:first-child {
-    border-left: 5px solid #3b82f6 !important;
-  }
-
-  #result_list tbody tr.manual-row-group-even td.action-checkbox,
-  #result_list tbody tr.manual-row-group-even th:first-child {
-    border-left: 5px solid #64748b !important;
-  }
-
-  /* Первая строка каждой группы - сильнее */
+  /* Начало группы: только верхняя граница, без затемнения */
   #result_list tbody tr.group-start.manual-row-group-odd td,
   #result_list tbody tr.group-start.manual-row-group-odd th {
-    background: #dbeafe !important;
     border-top: 2px solid #93c5fd !important;
   }
 
   #result_list tbody tr.group-start.manual-row-group-even td,
   #result_list tbody tr.group-start.manual-row-group-even th {
-    background: #e2e8f0 !important;
     border-top: 2px solid #94a3b8 !important;
   }
 
-  /* Небольшой разделитель после группы */
-  #result_list tbody tr.group-end td,
-  #result_list tbody tr.group-end th {
-    border-bottom: 2px solid #d1d5db !important;
+  /* Конец группы */
+  #result_list tbody tr.group-end.manual-row-group-odd td,
+  #result_list tbody tr.group-end.manual-row-group-odd th {
+    border-bottom: 2px solid #93c5fd !important;
+  }
+
+  #result_list tbody tr.group-end.manual-row-group-even td,
+  #result_list tbody tr.group-end.manual-row-group-even th {
+    border-bottom: 2px solid #94a3b8 !important;
+  }
+
+  /* Внутри группы делаем разделители мягче */
+  #result_list tbody tr.manual-row-group-odd + tr.manual-row-group-odd td,
+  #result_list tbody tr.manual-row-group-odd + tr.manual-row-group-odd th,
+  #result_list tbody tr.manual-row-group-even + tr.manual-row-group-even td,
+  #result_list tbody tr.manual-row-group-even + tr.manual-row-group-even th {
+    border-top-color: rgba(148, 163, 184, 0.18) !important;
   }
 
   /* Hover */
@@ -349,10 +252,9 @@
   #result_list tbody tr.manual-row-group-odd:hover th,
   #result_list tbody tr.manual-row-group-even:hover td,
   #result_list tbody tr.manual-row-group-even:hover th {
-    background: #cfe5ff !important;
+    background: #dbeafe !important;
   }
 
-  /* Бейдж группы — тоже усилим */
   .manual-group-badge {
     display: inline-block;
     min-width: 58px;

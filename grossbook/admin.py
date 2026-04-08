@@ -1,5 +1,3 @@
-# grossbook/admin.py
-
 from django.contrib import admin, messages
 from django.contrib.admin import RelatedOnlyFieldListFilter, SimpleListFilter
 from django.db.models import Count, OuterRef, Subquery, IntegerField
@@ -40,6 +38,7 @@ class GroupedEntriesFilter(SimpleListFilter):
             return queryset.filter(same_contract_date_count__gt=1)
         if self.value() == "no":
             return queryset.filter(same_contract_date_count=1)
+
         return queryset
 
 
@@ -53,21 +52,18 @@ class ManualAdmin(admin.ModelAdmin):
     list_display = (
         "id_col",
         "date_col",
-        # "group_marker",
-        "owner_col",
         "contract_col",
         "acc_col",
         "amount_dt",
         "amount_cr",
-        # "balance_col",
         "comment_short",
     )
-    list_display_links = ("id_col", "contract_col")
+
+    list_display_links = ("date_col", "contract_col")
 
     search_fields = (
         "id",
         "temp",
-        "owner__name",
         "contract__number",
         "contract__cp__name",
         "acc__name",
@@ -144,7 +140,7 @@ class ManualAdmin(admin.ModelAdmin):
 
         for obj in queryset:
             Manual.objects.create(
-                pid=obj.pid,  # если не надо копировать связь, поставь None
+                pid=obj.pid,
                 date=obj.date,
                 owner=obj.owner,
                 acc=obj.acc,
@@ -166,7 +162,7 @@ class ManualAdmin(admin.ModelAdmin):
     @admin.display(description="ID", ordering="id")
     def id_col(self, obj):
         return format_html(
-            '<span style="font-weight:700; color:#111827;">#{}</span>',
+            '<span style="color:#9ca3af; font-size:12px; font-weight:500;">#{}</span>',
             obj.id,
         )
 
@@ -174,23 +170,17 @@ class ManualAdmin(admin.ModelAdmin):
     def date_col(self, obj):
         if not obj.date:
             return "—"
-        return obj.date.strftime("%d.%m.%Y")
 
-    @admin.display(description="Группа")
-    def group_marker(self, obj):
-        count = getattr(obj, "same_contract_date_count", 1)
-
-        if count > 1:
-            return format_html(
-                '<span class="manual-group-badge">{} шт.</span>',
-                count,
-            )
-        return format_html('<span style="color:#9ca3af;">—</span>')
+        return format_html(
+            '<div style="font-weight:700; color:#111827; font-size:13px;">{}</div>',
+            obj.date.strftime("%d.%m.%Y"),
+        )
 
     @admin.display(description="Компания", ordering="owner__name")
     def owner_col(self, obj):
         if not obj.owner:
             return "—"
+
         return format_html(
             '<span style="font-weight:600; color:#111827;">{}</span>',
             obj.owner,
@@ -201,33 +191,43 @@ class ManualAdmin(admin.ModelAdmin):
         if not obj.contract:
             return "—"
 
-        number = obj.contract.number or "без номера"
+        contract_number = obj.contract.number or "без номера"
+        contract_id = obj.contract.id
         cp_name = getattr(obj.contract.cp, "name", "—")
-        count = getattr(obj, "same_contract_date_count", 1)
+        group_count = getattr(obj, "same_contract_date_count", 1)
 
-        if count > 1:
-            return format_html(
-                '<div>'
-                '<div style="font-weight:700; color:#111827;">{}</div>'
-                '<div style="font-size:11px; color:#6b7280;">{}</div>'
-                '</div>',
-                number,
-                cp_name,
-            )
+        # ключ группы: только дата + договор
+        # именно это и нужно по бизнес-логике
+        group_key = f"{obj.date.isoformat()}__{contract_id}"
 
         return format_html(
-            '<div>'
-            '<div style="font-weight:700; color:#111827;">{}</div>'
-            '<div style="font-size:11px; color:#6b7280;">{}</div>'
-            '</div>',
-            number,
+            (
+                '<div class="manual-contract-cell" '
+                'data-group-key="{}" '
+                'data-group-count="{}" '
+                'data-contract-id="{}">'
+                '<div style="font-weight:700; color:#111827; line-height:1.2;">{}</div>'
+                '<div style="font-size:12px; color:#374151; line-height:1.2; margin-top:4px;">'
+                'Договор: {}'
+                '</div>'
+                '<div style="font-size:11px; color:#6b7280; line-height:1.2; margin-top:2px;">'
+                'ID: {}'
+                '</div>'
+                '</div>'
+            ),
+            group_key,
+            group_count,
+            contract_id,
             cp_name,
+            contract_number,
+            contract_id,
         )
 
     @admin.display(description="Счёт", ordering="acc__name")
     def acc_col(self, obj):
         if not obj.acc:
             return "—"
+
         return format_html(
             '<span style="color:#111827;">{}</span>',
             obj.acc,
