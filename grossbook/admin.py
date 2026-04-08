@@ -1,3 +1,4 @@
+# grossbook/admin.py
 from django.contrib import admin, messages
 from django.contrib.admin import RelatedOnlyFieldListFilter, SimpleListFilter
 from django.db.models import Count, OuterRef, Subquery, IntegerField
@@ -56,6 +57,7 @@ class ManualAdmin(admin.ModelAdmin):
         "acc_col",
         "amount_dt",
         "amount_cr",
+         "cfitem_col",
         "comment_short",
     )
 
@@ -185,6 +187,16 @@ class ManualAdmin(admin.ModelAdmin):
             '<span style="font-weight:600; color:#111827;">{}</span>',
             obj.owner,
         )
+        
+    @admin.display(description="CF статья", ordering="cfitem__name")
+    def cfitem_col(self, obj):
+        if not obj.cfitem:
+            return "—"
+
+        return format_html(
+            '<span style="color:#1f2937; font-weight:500;">{}</span>',
+            obj.cfitem,
+        )
 
     @admin.display(description="Договор", ordering="contract__number")
     def contract_col(self, obj):
@@ -276,7 +288,7 @@ class ManualAdmin(admin.ModelAdmin):
             return format_html('<span style="color:#9ca3af;">—</span>')
 
         text = obj.temp.strip()
-        short_text = text[:100] + "..." if len(text) > 100 else text
+        short_text = text[:6] + "..." if len(text) > 6 else text
 
         return format_html(
             '<span style="color:#374151;">{}</span>',
