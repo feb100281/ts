@@ -327,6 +327,14 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
         exclude=INTERCOMPANY_EXCLUDE,
         include=INTERCOMPANY_INCLUDE,
     )
+    
+    # Конвертация - не межгрупповая транзакция
+    df["intercompany"] = np.where(
+        df["temp"].fillna("").str.contains("Конвертация", case=False, na=False),
+        False,
+        df["intercompany"]
+    )
+
 
 
     # Выделяем контрагента по выписки
