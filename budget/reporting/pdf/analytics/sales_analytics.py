@@ -1,39 +1,11 @@
-# budget/reporting/pdf/sales_analytics.py
+# budget/reporting/pdf/analytics/sales_analytics.py
+
 from __future__ import annotations
 
 import math
 
-
-def _safe_corr(x_values: list[float], y_values: list[float]) -> float | None:
-    pairs = [
-        (float(x), float(y))
-        for x, y in zip(x_values, y_values)
-        if x is not None and y is not None
-    ]
-
-    if len(pairs) < 2:
-        return None
-
-    xs = [x for x, _ in pairs]
-    ys = [y for _, y in pairs]
-
-    mean_x = sum(xs) / len(xs)
-    mean_y = sum(ys) / len(ys)
-
-    num = sum((x - mean_x) * (y - mean_y) for x, y in pairs)
-    den_x = math.sqrt(sum((x - mean_x) ** 2 for x in xs))
-    den_y = math.sqrt(sum((y - mean_y) ** 2 for y in ys))
-
-    if den_x == 0 or den_y == 0:
-        return None
-
-    return num / (den_x * den_y)
-
-
-def _format_corr(value: float | None) -> str:
-    if value is None:
-        return "—"
-    return f"{value:.2f}".replace(".", ",")
+from budget.reporting.pdf.utils.formatters import format_corr, format_pct_signed
+from budget.reporting.pdf.utils.math_utils import safe_corr, safe_pct_change
 
 
 def _strength(abs_value: float) -> str:
@@ -131,7 +103,7 @@ def _interpret_corr(value: float | None, pair_code: str) -> tuple[str, str, str]
                 "Это означает, что масштаб продаж не был жестко связан с ценовым уровнем."
             )
 
-    else:  # qty_revenue
+    else:
         if direction == "прямая":
             meaning = (
                 "Рост количества продаж сопровождался ростом чистой выручки. "
@@ -151,25 +123,6 @@ def _interpret_corr(value: float | None, pair_code: str) -> tuple[str, str, str]
     return text, css_class, meaning
 
 
-def _safe_pct_change(current: float | None, previous: float | None) -> float | None:
-    if previous in (None, 0):
-        return None
-    return (current / previous - 1) * 100
-
-
-def _fmt_pct(value: float | None) -> str:
-    if value is None:
-        return "—"
-    sign = "+" if value > 0 else ""
-    return f"{sign}{value:.1f}%".replace(".", ",")
-
-
-def _fmt_money_mln(value: float | None) -> str:
-    if value is None:
-        return "—"
-    return f"{value / 1_000_000:.1f} млн руб.".replace(".", ",")
-
-
 def build_sales_auto_comment(month_rows: list[dict]) -> str | None:
     if not month_rows or len(month_rows) < 2:
         return None
@@ -186,17 +139,17 @@ def build_sales_auto_comment(month_rows: list[dict]) -> str | None:
     cur_qty = float(current.get("sales_qty") or 0)
     prev_qty = float(prev.get("sales_qty") or 0)
 
-    delta_net = _safe_pct_change(cur_net, prev_net)
-    delta_price = _safe_pct_change(cur_price, prev_price)
-    delta_qty = _safe_pct_change(cur_qty, prev_qty)
+    delta_net = safe_pct_change(cur_net, prev_net)
+    delta_price = safe_pct_change(cur_price, prev_price)
+    delta_qty = safe_pct_change(cur_qty, prev_qty)
 
     def trend_word(v: float | None, noun_up: str, noun_down: str):
         if v is None:
             return "существенных изменений не зафиксировано"
         if v > 0.1:
-            return f"{noun_up} на {_fmt_pct(abs(v))}"
+            return f"{noun_up} на {format_pct_signed(abs(v)).lstrip('+')}"
         if v < -0.1:
-            return f"{noun_down} на {_fmt_pct(abs(v))}"
+            return f"{noun_down} на {format_pct_signed(abs(v)).lstrip('+')}"
         return "существенных изменений не зафиксировано"
 
     net_phrase = trend_word(delta_net, "рост", "снижение")
@@ -204,8 +157,9 @@ def build_sales_auto_comment(month_rows: list[dict]) -> str | None:
     qty_phrase = trend_word(delta_qty, "рост", "снижение")
 
     comment = (
-        f"В {current.get('month_label')} чистая выручка составила {_fmt_money_mln(cur_net)}; "
-        f"по сравнению с предыдущим месяцем зафиксирован {net_phrase}. "
+        f"В {current.get('month_label')} чистая выручка составила "
+        f"{(cur_net / 1_000_000):.1f} млн руб.; ".replace(".", ",")
+        + f"по сравнению с предыдущим месяцем зафиксирован {net_phrase}. "
         f"Средняя цена продажи показала {price_phrase}, количество продаж — {qty_phrase}. "
     )
 
@@ -232,9 +186,9 @@ def build_sales_correlation_context(month_rows: list[dict]) -> dict | None:
     net_revenue = [float(row.get("net_amount") or 0) for row in month_rows]
     qty = [float(row.get("sales_qty") or 0) for row in month_rows]
 
-    corr_price_revenue = _safe_corr(price, net_revenue)
-    corr_qty_price = _safe_corr(qty, price)
-    corr_qty_revenue = _safe_corr(qty, net_revenue)
+    corr_price_revenue = safe_corr(price, net_revenue)
+    corr_qty_price = safe_corr(qty, price)
+    corr_qty_revenue = safe_corr(qty, net_revenue)
 
     pr_text, pr_class, pr_meaning = _interpret_corr(corr_price_revenue, "price_revenue")
     qp_text, qp_class, qp_meaning = _interpret_corr(corr_qty_price, "qty_price")
@@ -256,13 +210,13 @@ def build_sales_correlation_context(month_rows: list[dict]) -> dict | None:
         if abs(best_val) >= 0.7:
             driver_comment = (
                 f"Наиболее выраженная связь наблюдается между показателями «{best_name}» "
-                f"(коэффициент {_format_corr(best_val)}). "
+                f"(коэффициент {format_corr(best_val)}). "
                 f"Это означает, что именно эта пара в наибольшей степени объясняет изменения внутри анализируемого периода."
             )
         elif abs(best_val) >= 0.4:
             driver_comment = (
                 f"Наиболее заметная, но не доминирующая связь наблюдается между показателями «{best_name}» "
-                f"(коэффициент {_format_corr(best_val)}). "
+                f"(коэффициент {format_corr(best_val)}). "
                 f"Связь присутствует, однако для управленческих выводов ее следует рассматривать совместно с сезонностью, ассортиментом и возвратами."
             )
         else:
@@ -280,21 +234,21 @@ def build_sales_correlation_context(month_rows: list[dict]) -> dict | None:
     return {
         "general_note": general_note,
         "price_revenue": {
-            "value": _format_corr(corr_price_revenue),
+            "value": format_corr(corr_price_revenue),
             "text": pr_text,
             "class": pr_class,
             "meaning": pr_meaning,
             "short_comment": _short_corr_comment(corr_price_revenue),
         },
         "qty_price": {
-            "value": _format_corr(corr_qty_price),
+            "value": format_corr(corr_qty_price),
             "text": qp_text,
             "class": qp_class,
             "meaning": qp_meaning,
             "short_comment": _short_corr_comment(corr_qty_price),
         },
         "qty_revenue": {
-            "value": _format_corr(corr_qty_revenue),
+            "value": format_corr(corr_qty_revenue),
             "text": qr_text,
             "class": qr_class,
             "meaning": qr_meaning,
@@ -337,9 +291,9 @@ def build_daily_correlation_context(daily_rows: list[dict]) -> dict | None:
     qty = [float(row.get("sales_qty") or 0) for row in daily_rows]
     price = [float(row.get("avg_price") or 0) for row in daily_rows]
 
-    corr = _safe_corr(qty, price)
+    corr = safe_corr(qty, price)
     return {
-        "value": _format_corr(corr),
+        "value": format_corr(corr),
         "comment": _interpret_daily_corr(corr),
         "note": (
             "Дневная корреляция более чувствительна к промо-акциям, выходным, праздничным дням, "
@@ -361,16 +315,16 @@ def build_qty_price_auto_comment(month_rows: list[dict]) -> str | None:
     cur_price = float(current.get("avg_price") or 0)
     prev_price = float(prev.get("avg_price") or 0)
 
-    delta_qty = _safe_pct_change(cur_qty, prev_qty)
-    delta_price = _safe_pct_change(cur_price, prev_price)
+    delta_qty = safe_pct_change(cur_qty, prev_qty)
+    delta_price = safe_pct_change(cur_price, prev_price)
 
     def _trend_text(value: float | None, noun_up: str, noun_down: str) -> str:
         if value is None:
             return "без сопоставимой базы"
         if value > 0.1:
-            return f"{noun_up} на {_fmt_pct(abs(value))}"
+            return f"{noun_up} на {format_pct_signed(abs(value)).lstrip('+')}"
         if value < -0.1:
-            return f"{noun_down} на {_fmt_pct(abs(value))}"
+            return f"{noun_down} на {format_pct_signed(abs(value)).lstrip('+')}"
         return "без существенных изменений"
 
     qty_text = _trend_text(delta_qty, "рост", "снижение")
@@ -410,3 +364,7 @@ def build_qty_price_auto_comment(month_rows: list[dict]) -> str | None:
             )
 
     return comment
+
+
+
+

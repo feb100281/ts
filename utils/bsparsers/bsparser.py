@@ -327,6 +327,7 @@ def make_final_statemens(filepath: str, ts_inn=None, ts_banks_accounts=None):
         exclude=INTERCOMPANY_EXCLUDE,
         include=INTERCOMPANY_INCLUDE,
     )
+    
 
 
     # Выделяем контрагента по выписки
