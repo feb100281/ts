@@ -21,4 +21,5 @@ Thumbs.db
 *.parquet
 *.duckdb
 *.db
+*.zip
 /data/

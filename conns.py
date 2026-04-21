@@ -46,9 +46,6 @@ def get_psql_conn_str():
         f"password={os.getenv('DB_PASSWORD')}"
     )
 
-
-
-
 def get_duckdb_conn()->duckdb.DuckDBPyConnection:
     db_path = os.getenv("DUCKDB_PATH")
 

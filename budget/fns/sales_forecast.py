@@ -7,7 +7,7 @@ import numpy as np
 from conns import get_duckdb_conn
 from duckdb import DuckDBPyConnection
 from pprint import pprint
-
+from reporting.report_buider.reporter_builder import P,T, Section,Report
 
 def calculation(frc:pd.DataFrame,stats:dict,dt_from):
     
@@ -700,41 +700,14 @@ def make_forecast(conn, date_from, date_to, prophet_params, freq="D"):
 
     return model, forecast
 
-# def main(conn, **args):
-#     ddb_con = None
-#     psql_con = conn
-
-#     try:
-#         ddb_con = get_duckdb_conn()
-
-#         model, forecast = make_forecast(
-#             ddb_con,
-#             args["date_from"],
-#             args["date_to"],
-#             args["revenue_param"],
-#         )
-
-#         stat = stats(
-#             ddb_con,
-#             args["date_from"],
-#             args["wb_costs_params"],
-#         )
-
-#         d = calculation(forecast, stat, args["date_from"])
-#         write_forecast(d, args["id"], psql_con)
-
-#     finally:
-#         if ddb_con is not None:
-#             try:
-#                 ddb_con.execute("DETACH pg")
-#             except Exception:
-#                 pass
-#             ddb_con.close()
-    
+def add_forecats_section(revenue_param):
+    pass
 
 def main(conn, **args):
     ddb_con = None
     psql_con = conn
+    
+    SECTIONS = []
 
     try:
         ddb_con = get_duckdb_conn()
