@@ -128,7 +128,7 @@
             padding:10px 12px;
         ">
           Здесь хранятся ручные проводки по договорам. В списке удобно контролировать дату,
-          счёт, договор, дебет, кредит и итоговую сумму по строке.
+          счёт, договор, дебет, кредит и комментарий по строке.
         </div>
       </div>
     </div>
@@ -166,52 +166,108 @@
 {% block extrahead %}
   {{ block.super }}
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const rows = document.querySelectorAll('#result_list tbody tr');
-
-      rows.forEach(function (row) {
-        const link = row.querySelector('th a');
-        if (!link) return;
-
-        row.style.cursor = 'pointer';
-
-        row.addEventListener('click', function (e) {
-          if (e.target.closest('a')) return;
-          if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
-          if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
-          if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-          if (e.target.closest('form')) return;
-          window.location.href = link.href;
-        });
-      });
-    });
-  </script>
-
   <style>
-    #result_list tbody tr:hover { background: rgba(2,132,199,0.06); }
-    #changelist #toolbar { border-radius: 2px; overflow: hidden; }
+  #changelist #toolbar {
+    border-radius: 2px;
+    overflow: hidden;
+  }
 
-    #changelist-form .results {
-      border-radius: 2px;
-      overflow: hidden;
-    }
+  #changelist-form .results {
+    border-radius: 2px;
+    overflow: hidden;
+  }
 
-    #result_list thead th {
-      position: sticky;
-      top: 0;
-      z-index: 5;
-      background: var(--body-bg, #fff);
-    }
+  #result_list thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--body-bg, #fff);
+  }
 
-    #result_list thead th a {
-      background: inherit;
-    }
+  #result_list thead th a {
+    background: inherit;
+  }
 
-    #result_list thead {
-      box-shadow: 0 2px 0 rgba(0,0,0,.06);
-    }
-  </style>
+  #result_list thead {
+    box-shadow: 0 2px 0 rgba(0, 0, 0, .06);
+  }
+
+  #result_list tbody td,
+  #result_list tbody th {
+    vertical-align: middle;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  /* Обычные строки */
+  #result_list tbody tr.manual-row-single td,
+  #result_list tbody tr.manual-row-single th {
+    background: #ffffff;
+  }
+
+  /* Группы: один цвет на всю группу */
+  #result_list tbody tr.manual-row-group-odd td,
+  #result_list tbody tr.manual-row-group-odd th {
+    background: #eaf3ff !important;
+  }
+
+  #result_list tbody tr.manual-row-group-even td,
+  #result_list tbody tr.manual-row-group-even th {
+    background: #eef2f7 !important;
+  }
+
+  /* Начало группы: только верхняя граница, без затемнения */
+  #result_list tbody tr.group-start.manual-row-group-odd td,
+  #result_list tbody tr.group-start.manual-row-group-odd th {
+    border-top: 2px solid #93c5fd !important;
+  }
+
+  #result_list tbody tr.group-start.manual-row-group-even td,
+  #result_list tbody tr.group-start.manual-row-group-even th {
+    border-top: 2px solid #94a3b8 !important;
+  }
+
+  /* Конец группы */
+  #result_list tbody tr.group-end.manual-row-group-odd td,
+  #result_list tbody tr.group-end.manual-row-group-odd th {
+    border-bottom: 2px solid #93c5fd !important;
+  }
+
+  #result_list tbody tr.group-end.manual-row-group-even td,
+  #result_list tbody tr.group-end.manual-row-group-even th {
+    border-bottom: 2px solid #94a3b8 !important;
+  }
+
+  /* Внутри группы делаем разделители мягче */
+  #result_list tbody tr.manual-row-group-odd + tr.manual-row-group-odd td,
+  #result_list tbody tr.manual-row-group-odd + tr.manual-row-group-odd th,
+  #result_list tbody tr.manual-row-group-even + tr.manual-row-group-even td,
+  #result_list tbody tr.manual-row-group-even + tr.manual-row-group-even th {
+    border-top-color: rgba(148, 163, 184, 0.18) !important;
+  }
+
+  /* Hover */
+  #result_list tbody tr.manual-row-single:hover td,
+  #result_list tbody tr.manual-row-single:hover th,
+  #result_list tbody tr.manual-row-group-odd:hover td,
+  #result_list tbody tr.manual-row-group-odd:hover th,
+  #result_list tbody tr.manual-row-group-even:hover td,
+  #result_list tbody tr.manual-row-group-even:hover th {
+    background: #dbeafe !important;
+  }
+
+  .manual-group-badge {
+    display: inline-block;
+    min-width: 58px;
+    text-align: center;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-weight: 700;
+    font-size: 12px;
+    border: 1px solid #93c5fd;
+  }
+</style>
 {% endblock %}
 
 {% block content %}

@@ -26,6 +26,11 @@ from utils.bsparsers.bsupdater import update_cf_data
 from decimal import Decimal, InvalidOperation
 
 
+from django.contrib.admin.helpers import ActionForm
+from grossbook.models import Manual
+from corporate.models import COA
+
+
 
 
 from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS
@@ -917,6 +922,15 @@ class CfDataAdminForm(forms.ModelForm):
 
 
 
+
+class CfDataActionForm(ActionForm):
+    manual_acc = forms.ModelChoiceField(
+        queryset=COA.objects.all(),
+        required=False,
+        label="Счёт для сторно",
+    )
+
+
 @admin.register(CfData)
 class CfDataAdmin(admin.ModelAdmin):
     inlines = [CfSplitsInline]
@@ -924,6 +938,8 @@ class CfDataAdmin(admin.ModelAdmin):
     list_per_page = 25
     readonly_fields = ("source_dt", "source_cr")
     change_list_template = "admin/treasury/cfdata/change_list.html"
+    action_form = CfDataActionForm
+    actions = ["create_storno_manual_entries"]
 
     list_display = (
         "date_short",
@@ -1494,6 +1510,88 @@ class CfDataAdmin(admin.ModelAdmin):
             )
 
         return "—"
+    
+    
+    
+    @admin.action(description="Создать сторно в ручных проводках")
+    def create_storno_manual_entries(self, request, queryset):
+        acc = request.POST.get("manual_acc")
+
+        if not acc:
+            self.message_user(
+                request,
+                "Выберите счёт для сторно в выпадающем поле рядом с Actions.",
+                level=messages.ERROR
+            )
+            return
+
+        try:
+            acc_obj = COA.objects.get(pk=acc)
+        except COA.DoesNotExist:
+            self.message_user(
+                request,
+                "Выбранный счёт не найден.",
+                level=messages.ERROR
+            )
+            return
+
+        created_count = 0
+        skipped_count = 0
+
+        for obj in queryset.select_related("owner", "contract", "cfitem", "ba", "bs"):
+            owner = obj.owner or getattr(obj.bs, "owner", None)
+            contract = obj.contract
+            cfitem = obj.cfitem
+
+            # валюта берётся из bank account, если есть; иначе RUB
+            currency = (
+                getattr(obj.ba, "currency", None)
+                or getattr(getattr(obj, "bs", None), "ba", None) and getattr(obj.bs.ba, "currency", None)
+                or "RUB"
+            )
+
+            dt_value = obj.cr or Decimal("0.00")
+            cr_value = obj.dt or Decimal("0.00")
+
+            # если обе суммы пустые/нулевые — пропускаем
+            if dt_value <= 0 and cr_value <= 0:
+                skipped_count += 1
+                continue
+
+            comment = (
+                f"Сторно по CF документу #{obj.pk}. "
+                f"Документ: {obj.doc_type or ''} № {obj.doc_numner or ''} "
+                f"от {obj.doc_date or ''}. "
+                f"Назначение: {(obj.temp or '').strip()}"
+            ).strip()
+
+            Manual.objects.create(
+                pid=None,
+                date=obj.date,
+                owner=owner,
+                acc=acc_obj,
+                contract=contract,
+                dt=dt_value,
+                cr=cr_value,
+                currency=currency,
+                cfitem=cfitem,
+                temp=comment,
+            )
+            created_count += 1
+
+        if created_count:
+            self.message_user(
+                request,
+                f"Создано сторно-проводок: {created_count}",
+                level=messages.SUCCESS
+            )
+
+        if skipped_count:
+            self.message_user(
+                request,
+                f"Пропущено строк без суммы: {skipped_count}",
+                level=messages.WARNING
+            )
 
 
 

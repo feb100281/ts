@@ -5,7 +5,7 @@ from corporate.models import Owners,COA,CfItems
 from contracts.models import Contracts
 from counterparties.models import Counterparty
 
-# Create your models here.
+
 
 #Модель для ручных проводок
 

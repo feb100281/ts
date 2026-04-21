@@ -375,6 +375,15 @@
     color: var(--color-realestate) !important;
 }
 
+
+
+
+/* 1. Бюджет*/
+.fa-layer-group,
+.fa-chart-pie {
+    color: var(--color-realestate) !important;
+}
+
 /* 2. Договоры аренды / сделки */
 .fa-handshake,
 .fa-list-ul,

@@ -354,6 +354,11 @@ JAZZMIN_SETTINGS = {
         "treasury.CfData": "fa-solid fa-arrows-rotate",
         "treasury.ContractsRexex": "fa-solid fa-robot",
         
+        # --- БЮДЖЕТ ---
+        "budget": "fa-solid fa-chart-pie",
+        "budget.BudgetVersion": "fa-solid fa-layer-group",
+        "budget.Gl": "fa-solid fa-scale-balanced",
+        
         
         # --- АНАЛИЗ ФАЙЛОВ БУХГАЛТЕРИИ ---
         "accounting_analysis": "fa-solid fa-magnifying-glass-chart",
@@ -392,6 +397,7 @@ JAZZMIN_SETTINGS = {
         "contracts",       # Договоры 
         'sales',           # Продажи 
         'treasury',        # Казначейство 
+        'budget',          # Бюджет 
         'grossbook',       # Главная книга
         'accounting_analysis' # Анализ файло бухгалтерии
 ,        
