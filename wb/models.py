@@ -1,5 +1,15 @@
 from django.db import models
 
+class TechSize(models.Model):
+    size = models.CharField(max_length=100, primary_key=True, verbose_name="Размер")
+
+    class Meta:
+        verbose_name = "Тех. размер"
+        verbose_name_plural = "Тех. размеры"
+
+    def __str__(self):
+        return self.size
+
 class Subject(models.Model):
     subject_id = models.BigIntegerField(primary_key=True,verbose_name="subject_id")
     name = models.CharField(max_length=250,verbose_name="Категория", blank=True, null=True)
@@ -26,6 +36,13 @@ class Product(models.Model):
     gender = models.CharField(max_length=250,verbose_name="Пол", blank=True, null=True)
     country = models.CharField(max_length=250,verbose_name="Страна производитель", blank=True, null=True)  
     vat_rate = models.CharField(max_length=250,verbose_name="Указанная ставка НДС", blank=True, null=True)  
+    
+    tech_sizes = models.ManyToManyField(
+        "TechSize",
+        verbose_name="Тех. размеры",
+        blank=True,
+        related_name="products",
+    )
 
     
     class Meta:
@@ -34,3 +51,4 @@ class Product(models.Model):
     
     def __str__(self):
         return f"{self.title} ({self.nm_id})"
+   

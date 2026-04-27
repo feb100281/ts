@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "budget",
     "mptt",    
     "jsoneditor",
+    "app_wb",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
     "django.contrib.admin",
