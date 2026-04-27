@@ -84,7 +84,62 @@
         </div>
         {% endif %}
 
+
+
+
         <div class="toc-section">
+            <div class="toc-item">
+                <div class="toc-item-left">
+                        <a href="#section-budget-ytd-monthly" class="toc-link">
+                        <span class="toc-num">{% if sales_block %}II.{% else %}II.{% endif %}</span>
+                        <span class="toc-text">Анализ выполнения плана выручки</span>
+                    </a>
+                </div>
+                <div class="toc-dots"></div>
+            </div>
+
+            <div class="toc-subitems">
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.1{% else %}II.1{% endif %}</span>
+                        <span class="toc-subtext">Помесячное выполнение плана WB</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-waterfall" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.2{% else %}II.2{% endif %}</span>
+                        <span class="toc-subtext">Помесячный вклад в отклонение от плана</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-dynamics" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.3{% else %}II.3{% endif %}</span>
+                        <span class="toc-subtext">Динамика накопленных продаж YTD</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-semi" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.4{% else %}II.4{% endif %}</span>
+                        <span class="toc-subtext">Выполнение полугодовых целевых оборотов</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-daily" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.5{% else %}II.5{% endif %}</span>
+                        <span class="toc-subtext">Дневная детализация текущего месяца</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+
+
+
+        {% comment %} <div class="toc-section">
             <div class="toc-item">
                 <div class="toc-item-left">
                     <a href="#section-summary" class="toc-link">
@@ -130,7 +185,7 @@
                 </div>
                 <div class="toc-dots"></div>
             </div>
-        </div>
+        </div> {% endcomment %}
 
         {% if certificate_risks %}
 <div class="toc-section">
