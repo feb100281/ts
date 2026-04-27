@@ -17,7 +17,14 @@ COLORS = {
     "delta_red": "FBEAEA",
     "delta_green": "EAF6EE",
     "counterparty_green": "5F7F75",
-    "counterparty_gray": "7A7A7A"
+    "counterparty_gray": "7A7A7A",
+    
+    # НОВЫЕ ЦВЕТА для YTD и комментариев
+    "header_alt":"1B5E20",          # темно-зеленый для YTD заголовков (чуть темнее основного)
+    "light_red": "FFEBEE",           # очень светлый красный для подсветки аномалий
+    "light_green": "E8F5E9",         # очень светлый зеленый для подсветки аномалий
+    "comment_bg": "FFF8E1",          # теплый фон для комментариев
+    "comment_border": "FFC107",      # янтарный для рамки комментариев
     
 
 }
@@ -32,6 +39,10 @@ FILLS = {
     "delta_red": PatternFill("solid", fgColor=COLORS["delta_red"]),
     "delta_green": PatternFill("solid", fgColor=COLORS["delta_green"]),
     "none": PatternFill(fill_type=None),
+    "header_alt": PatternFill("solid", fgColor=COLORS["header_alt"]),
+    "delta_red_light": PatternFill("solid", fgColor=COLORS["light_red"]),
+    "delta_green_light": PatternFill("solid", fgColor=COLORS["light_green"]),
+    "comment": PatternFill("solid", fgColor=COLORS["comment_bg"]),
 
 }
 
@@ -53,10 +64,13 @@ FONTS = {
     
     "counterparty": Font(name="Roboto", size=10, italic=True, color=COLORS["counterparty_gray"]),
     "counterparty_negative": Font(name="Roboto", size=10, color=COLORS["counterparty_gray"]),
+    "comment": Font(name="Roboto", size=9, italic=True, color=COLORS["text_gray"]),
+    "comment_bold": Font(name="Roboto", size=10, bold=True, color=COLORS["black"]),
 }
 
 thin = Side(style="thin", color=COLORS["border_gray"])
 medium_dark = Side(style="medium", color=COLORS["black"])
+medium_green = Side(style="medium", color=COLORS["dark_green"])
 
 BORDERS = {
     "thin": Border(left=thin, right=thin, top=thin, bottom=thin),
@@ -64,6 +78,8 @@ BORDERS = {
     "bottom_medium": Border(bottom=medium_dark),
     "none": Border(),
     "left_sublevel": Border(left=thin),
+    "comment_box": Border(left=medium_green, right=medium_green, top=medium_green, bottom=medium_green),
+    "comment_top": Border(top=medium_green),
 
 }
 
@@ -73,6 +89,7 @@ ALIGNMENTS = {
     "right": Alignment(horizontal="right", vertical="center"),
     "center_wrap": Alignment(horizontal="center", vertical="center", wrap_text=True),
     "left_wrap": Alignment(horizontal="left", vertical="center", wrap_text=True),
+    "right_wrap": Alignment(horizontal="right", vertical="center", wrap_text=True),
 }
 
 FORMATS = {
@@ -80,4 +97,5 @@ FORMATS = {
     "money_int": '#,##0;(#,##0)',
     "date": 'dd.mm.yyyy',
     "percent": '0.0%',
+    "percent_int": '0%',          # целые проценты
 }

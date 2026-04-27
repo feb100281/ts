@@ -1,0 +1,385 @@
+{# templates/budget/sections/_budget_ytd_section.html #}
+{% load humanize %}
+
+<div id="section-budget-ytd"></div>
+
+<div class="section-header">
+    <div class="section-number">
+        {% if sales_block %}II.{% else %}II.{% endif %}
+    </div>
+    <div class="section-title-with-num">Анализ выполнения плана выручки</div>
+</div>
+
+{% if budget_ytd and budget_ytd.monthly_data %}
+
+{# Информационная панель #}
+<div class="info-panel" style="margin-bottom: 20px; padding: 10px 15px; background: #F7F9F8; border-left: 3px solid #2f6656;">
+    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div>
+            <span style="font-size: 11px; color: #5B6B66;">Данные актуальны на:</span>
+            <span style="font-size: 11px; font-weight: 600; margin-left: 5px;">{{ budget_ytd.period_info.report_date_str }}</span>
+            <span style="font-size: 10px; color: #888; margin-left: 10px;">
+                (прошло {{ budget_ytd.period_info.months_passed }} полн. мес.
+                {% if budget_ytd.period_info.has_partial_month %}
+                    / {{ budget_ytd.period_info.days_passed_current_month }} дн. текущего месяца)
+                {% endif %}
+            </span>
+        </div>
+        <div>
+            <span class="badge" style="background: #2f6656; color: white; padding: 2px 10px; border-radius: 3px; font-size: 10px;">
+                Годовой план: {{ budget_ytd.totals.plan_full_year_compact }} ₽
+            </span>
+        </div>
+    </div>
+</div>
+
+{# KPI Карточки #}
+<div class="kpi-row" style="display: flex; gap: 15px; margin-bottom: 25px;">
+    <div class="kpi-card-compact" style="flex: 1; background: #F7F9F8; border-radius: 6px; padding: 12px;">
+        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">План (YTD {{ budget_ytd.period_info.months_passed }} мес.)</div>
+        <div class="kpi-value-compact" style="font-size: 18px; font-weight: 700; color: #1A3F3A;">{{ budget_ytd.totals.plan_compact }} ₽</div>
+    </div>
+    <div class="kpi-card-compact" style="flex: 1; background: #F7F9F8; border-radius: 6px; padding: 12px;">
+        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">Факт (YTD {{ budget_ytd.period_info.months_passed }} мес.)</div>
+        <div class="kpi-value-compact" style="font-size: 18px; font-weight: 700; color: #1A3F3A;">{{ budget_ytd.totals.fact_compact }} ₽</div>
+    </div>
+    <div class="kpi-card-compact" style="flex: 1; background: #F7F9F8; border-radius: 6px; padding: 12px;">
+        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">Выполнение плана</div>
+        <div class="kpi-value-compact" style="font-size: 18px; font-weight: 700; {% if budget_ytd.totals.exec_pct >= 100 %}color: #2E7D32;{% else %}color: #C62828;{% endif %}">
+            {{ budget_ytd.totals.exec_pct|floatformat:1 }}%
+        </div>
+    </div>
+    <div class="kpi-card-compact" style="flex: 1; background: #F7F9F8; border-radius: 6px; padding: 12px;">
+        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">Отклонение</div>
+        <div class="kpi-value-compact" style="font-size: 18px; font-weight: 700; {% if budget_ytd.totals.delta >= 0 %}color: #2E7D32;{% else %}color: #C62828;{% endif %}">
+            {% if budget_ytd.totals.delta >= 0 %}+{% endif %}{{ budget_ytd.totals.delta_compact }} ₽
+            <span style="font-size: 13px; font-weight: normal;">
+                ({% if budget_ytd.totals.delta_pct >= 0 %}+{% endif %}{{ budget_ytd.totals.delta_pct|floatformat:1 }}%)
+            </span>
+        </div>
+    </div>
+</div>
+
+{# Таблица помесячного выполнения #}
+<div class="subsection-header" id="section-budget-ytd-monthly" style="margin-top: 0;">
+    <div class="subsection-number">1</div>
+    <div class="subsection-title">Помесячное выполнение плана</div>
+</div>
+
+<table class="data">
+    <thead>
+        <tr>
+            <th>Месяц</th>
+            <th>План, руб.</th>
+            <th>Факт, руб.</th>
+            <th>Отклонение, руб.</th>
+            <th>Выполнение, %</th>
+            <th>План YTD (нак.), руб.</th>
+            <th>Факт YTD (нак.), руб.</th>
+            <th>Выполнение YTD (нак.), %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for m in budget_ytd.monthly_data %}
+        <tr>
+            <td class="left"><strong>{{ m.month_label }}</strong>{% if m.is_current_month %} *{% endif %}</td>
+            <td class="right">{{ m.plan_fmt }}</td>
+            <td class="right {% if m.delta >= 0 %}positive-text{% else %}negative-text{% endif %}">
+                {{ m.fact_fmt }}
+            </td>
+            <td class="right {% if m.delta >= 0 %}positive-text{% else %}negative-text{% endif %}">
+                {% if m.delta >= 0 %}+{% endif %}{{ m.delta_fmt }}
+            </td>
+            <td class="right {% if m.exec_pct >= 100 %}positive-text{% else %}negative-text{% endif %}">
+                {{ m.exec_pct|floatformat:1 }}%
+            </td>
+            <td class="right">{{ m.running_plan_fmt }}</td>
+            <td class="right">{{ m.running_fact_fmt }}</td>
+            <td class="right {% if m.running_exec_pct >= 100 %}positive-text{% else %}negative-text{% endif %}">
+                {{ m.running_exec_pct|floatformat:1 }}%
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr style="background: #E8F5E9;">
+            <td class="left"><strong>ИТОГО</strong></td>
+            <td class="right"><strong>{{ budget_ytd.totals.plan_full }}</strong></td>
+            <td class="right"><strong>{{ budget_ytd.totals.fact_full }}</strong></td>
+            <td class="right {% if budget_ytd.totals.delta >= 0 %}positive-text{% else %}negative-text{% endif %}">
+                <strong>{% if budget_ytd.totals.delta >= 0 %}+{% endif %}{{ budget_ytd.totals.delta_full }}</strong>
+            </td>
+            <td class="right {% if budget_ytd.totals.exec_pct >= 100 %}positive-text{% else %}negative-text{% endif %}">
+                <strong>{{ budget_ytd.totals.exec_pct|floatformat:1 }}%</strong>
+            </td>
+            <td colspan="3"></td>
+        </tr>
+    </tfoot>
+</table>
+
+<div class="small-note" style="margin-top: 5px; margin-bottom: 20px;">
+    * — текущий месяц, данные неполные
+</div>
+
+
+{# График помесячного выполнения #}
+{% if budget_ytd.charts.monthly_waterfall %}
+<div class="subsection-header" id="section-budget-ytd-waterfall">
+    <div class="subsection-number">2</div>
+    <div class="subsection-title">Помесячный вклад в отклонение от плана</div>
+</div>
+<div class="chart-container" style="margin: 15px 0 20px 0; text-align: center;">
+    <img src="data:image/png;base64,{{ budget_ytd.charts.monthly_waterfall }}"
+         alt="Waterfall отклонений"
+         style="max-width: 100%;">
+</div>
+{% endif %}
+
+
+{% if budget_ytd.monthly_insight %}
+<div class="insight-box" style="margin: 0 0 24px 0; padding: 12px 14px; background: #F7F9F8; border-left: 3px solid #2f6656; border-radius: 4px;">
+    <div style="font-size: 11px; font-weight: 700; color: #1A3F3A; margin-bottom: 6px;">
+        Ключевые драйверы отклонения
+    </div>
+    <div style="font-size: 10.5px; line-height: 1.55; color: #2B2B2B;">
+        {{ budget_ytd.monthly_insight.text }}
+    </div>
+</div>
+{% endif %}
+
+
+{# График накопленных итогов #}
+{% if budget_ytd.charts.plan_fact %}
+<div class="page-break"></div>
+<div class="subsection-header" id="section-budget-ytd-dynamics">
+    <div class="subsection-number">3</div>
+    <div class="subsection-title">Динамика накопленных продаж (YTD)</div>
+</div>
+<div class="chart-container" style="margin: 15px 0; text-align: center;">
+    <img src="data:image/png;base64,{{ budget_ytd.charts.plan_fact }}" alt="План vs Факт YTD" style="max-width: 100%;">
+</div>
+{% endif %}
+
+{# Анализ полугодовых планов#}
+{% if budget_ytd.semi_analysis %}
+<div class="subsection-header" id="section-budget-ytd-semi">
+    <div class="subsection-number">4</div>
+    <div class="subsection-title">Выполнение полугодовых целевых оборотов</div>
+</div>
+
+<table class="data">
+    <thead>
+        <tr>
+            <th>Период</th>
+            <th>План, руб.</th>
+            <th>Факт, руб.</th>
+            <th>Выполнение, %</th>
+            <th>Остаток до цели, руб.</th>
+            <th>Статус</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in budget_ytd.semi_analysis %}
+        <tr>
+            <td class="left"><strong>{{ s.period }}</strong></td>
+            <td class="right">{{ s.plan_fmt }}</td>
+            <td class="right">{{ s.fact_fmt }}</td>
+            <td class="right {% if s.exec_pct >= 100 %}positive-text{% else %}negative-text{% endif %}">
+                {{ s.exec_pct|floatformat:1 }}%
+            </td>
+            <td class="right">
+                {% if s.remaining > 0 %}
+                    {{ s.remaining_fmt }}
+                {% else %}
+                    <span class="positive-text">+{{ s.overachievement_fmt }}</span>
+                {% endif %}
+            </td>
+            <td class="center">
+                {% if s.is_completed %}
+                    {% if s.exec_pct >= 100 %}
+                        <span style="color: #2E7D32;">Выполнен</span>
+                    {% else %}
+                        <span style="color: #C62828;">Не выполнен</span>
+                    {% endif %}
+                {% else %}
+                    <span style="color: #FFA726;">В процессе</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+
+{# Прогноз для текущего полугодия #}
+{% for s in budget_ytd.semi_analysis %}
+    {% if s.is_current and not s.is_completed %}
+
+        <div class="forecast-box" style="margin: 15px 0 16px 0; padding: 14px 16px; background: #FFF8E1; border-left: 4px solid #FFA726;">
+
+            <div style="font-weight: 700; margin-bottom: 10px; font-size: 12px;">
+                Прогноз по {{ s.period }}:
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 10.5px; margin-bottom: 12px;">
+                <div>
+                    <div style="color:#777;">Текущий темп</div>
+                    <strong>{{ s.current_daily_rate_fmt }} ₽/день</strong>
+                </div>
+
+                <div>
+                    <div style="color:#777;">Необходимый темп</div>
+                    <strong>{{ s.required_daily_rate_fmt }} ₽/день</strong>
+                </div>
+
+                <div>
+                    <div style="color:#777;">Осталось дней</div>
+                    <strong>{{ s.days_remaining }}</strong>
+                </div>
+
+                <div>
+                    <div style="color:#777;">Прогноз на конец периода</div>
+                    <strong>{{ s.projected_end_fmt }} ₽</strong>
+                </div>
+            </div>
+
+            {% if s.projected_end >= s.target %}
+                <div style="font-weight: 700; font-size: 11px; color: #2E7D32;">
+                    План будет выполнен при текущем темпе продаж.
+                </div>
+            {% else %}
+                <div style="font-size: 11px; line-height: 1.55; color: #C62828;">
+                    <strong>План под риском невыполнения.</strong><br>
+
+                    Для выполнения плана необходимо увеличить среднедневную выручку на
+                    <strong>{{ s.gap_daily_rate_fmt }} ₽/день</strong>.<br>
+
+                    За оставшиеся {{ s.days_remaining }} дн. это составляет дополнительно
+                    <strong>{{ s.gap_total_fmt }} ₽</strong>
+                    выручки относительно текущего темпа.
+                </div>
+            {% endif %}
+
+        </div>
+
+    {% endif %}
+{% endfor %}
+
+{% endif %}
+
+
+
+{# Дневная детализация текущего месяца #}
+{% if budget_ytd.daily_analysis and budget_ytd.daily_analysis.days %}
+<div class="page-break"></div>
+<div class="subsection-header" id="section-budget-ytd-daily" style="margin-top: 25px;">
+    <div class="subsection-number">5</div>
+    <div class="subsection-title">Дневная детализация: {{ budget_ytd.daily_analysis.month_name }}</div>
+</div>
+
+{# График накопленного выполнения #}
+{% if budget_ytd.charts.daily %}
+<div class="chart-container" style="margin: 10px 0 18px 0; text-align: center;">
+    <img src="data:image/png;base64,{{ budget_ytd.charts.daily }}" alt="Дневное выполнение" style="max-width: 100%;">
+</div>
+{% endif %}
+
+{# Аккуратные карточки статистики #}
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0 18px 0;">
+    <div style="background: #F7F9F8; border: 1px solid #DDE7E2; border-radius: 8px; padding: 11px 12px; border-left: 4px solid #2f6656;">
+        <div style="font-size: 8.5px; color: #6B7C76; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px;">
+            Средний план на день
+        </div>
+        <div style="font-size: 15px; font-weight: 700; color: #1A3F3A;">
+            {{ budget_ytd.daily_analysis.avg_daily_plan_fmt }} ₽
+        </div>
+    </div>
+    <div style="background: #F7F9F8; border: 1px solid #DDE7E2; border-radius: 8px; padding: 11px 12px; border-left: 4px solid #1A3F3A;">
+        <div style="font-size: 8.5px; color: #6B7C76; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px;">
+            Средний факт за день
+        </div>
+        <div style="font-size: 15px; font-weight: 700; color: #1A3F3A;">
+            {{ budget_ytd.daily_analysis.avg_daily_fact_fmt }} ₽
+        </div>
+    </div>
+    <div style="background: #F7F9F8; border: 1px solid #DDE7E2; border-radius: 8px; padding: 11px 12px; border-left: 4px solid #2E7D32;">
+        <div style="font-size: 8.5px; color: #6B7C76; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px;">
+            Лучший день
+        </div>
+        <div style="font-size: 14px; font-weight: 700; color: #1A3F3A;">
+            {{ budget_ytd.daily_analysis.best_day.day }} {{ budget_ytd.daily_analysis.best_day.weekday }}
+        </div>
+        <div style="font-size: 11px; color: #2E7D32; font-weight: 600; margin-top: 2px;">
+            {{ budget_ytd.daily_analysis.best_day.fact_day_fmt }} ₽
+        </div>
+    </div>
+    <div style="background: #F7F9F8; border: 1px solid #DDE7E2; border-radius: 8px; padding: 11px 12px; border-left: 4px solid #C62828;">
+        <div style="font-size: 8.5px; color: #6B7C76; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px;">
+            Минимальный день
+        </div>
+        <div style="font-size: 14px; font-weight: 700; color: #1A3F3A;">
+            {{ budget_ytd.daily_analysis.worst_day.day }} {{ budget_ytd.daily_analysis.worst_day.weekday }}
+        </div>
+        <div style="font-size: 11px; color: #C62828; font-weight: 600; margin-top: 2px;">
+            {{ budget_ytd.daily_analysis.worst_day.fact_day_fmt }} ₽
+        </div>
+    </div>
+</div>
+
+{# Таблица по дням #}
+<table class="data" style="font-size: 9px;">
+    <thead>
+        <tr>
+            <th>День</th>
+            <th>День недели</th>
+            <th>План дня, ₽</th>
+            <th>Факт дня, ₽</th>
+            <th>Отклонение, ₽</th>
+            <th>Выполнение, %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for day in budget_ytd.daily_analysis.days %}
+        <tr>
+            <td class="center"><strong>{{ day.date_label }}</strong></td>
+            <td class="center">{{ day.weekday }}</td>
+            <td class="right">{{ day.plan_day_fmt }}</td>
+            <td class="right {% if day.fact_day >= day.plan_day %}positive-text{% else %}negative-text{% endif %}">
+                {{ day.fact_day_fmt }}
+            </td>
+            <td class="right {% if day.delta_day >= 0 %}positive-text{% else %}negative-text{% endif %}">
+                {% if day.delta_day >= 0 %}+{% else %}-{% endif %}{{ day.delta_day_fmt }}
+            </td>
+            <td class="right {% if day.exec_day_pct >= 100 %}positive-text{% else %}negative-text{% endif %}">
+                {{ day.exec_day_pct|floatformat:0 }}%
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="small-note" style="margin-top: 8px;">
+    * В таблице показаны только дни, по которым есть фактические данные. План распределен по рабочим дням месяца.
+</div>
+{% endif %}
+
+{# Итоговый комментарий #}
+<div class="comment-box" style="margin-top: 25px;">
+    <div class="comment-title">Анализ исполнения</div>
+    <div class="comment-text">
+        {% if budget_ytd.totals.exec_pct >= 100 %}
+            План выполнен. Фактические продажи составили {{ budget_ytd.totals.fact_compact }} ₽ 
+            при плане {{ budget_ytd.totals.plan_compact }} ₽. 
+            Перевыполнение: {{ budget_ytd.totals.delta_compact }} ₽ ({{ budget_ytd.totals.delta_pct|floatformat:1 }}%).
+        {% else %}
+            План не выполнен. Фактические продажи составили {{ budget_ytd.totals.fact_compact }} ₽ 
+            при плане {{ budget_ytd.totals.plan_compact }} ₽. 
+            Отставание: {{ budget_ytd.totals.delta_compact }} ₽ ({{ budget_ytd.totals.delta_pct|floatformat:1 }}%).
+        {% endif %}
+    </div>
+</div>
+
+{% else %}
+    <p class="text-muted">Нет данных по выручке (код 111000) за прошедший период</p>
+{% endif %}
