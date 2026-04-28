@@ -347,7 +347,7 @@ report_type::bigint as report_type,
 field::text as field,
 val::bigint as val,
 case when oper = 'dt' then 'dt_wb' else 'cr_wb' end as oper
-from a13.main.sales_long
+from sales_long
 union all
 select 
 date_from::date as date_from,
@@ -355,7 +355,7 @@ report_type::bigint as report_type,
 field::text as field,
 round(val::bigint / (100+vat_rate) * 100,0)::bigint as val,
 case when oper = 'dt' then 'dt_pl' else 'cr_pl' end as oper
-from a13.main.sales_long
+from sales_long
 union all
 select 
 date_from::date as date_from,
@@ -363,7 +363,7 @@ report_type::bigint as report_type,
 field::text as field,
 round(val::bigint / (100+vat_rate) * vat_rate,0)::bigint as val,
 case when oper = 'dt' then 'dt_vat' else 'cr_vat' end as oper
-from a13.main.sales_long
+from sales_long
 )
 select 
 x.date_from,
@@ -391,7 +391,9 @@ on oper
 using COALESCE(sum(val),0)
 group by date_from, report_type, field
 ) x
-left join a13.main.maping as m on m.field = x.field and m.report_type = x.report_type
+left join maping as m on m.field = x.field and m.report_type = x.report_type
+
+order by date_from, field, report_type
 
 """
 
@@ -427,7 +429,57 @@ def get_psql_data():
 
 
     return vat,maping
+
+
+def update_wb_distribution(conn: DuckDBPyConnection):
+    duck = conn
+    psql = connect_db()
+
+    # данные из duck
+    result = duck.execute(UPDATE_WB_DISTRIBUTION)
+
+    # границы дат
+    min_date, max_date = duck.execute(f"""
+        SELECT min(date_from), max(date_from)
+        FROM ({UPDATE_WB_DISTRIBUTION})
+    """).fetchone()
     
+    print(min_date, max_date)
+
+    rows = result.fetchall()
+    cols = [c[0] for c in result.description]
+
+    # 🔥 подготовим SQL
+    columns_sql = ", ".join(cols)
+    placeholders = ", ".join(["%s"] * len(cols))
+
+    insert_sql = f"""
+        INSERT INTO gl.wb_distibution ({columns_sql})
+        VALUES ({placeholders})
+    """
+    print("ROWS:", len(rows))
+
+    with psql.cursor() as cur:
+        # DELETE
+        cur.execute(
+            """
+            DELETE FROM gl.wb_distibution
+            WHERE date_from BETWEEN %s AND %s
+            """,
+            (min_date, max_date),
+        )
+
+        # INSERT
+        cur.executemany(insert_sql, rows)
+
+    psql.commit()
+    psql.close()
+    
+      
+    
+
+
+
 def log(
     conn: DuckDBPyConnection,
     fun='handle',
@@ -531,8 +583,10 @@ class Command(BaseCommand):
                     {SALES_LONG}
                     """
                 )
-                self.stdout.write(self.style.SUCCESS(f"Table sales_long were renewed"))
+                self.stdout.write(self.style.SUCCESS(f"Table sales_long was renewed"))
                 
+                update_wb_distribution(con)
+                self.stdout.write(self.style.SUCCESS(f"Table wb_distibution was updated"))
 
         except Exception as e:
             log(con,status='faild',msg=f"DuckDB error: {e}")
