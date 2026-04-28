@@ -436,7 +436,9 @@ def update_wb_distribution(conn: DuckDBPyConnection):
     psql = connect_db()
 
     # данные из duck
-    result = duck.execute(UPDATE_WB_DISTRIBUTION)
+    result = duck.sql(UPDATE_WB_DISTRIBUTION)
+    
+    
 
     # границы дат
     min_date, max_date = duck.execute(f"""
