@@ -36,11 +36,11 @@
 {# KPI Карточки #}
 <div class="kpi-row" style="display: flex; gap: 15px; margin-bottom: 25px;">
     <div class="kpi-card-compact" style="flex: 1; background: #F7F9F8; border-radius: 6px; padding: 12px;">
-        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">План (YTD {{ budget_ytd.period_info.months_passed }} мес.)</div>
+        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">План (YTD {{ budget_ytd.period_info.months_ytd }} мес.)</div>
         <div class="kpi-value-compact" style="font-size: 18px; font-weight: 700; color: #1A3F3A;">{{ budget_ytd.totals.plan_compact }} ₽</div>
     </div>
     <div class="kpi-card-compact" style="flex: 1; background: #F7F9F8; border-radius: 6px; padding: 12px;">
-        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">Факт (YTD {{ budget_ytd.period_info.months_passed }} мес.)</div>
+        <div class="kpi-label-compact" style="font-size: 10px; color: #666; text-transform: uppercase;">Факт (YTD {{  budget_ytd.period_info.months_ytd }} мес.)</div>
         <div class="kpi-value-compact" style="font-size: 18px; font-weight: 700; color: #1A3F3A;">{{ budget_ytd.totals.fact_compact }} ₽</div>
     </div>
     <div class="kpi-card-compact" style="flex: 1; background: #F7F9F8; border-radius: 6px; padding: 12px;">
@@ -224,7 +224,9 @@
 
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 10.5px; margin-bottom: 12px;">
                 <div>
-                    <div style="color:#777;">Текущий темп</div>
+                    <div style="color:#777;">
+                        Темп за период {{ s.rate_start_date|date:"d.m" }}–{{ budget_ytd.period_info.report_date|date:"d.m" }}
+                    </div>
                     <strong>{{ s.current_daily_rate_fmt }} ₽/день</strong>
                 </div>
 

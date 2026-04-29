@@ -66,6 +66,7 @@ FONTS = {
     "counterparty_negative": Font(name="Roboto", size=10, color=COLORS["counterparty_gray"]),
     "comment": Font(name="Roboto", size=9, italic=True, color=COLORS["text_gray"]),
     "comment_bold": Font(name="Roboto", size=10, bold=True, color=COLORS["black"]),
+    "subitem": Font(name="Roboto",size=10,italic=True,color=COLORS["counterparty_gray"],),
 }
 
 thin = Side(style="thin", color=COLORS["border_gray"])

@@ -126,7 +126,7 @@ def _draw_kpi_block(ws, start_row, data):
         ("Количество расшифровок", len(detail_sheets), False, False),
         ("Итого дебет (поступление)", total_dt, True, False),
         ("Итого кредит (оплаты)", total_cr, True, False),
-        ("Итого amount", total_amount, True, True),
+        ("Итого", total_amount, True, True),
     ]
 
     row_idx = start_row + 1
