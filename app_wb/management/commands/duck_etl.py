@@ -301,7 +301,11 @@ x.btn,
 x.ts_name,
 x.barcode,
 x.field,
-abs(round(x.val*100,0)) as val,
+CASE 
+    WHEN x.field = 'additional_payment' 
+        THEN abs(round(x.val * 100, 0))
+    ELSE round(x.val * 100, 0)
+END AS val,
 CASE 
 WHEN x.field in ('retail_price', 'retail_amount', 'ppvz_for_pay') and x.dtn = 'Продажа' then 'dt'
 WHEN x.field in ('retail_price', 'retail_amount', 'ppvz_for_pay') and x.dtn = 'Возврат' then 'cr'
