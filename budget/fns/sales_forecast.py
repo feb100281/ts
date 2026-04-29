@@ -729,6 +729,12 @@ def main(conn, **args):
             args["revenue_param"].get("scenario", "base"),
             args["revenue_param"].get("scenarios", {}),
         )
+        
+        forecast = apply_monthly_amount_adjustments(
+            forecast,
+            args["revenue_param"].get("monthly_amount_adjustments", {}),
+            plan_start=args["date_from"],
+        )
 
         stat = stats(
             ddb_con,
@@ -784,6 +790,55 @@ def apply_monthly_adjustments(forecast: pd.DataFrame, adjustments: dict) -> pd.D
 
     return forecast.drop(columns=["month"])
 
+
+def apply_monthly_amount_adjustments(
+    forecast: pd.DataFrame,
+    adjustments: dict,
+    plan_start=None,
+) -> pd.DataFrame:
+    """
+    Ручная корректировка финального плана по месяцу абсолютной суммой в рублях.
+
+    Важно:
+    корректировка применяется только к датам, которые попадут в бюджет,
+    то есть начиная с plan_start.
+    """
+
+    if not adjustments:
+        return forecast
+
+    forecast = forecast.copy()
+    forecast["ds"] = pd.to_datetime(forecast["ds"])
+    forecast["month_key"] = forecast["ds"].dt.strftime("%Y-%m")
+
+    if plan_start is not None:
+        plan_start = pd.to_datetime(plan_start)
+
+    for month_key, amount_rub in adjustments.items():
+        try:
+            adjustment_kopecks = float(amount_rub) * 100
+        except (TypeError, ValueError):
+            continue
+
+        mask = forecast["month_key"] == str(month_key)
+
+        if plan_start is not None:
+            mask = mask & (forecast["ds"] >= plan_start)
+
+        if not mask.any():
+            continue
+
+        month_total = forecast.loc[mask, "yhat"].sum()
+
+        if month_total <= 0:
+            continue
+
+        shares = forecast.loc[mask, "yhat"] / month_total
+
+        forecast.loc[mask, "yhat"] += shares * adjustment_kopecks
+        forecast.loc[mask, "yhat"] = forecast.loc[mask, "yhat"].clip(lower=0)
+
+    return forecast.drop(columns=["month_key"])
 
 def apply_scenario(forecast: pd.DataFrame, scenario_name: str, scenarios: dict) -> pd.DataFrame:
     """

@@ -106,6 +106,9 @@ def revenue_json():
             "8": 1.10,
             "11": 1.10
         },
+        "monthly_amount_adjustments": {
+        "2026-04": 0
+                 },
 
         "scenario": "base",
         "scenarios": {

@@ -466,7 +466,20 @@ class BudgetVersionAdmin(admin.ModelAdmin):
             raise Http404("BudgetVersion not found")
 
         from budget.reporting.excel.exporter import build_budget_excel_response
-        return build_budget_excel_response(obj)
+        response = build_budget_excel_response(obj)
+        
+        # Меняем имя файла
+        date_from_str = obj.date_from.strftime('%Y-%m-%d') if obj.date_from else 'без_даты'
+        date_to_str = obj.date_to.strftime('%Y-%m-%d') if obj.date_to else 'без_даты'
+        
+        # Получаем название типа бюджета
+        budget_type_name = obj.get_budget_type_display()
+        
+        filename = f"Исполнение_бюджета_{budget_type_name}_{date_from_str}_{date_to_str}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+
 
 
 @admin.register(Gl)

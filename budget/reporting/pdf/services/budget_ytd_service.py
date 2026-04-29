@@ -1,7 +1,7 @@
 # budget/reporting/pdf/services/budget_ytd_service.py
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 import calendar
 
@@ -186,6 +186,28 @@ def _get_monthly_fact(date_from, report_date):
     }
 
 
+def _get_fact_for_period(date_start, date_end):
+    """
+    Факт выручки за произвольный период.
+    Нужен для расчета актуального среднедневного темпа.
+    """
+
+    sql = """
+        SELECT SUM(ROUND(x.amount, 2)) AS amount
+        FROM public.cf_to_csv x
+        JOIN corporate_cfitems i ON i.id = x.subconto_id
+        JOIN corporate_cfitems lv3 ON lv3.id = i.parent_id
+        WHERE lv3.code = %s
+          AND x.date_from BETWEEN %s AND %s
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [REVENUE_CODE, date_start, date_end])
+        row = cursor.fetchone()
+
+    return float(row[0] or 0) if row else 0.0
+
+
 def _get_semi_annual_targets(monthly_plan_full_year, year):
     """
     Полугодовые цели из полного годового плана.
@@ -321,13 +343,45 @@ def _build_ytd_summary(
         gap_total = 0.0
         gap_pct = 0.0
 
+        # if is_current and sem_fact > 0:
+        #     days_passed = (report_date - sem_start_date).days + 1
+        #     days_total = (sem_end_date - sem_start_date).days + 1
+        #     days_remaining = max((sem_end_date - report_date).days, 0)
+
+        #     current_daily_rate = sem_fact / days_passed if days_passed > 0 else 0.0
+        #     projected_end = current_daily_rate * days_total
+
+        #     if days_remaining > 0 and remaining_target > 0:
+        #         required_daily_rate = remaining_target / days_remaining
+
+        #     gap_daily_rate = max(required_daily_rate - current_daily_rate, 0)
+        #     gap_total = gap_daily_rate * days_remaining
+
+        #     if required_daily_rate > 0:
+        #         gap_pct = gap_daily_rate / required_daily_rate * 100
+        
+        
         if is_current and sem_fact > 0:
-            days_passed = (report_date - sem_start_date).days + 1
-            days_total = (sem_end_date - sem_start_date).days + 1
+            rate_window_days = 10
+
             days_remaining = max((sem_end_date - report_date).days, 0)
 
-            current_daily_rate = sem_fact / days_passed if days_passed > 0 else 0.0
-            projected_end = current_daily_rate * days_total
+            rate_start_date = max(
+                sem_start_date,
+                report_date - timedelta(days=rate_window_days - 1)
+            )
+
+            actual_rate_days = (report_date - rate_start_date).days + 1
+
+            fact_last_period = _get_fact_for_period(rate_start_date, report_date)
+
+            current_daily_rate = (
+                fact_last_period / actual_rate_days
+                if actual_rate_days > 0
+                else 0.0
+            )
+
+            projected_end = sem_fact + current_daily_rate * days_remaining
 
             if days_remaining > 0 and remaining_target > 0:
                 required_daily_rate = remaining_target / days_remaining
@@ -355,6 +409,8 @@ def _build_ytd_summary(
             "gap_total": gap_total,
             "gap_pct": gap_pct,
             "days_remaining": days_remaining,
+            "rate_window_days": actual_rate_days if is_current else 0,
+            "rate_start_date": rate_start_date if is_current else None,
         })
     total_plan = sum(float(m["plan"]) for m in monthly_data)
     total_fact = sum(float(m["fact"]) for m in monthly_data)
@@ -366,12 +422,13 @@ def _build_ytd_summary(
 
     return {
         "period_info": {
-            "report_date": report_date,
-            "report_date_str": report_date.strftime("%d.%m.%Y"),
-            "months_passed": completed_months_count,
-            "days_passed_current_month": report_date.day,
-            "has_partial_month": has_partial_month,
-        },
+        "report_date": report_date,
+        "report_date_str": report_date.strftime("%d.%m.%Y"),
+        "months_ytd": len(monthly_data),
+        "months_completed": completed_months_count,
+        "days_passed_current_month": report_date.day,
+        "has_partial_month": has_partial_month,
+    },
         "monthly_data": monthly_data,
         "semi_analysis": semi_analysis,
         "totals": {
