@@ -36,9 +36,9 @@ class Command(BaseCommand):
         parser.add_argument("--overwrite", action="store_true")
 
     def handle(self, *args, **options):
-        token = os.getenv("WB_TOKEN")
+        token = os.getenv("WB_SUPER_TOKEN")
         if not token:
-            raise CommandError("WB_TOKEN is not set")
+            raise CommandError("WB_SUPER_TOKEN is not set")
 
         parquet_path = os.getenv("PARQUET_PATH")
         if not parquet_path:
@@ -122,6 +122,7 @@ class Command(BaseCommand):
             "dateTo": date_to,
             "limit": LIMIT,
             "rrdid": rrdid,
+            "period": "daily"
         }
 
         response = requests.post(

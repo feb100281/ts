@@ -28,8 +28,12 @@ python manage.py check
 ────────────────────────
 sudo systemctl restart gunicorn-ts
 
+Манажемент коммандс
+________
+#Получить продажи
+python manage.py fin_report_range 2026-04-27 2026-04-28 --overwrite
 
-
+________
 
 
 🌐 SSH-ТУННЕЛЬ К БАЗЕ
