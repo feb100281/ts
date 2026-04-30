@@ -158,6 +158,7 @@ SELECT
     vat.value::DOUBLE AS vat_rate,
     komplekt.value AS komplekt,
     declaration.value AS declaration_number,
+    country.value as origin_country,
 
     json_extract_string(payload, '$.createdAt') AS created_at,
     json_extract_string(payload, '$.updatedAt') AS updated_at
@@ -210,6 +211,13 @@ LEFT JOIN LATERAL (
     WHERE json_extract_string(ch.value, '$.name') = 'Номер декларации соответствия'
     LIMIT 1
 ) declaration ON TRUE
+
+LEFT JOIN LATERAL (
+    SELECT json_extract_string(ch.value, '$.value[0]') AS value
+    FROM json_each(json_extract(payload, '$.characteristics')) AS ch
+    WHERE json_extract_string(ch.value, '$.name') = 'Страна производства'
+    LIMIT 1
+) country ON TRUE
 
 """
 
