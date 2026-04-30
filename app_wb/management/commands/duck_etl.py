@@ -543,6 +543,12 @@ class Command(BaseCommand):
                 """)
                 
                 con.execute(f"""
+                    CREATE VIEW IF NOT EXISTS stocks_raw AS
+                    SELECT *
+                    FROM read_parquet('{parquet_path}/stocks/*.parquet', union_by_name=true);
+                """)
+                
+                con.execute(f"""
                     CREATE VIEW IF NOT EXISTS unpacked_cards AS
                     {UNPACTED_CARDS}
                 """)
