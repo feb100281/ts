@@ -166,3 +166,6 @@ python manage.py runserver 62.109.2.166:8092
 
 СЕРВЕР
 http://62.109.2.166:8090
+
+
+rsync -avP daria@82.202.197.94:/home/daria/ts/data/realization ~/Downloads/
