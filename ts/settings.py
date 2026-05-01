@@ -71,6 +71,8 @@ INSTALLED_APPS = [
     "mptt",    
     "jsoneditor",
     "app_wb",
+    "inventories",
+    "app_deliveries",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
     "django.contrib.admin",

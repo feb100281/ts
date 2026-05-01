@@ -17,6 +17,7 @@ server_path = '/home/daria/ts/data/lots/raws'
 
 # Пути к файлам комментим иначе git конфликт
 # '/Users/pavelustenko/Downloads/lots/03 Расчет себестоимости H&M 3 лот (3 LOT CALCULATION COST AND BREAK-EVEN POINT).xlsx'
+# 
 
 def get_xls_file(file):
     xls = pd.ExcelFile(file)
