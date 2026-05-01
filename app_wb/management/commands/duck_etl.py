@@ -494,7 +494,7 @@ def log(
 
 class Command(BaseCommand):
     help = "Initialize DuckDB views for WB parquet"
-    
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--update",
@@ -504,9 +504,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         update_flag = options.get("update", False)
+
         db_path = os.getenv("DUCKDB_PATH")
         parquet_path = os.getenv("PARQUET_PATH")
-        
 
         if not db_path:
             raise CommandError("DUCKDB_PATH is not set")
@@ -519,19 +519,15 @@ class Command(BaseCommand):
 
         try:
             with duckdb.connect(db_path) as con:
-
                 con.execute("CREATE SCHEMA IF NOT EXISTS sales;")
 
-                con.execute(
-                    f"""
+                con.execute(f"""
                     CREATE VIEW IF NOT EXISTS sales.realization_raw AS
                     SELECT *
                     FROM read_parquet('{parquet_path}/*.parquet', union_by_name=true);
-                """
-                )
-                
-                con.execute(
-                    """ 
+                """)
+
+                con.execute("""
                     CREATE TABLE IF NOT EXISTS duck_logs (
                         ts TIMESTAMP DEFAULT current_timestamp,
 
@@ -542,58 +538,83 @@ class Command(BaseCommand):
                         details JSON,
                         message TEXT
                     );
-                    """
-                )
+                """)
 
                 self.stdout.write(self.style.SUCCESS("VIEW realization_raw created"))
 
-                cnt = con.execute("SELECT COUNT(*) FROM sales.realization_raw").fetchone()[0]
+                cnt = con.execute(
+                    "SELECT COUNT(*) FROM sales.realization_raw"
+                ).fetchone()[0]
 
                 self.stdout.write(self.style.SUCCESS(f"Rows available: {cnt}"))
                 log(con, msg=f"Rows available: {cnt}", status="ok")
 
+                # =========================
+                # wb_raw / new_rows
+                # =========================
+
                 try:
-                    new_rows = con.sql(
-                        """ 
-                        select * from sales.realization_raw
-                        where rrd_id not in (
-                            select rrd_id from sales.wb_raw
+                    new_rows = con.sql("""
+                        SELECT *
+                        FROM sales.realization_raw
+                        WHERE rrd_id NOT IN (
+                            SELECT rrd_id FROM sales.wb_raw
                         )
-                        """
-                    )
-                except:
+                    """)
+                except Exception:
                     con.execute(RAW_TABLE)
-                    
-                
-                if new_rows:
-                   con.register("new_rows", new_rows)  
-                   nr = con.sql("SELECT COUNT(*) FROM new_rows").fetchone()[0]
-                   insert_new_rows(con) 
-                   self.stdout.write(self.style.SUCCESS(f"Rows inserter: {nr}"))
+
+                    new_rows = con.sql("""
+                        SELECT *
+                        FROM sales.realization_raw
+                        WHERE rrd_id NOT IN (
+                            SELECT rrd_id FROM sales.wb_raw
+                        )
+                    """)
+
+                con.register("new_rows", new_rows)
+
+                nr = con.sql(
+                    "SELECT COUNT(*) FROM new_rows"
+                ).fetchone()[0]
+
+                if nr > 0:
+                    insert_new_rows(con)
+                    self.stdout.write(
+                        self.style.SUCCESS(f"Rows inserted: {nr}")
+                    )
                 else:
-                   self.stdout.write(self.style.SUCCESS(f"Nothing to insert")) 
-                   
-                    
+                    self.stdout.write(
+                        self.style.SUCCESS("Nothing to insert")
+                    )
 
                 self.stdout.write(
-                    self.style.SUCCESS(f"Table wb_raw and products were renewed")
+                    self.style.SUCCESS("Table wb_raw and products were renewed")
                 )
+
+                # =========================
+                # psql data
+                # =========================
 
                 vat, maping = get_psql_data()
 
-                con.execute("CREATE OR REPLACE TABLE main.vat AS select * from vat")
-                con.execute(
-                    "CREATE OR REPLACE TABLE main.maping AS select * from maping"
-                )
-                self.stdout.write(self.style.SUCCESS(f"vat_renew"))
+                con.execute("CREATE OR REPLACE TABLE main.vat AS SELECT * FROM vat")
+                con.execute("CREATE OR REPLACE TABLE main.maping AS SELECT * FROM maping")
 
-                con.execute(
-                    f""" 
+                self.stdout.write(self.style.SUCCESS("vat_renew"))
+
+                con.execute(f"""
                     CREATE OR REPLACE TABLE sales.sales_long AS
                     {SALES_LONG}
-                    """
+                """)
+
+                self.stdout.write(
+                    self.style.SUCCESS("Table sales_long was renewed")
                 )
-                self.stdout.write(self.style.SUCCESS(f"Table sales_long was renewed"))
+
+                # =========================
+                # optional update
+                # =========================
 
                 if update_flag:
                     update_wb_distribution(con)
@@ -606,5 +627,4 @@ class Command(BaseCommand):
                     )
 
         except Exception as e:
-            log(con, status="faild", msg=f"DuckDB error: {e}")
             raise CommandError(f"DuckDB error: {e}")
