@@ -83,9 +83,9 @@ class Command(BaseCommand):
                 con.register("lot_df", lot_df)
 
                 con.execute(f"""
-                    CREATE VIEW IF NOT EXISTS deliveries.deliveries_raw AS
+                    CREATE OR REPLACE VIEW deliveries.deliveries_raw AS
                     SELECT *
-                    FROM read_parquet('{parquet_path}/deliveries/*.parquet', union_by_name=true);
+                    FROM read_parquet('{output_dir.as_posix()}/*.parquet', union_by_name=true);
                 """)
                 
                 

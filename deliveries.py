@@ -34,6 +34,8 @@ d = {'Отгрузка_№_32_H&M_WB_1_ая_фура_001_3333_26471_ед_;_22_п
      'Отгрузка_№_33_H&M_WB_1_ая_фура_001_17751_ед_;_2_ая_фура_004_21348.xlsx':'33', 
      'Отгрузка_№_36_H&M_WB_3333_3_яя_003_4411_ед_и_4_ая_002_28433_ед_32.xlsx':'36'}
 
+cols_to_keep = list(FIELDS.values())
+
 for i,v in d.items():
     print(i)
     xls = pd.ExcelFile(p/i)
@@ -43,8 +45,10 @@ for i,v in d.items():
     else:
         df =  df = xls.parse(sheet_name='Sheet1',dtype=str,skiprows=3,usecols='A:Q')
     df = df[df["Артикул"].notna() & (df["Артикул"].str.strip() != "")]
-    df = df.rename(columns=FIELDS)
+    df = df.rename(columns=FIELDS)    
+    df = df[cols_to_keep]
     df = df.apply(lambda col: col.str.strip())
+    
     df.to_csv(p/f"lot6_{v}.csv")
     
     
