@@ -82,6 +82,13 @@ class Command(BaseCommand):
                 con.register("delivery_df", delivery_df)
                 con.register("lot_df", lot_df)
 
+                con.execute(f"""
+                    CREATE VIEW IF NOT EXISTS deliveries.deliveries_raw AS
+                    SELECT *
+                    FROM read_parquet('{parquet_path}/deliveries/*.parquet', union_by_name=true);
+                """)
+                
+                
                 con.execute("""
                     CREATE OR REPLACE TABLE deliveries.delivery AS
                     SELECT * FROM delivery_df;

@@ -13,12 +13,15 @@ import pandas as pd
 
 load_dotenv()
 
+from inventories.models import Delivery, Lot
+
 
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME")
+
 
 def connect_db():
     return psycopg.connect(
@@ -30,24 +33,11 @@ def connect_db():
         connect_timeout=10,
     )
 
+
 # --------
 # Запросы
 # --------
 
-UNPACKED_STOCKS = """
-CREATE OR REPLACE TABLE stocks.unpacked_stocks as
-SELECT
-    _loaded_at::date as date_from,
-    nm_id,
-    (payload::JSON ->> 'chrtId')::BIGINT AS chrt_id,
-    (payload::JSON ->> 'warehouseId')::BIGINT AS warehouse_id,
-    payload::JSON ->> 'warehouseName' AS warehouse_name,
-    payload::JSON ->> 'regionName' AS region_name,
-    (payload::JSON ->> 'quantity')::BIGINT AS quantity,
-    (payload::JSON ->> 'inWayToClient')::BIGINT AS in_way_to_client,
-    (payload::JSON ->> 'inWayFromClient')::BIGINT AS in_way_from_client
-from stocks.stocks_raw
-"""
 
 
 class Command(BaseCommand):
@@ -69,17 +59,41 @@ class Command(BaseCommand):
         try:
             with duckdb.connect(db_path) as con:
 
-                con.execute("CREATE SCHEMA IF NOT EXISTS stocks;")                
-               
+                con.execute("CREATE SCHEMA IF NOT EXISTS deliveries;") 
+                
+                delivery_df = pd.DataFrame(
+                    list(Delivery.objects.all().values())
+                )
+
+                lot_df = pd.DataFrame(
+                    list(Lot.objects.all().values())
+                )
+
+                # =========================
+                # в DuckDB
+                # =========================
+                con.register("delivery_df", delivery_df)
+                con.register("lot_df", lot_df)
+
                 con.execute(f"""
-                    CREATE VIEW IF NOT EXISTS stocks.stocks_raw AS
+                    CREATE VIEW IF NOT EXISTS deliveries.deliveries_raw AS
                     SELECT *
-                    FROM read_parquet('{parquet_path}/stocks/*.parquet', union_by_name=true);
+                    FROM read_parquet('{parquet_path}/deliveries/*.parquet', union_by_name=true);
                 """)
                 
-                con.execute(UNPACKED_STOCKS)      
                 
-                self.stdout.write(self.style.SUCCESS("ALL STOCKS UNPACKED"))
+                con.execute("""
+                    CREATE OR REPLACE TABLE deliveries.delivery AS
+                    SELECT * FROM delivery_df;
+                """)
+
+                con.execute("""
+                    CREATE OR REPLACE TABLE deliveries.lot AS
+                    SELECT * FROM lot_df;
+                """)               
+                   
+                
+                self.stdout.write(self.style.SUCCESS("ALL DELIVERIES CREATED"))
                 
         except Exception as e:
             raise CommandError(f"DuckDB error: {e}")

@@ -39,7 +39,134 @@ def connect_db():
 # --------
 
 # Обновляем таблицу raw
+def insert_new_rows(con:DuckDBPyConnection):
+    con.execute("""
+    INSERT INTO sales.wb_raw(
+        rrd_id,
+    rr_dt,
+    date_from,
+
+    nm_id,
+    report_type,
+    ts_name,
+    sop_name,
+    dtn,
+    report_id,
+    barcode,
+    srid,
+    gi_id,
+    currency_name,
+    btn,
+
+    comissioning_percent,
+    sale_percent,
+    quantity,
+
+    retail_price,
+    retail_amount,
+    loyalty_discount,
+    ppvz_for_pay,
+    delivery_rub,
+    storage_fee,
+    acceptance,
+    deduction,
+    penalty,
+    additional_payment,
+    cashback_amount,
+    cashback_commission_change,
+    payment_schedule,
+
+    _loaded_at
+    )
+    SELECT
+    rrd_id,
+    rr_dt,
+    date_from,
+
+    nm_id,
+    report_type,
+    ts_name,
+    sop_name,
+    dtn,
+    report_id,
+    barcode,
+    srid,
+    gi_id,
+    currency_name,
+    btn,
+
+    comissioning_percent,
+    sale_percent,
+    quantity,
+
+    retail_price,
+    retail_amount,
+    loyalty_discount,
+    ppvz_for_pay,
+    delivery_rub,
+    storage_fee,
+    acceptance,
+    deduction,
+    penalty,
+    additional_payment,
+    cashback_amount,
+    cashback_commission_change,
+    payment_schedule,
+
+    _loaded_at
+FROM (
+    SELECT
+        rrd_id,
+        rr_dt::DATE AS rr_dt,
+        date_from::DATE AS date_from,
+
+        json_extract_string(payload, '$.nmId')::BIGINT AS nm_id,
+        json_extract_string(payload, '$.reportType')::INT AS report_type,
+        json_extract_string(payload, '$.techSize') AS ts_name,
+        json_extract_string(payload, '$.sellerOperName') AS sop_name,
+        json_extract_string(payload, '$.docTypeName') AS dtn,
+        json_extract_string(payload, '$.reportId') AS report_id,
+        json_extract_string(payload, '$.sku') AS barcode,
+        json_extract_string(payload, '$.srid') AS srid,
+        json_extract_string(payload, '$.giId') AS gi_id,
+        json_extract_string(payload, '$.currency') AS currency_name,
+        json_extract_string(payload, '$.bonusTypeName') AS btn,
+        json_extract_string(payload, '$.country') AS country,
+
+        json_extract_string(payload, '$.commissionPercent')::DOUBLE AS comissioning_percent,
+        json_extract_string(payload, '$.salePercent')::DOUBLE AS sale_percent,
+        json_extract_string(payload, '$.quantity')::DOUBLE AS quantity,
+
+        json_extract_string(payload, '$.retailPrice')::DOUBLE AS retail_price,
+        json_extract_string(payload, '$.retailAmount')::DOUBLE AS retail_amount,
+        json_extract_string(payload, '$.loyaltyDiscount')::DOUBLE AS loyalty_discount,
+        json_extract_string(payload, '$.forPay')::DOUBLE AS ppvz_for_pay,
+        json_extract_string(payload, '$.deliveryService')::DOUBLE AS delivery_rub,
+        json_extract_string(payload, '$.paidStorage')::DOUBLE AS storage_fee,
+        json_extract_string(payload, '$.paidAcceptance')::DOUBLE AS acceptance,
+        json_extract_string(payload, '$.deduction')::DOUBLE AS deduction,
+        json_extract_string(payload, '$.penalty')::DOUBLE AS penalty,
+        json_extract_string(payload, '$.additionalPayment')::DOUBLE AS additional_payment,
+        json_extract_string(payload, '$.cashbackAmount')::DOUBLE AS cashback_amount,
+        json_extract_string(payload, '$.cashbackCommissionChange')::DOUBLE AS cashback_commission_change,
+        json_extract_string(payload, '$.paymentSchedule')::DOUBLE AS payment_schedule,
+
+        _loaded_at,
+
+        ROW_NUMBER() OVER (
+            PARTITION BY rrd_id
+            ORDER BY _loaded_at DESC
+        ) AS rn
+
+    FROM new_rows
+    WHERE rrd_id IS NOT NULL
+)
+WHERE rn = 1;
+    """)
+    
+
 RAW_TABLE = """ 
+    
 CREATE OR REPLACE TABLE sales.wb_raw AS
 SELECT
     rrd_id,
@@ -271,6 +398,7 @@ order by date_from, field, report_type
 """
 
 
+
 def get_psql_data():
     conn = connect_db()
 
@@ -366,10 +494,19 @@ def log(
 
 class Command(BaseCommand):
     help = "Initialize DuckDB views for WB parquet"
+    
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--update",
+            action="store_true",
+            help="Update wb_distribution"
+        )
 
     def handle(self, *args, **options):
+        update_flag = options.get("update", False)
         db_path = os.getenv("DUCKDB_PATH")
         parquet_path = os.getenv("PARQUET_PATH")
+        
 
         if not db_path:
             raise CommandError("DUCKDB_PATH is not set")
@@ -392,7 +529,7 @@ class Command(BaseCommand):
                     FROM read_parquet('{parquet_path}/*.parquet', union_by_name=true);
                 """
                 )
-
+                
                 con.execute(
                     """ 
                     CREATE TABLE IF NOT EXISTS duck_logs (
@@ -415,7 +552,28 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Rows available: {cnt}"))
                 log(con, msg=f"Rows available: {cnt}", status="ok")
 
-                con.execute(RAW_TABLE)
+                try:
+                    new_rows = con.sql(
+                        """ 
+                        select * from sales.realization_raw
+                        where rrd_id not in (
+                            select rrd_id from sales.wb_raw
+                        )
+                        """
+                    )
+                except:
+                    con.execute(RAW_TABLE)
+                    
+                
+                if new_rows:
+                   con.register("new_rows", new_rows)  
+                   nr = con.sql("SELECT COUNT(*) FROM new_rows").fetchone()[0]
+                   insert_new_rows(con) 
+                   self.stdout.write(self.style.SUCCESS(f"Rows inserter: {nr}"))
+                else:
+                   self.stdout.write(self.style.SUCCESS(f"Nothing to insert")) 
+                   
+                    
 
                 self.stdout.write(
                     self.style.SUCCESS(f"Table wb_raw and products were renewed")
@@ -431,16 +589,21 @@ class Command(BaseCommand):
 
                 con.execute(
                     f""" 
-                    CREATE OR REPLACE TABLE sales_long AS
+                    CREATE OR REPLACE TABLE sales.sales_long AS
                     {SALES_LONG}
                     """
                 )
                 self.stdout.write(self.style.SUCCESS(f"Table sales_long was renewed"))
 
-                update_wb_distribution(con)
-                self.stdout.write(
-                    self.style.SUCCESS(f"Table wb_distibution was updated")
-                )
+                if update_flag:
+                    update_wb_distribution(con)
+                    self.stdout.write(
+                        self.style.SUCCESS("Table wb_distibution was updated")
+                    )
+                else:
+                    self.stdout.write(
+                        self.style.WARNING("Skip wb_distribution update")
+                    )
 
         except Exception as e:
             log(con, status="faild", msg=f"DuckDB error: {e}")
