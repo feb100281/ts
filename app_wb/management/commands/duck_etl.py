@@ -152,7 +152,7 @@ COALESCE(additional_payment::double) as additional_payment,
 COALESCE(cashback_amount::double) as cashback_amount,
 COALESCE(cashback_commission_change::double) as cashback_commission_change,
 COALESCE(payment_schedule::double) as payment_schedule
-from wb_raw
+from sales.wb_raw
 where quantity <> 2 
 order by date_from desc
 
