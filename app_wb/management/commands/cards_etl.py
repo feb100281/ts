@@ -69,6 +69,8 @@ SELECT
     komplekt.value AS komplekt,
     declaration.value AS declaration_number,
     country.value as origin_country,
+    color.value AS color,
+    
 
     json_extract_string(payload, '$.createdAt') AS created_at,
     json_extract_string(payload, '$.updatedAt') AS updated_at
@@ -129,6 +131,97 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) country ON TRUE
 
+LEFT JOIN LATERAL (
+    SELECT json_extract_string(ch.value, '$.value[0]') AS value
+    FROM json_each(json_extract(payload, '$.characteristics')) AS ch
+    WHERE json_extract_string(ch.value, '$.name') = 'Цвет'
+    LIMIT 1
+) color ON TRUE
+
+"""
+
+PIDS = """
+CREATE OR REPLACE TABLE cards.pids as
+WITH a AS (
+    SELECT DISTINCT
+        nm_id,
+        vendor_code AS sa_name
+    FROM analytics.cards.unpacked_cards
+),
+fin as (
+SELECT
+    c.nm_id,
+    p.nm_id AS nm_pid,
+    c.sa_name,
+    p.sa_name AS sa_pid
+FROM a c
+LEFT JOIN a p
+    ON left(c.sa_name, 10) = p.sa_name
+   AND try_cast(left(c.sa_name,10) AS BIGINT) IS NOT NULL
+)
+select 
+nm_id::bigint as nm_id,
+COALESCE(nm_pid,nm_id)::bigint as nm_pid,
+sa_name::text as sa_name,
+coalesce(sa_pid, sa_name)::text as sa_pid,
+case when nm_id::bigint <> COALESCE(nm_pid,nm_id)::bigint 
+then true else false end has_parent
+from fin
+"""
+
+SIZES = """
+create or replace table cards.sizes as
+select distinct 
+nm_id,
+chrt_id,
+tech_size
+from cards.unpacked_cards
+"""
+
+PRODUCTS = """
+create or replace table cards.product as
+select 
+t.nm_id,
+t.nm_pid,
+t.sa_name,
+t.sa_pid,
+s.title,
+s.komplekt as alternative_name, 
+s.subject_name,
+s.subject_id::bigint as subject_id,
+t.has_parent,
+s.vat_rate::double as vat_rate,
+case when s.vat_rate is null then false else true end as discount_vat,
+s.tnved::text as tnved,
+s.gender,
+s.origin_country,
+s.photo_hq,
+try_strptime(s.cert_end_date, '%d.%m.%Y')::date as cert_end_date,
+s.created_at::timestamp as created_at,
+s.updated_at::timestamp as updated_at,
+list(distinct s.tech_size order by s.tech_size) as available_sizes
+from cards.pids t
+left join cards.unpacked_cards s on s.nm_id::bigint = t.nm_id
+group by 
+t.nm_id,
+t.nm_pid,
+t.sa_name,
+t.sa_pid,
+s.title,
+s.komplekt,
+s.subject_name,
+s.subject_id,
+t.has_parent,
+s.vat_rate,
+discount_vat,
+cert_end_date,
+s.tnved,
+s.gender,
+s.origin_country,
+s.photo_hq,
+s.created_at,
+s.updated_at
+
 """
 
 
@@ -159,20 +252,34 @@ class Command(BaseCommand):
                     FROM read_parquet('{parquet_path}/cards/*.parquet', union_by_name=true);
                 """)
                 
-                
-                
                 con.execute(f"""
-                    CREATE TABLE IF NOT EXISTS cards.unpacked_cards AS
+                    create or replace table cards.unpacked_cards AS
                     {UNPACTED_CARDS}
                 """)
                 
+                con.execute(PIDS)
                 
+                con.execute(SIZES)
+                
+                con.execute(PRODUCTS)
+                
+                cnt_double = con.sql("SELECT nm_id, count(*) as cnt from cards.product group by nm_id having cnt > 1")
+                                
                 cnt_cards = con.execute("SELECT COUNT(*) FROM cards.cards_raw").fetchone()[0]
                 details_count = con.execute("SELECT COUNT(*) FROM cards.unpacked_cards").fetchone()[0]
+                pids_count = con.execute("SELECT COUNT(*) FROM cards.pids where has_parent = true").fetchone()[0]
+                size_count = con.execute("SELECT COUNT(distinct tech_size) from cards.sizes").fetchone()[0]
+                chrid_count = con.execute("SELECT COUNT(*) from cards.sizes").fetchone()[0]
+                product_cnt = con.execute("SELECT COUNT(*) from cards.product").fetchone()[0]
 
                 self.stdout.write(self.style.SUCCESS(f"Cards available: {cnt_cards}"))
                 self.stdout.write(self.style.SUCCESS(f"Cards unpacked raws: {details_count}"))
- 
-
+                self.stdout.write(self.style.SUCCESS(f"Pids created: {pids_count}"))
+                self.stdout.write(self.style.SUCCESS(f"SIZES created: {size_count} sizes on {chrid_count} nm_ids"))
+                if cnt_double:
+                   self.stdout.write(self.style.ERROR(f"ЗАДВОЯШКИ В КАРТОЧКАХ")) 
+                else:
+                   self.stdout.write(self.style.SUCCESS(f"UNIQUE cards created: {product_cnt}")) 
+                
         except Exception as e:
             raise CommandError(f"DuckDB error: {e}")
