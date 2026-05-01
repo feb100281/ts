@@ -196,7 +196,7 @@ INTO
 LEFT JOIN vat AS v
     ON x.date_from >= v.date_from 
    AND x.date_from < v.date_to
-LEFT JOIN products as p on p.nm_id = x.nm_id
+LEFT JOIN cards.product as p on p.nm_id = x.nm_id
 where x.val != 0
 ),
 vat_adj as (
