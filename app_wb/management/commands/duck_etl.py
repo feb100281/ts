@@ -410,7 +410,7 @@ class Command(BaseCommand):
 
                 self.stdout.write(self.style.SUCCESS("VIEW realization_raw created"))
 
-                cnt = con.execute("SELECT COUNT(*) FROM realization_raw").fetchone()[0]
+                cnt = con.execute("SELECT COUNT(*) FROM sales.realization_raw").fetchone()[0]
 
                 self.stdout.write(self.style.SUCCESS(f"Rows available: {cnt}"))
                 log(con, msg=f"Rows available: {cnt}", status="ok")
