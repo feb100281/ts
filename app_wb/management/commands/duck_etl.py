@@ -39,7 +39,134 @@ def connect_db():
 # --------
 
 # Обновляем таблицу raw
+def insert_new_rows(con:DuckDBPyConnection):
+    con.execute("""
+    INSERT INTO sales.wb_raw(
+        rrd_id,
+    rr_dt,
+    date_from,
+
+    nm_id,
+    report_type,
+    ts_name,
+    sop_name,
+    dtn,
+    report_id,
+    barcode,
+    srid,
+    gi_id,
+    currency_name,
+    btn,
+
+    comissioning_percent,
+    sale_percent,
+    quantity,
+
+    retail_price,
+    retail_amount,
+    loyalty_discount,
+    ppvz_for_pay,
+    delivery_rub,
+    storage_fee,
+    acceptance,
+    deduction,
+    penalty,
+    additional_payment,
+    cashback_amount,
+    cashback_commission_change,
+    payment_schedule,
+
+    _loaded_at
+    )
+    SELECT
+    rrd_id,
+    rr_dt,
+    date_from,
+
+    nm_id,
+    report_type,
+    ts_name,
+    sop_name,
+    dtn,
+    report_id,
+    barcode,
+    srid,
+    gi_id,
+    currency_name,
+    btn,
+
+    comissioning_percent,
+    sale_percent,
+    quantity,
+
+    retail_price,
+    retail_amount,
+    loyalty_discount,
+    ppvz_for_pay,
+    delivery_rub,
+    storage_fee,
+    acceptance,
+    deduction,
+    penalty,
+    additional_payment,
+    cashback_amount,
+    cashback_commission_change,
+    payment_schedule,
+
+    _loaded_at
+FROM (
+    SELECT
+        rrd_id,
+        rr_dt::DATE AS rr_dt,
+        date_from::DATE AS date_from,
+
+        json_extract_string(payload, '$.nmId')::BIGINT AS nm_id,
+        json_extract_string(payload, '$.reportType')::INT AS report_type,
+        json_extract_string(payload, '$.techSize') AS ts_name,
+        json_extract_string(payload, '$.sellerOperName') AS sop_name,
+        json_extract_string(payload, '$.docTypeName') AS dtn,
+        json_extract_string(payload, '$.reportId') AS report_id,
+        json_extract_string(payload, '$.sku') AS barcode,
+        json_extract_string(payload, '$.srid') AS srid,
+        json_extract_string(payload, '$.giId') AS gi_id,
+        json_extract_string(payload, '$.currency') AS currency_name,
+        json_extract_string(payload, '$.bonusTypeName') AS btn,
+        json_extract_string(payload, '$.country') AS country,
+
+        json_extract_string(payload, '$.commissionPercent')::DOUBLE AS comissioning_percent,
+        json_extract_string(payload, '$.salePercent')::DOUBLE AS sale_percent,
+        json_extract_string(payload, '$.quantity')::DOUBLE AS quantity,
+
+        json_extract_string(payload, '$.retailPrice')::DOUBLE AS retail_price,
+        json_extract_string(payload, '$.retailAmount')::DOUBLE AS retail_amount,
+        json_extract_string(payload, '$.loyaltyDiscount')::DOUBLE AS loyalty_discount,
+        json_extract_string(payload, '$.forPay')::DOUBLE AS ppvz_for_pay,
+        json_extract_string(payload, '$.deliveryService')::DOUBLE AS delivery_rub,
+        json_extract_string(payload, '$.paidStorage')::DOUBLE AS storage_fee,
+        json_extract_string(payload, '$.paidAcceptance')::DOUBLE AS acceptance,
+        json_extract_string(payload, '$.deduction')::DOUBLE AS deduction,
+        json_extract_string(payload, '$.penalty')::DOUBLE AS penalty,
+        json_extract_string(payload, '$.additionalPayment')::DOUBLE AS additional_payment,
+        json_extract_string(payload, '$.cashbackAmount')::DOUBLE AS cashback_amount,
+        json_extract_string(payload, '$.cashbackCommissionChange')::DOUBLE AS cashback_commission_change,
+        json_extract_string(payload, '$.paymentSchedule')::DOUBLE AS payment_schedule,
+
+        _loaded_at,
+
+        ROW_NUMBER() OVER (
+            PARTITION BY rrd_id
+            ORDER BY _loaded_at DESC
+        ) AS rn
+
+    FROM new_rows
+    WHERE rrd_id IS NOT NULL
+)
+WHERE rn = 1;
+    """)
+    
+
 RAW_TABLE = """ 
+    
 CREATE OR REPLACE TABLE sales.wb_raw AS
 SELECT
     rrd_id,
@@ -152,7 +279,7 @@ COALESCE(additional_payment::double) as additional_payment,
 COALESCE(cashback_amount::double) as cashback_amount,
 COALESCE(cashback_commission_change::double) as cashback_commission_change,
 COALESCE(payment_schedule::double) as payment_schedule
-from wb_raw
+from sales.wb_raw
 where quantity <> 2 
 order by date_from desc
 
@@ -196,7 +323,7 @@ INTO
 LEFT JOIN vat AS v
     ON x.date_from >= v.date_from 
    AND x.date_from < v.date_to
-LEFT JOIN products as p on p.nm_id = x.nm_id
+LEFT JOIN cards.product as p on p.nm_id = x.nm_id
 where x.val != 0
 ),
 vat_adj as (
@@ -269,6 +396,7 @@ left join maping as m on m.field = x.field and m.report_type = x.report_type
 order by date_from, field, report_type
 
 """
+
 
 
 def get_psql_data():
@@ -367,7 +495,16 @@ def log(
 class Command(BaseCommand):
     help = "Initialize DuckDB views for WB parquet"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--update",
+            action="store_true",
+            help="Update wb_distribution"
+        )
+
     def handle(self, *args, **options):
+        update_flag = options.get("update", False)
+
         db_path = os.getenv("DUCKDB_PATH")
         parquet_path = os.getenv("PARQUET_PATH")
 
@@ -382,19 +519,15 @@ class Command(BaseCommand):
 
         try:
             with duckdb.connect(db_path) as con:
-
                 con.execute("CREATE SCHEMA IF NOT EXISTS sales;")
 
-                con.execute(
-                    f"""
+                con.execute(f"""
                     CREATE VIEW IF NOT EXISTS sales.realization_raw AS
                     SELECT *
                     FROM read_parquet('{parquet_path}/*.parquet', union_by_name=true);
-                """
-                )
+                """)
 
-                con.execute(
-                    """ 
+                con.execute("""
                     CREATE TABLE IF NOT EXISTS duck_logs (
                         ts TIMESTAMP DEFAULT current_timestamp,
 
@@ -405,43 +538,93 @@ class Command(BaseCommand):
                         details JSON,
                         message TEXT
                     );
-                    """
-                )
+                """)
 
                 self.stdout.write(self.style.SUCCESS("VIEW realization_raw created"))
 
-                cnt = con.execute("SELECT COUNT(*) FROM realization_raw").fetchone()[0]
+                cnt = con.execute(
+                    "SELECT COUNT(*) FROM sales.realization_raw"
+                ).fetchone()[0]
 
                 self.stdout.write(self.style.SUCCESS(f"Rows available: {cnt}"))
                 log(con, msg=f"Rows available: {cnt}", status="ok")
 
-                con.execute(RAW_TABLE)
+                # =========================
+                # wb_raw / new_rows
+                # =========================
+
+                try:
+                    new_rows = con.sql("""
+                        SELECT *
+                        FROM sales.realization_raw
+                        WHERE rrd_id NOT IN (
+                            SELECT rrd_id FROM sales.wb_raw
+                        )
+                    """)
+                except Exception:
+                    con.execute(RAW_TABLE)
+
+                    new_rows = con.sql("""
+                        SELECT *
+                        FROM sales.realization_raw
+                        WHERE rrd_id NOT IN (
+                            SELECT rrd_id FROM sales.wb_raw
+                        )
+                    """)
+
+                con.register("new_rows", new_rows)
+
+                nr = con.sql(
+                    "SELECT COUNT(*) FROM new_rows"
+                ).fetchone()[0]
+
+                if nr > 0:
+                    insert_new_rows(con)
+                    self.stdout.write(
+                        self.style.SUCCESS(f"Rows inserted: {nr}")
+                    )
+                else:
+                    self.stdout.write(
+                        self.style.SUCCESS("Nothing to insert")
+                    )
 
                 self.stdout.write(
-                    self.style.SUCCESS(f"Table wb_raw and products were renewed")
+                    self.style.SUCCESS("Table wb_raw and products were renewed")
                 )
+
+                # =========================
+                # psql data
+                # =========================
 
                 vat, maping = get_psql_data()
 
-                con.execute("CREATE OR REPLACE TABLE main.vat AS select * from vat")
-                con.execute(
-                    "CREATE OR REPLACE TABLE main.maping AS select * from maping"
-                )
-                self.stdout.write(self.style.SUCCESS(f"vat_renew"))
+                con.execute("CREATE OR REPLACE TABLE main.vat AS SELECT * FROM vat")
+                con.execute("CREATE OR REPLACE TABLE main.maping AS SELECT * FROM maping")
 
-                con.execute(
-                    f""" 
-                    CREATE OR REPLACE TABLE sales_long AS
+                self.stdout.write(self.style.SUCCESS("vat_renew"))
+
+                con.execute(f"""
+                    CREATE OR REPLACE TABLE sales.sales_long AS
                     {SALES_LONG}
-                    """
-                )
-                self.stdout.write(self.style.SUCCESS(f"Table sales_long was renewed"))
+                """)
 
-                update_wb_distribution(con)
                 self.stdout.write(
-                    self.style.SUCCESS(f"Table wb_distibution was updated")
+                    self.style.SUCCESS("Table sales_long was renewed")
                 )
+
+                # =========================
+                # optional update
+                # =========================
+
+                if update_flag:
+                    update_wb_distribution(con)
+                    self.stdout.write(
+                        self.style.SUCCESS("Table wb_distibution was updated")
+                    )
+                else:
+                    self.stdout.write(
+                        self.style.WARNING("Skip wb_distribution update")
+                    )
 
         except Exception as e:
-            log(con, status="faild", msg=f"DuckDB error: {e}")
             raise CommandError(f"DuckDB error: {e}")
