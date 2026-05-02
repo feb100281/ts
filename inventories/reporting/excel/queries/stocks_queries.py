@@ -211,3 +211,28 @@ class StocksQueries:
             return df
         finally:
             con.close()
+            
+            
+
+    def get_stocks_by_warehouse_extended(self, report_date: str) -> pd.DataFrame:
+        """Расширенная версия: возвращает регион, итого, в пути, количество складов"""
+        con = duckdb.connect(self.db_path)
+        query = """
+            SELECT 
+                region_name,
+                COUNT(DISTINCT warehouse_name) as warehouses_count,
+                SUM(quantity) as total_on_hand,
+                SUM(in_way_to_client + in_way_from_client) as total_in_transit,
+                SUM(quantity + in_way_to_client + in_way_from_client) as total
+            FROM stocks.unpacked_stocks
+            WHERE date_from = $date
+            GROUP BY region_name
+            ORDER BY total DESC
+        """
+        try:
+            df = con.execute(query, {"date": report_date}).df()
+            # Переименовываем колонки
+            df.columns = ['регион', 'складов', 'на_складе', 'в_пути', 'итого']
+            return df
+        finally:
+            con.close()

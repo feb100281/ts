@@ -1291,6 +1291,294 @@ console.log("✅ manpack_export.js loaded");
 
 
 
+// console.log("✅ stocks_export.js loaded");
+
+// (function () {
+//   function injectStocksStylesOnce() {
+//     if (document.getElementById("jmStocksStyles")) return;
+
+//     const st = document.createElement("style");
+//     st.id = "jmStocksStyles";
+//     st.textContent = `
+//       .jm-stocks-backdrop {
+//         position: fixed;
+//         inset: 0;
+//         background: rgba(17, 24, 39, 0.45);
+//         z-index: 20000;
+//         display: none;
+//         align-items: center;
+//         justify-content: center;
+//         padding: 24px;
+//       }
+
+//       .jm-stocks-backdrop.is-open {
+//         display: flex;
+//       }
+
+//       .jm-stocks-modal {
+//         width: 100%;
+//         max-width: 460px;
+//         background: #ffffff;
+//         border: 1px solid #d1d5db;
+//         box-shadow: 0 20px 50px rgba(17, 24, 39, 0.18);
+//         padding: 20px;
+//       }
+
+//       .jm-stocks-title {
+//         margin: 0 0 8px 0;
+//         font-size: 18px;
+//         font-weight: 700;
+//         color: #111827;
+//       }
+
+//       .jm-stocks-subtitle {
+//         margin: 0 0 16px 0;
+//         font-size: 13px;
+//         color: #6b7280;
+//         line-height: 1.45;
+//       }
+
+//       .jm-stocks-label {
+//         display: block;
+//         margin-bottom: 8px;
+//         font-size: 13px;
+//         font-weight: 600;
+//         color: #111827;
+//       }
+
+//       .jm-stocks-input {
+//         width: 100%;
+//         height: 40px;
+//         border: 1px solid #d1d5db;
+//         padding: 0 12px;
+//         font-size: 14px;
+//         color: #111827;
+//         outline: none;
+//         box-sizing: border-box;
+//         background: #fff;
+//       }
+
+//       .jm-stocks-input:focus {
+//         border-color: #111827;
+//       }
+
+//       .jm-stocks-quick {
+//         display: flex;
+//         gap: 8px;
+//         margin-top: 12px;
+//         margin-bottom: 18px;
+//         flex-wrap: wrap;
+//       }
+
+//       .jm-stocks-quick-btn {
+//         border: 1px solid #d1d5db;
+//         background: #ffffff;
+//         color: #111827;
+//         height: 34px;
+//         padding: 0 12px;
+//         cursor: pointer;
+//         font-size: 13px;
+//       }
+
+//       .jm-stocks-quick-btn:hover {
+//         background: #f9fafb;
+//       }
+
+//       .jm-stocks-actions {
+//         display: flex;
+//         justify-content: flex-end;
+//         gap: 10px;
+//       }
+
+//       .jm-stocks-btn {
+//         min-width: 110px;
+//         height: 38px;
+//         padding: 0 14px;
+//         border: 1px solid #d1d5db;
+//         background: #fff;
+//         cursor: pointer;
+//         font-size: 14px;
+//         font-weight: 600;
+//       }
+
+//       .jm-stocks-btn:hover {
+//         background: #f9fafb;
+//       }
+
+//       .jm-stocks-btn--primary {
+//         background: #111827;
+//         color: #ffffff;
+//         border-color: #111827;
+//       }
+
+//       .jm-stocks-btn--primary:hover {
+//         background: #0b1220;
+//       }
+
+//       .jm-stocks-error {
+//         margin-top: 10px;
+//         font-size: 12px;
+//         color: #b91c1c;
+//         display: none;
+//       }
+
+//       .jm-stocks-error.is-visible {
+//         display: block;
+//       }
+//     `;
+//     document.head.appendChild(st);
+//   }
+
+//   function formatDateToYmd(dateObj) {
+//     const y = dateObj.getFullYear();
+//     const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+//     const d = String(dateObj.getDate()).padStart(2, "0");
+//     return `${y}-${m}-${d}`;
+//   }
+
+//   function getTodayYmd() {
+//     return formatDateToYmd(new Date());
+//   }
+
+//   function getEndOfPrevMonthYmd() {
+//     const d = new Date();
+//     d.setDate(1);
+//     d.setHours(0, 0, 0, 0);
+//     d.setDate(0);
+//     return formatDateToYmd(d);
+//   }
+
+//   function ensureStocksModal() {
+//     injectStocksStylesOnce();
+
+//     let backdrop = document.getElementById("jmStocksBackdrop");
+//     if (backdrop) return backdrop;
+
+//     backdrop = document.createElement("div");
+//     backdrop.className = "jm-stocks-backdrop";
+//     backdrop.id = "jmStocksBackdrop";
+
+//     backdrop.innerHTML = `
+//       <div class="jm-stocks-modal" role="dialog" aria-modal="true" aria-labelledby="jmStocksTitle">
+//         <h3 class="jm-stocks-title" id="jmStocksTitle">Скачать остатки на складах</h3>
+//         <div class="jm-stocks-subtitle">
+//           Выберите дату, на которую нужны остатки.
+//         </div>
+
+//         <label class="jm-stocks-label" for="jmStocksDate">Дата отчетности</label>
+//         <input type="date" id="jmStocksDate" class="jm-stocks-input" />
+
+//         <div class="jm-stocks-quick">
+//           <button type="button" class="jm-stocks-quick-btn" id="jmStocksToday">
+//             📅 Сегодня
+//           </button>
+//           <button type="button" class="jm-stocks-quick-btn" id="jmStocksPrevMonthEnd">
+//             📆 Конец прошлого месяца
+//           </button>
+//         </div>
+
+//         <div class="jm-stocks-error" id="jmStocksError">
+//           Пожалуйста, выберите дату.
+//         </div>
+
+//         <div class="jm-stocks-actions">
+//           <button type="button" class="jm-stocks-btn" id="jmStocksCancel">Отмена</button>
+//           <button type="button" class="jm-stocks-btn jm-stocks-btn--primary" id="jmStocksDownload">Скачать</button>
+//         </div>
+//       </div>
+//     `;
+
+//     document.body.appendChild(backdrop);
+
+//     const dateInput = backdrop.querySelector("#jmStocksDate");
+//     const btnToday = backdrop.querySelector("#jmStocksToday");
+//     const btnPrevMonthEnd = backdrop.querySelector("#jmStocksPrevMonthEnd");
+//     const btnCancel = backdrop.querySelector("#jmStocksCancel");
+//     const btnDownload = backdrop.querySelector("#jmStocksDownload");
+//     const errorBox = backdrop.querySelector("#jmStocksError");
+
+//     function open() {
+//       errorBox.classList.remove("is-visible");
+//       if (!dateInput.value) {
+//         dateInput.value = getTodayYmd();
+//       }
+//       backdrop.classList.add("is-open");
+//     }
+
+//     function close() {
+//       backdrop.classList.remove("is-open");
+//       errorBox.classList.remove("is-visible");
+//     }
+
+//     btnToday.addEventListener("click", function () {
+//       dateInput.value = getTodayYmd();
+//       errorBox.classList.remove("is-visible");
+//     });
+
+//     btnPrevMonthEnd.addEventListener("click", function () {
+//       dateInput.value = getEndOfPrevMonthYmd();
+//       errorBox.classList.remove("is-visible");
+//     });
+
+//     btnCancel.addEventListener("click", close);
+
+//     backdrop.addEventListener("click", function (e) {
+//       if (e.target === backdrop) close();
+//     });
+
+//     document.addEventListener("keydown", function (e) {
+//       if (e.key === "Escape" && backdrop.classList.contains("is-open")) {
+//         close();
+//       }
+//     });
+
+//     btnDownload.addEventListener("click", function () {
+//       const reportDate = dateInput.value;
+
+//       if (!reportDate) {
+//         errorBox.classList.add("is-visible");
+//         return;
+//       }
+
+//       errorBox.classList.remove("is-visible");
+
+//       const baseUrl = "/admin/export/stocks/";
+//       const url = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}`;
+
+//       close();
+//       window.location.href = url;
+//     });
+
+//     backdrop._openStocksModal = open;
+//     backdrop._closeStocksModal = close;
+
+//     return backdrop;
+//   }
+
+//   function bindStocksTriggers() {
+//     const backdrop = ensureStocksModal();
+//     const triggers = document.querySelectorAll(".jm-stocks-trigger");
+
+//     triggers.forEach((el) => {
+//       if (el.dataset.stocksBound === "1") return;
+//       el.dataset.stocksBound = "1";
+
+//       el.addEventListener("click", function (e) {
+//         e.preventDefault();
+//         backdrop._openStocksModal();
+//       });
+//     });
+//   }
+
+//   function boot() {
+//     ensureStocksModal();
+//     bindStocksTriggers();
+//   }
+
+//   document.addEventListener("DOMContentLoaded", boot);
+//   document.addEventListener("pjax:end", boot);
+// })();
+
 console.log("✅ stocks_export.js loaded");
 
 (function () {
@@ -1317,7 +1605,7 @@ console.log("✅ stocks_export.js loaded");
 
       .jm-stocks-modal {
         width: 100%;
-        max-width: 460px;
+        max-width: 500px;
         background: #ffffff;
         border: 1px solid #d1d5db;
         box-shadow: 0 20px 50px rgba(17, 24, 39, 0.18);
@@ -1384,14 +1672,15 @@ console.log("✅ stocks_export.js loaded");
         background: #f9fafb;
       }
 
-      .jm-stocks-actions {
+      /* Три кнопки в один ряд */
+      .jm-stocks-actions-row {
         display: flex;
-        justify-content: flex-end;
         gap: 10px;
+        margin-top: 20px;
       }
 
       .jm-stocks-btn {
-        min-width: 110px;
+        flex: 1;
         height: 38px;
         padding: 0 14px;
         border: 1px solid #d1d5db;
@@ -1399,6 +1688,7 @@ console.log("✅ stocks_export.js loaded");
         cursor: pointer;
         font-size: 14px;
         font-weight: 600;
+        white-space: nowrap;
       }
 
       .jm-stocks-btn:hover {
@@ -1413,6 +1703,16 @@ console.log("✅ stocks_export.js loaded");
 
       .jm-stocks-btn--primary:hover {
         background: #0b1220;
+      }
+
+      .jm-stocks-btn--map {
+        background: #059669;
+        color: #ffffff;
+        border-color: #059669;
+      }
+
+      .jm-stocks-btn--map:hover {
+        background: #047857;
       }
 
       .jm-stocks-error {
@@ -1460,7 +1760,7 @@ console.log("✅ stocks_export.js loaded");
 
     backdrop.innerHTML = `
       <div class="jm-stocks-modal" role="dialog" aria-modal="true" aria-labelledby="jmStocksTitle">
-        <h3 class="jm-stocks-title" id="jmStocksTitle">Скачать остатки на складах</h3>
+        <h3 class="jm-stocks-title" id="jmStocksTitle">📊 Скачать остатки</h3>
         <div class="jm-stocks-subtitle">
           Выберите дату, на которую нужны остатки.
         </div>
@@ -1481,9 +1781,14 @@ console.log("✅ stocks_export.js loaded");
           Пожалуйста, выберите дату.
         </div>
 
-        <div class="jm-stocks-actions">
+        <div class="jm-stocks-actions-row">
           <button type="button" class="jm-stocks-btn" id="jmStocksCancel">Отмена</button>
-          <button type="button" class="jm-stocks-btn jm-stocks-btn--primary" id="jmStocksDownload">Скачать</button>
+          <button type="button" class="jm-stocks-btn jm-stocks-btn--primary" id="jmStocksDownloadExcel">
+            📎 Скачать Excel
+          </button>
+          <button type="button" class="jm-stocks-btn jm-stocks-btn--map" id="jmStocksDownloadMap">
+            🗺️ Карта остатков
+          </button>
         </div>
       </div>
     `;
@@ -1494,7 +1799,8 @@ console.log("✅ stocks_export.js loaded");
     const btnToday = backdrop.querySelector("#jmStocksToday");
     const btnPrevMonthEnd = backdrop.querySelector("#jmStocksPrevMonthEnd");
     const btnCancel = backdrop.querySelector("#jmStocksCancel");
-    const btnDownload = backdrop.querySelector("#jmStocksDownload");
+    const btnDownloadExcel = backdrop.querySelector("#jmStocksDownloadExcel");
+    const btnDownloadMap = backdrop.querySelector("#jmStocksDownloadMap");
     const errorBox = backdrop.querySelector("#jmStocksError");
 
     function open() {
@@ -1508,6 +1814,10 @@ console.log("✅ stocks_export.js loaded");
     function close() {
       backdrop.classList.remove("is-open");
       errorBox.classList.remove("is-visible");
+    }
+
+    function getSelectedDate() {
+      return dateInput.value;
     }
 
     btnToday.addEventListener("click", function () {
@@ -1532,8 +1842,8 @@ console.log("✅ stocks_export.js loaded");
       }
     });
 
-    btnDownload.addEventListener("click", function () {
-      const reportDate = dateInput.value;
+    btnDownloadExcel.addEventListener("click", function () {
+      const reportDate = getSelectedDate();
 
       if (!reportDate) {
         errorBox.classList.add("is-visible");
@@ -1544,6 +1854,23 @@ console.log("✅ stocks_export.js loaded");
 
       const baseUrl = "/admin/export/stocks/";
       const url = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}`;
+
+      close();
+      window.location.href = url;
+    });
+
+    btnDownloadMap.addEventListener("click", function () {
+      const reportDate = getSelectedDate();
+
+      if (!reportDate) {
+        errorBox.classList.add("is-visible");
+        return;
+      }
+
+      errorBox.classList.remove("is-visible");
+
+      const baseUrl = "/admin/export/stocks-map/";
+      const url = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}&format=png`;
 
       close();
       window.location.href = url;
@@ -1578,7 +1905,3 @@ console.log("✅ stocks_export.js loaded");
   document.addEventListener("DOMContentLoaded", boot);
   document.addEventListener("pjax:end", boot);
 })();
-
-
-
-

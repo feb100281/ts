@@ -14,7 +14,7 @@ from .admin_exports import (
     export_manpack,
 )
 
-from inventories.views import export_stocks_excel
+from inventories.views import export_stocks_excel, export_stocks_map
 
 login_view = auth_views.LoginView.as_view(
     template_name="admin/landing.html",
@@ -30,6 +30,7 @@ urlpatterns = [
     path("admin/export/arap-to-date/", admin.site.admin_view(export_arap_to_date), name="export_arap_to_date",),
     path("admin/export/contracts-gl-check/",admin.site.admin_view(export_contracts_gl_check), name="export_contracts_gl_check",),
     path("admin/export/stocks/", admin.site.admin_view(export_stocks_excel), name="export_stocks"),
+    path("admin/export/stocks-map/", admin.site.admin_view(export_stocks_map), name="export_stocks_map"),
     path("admin/export/manpack/", admin.site.admin_view(export_manpack), name="export_manpack"),
     path("apps/", include('django_plotly_dash.urls')),
 
