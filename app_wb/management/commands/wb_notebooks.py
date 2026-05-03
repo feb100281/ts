@@ -81,6 +81,37 @@ GROUP BY subject_name
 order by total_qty desc;
 """
 
+query = """
+WITH a AS (
+    SELECT 
+        COALESCE(gender,'Пол не указан') as gender,
+        subject_name,
+        SUM(qty) AS qty
+    FROM reports_stocks.stocks_by_product
+    where date_from =  '2026-04-30'
+    GROUP BY 
+        gender,
+        subject_name
+)
+SELECT 
+    subject_name as 'категория',
+    LIST(
+        CONCAT(
+            COALESCE(gender::text, 'без пола'),
+            ' -> ',
+            qty::text,
+            ' шт'
+        )
+    ) AS 'разбивка_по_полу',
+    SUM(qty) as 'всего'
+FROM a
+GROUP BY subject_name
+order by total_qty desc;
+           
+        """
+
+
+
 class Command(BaseCommand):
     help = "Import NOTEBOKKS AND VIEWS"
 

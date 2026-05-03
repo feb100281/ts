@@ -38,6 +38,173 @@ def connect_db():
 # Запросы
 # --------
 
+MATCHING_CARDS = """
+-- делаем вью для матчинга карточек
+CREATE OR REPLACE VIEW deliveries.matching_cards as
+with a as (
+select 
+t.sa_pid,
+list(DISTINCT t.sa_name order by t.sa_name) as sa_lists,
+list(DISTINCT t.title order by t.title) as sa_titles,
+list(DISTINCT t.gender order by t.gender) available_genders,
+list(DISTINCT lower(t.gender) order by lower(t.gender)) available_genders_l,
+list(DISTINCT c.brand order by c.brand) as brand_list,
+list(DISTINCT lower(c.brand) order by lower(c.brand)) as brand_list_l,
+list(DISTINCT c.color order by c.color) as available_colors,
+list(DISTINCT lower(c.color) order by lower(c.color)) as available_colors_l,
+
+list(DISTINCT c.tech_size order by c.tech_size) as available_sizes,
+list(DISTINCT lower(c.tech_size) order by lower(c.tech_size)) as available_sizes_l
+from cards.product t
+left join cards.unpacked_cards c on c.nm_id = t.nm_id
+group by 
+t.sa_pid
+)
+
+select 
+t.delivery_id,
+t.sa_pid as sa_file,
+s.sa_pid as sa_cards,
+s.sa_lists,
+t.name_file,
+s.sa_titles,
+length(
+    list_filter(
+        string_split(
+            regexp_replace(lower(t.name_file), '[^a-zа-яё0-9]+', ' ', 'g'),
+            ' '
+        ),
+        w ->
+            length(w) > 2
+            AND length(
+                list_filter(
+                    s.sa_titles,
+                    x ->
+                        regexp_replace(lower(x), '[^a-zа-яё0-9]+', ' ', 'g')
+                        LIKE '%' || w || '%'
+                )
+            ) > 0
+    )
+) > 0 AS match_name,
+t.size_file,
+s.available_sizes,
+list_contains(s.available_sizes_l, trim(lower(t.size_file))) as match_size,
+t.color_file,
+s.available_colors,
+list_contains(s.available_colors_l, trim(lower(t.color_file))) as match_color,
+t.gender_file,
+s.available_genders,
+list_contains(s.available_genders_l, trim(lower(t.gender_file))) as match_gender,
+t.brand as brand_file,
+s.brand_list,
+list_contains(s.brand_list_l, trim(lower(t.brand))) as match_brand,
+qty
+
+from deliveries.deliveries_raw t
+left join a s on s.sa_pid = t.sa_pid
+
+"""
+
+MARKING_ERRORS = """ 
+CREATE OR REPLACE VIEW deliveries.marking_errors as 
+
+select  
+delivery_id,
+'Цвет' as reason,
+false as critical,
+sa_file,
+sa_cards,
+sa_lists,
+name_file,
+sa_titles,
+color_file as attr,
+available_colors as available_attr,
+sum(qty::double) as qty
+from deliveries.matching_cards
+where match_color = false and sa_cards is not null
+group by 
+delivery_id,
+sa_file,
+sa_cards,
+sa_lists,
+name_file,
+sa_titles,
+color_file,
+available_colors
+
+union all
+
+select 
+delivery_id,
+'Размер' as reason,
+false as critical,
+sa_file,
+sa_cards,
+sa_lists,
+name_file,
+sa_titles,
+size_file as attr,
+available_sizes as avalable_attr,
+sum(qty::double) as qty
+from deliveries.matching_cards
+where match_size = false and sa_cards is not null
+group by 
+delivery_id,
+sa_file,
+sa_cards,
+sa_lists,
+name_file,
+sa_titles,
+size_file,
+available_sizes
+
+union all
+
+select 
+delivery_id,
+'Наименование' as reason,
+true as critical,
+sa_file,
+sa_cards,
+sa_lists,
+name_file,
+sa_titles,
+name_file as attr,
+sa_titles as avalable_attr,
+sum(qty::double) as qty
+from deliveries.matching_cards
+where match_name = false and sa_cards is not null
+group by 
+delivery_id,
+sa_file,
+sa_cards,
+sa_lists,
+name_file,
+sa_titles
+
+
+union all
+
+select 
+delivery_id,
+'НЕТ КАРТОЧКИ' as reason,
+true as critical,
+sa_file,
+null::text as sa_cards,
+null::text as sa_lists,
+name_file,
+null as sa_titles,
+name_file as attr,
+null as avalable_attr,
+sum(qty::double) as qty
+from deliveries.matching_cards
+where sa_cards is null
+group by 
+delivery_id,
+sa_file,
+name_file
+"""
+
 
 
 class Command(BaseCommand):
@@ -90,7 +257,10 @@ class Command(BaseCommand):
                 con.execute("""
                     CREATE OR REPLACE TABLE deliveries.lot AS
                     SELECT * FROM lot_df;
-                """)               
+                """)
+                
+                con.execute(MATCHING_CARDS)
+                con.execute(MARKING_ERRORS)               
                    
                 
                 self.stdout.write(self.style.SUCCESS("ALL DELIVERIES CREATED"))

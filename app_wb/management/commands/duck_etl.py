@@ -13,6 +13,8 @@ from psycopg.rows import dict_row
 from psycopg import Connection
 import pandas as pd
 
+from corporate.models import Countries
+
 load_dotenv()
 
 
@@ -399,6 +401,7 @@ order by date_from, field, report_type
 
 
 
+
 def get_psql_data():
     conn = connect_db()
 
@@ -597,9 +600,15 @@ class Command(BaseCommand):
                 # =========================
 
                 vat, maping = get_psql_data()
+                
+                countries_df = pd.DataFrame(
+                    list(Countries.objects.all().values())
+                )
+                con.register("countries_df", countries_df)
 
                 con.execute("CREATE OR REPLACE TABLE main.vat AS SELECT * FROM vat")
                 con.execute("CREATE OR REPLACE TABLE main.maping AS SELECT * FROM maping")
+                con.execute("CREATE OR REPLACE TABLE main.countries AS SELECT * FROM countries_df")
 
                 self.stdout.write(self.style.SUCCESS("vat_renew"))
 

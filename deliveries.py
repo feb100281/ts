@@ -8,7 +8,7 @@ FIELDS = {'Артикул':'sa_pid',
           'Наименование':'name_file', 
           'Штрихкод/ EAN13':'barcode', 
           'Datamatrix':'datamatrix', 
-          'Бренд':'brend',
+          'Бренд':'brand',
           'Цвет':'color_file', 
           'Размер':'size_file', 
           'Пол':'gender_file', 
@@ -49,7 +49,7 @@ for i,v in d.items():
     df = df[cols_to_keep]
     df = df.apply(lambda col: col.str.strip())
     
-    df.to_csv(p/f"lot6_{v}.csv")
+    df.to_csv(p/f"lot6_{v}.csv",index=False)
     
     
 
