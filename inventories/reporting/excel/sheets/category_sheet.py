@@ -124,6 +124,22 @@ class CategorySheet(BaseSheet):
             for col in [2, 3]:
                 cell = self.ws.cell(row=r, column=col)
                 cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                
+                # ПОДСВЕТКА КОЛОНКИ "Всего, шт" (колонка D, индекс 4)
+                qty_cell = self.ws.cell(row=r, column=4)
+                qty_cell.alignment = Alignment(horizontal="center", vertical="center")
+                qty_cell.number_format = '#,##0'
+                qty_cell.font = Font(
+                    name="Roboto",
+                    size=9,
+                    bold=True,
+                    color=COLORS["dark_green"],
+                )
+                qty_cell.fill = PatternFill(
+                    start_color=COLORS["light_green"],
+                    end_color=COLORS["light_green"],
+                    fill_type="solid",
+                )
             
             # Центр для количества (D)
             cell_qty = self.ws.cell(row=r, column=4)

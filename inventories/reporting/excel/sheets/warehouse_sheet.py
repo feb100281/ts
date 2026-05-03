@@ -160,6 +160,23 @@ class WarehouseSheet(BaseSheet):
                 cell = self.ws.cell(row=r, column=col)
                 cell.alignment = Alignment(horizontal="center", vertical="center")
                 cell.number_format = '#,##0'
+            
+            
+            # ПОДСВЕТКА КОЛОНКИ "ИТОГО" (колонка G, индекс 7)
+            total_cell = self.ws.cell(row=r, column=7)
+            total_cell.alignment = Alignment(horizontal="center", vertical="center")
+            total_cell.number_format = '#,##0'
+            total_cell.font = Font(
+                name="Roboto",
+                size=9,
+                bold=True,
+                color=COLORS["dark_green"],
+            )
+            total_cell.fill = PatternFill(
+                start_color=COLORS["light_green"],
+                end_color=COLORS["light_green"],
+                fill_type="solid",
+            )
         
         # Выделяем итоговую строку жирным шрифтом
         total_row_idx = header_row + len(df) + 1

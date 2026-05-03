@@ -135,8 +135,9 @@ class StockMapGenerator:
 
     def generate_png(self, report_date: str) -> io.BytesIO:
         region_stats = self.load_data(report_date)
+        summary_stats = self.queries.get_summary_stats(report_date)
 
         date_obj = datetime.strptime(report_date, "%Y-%m-%d")
         formatted_date = date_obj.strftime("%d.%m.%Y")
 
-        return build_russia_regions_map(region_stats, formatted_date)
+        return build_russia_regions_map(region_stats, formatted_date, summary_stats=summary_stats )

@@ -75,7 +75,7 @@ class DetailSheet(BaseSheet):
             {'title': 'ВСЕГО ТОВАРОВ', 'value': self._format_number(stats['total_products']), 
              'subtitle': 'уникальных позиций', 'color': COLORS["dark_green"], 'width': 3},
             {'title': 'ВСЕГО КАТЕГОРИЙ', 'value': self._format_number(stats['total_categories']), 
-             'subtitle': 'товарных групп', 'color': COLORS["dark_green"], 'width': 2},
+             'subtitle': 'товарных групп', 'color': COLORS["dark_green"], 'width': 3},
             {'title': 'ОБЩЕЕ КОЛИЧЕСТВО', 'value': self._format_number(stats['total_quantity']), 
              'subtitle': 'единиц на складах и в пути', 'color': COLORS["dark_green"], 'width': 2},
         ]
@@ -86,7 +86,7 @@ class DetailSheet(BaseSheet):
         # ============================================================
         # ТАБЛИЦА
         # ============================================================
-        headers = ['ID карточки WB', 'Артикул продавца', 'Категория', 'Пол', 'Наименование', 'Размеры', 'Количество, шт']
+        headers = ['ID карточки WB','Бренд', 'Артикул продавца', 'Категория', 'Пол', 'Наименование', 'Размеры', 'Количество, шт']
         
         # Подготавливаем данные с правильным форматированием
         data_rows = []
@@ -94,11 +94,13 @@ class DetailSheet(BaseSheet):
             # Форматируем nm_id как текст (чтобы Excel не превращал в число)
             nm_id_text = f"'{row_data['nm_id']}" if isinstance(row_data['nm_id'], (int, float)) else str(row_data['nm_id'])
             # Форматируем бренд/артикул продавца как текст
-            brand_text = f"'{row_data['бренд']}" if isinstance(row_data['бренд'], (int, float)) else str(row_data['бренд'])
+            brand_text = str(row_data['бренд']) if row_data['бренд'] and str(row_data['бренд']) != 'nan' else 'не указан'
+            article_text = f"'{row_data['артикул']}" if isinstance(row_data['артикул'], (int, float)) else str(row_data['артикул'])
             
             data_rows.append([
                 nm_id_text,
                 brand_text,
+                article_text,
                 row_data['категория'],
                 row_data['пол'] if row_data['пол'] and str(row_data['пол']) != 'nan' else 'не указан',
                 row_data['наименование'][:80] if len(str(row_data['наименование'])) > 80 else row_data['наименование'],
@@ -108,14 +110,15 @@ class DetailSheet(BaseSheet):
         
         column_widths = {
 
-            'A': 5,  
+            'A': 5,
             'B': 12,  # ID карточки WB
-            'C': 12,  # Артикул продавца
-            'D': 16,  # Категория
-            'E': 16,  # Пол
-            'F': 35,  # Наименование
-            'G': 45,  # Размеры
-            'H': 16,  # Количество, шт
+            'C': 18,  # Бренд
+            'D': 16,  # Артикул продавца
+            'E': 16,  # Категория
+            'F': 16,  # Пол
+            'G': 35,  # Наименование
+            'H': 45,  # Размеры
+            'I': 16,  # Количество, шт
         }
         
         # Рисуем таблицу
@@ -134,12 +137,28 @@ class DetailSheet(BaseSheet):
         # ============================================================
         for r in range(row - len(data_rows), row):
             # Левый край для текстовых колонок (B-G)
-            for col in [2, 3, 4, 5, 6, 7]:
+            for col in [2, 3, 4, 5, 6, 7, 8]:
                 cell = self.ws.cell(row=r, column=col)
                 cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                
+                # ПОДСВЕТКА КОЛОНКИ "Количество, шт" (колонка I, индекс 9)
+                qty_cell = self.ws.cell(row=r, column=9)
+                qty_cell.alignment = Alignment(horizontal="center", vertical="center")
+                qty_cell.number_format = '#,##0'
+                qty_cell.font = Font(
+                    name="Roboto",
+                    size=9,
+                    bold=True,
+                    color=COLORS["dark_green"],
+                )
+                qty_cell.fill = PatternFill(
+                    start_color=COLORS["light_green"],
+                    end_color=COLORS["light_green"],
+                    fill_type="solid",
+                )
             
             # Правый край для количества (H)
-            cell_qty = self.ws.cell(row=r, column=8)
+            cell_qty = self.ws.cell(row=r, column=9)
             cell_qty.alignment = Alignment(horizontal="center", vertical="center")
             cell_qty.number_format = '#,##0'
         
@@ -148,7 +167,7 @@ class DetailSheet(BaseSheet):
         # НАСТРОЙКИ
         # ============================================================
         # Фильтр только для таблицы (с 8 строки)
-        self.ws.auto_filter.ref = f'B{row - len(data_rows) - 1}:H{row - 2}'
+        self.ws.auto_filter.ref = f'B{row - len(data_rows) - 1}:I{row - 2}'
         
 
         header_row = row - len(data_rows) - 1

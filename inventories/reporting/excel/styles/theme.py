@@ -18,7 +18,11 @@ COLORS = {
     "delta_green": "EAF6EE",
     "warehouse_blue": "4A90E2",
     "stock_highlight": "FFF3E0",
-             # синий для ссылок
+    "expired_bg": "FFEBEE",      # Светло-красный фон
+    "expired_text": "D32F2F",    # Темно-красный текст
+    "expiring_bg": "FFF3E0",     # Светло-оранжевый фон
+    "expiring_text": "FF9800",   # Оранжевый текст
+     
 }
 
 FILLS = {
