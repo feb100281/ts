@@ -280,21 +280,40 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
     pd_date = pd.to_datetime(date_from)
     
     rel = conn.sql(
-        """
-        SELECT 
+        """ 
+        select 
         t.date_from,
-        t.report_type,        
+        t.report_type,
         CASE WHEN v.vat_rate IS NOT NULL THEN 1 ELSE 0 END as vat_rate,
-        t.field,        
-        t.value,
-        t.dtn_id
-        from sales t
-        left join product v on v.nm_id = t.nm_id
-        """        
+        t.field, 
+        t.val as value,
+        CASE WHEN dtn = 'Продажа' then 2 
+        WHEN dtn = 'Возврат' then 1
+        else null
+        end as dtn_id
+        from sales.sales_long t
+        left join cards.product v on v.nm_id = t.nm_id
+        
+        """
+        
     )
     
     stats = {}
     
+
+
+        
+        # """
+        # SELECT 
+        # t.date_from,
+        # t.report_type,        
+        # CASE WHEN v.vat_rate IS NOT NULL THEN 1 ELSE 0 END as vat_rate,
+        # t.field,        
+        # t.value,
+        # t.dtn_id
+        # from sales t
+        # left join product v on v.nm_id = t.nm_id
+        # """        
     #Находим средние цены
     wa_prices = wb['average_unit_price'][0]
     
@@ -607,21 +626,45 @@ def stats(conn:DuckDBPyConnection,date_from,wb):
 def get_forecast_data(conn:DuckDBPyConnection,date_from):
     return conn.execute(
         """
-        SELECT
-        date_from as ds,
-        sum(value) filter (where field = 'retail_price' and dtn_id = 2) -
-        sum(value) filter (where field = 'retail_price' and dtn_id = 1) 
-        as y  
-        from sales
-        where date_from < ? 
-        group by date_from
-        HAVING
-            SUM(value) FILTER (WHERE field = 'retail_price' AND dtn_id = 2)
-            - SUM(value) FILTER (WHERE field = 'retail_price' AND dtn_id = 1) > 0
+        with a as (
+        select 
+        date_from,
+        oper,
+        val
+        from sales.sales_long
+        where field = 'retail_price'
+        )
+        select
+        x.date_from as ds,
+        x.dt - x.cr as y
+        from (
+        pivot a
+        on oper
+        using COALESCE(sum(val),0)
+        group by date_from, 
+        ) x
+        where x.dt - x.cr > 0
+        and date_from < ?
         """,
         [date_from],
     ).df()
-    
+
+
+
+        
+        # SELECT
+        # date_from as ds,
+        # sum(value) filter (where field = 'retail_price' and dtn_id = 2) -
+        # sum(value) filter (where field = 'retail_price' and dtn_id = 1) 
+        # as y  
+        # from sales
+        # where date_from < ? 
+        # group by date_from
+        # HAVING
+        #     SUM(value) FILTER (WHERE field = 'retail_price' AND dtn_id = 2)
+        #     - SUM(value) FILTER (WHERE field = 'retail_price' AND dtn_id = 1) > 0
+
+
 # Строим модель профет
 def build_prophet_model(params: dict) -> Prophet:
     model = Prophet(
