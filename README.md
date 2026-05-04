@@ -57,7 +57,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-04-30 2026-05-01 --overwrite
+1) python manage.py fin_report_range 2026-05-01 2026-05-03 --overwrite
 2) python manage.py duck_etl
 
 
@@ -67,7 +67,7 @@ python manage.py duck_etl
 1) Заходим на сервер ssh daria@82.202.197.94
 2) cd ts/data
 3) cd realization
-4) cf stocks
+4) cd stocks
 5) python3 -m http.server 8000
 6) 82.202.197.94:8000 (скачиваем остатки в браузере)
 7) python manage.py stocks_etl (Распарсиваем остатки по складам) 

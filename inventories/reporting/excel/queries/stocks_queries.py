@@ -497,254 +497,62 @@ class StocksQueries:
             
             
     
-
-    # def get_certificates_data(self, report_date: str) -> pd.DataFrame:
-    #     """Получить товары с проблемами по сертификатам."""
-    #     con = duckdb.connect(self.db_path)
-
-    #     query = """
-    #         WITH current_stocks AS (
-    #             SELECT
-    #                 t.nm_id,
-    #                 t.chrt_id,
-    #                 SUM(
-    #                     COALESCE(t.quantity, 0)
-    #                     + COALESCE(t.in_way_to_client, 0)
-    #                     + COALESCE(t.in_way_from_client, 0)
-    #                 ) AS qty
-    #             FROM stocks.unpacked_stocks t
-    #             WHERE t.date_from = $date
-    #             GROUP BY t.nm_id, t.chrt_id
-    #             HAVING SUM(
-    #                 COALESCE(t.quantity, 0)
-    #                 + COALESCE(t.in_way_to_client, 0)
-    #                 + COALESCE(t.in_way_from_client, 0)
-    #             ) > 0
-    #         ),
-
-    #         brands AS (
-    #             SELECT
-    #                 nm_id,
-    #                 COALESCE(MAX(brand), 'Бренд не указан') AS brand
-    #             FROM cards.unpacked_cards
-    #             GROUP BY nm_id
-    #         ),
-
-    #         product_data AS (
-    #             SELECT
-    #                 cs.nm_id,
-    #                 COALESCE(b.brand, 'Бренд не указан') AS бренд,
-    #                 p.sa_name AS артикул,
-    #                 p.subject_name AS категория,
-    #                 p.gender AS пол,
-    #                 p.title AS наименование,
-    #                 s.tech_size AS размер,
-    #                 cs.qty AS количество,
-    #                 p.cert_end_date AS дата_окончания_сертификата
-    #             FROM current_stocks cs
-    #             LEFT JOIN cards.product p ON p.nm_id = cs.nm_id
-    #             LEFT JOIN brands b ON b.nm_id = cs.nm_id
-    #             LEFT JOIN cards.sizes s ON s.chrt_id = cs.chrt_id
-    #         ),
-
-    #         grouped AS (
-    #             SELECT
-    #                 nm_id,
-    #                 COALESCE(MAX(бренд), 'Бренд не указан') AS бренд,
-    #                 COALESCE(MAX(артикул), 'Артикул не указан') AS артикул,
-    #                 COALESCE(MAX(категория), 'Категория не указана') AS категория,
-    #                 COALESCE(MAX(пол), 'не указан') AS пол,
-    #                 COALESCE(MAX(наименование), 'Наименование не указано') AS наименование,
-
-    #                 string_agg(
-    #                     COALESCE(CAST(размер AS VARCHAR), 'без размера')
-    #                     || ' - '
-    #                     || CAST(CAST(количество AS BIGINT) AS VARCHAR)
-    #                     || ' шт',
-    #                     ', '
-    #                     ORDER BY размер
-    #                 ) AS размер,
-
-    #                 SUM(количество) AS количество,
-    #                 MAX(дата_окончания_сертификата) AS дата_окончания_сертификата
-    #             FROM product_data
-    #             GROUP BY nm_id
-    #         )
-
-    #         SELECT
-    #             nm_id,
-    #             бренд,
-    #             артикул,
-    #             категория,
-    #             пол,
-    #             наименование,
-    #             размер,
-    #             количество,
-    #             дата_окончания_сертификата,
-
-    #             CASE
-    #                 WHEN дата_окончания_сертификата IS NULL THEN 'Нет сертификата'
-    #                 WHEN дата_окончания_сертификата < $date THEN 'Просрочен'
-    #                 WHEN дата_окончания_сертификата BETWEEN $date AND ($date::DATE + INTERVAL 30 DAYS)
-    #                     THEN 'Истекает в ближайшие 30 дней'
-    #                 ELSE 'Действителен'
-    #             END AS статус_сертификата,
-
-    #             CASE
-    #                 WHEN дата_окончания_сертификата IS NULL THEN NULL
-    #                 WHEN дата_окончания_сертификата < $date THEN ($date::DATE - дата_окончания_сертификата)
-    #                 ELSE (дата_окончания_сертификата - $date::DATE)
-    #             END AS дней_до_окончания
-
-    #         FROM grouped
-    #         WHERE
-    #             дата_окончания_сертификата IS NULL
-    #             OR дата_окончания_сертификата < $date
-    #             OR дата_окончания_сертификата BETWEEN $date AND ($date::DATE + INTERVAL 30 DAYS)
-
-    #         ORDER BY
-    #             CASE
-    #                 WHEN дата_окончания_сертификата IS NULL THEN 1
-    #                 WHEN дата_окончания_сертификата < $date THEN 2
-    #                 ELSE 3
-    #             END,
-    #             дней_до_окончания,
-    #             бренд,
-    #             наименование
-    #     """
-
-    #     try:
-    #         df = con.execute(query, {"date": report_date}).df()
-
-    #         if "дата_окончания_сертификата" in df.columns:
-    #             df["дата_окончания_сертификата"] = pd.to_datetime(
-    #                 df["дата_окончания_сертификата"],
-    #                 errors="coerce",
-    #             ).dt.strftime("%d.%m.%Y")
-
-    #         df = df.where(pd.notnull(df), None)
-
-    #         return df
-
-    #     finally:
-    #         con.close()
-    
-    
     
     def get_certificates_data(self, report_date: str) -> pd.DataFrame:
         con = duckdb.connect(self.db_path)
 
         query = """
-            WITH problem_products AS (
-                SELECT
-                    nm_id,
-                    MAX(sa_name) AS артикул,
-                    MAX(subject_name) AS категория,
-                    MAX(gender) AS пол,
-                    MAX(title) AS наименование,
-                    MAX(cert_end_date) AS дата_окончания_сертификата
-                FROM cards.product
-                WHERE
-                    cert_end_date IS NULL
-                    OR cert_end_date < $date::DATE
-                    OR cert_end_date BETWEEN $date::DATE AND ($date::DATE + INTERVAL 30 DAYS)
-                GROUP BY nm_id
-            ),
-
-            current_stocks AS (
-                SELECT
-                    t.nm_id,
-                    t.chrt_id,
-                    SUM(
-                        COALESCE(t.quantity, 0)
-                        + COALESCE(t.in_way_to_client, 0)
-                        + COALESCE(t.in_way_from_client, 0)
-                    ) AS qty
-                FROM stocks.unpacked_stocks t
-                INNER JOIN problem_products pp ON pp.nm_id = t.nm_id
-                WHERE t.date_from = $date
-                GROUP BY t.nm_id, t.chrt_id
-                HAVING qty > 0
-            ),
-
-            brands AS (
-                SELECT
-                    nm_id,
-                    COALESCE(MAX(brand), 'Бренд не указан') AS бренд
-                FROM cards.unpacked_cards
-                GROUP BY nm_id
-            ),
-
-            sizes AS (
-                SELECT
-                    chrt_id,
-                    MAX(tech_size) AS tech_size
-                FROM cards.sizes
-                GROUP BY chrt_id
-            )
-
-            SELECT
-                cs.nm_id,
-                COALESCE(MAX(b.бренд), 'Бренд не указан') AS бренд,
-                COALESCE(MAX(pp.артикул), 'Артикул не указан') AS артикул,
-                COALESCE(MAX(pp.категория), 'Категория не указана') AS категория,
-                COALESCE(MAX(pp.пол), 'не указан') AS пол,
-                COALESCE(MAX(pp.наименование), 'Наименование не указано') AS наименование,
-
-                string_agg(
-                    COALESCE(CAST(s.tech_size AS VARCHAR), 'без размера')
-                    || ' - '
-                    || CAST(CAST(cs.qty AS BIGINT) AS VARCHAR)
-                    || ' шт',
-                    ', '
-                    ORDER BY s.tech_size
-                ) AS размер,
-
-                SUM(cs.qty) AS количество,
-                MAX(pp.дата_окончания_сертификата) AS дата_окончания_сертификата,
-
-                CASE
-                    WHEN MAX(pp.дата_окончания_сертификата) IS NULL THEN 'Нет сертификата'
-                    WHEN MAX(pp.дата_окончания_сертификата) < $date::DATE THEN 'Просрочен'
-                    ELSE 'Истекает в ближайшие 30 дней'
-                END AS статус_сертификата,
-
-                CASE
-                    WHEN MAX(pp.дата_окончания_сертификата) IS NULL THEN NULL
-                    WHEN MAX(pp.дата_окончания_сертификата) < $date::DATE
-                        THEN $date::DATE - MAX(pp.дата_окончания_сертификата)
-                    ELSE MAX(pp.дата_окончания_сертификата) - $date::DATE
-                END AS дней_до_окончания
-
-            FROM current_stocks cs
-            LEFT JOIN problem_products pp ON pp.nm_id = cs.nm_id
-            LEFT JOIN brands b ON b.nm_id = cs.nm_id
-            LEFT JOIN sizes s ON s.chrt_id = cs.chrt_id
-
-            GROUP BY cs.nm_id
-
-            ORDER BY
-                CASE
-                    WHEN MAX(pp.дата_окончания_сертификата) IS NULL THEN 1
-                    WHEN MAX(pp.дата_окончания_сертификата) < $date::DATE THEN 2
-                    ELSE 3
-                END,
-                дней_до_окончания,
-                бренд,
-                наименование
+            select 
+                t.nm_id,
+                c.brand as 'бренд',
+                t.sa_name as 'артикул',
+                t.subject_name as 'категория',
+                t.gender as 'пол',
+                t.title as 'наименование',
+                t.available_sizes as 'размер',
+                t.qty as 'количество',
+                c.cert_end_date as 'дата_окончания_сертификата',
+                case 
+                when c.cert_end_date is null then 'Нет сертификата'
+                when c.cert_end_date < t.date_from then 'Просрочен'
+                when c.cert_end_date < t.date_from + INTERVAL 30 DAYS then 'Истекает в ближайшие 30 дней'
+                else 'Действует'
+                end as 'статус_сертификата',
+                case when c.cert_end_date < t.date_from then 0 
+                else c.cert_end_date - t.date_from 
+                end as 'дней_до_окончания'
+                from reports_stocks.stocks_by_product t
+                left join cards.product c on c.nm_id = t.nm_id
+                where t.date_from = ?
+                and статус_сертификата != 'Действует'
         """
 
         try:
-            df = con.execute(query, {"date": report_date}).df()
+
+            df = con.execute(query, parameters=[report_date]).df()
 
             if "дата_окончания_сертификата" in df.columns:
-                df["дата_окончания_сертификата"] = pd.to_datetime(
-                    df["дата_окончания_сертификата"],
-                    errors="coerce",
-                ).dt.strftime("%d.%m.%Y")
 
-            df = df.where(pd.notnull(df), None)
+                df["дата_окончания_сертификата"] = (
+
+                    pd.to_datetime(
+
+                        df["дата_окончания_сертификата"],
+
+                        errors="coerce",
+
+                    )
+
+                    .dt.strftime("%d.%m.%Y")
+
+                )
+
+            # корректная замена NaN → None
+
+            df = df.astype(object).where(pd.notnull(df), None)
+
             return df
 
         finally:
+
             con.close()
