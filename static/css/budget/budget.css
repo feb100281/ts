@@ -1032,3 +1032,255 @@ table.data .flat {
 }
 
 
+
+
+
+
+/* ===== Стили для прогноза (без эмодзи) ===== */
+.forecast-box {
+    margin: 16px 0;
+    padding: 12px 16px;
+    background: #fef7e0;
+    border-left: 4px solid #c98f2e;
+    border-top: 1px solid #e6e0c8;
+    border-right: 1px solid #e6e0c8;
+    border-bottom: 1px solid #e6e0c8;
+    font-size: 10px;
+}
+.forecast-title {
+    font-weight: 700;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: #7a5c1c;
+}
+.forecast-grid {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.forecast-grid > div {
+    flex: 1;
+    min-width: 100px;
+}
+.forecast-label {
+    display: block;
+    font-size: 9px;
+    color: #6c6c6c;
+    text-transform: uppercase;
+}
+.forecast-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: #2f6656;
+}
+.forecast-success {
+    font-weight: 700;
+    color: #2e7d32;
+    font-size: 10px;
+}
+.forecast-warning {
+    font-size: 10px;
+    line-height: 1.5;
+    color: #b85c00;
+}
+.forecast-warning strong {
+    color: #c62828;
+}
+
+/* ===== Информационный блок для 10 дней ===== */
+.info-compact {
+    background: #f7f9f8;
+    border: 1px solid #d9d9d9;
+    padding: 8px 12px;
+    margin: 10px 0 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.info-compact > div:first-child {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: #6b7c76;
+}
+.info-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a3f3a;
+}
+.info-note {
+    font-size: 9px;
+    color: #888;
+    margin-left: auto;
+}
+
+/* ===== Общие вспомогательные классы ===== */
+.muted {
+    color: #8c8c8c;
+    font-style: italic;
+}
+.neutral {
+    color: #a87c2b;
+}
+
+
+/* ===== KPI карточки ===== */
+.kpi-grid-3 {
+    display: flex;
+    width: 100%;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.kpi-grid-3 .kpi-card-compact {
+    flex: 1;
+    border: 1px solid #d9d9d9;
+    background: #fbfbfb;
+    padding: 12px 16px;
+    border-radius: 0; 
+}
+.kpi-label-compact {
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 6px;
+}
+.kpi-value-compact {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1A3F3A;
+}
+
+/* ===== Итоговая строка в таблице ===== */
+.total-row {
+    background: #eef4f2;
+    font-weight: 700;
+}
+.total-row td {
+    border-top: 2px solid #2f6656;
+}
+
+/* ===== Прогноз с прогресс-баром ===== */
+.forecast-box {
+    margin: 20px 0;
+    padding: 16px 20px;
+    background: #fef9e6;
+    border-left: 4px solid #c98f2e;
+    border-top: 1px solid #e8e0c0;
+    border-right: 1px solid #e8e0c0;
+    border-bottom: 1px solid #e8e0c0;
+}
+.forecast-title {
+    font-weight: 700;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: #7a5c1c;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.progress-bar-container {
+    background: #e8e0c0;
+    height: 6px;
+    margin-bottom: 16px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.progress-bar {
+    background: #c98f2e;
+    height: 100%;
+    border-radius: 3px;
+}
+.forecast-grid {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.forecast-grid > div {
+    flex: 1;
+    min-width: 100px;
+}
+.forecast-label {
+    display: block;
+    font-size: 9px;
+    color: #8c8c6c;
+    text-transform: uppercase;
+}
+.forecast-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #2f6656;
+}
+.forecast-sub {
+    font-size: 9px;
+    color: #888;
+    margin-left: 4px;
+}
+.forecast-success {
+    font-weight: 600;
+    color: #2e7d32;
+    font-size: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #d4e0a0;
+}
+.forecast-warning {
+    font-size: 10px;
+    line-height: 1.5;
+    color: #b85c00;
+    padding-top: 8px;
+    border-top: 1px solid #f0d8a0;
+}
+.forecast-warning strong {
+    color: #c62828;
+}
+
+
+/* ===== Информационная панель ===== */
+.info-compact {
+    background: #f7f9f8;
+    border: 1px solid #d9d9d9;
+    padding: 8px 14px;
+    margin: 10px 0 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.info-compact > span:first-child {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: #6b7c76;
+}
+.info-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a3f3a;
+}
+.info-note {
+    font-size: 9px;
+    color: #888;
+    margin-left: auto;
+}
+
+/* ===== Общие классы ===== */
+.positive-text {
+    color: #2e7d32;
+    font-weight: 600;
+}
+.negative-text {
+    color: #c62828;
+    font-weight: 600;
+}
+.neutral {
+    color: #a87c2b;
+}
+.muted {
+    color: #8c8c8c;
+    font-style: italic;
+}
+.small-note {
+    font-size: 8.5px;
+    color: #8a9e98;
+    margin-top: 6px;
+}

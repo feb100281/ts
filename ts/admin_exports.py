@@ -7,8 +7,12 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from django.http import FileResponse, HttpResponseBadRequest
+from django.http import FileResponse, HttpResponseBadRequest, JsonResponse
 from reporting.excel.engine import build_manpack
+
+import json
+from django.views.decorators.http import require_http_methods
+from budget.reporting.pdf.revenue_exporter import build_revenue_analysis_pdf_response
 
 
 def export_sql_to_csv(request, sql: str, filename_prefix: str):
@@ -79,3 +83,77 @@ def export_manpack(request):
         filename=file_path.name,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    
+    
+
+# ============================================================
+# API для получения списка бюджетов (прямо из БД)
+# ============================================================
+@require_http_methods(["GET"])
+def api_budgets(request):
+    """API для получения списка версий бюджетов"""
+    sql = """
+        SELECT 
+            id, 
+            number, 
+            budget_type, 
+            description, 
+            date_from, 
+            date_to, 
+            revenue_param
+        FROM public.budget_budgetversion
+        ORDER BY date_from DESC, id DESC
+    """
+    
+    with connection.cursor() as cursor:
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        columns = [col[0] for col in cursor.description]
+    
+    result = []
+    for row in rows:
+        budget_dict = dict(zip(columns, row))
+        
+        # Парсим revenue_param если это строка JSON
+        revenue_param = budget_dict.get('revenue_param')
+        if isinstance(revenue_param, str):
+            try:
+                revenue_param = json.loads(revenue_param)
+            except:
+                revenue_param = {}
+        
+        result.append({
+            'id': budget_dict['id'],
+            'number': budget_dict['number'],
+            'budget_type': budget_dict['budget_type'],
+            'description': budget_dict['description'],
+            'date_from': budget_dict['date_from'].isoformat() if budget_dict['date_from'] else None,
+            'date_to': budget_dict['date_to'].isoformat() if budget_dict['date_to'] else None,
+            'revenue_param': revenue_param,
+        })
+    
+    return JsonResponse(result, safe=False)
+
+
+# ============================================================
+# Экспорт анализа бюджета (пока заглушка)
+# ============================================================
+def export_budget_analysis(request):
+    """Экспорт анализа бюджета (PDF) - только доходная часть"""
+    budget_id = request.GET.get('budget_id')
+    report_date = request.GET.get('report_date')
+    
+    if not budget_id or not report_date:
+        return HttpResponseBadRequest("Не указан budget_id или report_date")
+    
+    try:
+        report_date_obj = datetime.strptime(report_date, "%Y-%m-%d").date()
+        from budget.models import BudgetVersion
+        budget = BudgetVersion.objects.get(id=budget_id)
+    except BudgetVersion.DoesNotExist:
+        return HttpResponseBadRequest("Бюджет не найден")
+    except ValueError:
+        return HttpResponseBadRequest("Некорректный формат даты. Ожидается YYYY-MM-DD")
+    
+    # Генерируем PDF через новый экспортер
+    return build_revenue_analysis_pdf_response(budget, report_date_obj)
