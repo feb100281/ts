@@ -12,6 +12,8 @@ from .admin_exports import (
     export_arap_to_date,
     export_contracts_gl_check,
     export_manpack,
+    api_budgets,                   
+    export_budget_analysis,        
 )
 
 from inventories.views import export_stocks_excel, export_stocks_map
@@ -32,6 +34,8 @@ urlpatterns = [
     path("admin/export/stocks/", admin.site.admin_view(export_stocks_excel), name="export_stocks"),
     path("admin/export/stocks-map/", admin.site.admin_view(export_stocks_map), name="export_stocks_map"),
     path("admin/export/manpack/", admin.site.admin_view(export_manpack), name="export_manpack"),
+    path("admin/api/budgets/", admin.site.admin_view(api_budgets), name="api_budgets"),
+    path("admin/export/budget-analysis/", admin.site.admin_view(export_budget_analysis), name="export_budget_analysis"),
     path("apps/", include('django_plotly_dash.urls')),
 
     path("admin/", admin.site.urls),

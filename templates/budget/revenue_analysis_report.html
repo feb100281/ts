@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} – {{ company }}</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/budget/budget.css">
+</head>
+<body>
+    <div class="header">
+        <div class="title">{{ title }}</div>
+        <div class="subtitle">{{ subtitle }}</div>
+        <div class="generated">{{ period_label }}</div>
+    </div>
+
+    {% include "budget/_revenue_analysis_section.html" %}
+
+    <div class="footer">
+        <div class="generated">Конфиденциально</div>
+    </div>
+</body>
+</html>

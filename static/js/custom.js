@@ -75,6 +75,7 @@ document.addEventListener("click", function (event) {
     'Скачать проверку договоров GL/PL/BS CSV': "fa-solid fa-scale-balanced",
     'Скачать ManPack': "fa-solid fa-file-excel",
     'Скачать остатки': "fa-solid fa-boxes", 
+    'Анализ бюджета': "fa-solid fa-chart-pie",
   };
 
   function enhanceTopMenu() {
@@ -235,11 +236,12 @@ document.addEventListener("click", function (event) {
       (a) => getLinkLabel(a) === "Скачать ManPack"
     );
 
-    const stocksLink = links.find(
-      (a) => getLinkLabel(a) === "Скачать остатки"
-    );
+    const stocksLink = links.find((a) => getLinkLabel(a) === "Скачать остатки");
+    const budgetAnalysisLink = links.find((a) => getLinkLabel(a) === "Анализ бюджета");
+    const budgetAnalysisLi = budgetAnalysisLink ? budgetAnalysisLink.closest(".nav-item") : null;
 
-    if (!glLink && !arapLink && !contractsCheckLink && !manpackLink && !stocksLink) return;
+
+    if (!glLink && !arapLink && !contractsCheckLink && !manpackLink && !stocksLink && !budgetAnalysisLink) return;
 
     injectExportMenuStylesOnce();
 
@@ -249,9 +251,9 @@ document.addEventListener("click", function (event) {
     const manpackLi = manpackLink ? manpackLink.closest(".nav-item") : null;
     const stocksLi = stocksLink ? stocksLink.closest(".nav-item") : null;
 
-    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || stocksLi;
+    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || stocksLi || budgetAnalysisLi;
 
-    [glLi, arapLi, contractsCheckLi, manpackLi, stocksLi].forEach((li) => {
+    [glLi, arapLi, contractsCheckLi, manpackLi, stocksLi, budgetAnalysisLi].forEach((li) => {
       if (li) li.remove();
     });
 
@@ -315,6 +317,14 @@ document.addEventListener("click", function (event) {
             className: "jm-stocks-trigger",
           }
         : null,
+        
+         budgetAnalysisLink ? {
+        href: budgetAnalysisLink.getAttribute("href") || "#",
+        label: "Анализ бюджета",
+        icon: "fa-solid fa-chart-pie",
+        className: "jm-budget-analysis-trigger",
+    } : null,
+        
     ].filter(Boolean);
 
     items.forEach((item) => {
@@ -1900,6 +1910,469 @@ console.log("✅ stocks_export.js loaded");
   function boot() {
     ensureStocksModal();
     bindStocksTriggers();
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("pjax:end", boot);
+})();
+
+
+
+
+
+
+
+
+// =============================
+// budget_analysis_export.js
+// Анализ бюджета (PDF отчет)
+// =============================
+
+(function () {
+  function injectBudgetAnalysisStylesOnce() {
+    if (document.getElementById("jmBudgetAnalysisStyles")) return;
+
+    const st = document.createElement("style");
+    st.id = "jmBudgetAnalysisStyles";
+    st.textContent = `
+      .jm-budget-analysis-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.45);
+        z-index: 20000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .jm-budget-analysis-backdrop.is-open {
+        display: flex;
+      }
+
+      .jm-budget-analysis-modal {
+        width: 100%;
+        max-width: 520px;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        box-shadow: 0 20px 50px rgba(17, 24, 39, 0.18);
+        padding: 24px;
+      }
+
+      .jm-budget-analysis-title {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      .jm-budget-analysis-subtitle {
+        margin: 0 0 20px 0;
+        font-size: 13px;
+        color: #6b7280;
+        line-height: 1.45;
+      }
+
+      .jm-budget-analysis-field {
+        margin-bottom: 18px;
+      }
+
+      .jm-budget-analysis-label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #111827;
+      }
+
+      .jm-budget-analysis-select,
+      .jm-budget-analysis-input {
+        width: 100%;
+        height: 40px;
+        border: 1px solid #d1d5db;
+        padding: 0 12px;
+        font-size: 14px;
+        color: #111827;
+        outline: none;
+        box-sizing: border-box;
+        background: #fff;
+      }
+
+      .jm-budget-analysis-select:focus,
+      .jm-budget-analysis-input:focus {
+        border-color: #111827;
+      }
+
+      .jm-budget-analysis-quick {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+      }
+
+      .jm-budget-analysis-quick-btn {
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #111827;
+        height: 34px;
+        padding: 0 12px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .jm-budget-analysis-quick-btn:hover {
+        background: #f9fafb;
+      }
+
+      .jm-budget-analysis-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 24px;
+      }
+
+      .jm-budget-analysis-btn {
+        min-width: 110px;
+        height: 38px;
+        padding: 0 14px;
+        border: 1px solid #d1d5db;
+        background: #fff;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .jm-budget-analysis-btn:hover {
+        background: #f9fafb;
+      }
+
+      .jm-budget-analysis-btn--primary {
+        background: #111827;
+        color: #ffffff;
+        border-color: #111827;
+      }
+
+      .jm-budget-analysis-btn--primary:hover {
+        background: #0b1220;
+      }
+
+      .jm-budget-analysis-error {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #b91c1c;
+        display: none;
+      }
+
+      .jm-budget-analysis-error.is-visible {
+        display: block;
+      }
+
+      .jm-budget-analysis-loading {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #6b7280;
+        display: none;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .jm-budget-analysis-loading.is-visible {
+        display: flex;
+      }
+
+      .jm-budget-analysis-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #e5e7eb;
+        border-top-color: #111827;
+        border-radius: 50%;
+        animation: jm-spin 0.6s linear infinite;
+      }
+
+      @keyframes jm-spin {
+        to { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function formatDateToYmd(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function getTodayYmd() {
+    return formatDateToYmd(new Date());
+  }
+
+  function getCurrentYear() {
+    return new Date().getFullYear();
+  }
+
+  // Загрузка списка бюджетов с сервера
+  async function loadBudgets() {
+    try {
+      const response = await fetch("/admin/api/budgets/", {
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+      
+      if (response.ok) {
+        return await response.json();
+      }
+      return [];
+    } catch (e) {
+      console.warn("Failed to load budgets:", e);
+      return [];
+    }
+  }
+
+  // Найти бюджет по году и сценарию base
+  function findDefaultBudget(budgets, targetYear) {
+    return budgets.find(b => {
+      if (!b.date_from) return false;
+      const budgetYear = new Date(b.date_from).getFullYear();
+      const isBaseScenario = b.revenue_param?.scenario === "base";
+      return budgetYear === targetYear && isBaseScenario;
+    });
+  }
+
+  function ensureModal() {
+    injectBudgetAnalysisStylesOnce();
+
+    let backdrop = document.getElementById("jmBudgetAnalysisBackdrop");
+    if (backdrop) return backdrop;
+
+    backdrop = document.createElement("div");
+    backdrop.className = "jm-budget-analysis-backdrop";
+    backdrop.id = "jmBudgetAnalysisBackdrop";
+
+    backdrop.innerHTML = `
+      <div class="jm-budget-analysis-modal" role="dialog" aria-modal="true" aria-labelledby="jmBudgetAnalysisTitle">
+        <h3 class="jm-budget-analysis-title" id="jmBudgetAnalysisTitle">📊 Анализ бюджета</h3>
+        <div class="jm-budget-analysis-subtitle">
+          Выберите версию бюджета и дату для анализа
+        </div>
+
+        <div class="jm-budget-analysis-field">
+          <label class="jm-budget-analysis-label" for="jmBudgetSelect">
+            Версия бюджета
+          </label>
+          <select id="jmBudgetSelect" class="jm-budget-analysis-select">
+            <option value="">Загрузка...</option>
+          </select>
+        </div>
+
+        <div class="jm-budget-analysis-field">
+          <label class="jm-budget-analysis-label" for="jmAnalysisDate">
+            Дата анализа
+          </label>
+          <input type="date" id="jmAnalysisDate" class="jm-budget-analysis-input" />
+          <div class="jm-budget-analysis-quick">
+            <button type="button" class="jm-budget-analysis-quick-btn" id="jmBudgetToday">
+              📅 Сегодня
+            </button>
+            <button type="button" class="jm-budget-analysis-quick-btn" id="jmBudgetMonthStart">
+              📆 Начало месяца
+            </button>
+            <button type="button" class="jm-budget-analysis-quick-btn" id="jmBudgetYearStart">
+              🗓️ Начало года
+            </button>
+          </div>
+        </div>
+
+        <div class="jm-budget-analysis-loading" id="jmBudgetAnalysisLoading">
+          <div class="jm-budget-analysis-spinner"></div>
+          <span>Генерация отчета...</span>
+        </div>
+
+        <div class="jm-budget-analysis-error" id="jmBudgetAnalysisError">
+          Пожалуйста, выберите версию бюджета и дату.
+        </div>
+
+        <div class="jm-budget-analysis-actions">
+          <button type="button" class="jm-budget-analysis-btn" id="jmBudgetAnalysisCancel">Отмена</button>
+          <button type="button"class="jm-budget-analysis-btn jm-budget-analysis-btn--primary" id="jmBudgetAnalysisDownload">
+            📄 Скачать PDF
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    const budgetSelect = backdrop.querySelector("#jmBudgetSelect");
+    const dateInput = backdrop.querySelector("#jmAnalysisDate");
+    const btnToday = backdrop.querySelector("#jmBudgetToday");
+    const btnMonthStart = backdrop.querySelector("#jmBudgetMonthStart");
+    const btnYearStart = backdrop.querySelector("#jmBudgetYearStart");
+    const btnCancel = backdrop.querySelector("#jmBudgetAnalysisCancel");
+    const btnDownload = backdrop.querySelector("#jmBudgetAnalysisDownload");
+    const errorBox = backdrop.querySelector("#jmBudgetAnalysisError");
+    const loadingBox = backdrop.querySelector("#jmBudgetAnalysisLoading");
+
+    let budgetsList = [];
+
+    // Функции дат
+    function getMonthStartYmd() {
+      const d = new Date();
+      d.setDate(1);
+      return formatDateToYmd(d);
+    }
+
+    function getYearStartYmd() {
+      const d = new Date();
+      d.setMonth(0, 1);
+      return formatDateToYmd(d);
+    }
+
+    // Заполнение селекта бюджетов
+    async function populateBudgets() {
+      budgetSelect.innerHTML = '<option value="">Загрузка...</option>';
+      budgetsList = await loadBudgets();
+      
+      if (!budgetsList.length) {
+        budgetSelect.innerHTML = '<option value="">Нет доступных бюджетов</option>';
+        return;
+      }
+
+      const options = budgetsList.map(b => {
+        const year = b.date_from ? new Date(b.date_from).getFullYear() : '—';
+        const scenario = b.revenue_param?.scenario || '—';
+        const label = `${b.number} (${year}) — ${scenario}`;
+        return `<option value="${b.id}">${escapeHtml(label)}</option>`;
+      }).join('');
+
+      budgetSelect.innerHTML = options;
+
+      // Установка бюджета по умолчанию
+      const currentYear = getCurrentYear();
+      const defaultBudget = findDefaultBudget(budgetsList, currentYear);
+      
+      if (defaultBudget) {
+        budgetSelect.value = defaultBudget.id;
+      }
+    }
+
+    function getSelectedBudget() {
+      const budgetId = budgetSelect.value;
+      return budgetsList.find(b => b.id == budgetId);
+    }
+
+    function getSelectedDate() {
+      return dateInput.value;
+    }
+
+    async function open() {
+      errorBox.classList.remove("is-visible");
+      loadingBox.classList.remove("is-visible");
+      
+      if (!dateInput.value) {
+        dateInput.value = getTodayYmd();
+      }
+      
+      // Загружаем бюджеты если еще не загружены
+      if (!budgetsList.length) {
+        await populateBudgets();
+      }
+      
+      backdrop.classList.add("is-open");
+    }
+
+    function close() {
+      backdrop.classList.remove("is-open");
+      errorBox.classList.remove("is-visible");
+      loadingBox.classList.remove("is-visible");
+    }
+
+    async function downloadReport() {
+      const budget = getSelectedBudget();
+      const reportDate = getSelectedDate();
+
+      if (!budget || !reportDate) {
+        errorBox.classList.add("is-visible");
+        return;
+      }
+
+      errorBox.classList.remove("is-visible");
+      loadingBox.classList.add("is-visible");
+
+      const url = `/admin/export/budget-analysis/?budget_id=${budget.id}&report_date=${encodeURIComponent(reportDate)}`;
+
+      try {
+        // Пока что просто редирект (позже будет PDF)
+        window.location.href = url;
+        close();
+      } catch (err) {
+        console.error("Download error:", err);
+        errorBox.textContent = "Ошибка при генерации отчета";
+        errorBox.classList.add("is-visible");
+        loadingBox.classList.remove("is-visible");
+      }
+    }
+
+    // Event listeners
+    btnToday.addEventListener("click", () => {
+      dateInput.value = getTodayYmd();
+      errorBox.classList.remove("is-visible");
+    });
+
+    btnMonthStart.addEventListener("click", () => {
+      dateInput.value = getMonthStartYmd();
+      errorBox.classList.remove("is-visible");
+    });
+
+    btnYearStart.addEventListener("click", () => {
+      dateInput.value = getYearStartYmd();
+      errorBox.classList.remove("is-visible");
+    });
+
+    btnCancel.addEventListener("click", close);
+    btnDownload.addEventListener("click", downloadReport);
+
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) close();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && backdrop.classList.contains("is-open")) {
+        close();
+      }
+    });
+
+    // Загружаем бюджеты при создании
+    populateBudgets();
+
+    backdrop._openBudgetAnalysisModal = open;
+    backdrop._closeBudgetAnalysisModal = close;
+
+    return backdrop;
+  }
+
+    function bindTriggers() {
+    const backdrop = ensureModal();
+    
+    // Ищем только триггеры в выпадающем меню "Экспорт"
+    const triggers = document.querySelectorAll(".jm-budget-analysis-trigger");
+    
+    triggers.forEach((el) => {
+      if (el.dataset.budgetAnalysisBound === "1") return;
+      el.dataset.budgetAnalysisBound = "1";
+      
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        backdrop._openBudgetAnalysisModal();
+      });
+    });
+  }
+
+  function boot() {
+    ensureModal();
+    bindTriggers();
   }
 
   document.addEventListener("DOMContentLoaded", boot);
