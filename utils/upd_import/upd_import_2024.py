@@ -1,39 +1,273 @@
-# ЭТО 2025 ГОД
+# ЭТО 2024 ГОД
 import pandas as pd
 
 from pathlib import Path
 
 
-source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/2025')
+source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/2024')
 base_path = Path.cwd()
-upd_path = base_path / "data" / "upd"
+upd_path = base_path / "data" / "upd_2024"
 upd_path.mkdir(parents=True, exist_ok=True)
 
 UPD_LIST = {
 
-    "Araqum MS-004 +Артикул (2).xlsx": {
-        "number": "MS-004",
-        "date": "2025-04-10",
+    "Araqum HM-001 (1).xlsx": {
+        "number": "HM-001",
+        "date": "2024-04-23",
         "columns": "B:O",
         "header_row": 16,
-        "nrows":4259,
+        "nrows":160,
         "dropna_col": "№",
         "supplier": "ЗАО «Арминвест»",
         "sheet": "1. Счет-Фактура"
     },
-    "Araqum MS-001 +Артикул (2) (1) (1).xlsx": {
-        "number": "MS-001",
-        "date": "2025-03-18",
+    
+    
+    "Araqum HM-004 (2).xlsx": {
+        "number": "HM-004",
+        "date": "2024-05-29",
         "columns": "B:O",
         "header_row": 16,
-        "nrows":3585,
+        "nrows":1632,
         "dropna_col": "№",
         "supplier": "ЗАО «Арминвест»",
         "sheet": "1. Счет-Фактура"
     },
-    "Araqum HM-041 +Артикул.xlsx": {
-        "number": "HM-041",
-        "date": "2025-07-01",
+    
+     "Araqum HM-005 (3) (2).xlsx": {
+        "number": "HM-005",
+        "date": "2024-07-03",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":498,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+     
+    "Araqum HM-006 (1) (2).xlsx": {
+        "number": "HM-006",
+        "date": "2024-07-12",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":504,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-007 (3) (2).xlsx": {
+        "number": "HM-007",
+        "date": "2024-07-25",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":338,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-008.xlsx": {
+        "number": "HM-008",
+        "date": "2024-08-09",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":2825,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-010.xlsx": {
+        "number": "HM-010",
+        "date": "2024-09-12",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":6429,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-011 последний.xlsx": {
+        "number": "HM-011",
+        "date": "2024-09-30",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":1173,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-012 (12)(1) скор 31-10 (1).xlsx": {
+        "number": "HM-012",
+        "date": "2024-10-08",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":1405,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-013 последняя.xlsx": {
+        "number": "HM-013",
+        "date": "2024-10-10",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":102,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-014.xlsx": {
+        "number": "HM-014",
+        "date": "2024-10-15",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":188,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-016 (1) последнее.xlsx": {
+        "number": "HM-016",
+        "date": "2024-10-24",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":146,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-017 без арт.xlsx": {
+        "number": "HM-017",
+        "date": "2024-10-29",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":126,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-018 без арт (1) ПОСЛЕДНЕЕ.xlsx": {
+        "number": "HM-018",
+        "date": "2024-11-04",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":156,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-019 +Артикул (6).xlsx": {
+        "number": "HM-019",
+        "date": "2024-11-08",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":240,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+    "Araqum HM-020 +Артикул (1).xlsx": {
+        "number": "HM-020",
+        "date": "2024-11-12",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":144,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+    
+     "Araqum HM-021 (1).xlsx": {
+        "number": "HM-021",
+        "date": "2024-11-15",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":271,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+     
+     "Araqum HM-022 +Артикул (2).xlsx": {
+        "number": "HM-022",
+        "date": "2024-11-21",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":202,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+     
+     "Araqum HM-023.xlsx": {
+        "number": "HM-023",
+        "date": "2024-11-28",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":1647,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+     
+      "Araqum HM-024.xlsx": {
+        "number": "HM-024",
+        "date": "2024-11-29",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":763,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+      
+      "Araqum HM-025 +Артикул.xlsx": {
+        "number": "HM-025",
+        "date": "2024-12-03",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":146,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+      
+       "Araqum HM-026 +Артикул.xlsx": {
+        "number": "HM-026",
+        "date": "2024-12-16",
+        "columns": "B:P",
+        "header_row": 16,
+        "nrows":230,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+       
+       "Araqum_HM-009.xlsx": {
+        "number": "HM-009",
+        "date": "2024-08-27",
+        "columns": "B:O",
+        "header_row": 16,
+        "nrows":5550,
+        "dropna_col": "№",
+        "supplier": "ЗАО «Арминвест»",
+        "sheet": "1. Счет-Фактура"
+    },
+       
+       "Copy of Araqum HM-015 последний 2.xlsx": {
+        "number": "HM-015",
+        "date": "2024-10-22",
         "columns": "B:O",
         "header_row": 16,
         "nrows":150,
@@ -41,236 +275,54 @@ UPD_LIST = {
         "supplier": "ЗАО «Арминвест»",
         "sheet": "1. Счет-Фактура"
     },
-    "Araqum MS-003 +Артикул (1).xlsx": {
-        "number": "MS-003",
-        "date": "2025-04-02",
+       
+       "HM-002.xlsx": {
+        "number": "HM-002",
+        "date": "2024-05-10",
         "columns": "B:O",
         "header_row": 16,
-        "nrows":2616,
+        "nrows":447,
         "dropna_col": "№",
         "supplier": "ЗАО «Арминвест»",
         "sheet": "1. Счет-Фактура"
     },
-    "Araqum HM-036 +Артикул.xlsx": {
-        "number": "HM-036",
-        "date": "2025-05-21",
+    
+    
+    "HM-003.xlsx": {
+        "number": "HM-003",
+        "date": "2024-05-10",
         "columns": "B:O",
         "header_row": 16,
-        "nrows":275,
+        "nrows":558,
         "dropna_col": "№",
         "supplier": "ЗАО «Арминвест»",
         "sheet": "1. Счет-Фактура"
     },
-    "Araqum HM-031 +Артикул.xlsx": {
-        "number": "HM-031",
-        "date": "2025-04-08",
-        "columns": "B:O",
+    
+    
+     "WB-4. (1) (2).xlsx": {
+        "number": "WB-4",
+        "date": "2024-02-08",
+        "columns": "B:L",
         "header_row": 16,
-        "nrows":530,
+        "nrows":287,
         "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
+        "supplier": "ЗАО «БРЕНД ДЕВЕЛОПМЕНТ»",
+        "sheet": "Счет-Фактура (2)"
     },
-    "Araqum HM-032 +Артикул (2).xlsx": {
-        "number": "HM-032",
-        "date": "2025-04-10",
-        "columns": "B:O",
+    
+    
+     "WB-5. (6) (1).xlsx": {
+        "number": "WB-5",
+        "date": "2024-03-14",
+        "columns": "B:L",
         "header_row": 16,
-        "nrows":253,
+        "nrows":324,
         "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
+        "supplier": "ЗАО «БРЕНД ДЕВЕЛОПМЕНТ»",
+        "sheet": "Счет-Фактура (2)"
     },
-     "Araqum HM-045.xlsx": {
-        "number": "HM-045",
-        "date": "2025-11-11",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":1939,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },
-    "Araqum HM-044.xlsx": {
-        "number": "HM-044",
-        "date": "2025-10-06",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":210,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum MS-005 +Артикул (1) (1).xlsx": {
-        "number": "MS-005",
-        "date": "2025-07-01",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":554,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum HM-046.xlsx": {
-        "number": "HM-046",
-        "date": "2025-12-04",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":2607,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum HM-029 +Артикул.xlsx": {
-        "number": "HM-029",
-        "date": "2025-02-17",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":171,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum HM-030 +Артикул (1).xlsx": {
-        "number": "HM-030",
-        "date": "2025-04-02",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":332,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum HM-042 +Артикул (1).xlsx": {
-        "number": "HM-042",
-        "date": "2025-08-07",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":359,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum MS-002 +Артикул.xlsx": {
-        "number": "MS-002",
-        "date": "2025-03-26",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":4248,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum HM-038 +Артикул + Номер.xlsx": {
-        "number": "HM-038",
-        "date": "2025-06-03",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":77,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum MS-006 +Артикул - на отправку брокер.xlsx": {
-        "number": "MS-006",
-        "date": "2025-08-07",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":4455,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-    "Araqum HM-028 БЕЗ Артикулов 1.xlsx": {
-        "number": "HM-028",
-        "date": "2025-02-03",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":327,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-     "Araqum HM-043 +Артикул (1) (1) (1).xlsx": {
-        "number": "HM-043",
-        "date": "2025-08-22",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":4435,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    }, 
-     "Araqum HM-033 +Артикул.xlsx": {
-        "number": "HM-033",
-        "date": "2025-04-21",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":455,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },  
-    "Araqum HM-040 +Артикул + Номер.xlsx": {
-        "number": "HM-040",
-        "date": "2025-06-16",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":65,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },  
-    "Araqum HM-034 +Артикул.xlsx": {
-        "number": "HM-034",
-        "date": "2025-04-25",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":397,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },  
-    "Araqum HM-037 +Артикул + Номер (1).xlsx": {
-        "number": "HM-037",
-        "date": "2025-05-29",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":74,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },
-    "Araqum HM-035 +Артикул.xlsx": {
-        "number": "HM-035",
-        "date": "2025-05-20",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":161,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },
-    "Araqum HM-039 +Артикул + Номер (2).xlsx": {
-        "number": "HM-039",
-        "date": "2025-06-10",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":149,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },    
-    "Araqum HM-027 +Артикул.xlsx": {
-        "number": "HM-027",
-        "date": "2025-02-03",
-        "columns": "B:O",
-        "header_row": 16,
-        "nrows":149,
-        "dropna_col": "№",
-        "supplier": "ЗАО «Арминвест»",
-        "sheet": "1. Счет-Фактура"
-    },            
+           
 }
 
 

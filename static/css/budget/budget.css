@@ -1284,3 +1284,130 @@ table.data .flat {
     color: #8a9e98;
     margin-top: 6px;
 }
+
+
+.chart-container {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    margin-top: 8px;
+    margin-bottom: 6px;
+}
+
+.chart-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+
+@page {
+    size: A4 portrait;
+
+     margin: 8mm 10mm 6mm 10mm;
+}
+
+.one-page-report {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    font-size: 9.6px;
+}
+
+/* HEADER */
+.one-page-report .header {
+    margin-bottom: 10px;
+}
+
+.one-page-report .title {
+    font-size: 20px;
+    line-height: 1.2;
+}
+
+.one-page-report .subtitle,
+.one-page-report .generated {
+    font-size: 9.5px;
+}
+
+/* SECTIONS */
+.one-page-report .section-header,
+.one-page-report .subsection-header {
+    margin-top: 10px;
+    margin-bottom: 7px;
+}
+
+/* TABLE */
+.one-page-report table.data {
+    font-size: 8.2px;
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+
+.one-page-report table.data th,
+.one-page-report table.data td {
+    padding: 3.6px 5px;
+    line-height: 1.2;
+}
+
+/* KPI */
+.one-page-report .kpi-grid-3 {
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.one-page-report .kpi-card-compact {
+    padding: 8px 10px;
+}
+
+.one-page-report .kpi-label-compact {
+    font-size: 8px;
+}
+
+.one-page-report .kpi-value-compact {
+    font-size: 14px;
+}
+
+/* FORECAST */
+.one-page-report .forecast-box {
+    padding: 8px 10px;
+    margin: 8px 0;
+}
+
+.one-page-report .forecast-title {
+    font-size: 11px;
+    margin-bottom: 6px;
+}
+
+.one-page-report .forecast-label {
+    font-size: 8px;
+}
+
+.one-page-report .forecast-value {
+    font-size: 11px;
+}
+
+.one-page-report .forecast-success,
+.one-page-report .forecast-warning {
+    font-size: 8.5px;
+    line-height: 1.3;
+    padding: 6px 8px;
+}
+
+/* INFO BLOCK */
+.one-page-report .info-compact {
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    font-size: 8.5px;
+}
+
+/* NOTES */
+.one-page-report .small-note {
+    font-size: 7px;
+    line-height: 1.3;
+    margin-top: 4px;
+}
+
+/* CHART */
+.one-page-report .chart-container {
+    margin: 6px 0 2px 0;
+}

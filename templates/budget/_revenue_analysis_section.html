@@ -165,6 +165,24 @@
 <div class="small-note">* Выручка = Продажи − Возвраты. Данные за последние 10 дней.</div>
 {% endif %}
 
+{# ГРАФИК #}
+{% if revenue_analysis.chart_svg %}
+<div class="subsection-header">
+    <div class="subsection-number">III.</div>
+    <div class="subsection-title">Визуализация динамики выручки</div>
+</div>
+
+<div class="chart-container">
+    {{ revenue_analysis.chart_svg|safe }}
+</div>
+
+
+{% endif %}
+
+
 {% else %}
     <p class="muted">Нет данных по выручке за указанный период</p>
 {% endif %}
+
+
+
