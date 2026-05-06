@@ -4,7 +4,8 @@ import pandas as pd
 from pathlib import Path
 
 
-source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/2024')
+# source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/2024')
+source_folder = Path('/Users/pavelustenko/Downloads/2024')
 base_path = Path.cwd()
 upd_path = base_path / "data" / "upd_2024"
 upd_path.mkdir(parents=True, exist_ok=True)
