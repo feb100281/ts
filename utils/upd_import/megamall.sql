@@ -1,7 +1,7 @@
 -- делаем вьюху с мегамол упд
-CREATE VIEW IF NOT EXISTS upd.megamall_raw AS
-    SELECT *
-    FROM read_parquet('/Users/daria/Documents/Projects/ts/data/megamall/*.parquet', union_by_name=true);
+-- CREATE VIEW IF NOT EXISTS upd.megamall_raw AS
+--     SELECT *
+--     FROM read_parquet('/Users/daria/Documents/Projects/ts/data/megamall/*.parquet', union_by_name=true);
 
 
 -- приводим нормальные название колонок и делаем таблицу для работы
@@ -58,7 +58,7 @@ group by "file_name",
 
 -- SET preserve_insertion_order=false;
 
--- CREATE OR REPLACE VIEW upd.megamall_vs_cards as 
+CREATE OR REPLACE VIEW upd.megamall_vs_cards as 
 WITH cards_sizes AS (
     SELECT
         t."nm_pid",

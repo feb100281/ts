@@ -1,3 +1,5 @@
+# inventories/reporting/excel/components/sheet_title.py
+
 from openpyxl.styles import Font, Alignment
 from ..styles.theme import COLORS
 

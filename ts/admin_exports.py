@@ -157,3 +157,27 @@ def export_budget_analysis(request):
     
     # Генерируем PDF через новый экспортер
     return build_revenue_analysis_pdf_response(budget, report_date_obj)
+
+
+
+
+def export_upd_issues(request):
+    """Экспорт косяков по УПД в Excel"""
+    from utils.upd_issues.builder import UpdIssuesReportGenerator
+    
+    try:
+        generator = UpdIssuesReportGenerator()
+        output = generator.generate()
+        
+        filename = f"upd_issues_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        response = HttpResponse(
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        return HttpResponseBadRequest(f"Ошибка при формировании отчета: {str(e)}")

@@ -1,3 +1,4 @@
+# inventories/reporting/excel/components/tables.py
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from ..styles.theme import COLORS, ALIGNMENTS, BORDERS, FILLS
 

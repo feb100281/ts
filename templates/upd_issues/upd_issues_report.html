@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} – {{ company }}</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/upd_issues/report.css">
+</head>
+<body>
+
+<div class="header">
+    <div class="title">{{ title }}</div>
+    <div class="subtitle">{{ company }}</div>
+    <div class="date">Сформировано: {{ report_date }} в {{ report_time }}</div>
+</div>
+
+<div class="greeting">
+    <strong>Уважаемые коллеги!</strong>
+</div>
+
+<div class="letter-content">
+    <p>
+        В ходе проверки УПД были выявлены несоответствия между данными, 
+        предоставленными в УПД, и информацией в учетной системе Wildberries.
+    </p>
+</div>
+
+
+
+<div class="letter-content">
+    <p><strong>Детализация по документам:</strong></p>
+</div>
+
+
+<div class="letter-content">
+    <p><strong>Детализация по документам:</strong></p>
+    <p class="table-note">
+        В таблице ниже приведено количество выявленных несоответствий по каждому документу 
+        в разрезе типов ошибок:
+    </p>
+    <ul class="legend">
+        <li><strong>Названия</strong> — несоответствие наименования товара в УПД и в карточке WB</li>
+        <li><strong>Артикулы</strong> — несоответствие артикула товара в УПД и в карточке WB</li>
+        <li><strong>Размеры</strong> — несоответствие размера/характеристики товара</li>
+        <li><strong>НДС</strong> — несоответствие ставки НДС в УПД и в карточке WB</li>
+        <li><strong>Сертификаты</strong> — проблемы с сертификатами (отсутствуют, истекли или истекают)</li>
+    </ul>
+</div>
+
+
+<!-- Группировка по поставщикам -->
+{% for group in supplier_groups %}
+<div class="supplier-section">
+    <div class="supplier-header">
+        <div class="supplier-badge">ПОСТАВЩИК</div>
+        <div class="supplier-name">{{ group.supplier }}</div>
+    </div>
+    
+    <table class="data">
+        <thead>
+            <tr>
+                <th style="width: 8%">№</th>
+                <th style="width: 42%">Документ</th>
+                <th style="width: 10%">Позиций</th>
+                <th style="width: 10%">Названия</th>
+                <th style="width: 10%">Артикулы</th>
+                <th style="width: 10%">Размеры</th>
+                <th style="width: 10%">НДС</th>
+                <th style="width: 10%">Сертификаты</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for file in group.files %}
+            <tr>
+                <td class="center">{{ forloop.counter }}</td>
+                <td class="left">
+                    <span class="file-name">{{ file.full_name }}</span>
+                </td>
+                <td class="right">{{ file.total_positions|floatformat:0 }}</td>
+                <td class="center {% if file.name_mismatch > 0 %}error-count{% endif %}">
+                    {{ file.name_mismatch|floatformat:0 }}
+                </td>
+                <td class="center {% if file.article_mismatch > 0 %}error-count{% endif %}">
+                    {{ file.article_mismatch|floatformat:0 }}
+                </td>
+                <td class="center {% if file.size_mismatch > 0 %}error-count{% endif %}">
+                    {{ file.size_mismatch|floatformat:0 }}
+                </td>
+                <td class="center {% if file.vat_mismatch > 0 %}error-count{% endif %}">
+                    {{ file.vat_mismatch|floatformat:0 }}
+                </td>
+                <td class="center {% if file.cert_issues > 0 %}error-count{% endif %}">
+                    {{ file.cert_issues|floatformat:0 }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="2" class="right"><strong>Итого по поставщику:</strong></td>
+                <td class="right"><strong>{{ group.total_positions|floatformat:0 }}</strong></td>
+                <td class="center"><strong>{{ group.total_name_mismatch|floatformat:0 }}</strong></td>
+                <td class="center"><strong>{{ group.total_article_mismatch|floatformat:0 }}</strong></td>
+                <td class="center"><strong>{{ group.total_size_mismatch|floatformat:0 }}</strong></td>
+                <td class="center"><strong>{{ group.total_vat_mismatch|floatformat:0 }}</strong></td>
+                <td class="center"><strong>{{ group.total_cert_issues|floatformat:0 }}</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% endfor %}
+
+
+
+<div class="letter-content">
+    <p>
+        По каждому документу в прикрепленном архиве содержится Excel-файл с детальным отчетом:
+    </p>
+    <ul>
+        <li>Лист «Справка» — общая статистика по документу и навигация по типам ошибок;</li>
+        <li>Отдельные листы для каждого типа несоответствий с детальным перечнем позиций.</li>
+    </ul>
+    <p>
+        <strong>Просьба:</strong> исправить выявленные несоответствия и 
+        прислать корректные версии файлов ответным сообщением.
+    </p>
+</div>
+
+<div class="signature">
+    <div>С уважением,</div>
+    <div class="signature-name">Дарья</div>
+    <div class="signature-date">{{ report_date }}</div>
+</div>
+
+
+
+</body>
+</html>
