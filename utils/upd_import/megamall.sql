@@ -1,10 +1,11 @@
 -- делаем вьюху с мегамол упд
-CREATE VIEW IF NOT EXISTS upd.megamall_raw AS
-    SELECT *
-    FROM read_parquet('/Users/pavelustenko/ts/data/megamall/*.parquet', union_by_name=true);
+-- CREATE VIEW IF NOT EXISTS upd.megamall_raw AS
+--     SELECT *
+--     FROM read_parquet('/Users/pavelustenko/ts/data/megamall/*.parquet', union_by_name=true);
 
 -- приводим нормальные название колонок и делаем таблицу для работы
-CREATE or REPLACE TABLE upd.megamall_adjust as
+DROP TABLE IF EXISTS upd.megamall_adjust;
+CREATE or REPLACE VIEW upd.megamall_adjust as
 select 
 row_number() over () as id,
 "file_name",
@@ -56,7 +57,7 @@ group by "file_name",
 
 -- SET preserve_insertion_order=false;
 
-CREATE OR REPLACE VIEW upd.megamall_vs_cards as 
+-- CREATE OR REPLACE VIEW upd.megamall_vs_cards as 
 WITH cards_sizes AS (
     SELECT
         t."nm_pid",
@@ -72,6 +73,7 @@ SELECT
     t."id", 
     t."file_name",
     t."number",
+    t."date_from",
     CONCAT(
         'УПД №: ',
         t."number",
@@ -81,14 +83,25 @@ SELECT
     t."upd_pos",
     t."upd_sa_name",
     c.sa_pid,
+    c."brand",
     t."upd_title",
     string_agg(DISTINCT cp.title, ' | ') AS cards_titles,
-    t."upd_size",
+    COALESCE(
+    NULLIF(trim(CAST(t."upd_size" AS VARCHAR)), ''),
+    CASE
+        WHEN list_count(cz.available_sizes) = 1
+        THEN CAST(cz.available_sizes[1] AS VARCHAR)
+        ELSE ''
+    END
+    ) AS upd_size,
     cz.available_sizes,
     t.upd_vat_rate,
-    COALESCE(c.vat_rate,22) as card_vat_rate, -- нужно потом переделать !!!!
+    COALESCE(c.vat_rate,v.rate) as card_vat_rate, 
     c.cert_end_date,
-    case when c.cert_end_date < t.date_from then 'Просрочен сертификат' else null end as cert_status
+    case 
+    when c.cert_end_date < t.date_from then 'Просрочен сертификат' 
+    when c.cert_end_date is null then 'Нет сертификата'    
+    else 'Ok' end as cert_status
 FROM upd.megamall_adjust t
 LEFT JOIN cards.product c
     ON c.sa_pid = t.upd_sa_name
@@ -96,6 +109,7 @@ LEFT JOIN cards.product cp
     ON cp.sa_name = c.sa_pid
 LEFT JOIN cards_sizes cz
     ON cz.nm_pid = c.nm_id
+LEFT JOIN main.vat v on t."date_from" >= v.date_from and t."date_from" < v.date_to
 GROUP BY
     t."id", 
     t."file_name",
@@ -104,33 +118,47 @@ GROUP BY
     t."upd_pos",
     t."upd_sa_name",
     c.sa_pid,
+    c."brand",
     t."upd_title",
-    t."upd_size",
+    upd_size,
     cz.available_sizes,
     t.upd_vat_rate,
     c.vat_rate,
-    c.cert_end_date
+    c.cert_end_date,
+    card_vat_rate
 )
 select 
-id,
-file_name,
-full_name,
-upd_pos,
-upd_sa_name,
-sa_pid,
-upd_title,
-cards_titles,
-lower(cards_titles) LIKE
-        '%' || lower(regexp_extract(upd_title, '^([^\s]+)', 1)) || '%'
+t.id,
+t.file_name,
+t.full_name,
+t.upd_pos,
+t.upd_sa_name,
+t.sa_pid,
+t.brand,
+t.upd_title,
+t.cards_titles,
+lower(t.cards_titles) LIKE
+        '%' || lower(regexp_extract(t.upd_title, '^([^\s]+)', 1)) || '%'
         AS name_match,
-upd_size,
-available_sizes,
-LIST_CONTAINS(available_sizes,upd_size) as size_match,
-upd_vat_rate,
-card_vat_rate,
-upd_vat_rate = card_vat_rate as match_vats
+t.upd_size,
+t.available_sizes,
+LIST_CONTAINS(t.available_sizes,t.upd_size) as size_match,
+t.upd_vat_rate,
+t.card_vat_rate,
+t.upd_vat_rate = t.card_vat_rate as match_vats,
+t.cert_end_date,
+t.cert_status,
+case when t.cert_status = 'Ok' then true else false end as cert_match,
+s."upd_unit",
+s."upd_qty",
+s."upd_price_vatless",
+s."upd_amount_vatless",
+s."upd_vat_amount",
+s."upd_amount_vatadd"
 
 
-from prefin
+
+from prefin t
+left join upd.megamall_adjust s on s.id = t.id
 
 
