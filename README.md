@@ -73,6 +73,12 @@ python manage.py duck_etl
 7) python manage.py stocks_etl (Распарсиваем остатки по складам) 
 
 
+📥 ОБНОВЛЯТЬ КАРТЫ
+────────────────────────
+python manage.py wb_cards_to_parquet --overwrite
+python manage.py cards_etl
+
+
 
 Поставки 
 python manage.py delivery_etl
