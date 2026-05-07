@@ -1,7 +1,8 @@
 -- делаем вьюху с мегамол упд
--- CREATE VIEW IF NOT EXISTS upd.megamall_raw AS
---     SELECT *
---     FROM read_parquet('/Users/pavelustenko/ts/data/megamall/*.parquet', union_by_name=true);
+CREATE VIEW IF NOT EXISTS upd.megamall_raw AS
+    SELECT *
+    FROM read_parquet('/Users/daria/Documents/Projects/ts/data/megamall/*.parquet', union_by_name=true);
+
 
 -- приводим нормальные название колонок и делаем таблицу для работы
 DROP TABLE IF EXISTS upd.megamall_adjust;

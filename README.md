@@ -57,7 +57,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-05-04 2026-05-05 --overwrite
+1) python manage.py fin_report_range 2026-05-05 2026-05-06 --overwrite
 2) python manage.py duck_etl
 
 
@@ -71,6 +71,12 @@ python manage.py duck_etl
 5) python3 -m http.server 8000
 6) 82.202.197.94:8000 (скачиваем остатки в браузере)
 7) python manage.py stocks_etl (Распарсиваем остатки по складам) 
+
+
+📥 ОБНОВЛЯТЬ КАРТЫ
+────────────────────────
+python manage.py wb_cards_to_parquet --overwrite
+python manage.py cards_etl
 
 
 
