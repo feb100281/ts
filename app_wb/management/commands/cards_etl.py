@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
 from psycopg import Connection
+from psycopg.types.json import Jsonb
+
 import pandas as pd
 
 load_dotenv()
@@ -227,8 +229,217 @@ s.updated_at
 """
 
 
+# Вставляем корточки и меняем если что
+
+def upsert_cards_raw(rows):
+
+    sql = """
+        INSERT INTO wb_cards_raw (
+            nm_id,
+            payload,
+            loaded_at
+        )
+        VALUES (
+            %s,
+            %s,
+            %s
+        )
+        ON CONFLICT (nm_id)
+        DO UPDATE SET
+            payload = EXCLUDED.payload,
+            loaded_at = EXCLUDED.loaded_at
+    """
+
+    data = []
+
+    for nm_id, payload, loaded_at in rows:
+
+        data.append(
+            (
+                int(nm_id),
+                Jsonb(json.loads(payload)),
+                loaded_at
+            )
+        )
+
+    with connect_db() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.executemany(sql, data)
+
+        conn.commit()
+
+    return len(data)
+
+def upsert_wb_sizes():
+    sql = """
+        INSERT INTO wb_sizes (
+            chrt_id,
+            nm_id,
+            tech_size
+        )
+        SELECT
+            (size_item->>'chrtID')::bigint AS chrt_id,
+            r.nm_id,
+            size_item->>'techSize' AS tech_size
+        FROM wb_cards_raw r
+        CROSS JOIN LATERAL jsonb_array_elements(r.payload->'sizes') AS size_item
+        WHERE size_item ? 'chrtID'
+        ON CONFLICT (chrt_id)
+        DO UPDATE SET
+            tech_size = EXCLUDED.tech_size
+        WHERE wb_sizes.tech_size IS DISTINCT FROM EXCLUDED.tech_size
+    """
+
+    with connect_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            changed = cur.rowcount
+
+        conn.commit()
+
+    return changed
+
+def upsert_wb_barcodes():
+    sql = """
+        INSERT INTO wb_barcodes (
+            barcode,
+            chrt_id
+        )
+        SELECT
+            barcode_item AS barcode,
+            (size_item->>'chrtID')::bigint AS chrt_id
+        FROM wb_cards_raw r
+        CROSS JOIN LATERAL jsonb_array_elements(r.payload->'sizes') AS size_item
+        CROSS JOIN LATERAL jsonb_array_elements_text(size_item->'skus') AS barcode_item
+        WHERE
+            size_item ? 'chrtID'
+            AND size_item ? 'skus'
+        ON CONFLICT (barcode)
+        DO UPDATE SET
+            chrt_id = EXCLUDED.chrt_id
+        WHERE wb_barcodes.chrt_id IS DISTINCT FROM EXCLUDED.chrt_id
+    """
+
+    with connect_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            changed = cur.rowcount
+
+        conn.commit()
+
+    return changed
+
+def upsert_wb_barcodes():
+
+    sql = """
+        INSERT INTO wb_barcodes (
+            barcode,
+            chrt_id
+        )
+        SELECT DISTINCT
+            barcode_item AS barcode,
+            (size_item->>'chrtID')::bigint AS chrt_id
+
+        FROM wb_cards_raw r
+
+        CROSS JOIN LATERAL jsonb_array_elements(r.payload->'sizes') AS size_item
+
+        CROSS JOIN LATERAL jsonb_array_elements_text(
+            size_item->'skus'
+        ) AS barcode_item
+
+        WHERE
+            size_item ? 'chrtID'
+            AND size_item ? 'skus'
+            AND barcode_item IS NOT NULL
+            AND barcode_item <> ''
+
+        ON CONFLICT (barcode, chrt_id)
+        DO NOTHING
+    """
+
+    with connect_db() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(sql)
+
+            inserted = cur.rowcount
+
+        conn.commit()
+
+    return inserted
+
+
+def upsert_wb_products(rows):
+
+    sql = """
+        INSERT INTO wb_products (
+            nm_id,
+            nm_pid,
+            sa_name,
+            sa_pid,
+            title,
+            alternative_name,
+            subject_name,
+            brand,
+            subject_id,
+            has_parent,
+            vat_rate,
+            discount_vat,
+            tnved,
+            gender,
+            origin_country,
+            photo_hq,
+            cert_end_date,
+            wb_created_at,
+            wb_updated_at,
+            available_sizes,
+            updated_at
+        )
+        VALUES (
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s,
+            now()
+        )
+        ON CONFLICT (nm_id)
+        DO UPDATE SET
+            nm_pid = EXCLUDED.nm_pid,
+            sa_name = EXCLUDED.sa_name,
+            sa_pid = EXCLUDED.sa_pid,
+            title = EXCLUDED.title,
+            alternative_name = EXCLUDED.alternative_name,
+            subject_name = EXCLUDED.subject_name,
+            brand = EXCLUDED.brand,
+            subject_id = EXCLUDED.subject_id,
+            has_parent = EXCLUDED.has_parent,
+            vat_rate = EXCLUDED.vat_rate,
+            discount_vat = EXCLUDED.discount_vat,
+            tnved = EXCLUDED.tnved,
+            gender = EXCLUDED.gender,
+            origin_country = EXCLUDED.origin_country,
+            photo_hq = EXCLUDED.photo_hq,
+            cert_end_date = EXCLUDED.cert_end_date,
+            wb_created_at = EXCLUDED.wb_created_at,
+            wb_updated_at = EXCLUDED.wb_updated_at,
+            available_sizes = EXCLUDED.available_sizes,
+            updated_at = now()
+    """
+
+    with connect_db() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(sql, rows)
+
+        conn.commit()
+
+    return len(rows)
+
 class Command(BaseCommand):
-    help = "Initialize DuckDB views for WB parquet"
+    help = "THIS IS THE WB CARDS ETL"
 
     def handle(self, *args, **options):
         db_path = os.getenv("DUCKDB_PATH")
@@ -282,6 +493,73 @@ class Command(BaseCommand):
                    self.stdout.write(self.style.ERROR(f"ЗАДВОЯШКИ В КАРТОЧКАХ")) 
                 else:
                    self.stdout.write(self.style.SUCCESS(f"UNIQUE cards created: {product_cnt}")) 
+                
+                rows = con.execute("""
+                        SELECT
+                            nm_id,
+                            payload,
+                            _loaded_at
+                        FROM cards.cards_raw
+                    """).fetchall()
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Rows fetched from DuckDB: {len(rows)}"
+                    )
+                )
+                count = upsert_cards_raw(rows)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"UPSERTED: {count}"
+                    )
+                )
+                changed_sizes = upsert_wb_sizes()
+
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"WbSizes inserted/updated: {changed_sizes}"
+                    )
+                )  
+                
+                inserted_barcodes = upsert_wb_barcodes()
+
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"WbBarcodes inserted: {inserted_barcodes}"
+                    )
+                ) 
+                
+                rows = con.execute("""
+                    SELECT
+                        nm_id,
+                        nm_pid,
+                        sa_name,
+                        sa_pid,
+                        title,
+                        alternative_name,
+                        subject_name,
+                        brand,
+                        subject_id,
+                        has_parent,
+                        vat_rate,
+                        discount_vat,
+                        tnved,
+                        gender,
+                        origin_country,
+                        photo_hq,
+                        cert_end_date,
+                        created_at,
+                        updated_at,
+                        available_sizes
+                    FROM cards.product
+                """).fetchall()
+
+                count_details = upsert_wb_products(rows)   
+                
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"details inserted: {count_details}"
+                    )
+                )          
                 
         except Exception as e:
             raise CommandError(f"DuckDB error: {e}")
