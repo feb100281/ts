@@ -58,108 +58,190 @@ group by "file_name",
 
 -- SET preserve_insertion_order=false;
 
--- CREATE OR REPLACE VIEW upd.megamall_vs_cards as 
+CREATE OR REPLACE VIEW upd.megamall_vs_cards AS
+
 WITH cards_sizes AS (
     SELECT
-        t."nm_pid",
-        list(DISTINCT uc.tech_size) FILTER (WHERE uc.tech_size IS NOT NULL) AS available_sizes
-    FROM cards.pids t
-    LEFT JOIN cards.unpacked_cards uc
+        t.nm_pid,
+        list(DISTINCT uc.tech_size)
+            FILTER (WHERE uc.tech_size IS NOT NULL) AS available_sizes
+    FROM cards.pids AS t
+    LEFT JOIN cards.unpacked_cards AS uc
         ON uc.nm_id = t.nm_pid
-    GROUP BY
-        t."nm_pid"
+    GROUP BY t.nm_pid
 ),
-prefin as (
-SELECT 
-    t."id", 
-    t."file_name",
-    t."number",
-    t."date_from",
-    CONCAT(
-        'УПД №: ',
-        t."number",
-        ' от ',
-        strftime(t."date_from"::DATE, '%d.%m.%Y')
-    ) AS full_name,
-    t."upd_pos",
-    t."upd_sa_name",
-    c.sa_pid,
-    c."brand",
-    t."upd_title",
-    string_agg(DISTINCT cp.title, ' | ') AS cards_titles,
-    COALESCE(
-    NULLIF(trim(CAST(t."upd_size" AS VARCHAR)), ''),
-    CASE
-        WHEN list_count(cz.available_sizes) = 1
-        THEN CAST(cz.available_sizes[1] AS VARCHAR)
-        ELSE ''
-    END
-    ) AS upd_size,
-    cz.available_sizes,
-    t.upd_vat_rate,
-    COALESCE(c.vat_rate,v.rate) as card_vat_rate, 
-    c.cert_end_date,
-    case 
-    when c.cert_end_date < t.date_from then 'Просрочен сертификат' 
-    when c.cert_end_date is null then 'Нет сертификата'    
-    else 'Ok' end as cert_status
-FROM upd.megamall_adjust t
-LEFT JOIN cards.product c
-    ON c.sa_pid = t.upd_sa_name
-LEFT JOIN cards.product cp
-    ON cp.sa_name = c.sa_pid
-LEFT JOIN cards_sizes cz
-    ON cz.nm_pid = c.nm_id
-LEFT JOIN main.vat v on t."date_from" >= v.date_from and t."date_from" < v.date_to
-GROUP BY
-    t."id", 
-    t."file_name",
-    t."number",
-    t."date_from",
-    t."upd_pos",
-    t."upd_sa_name",
-    c.sa_pid,
-    c."brand",
-    t."upd_title",
-    upd_size,
-    cz.available_sizes,
-    t.upd_vat_rate,
-    c.vat_rate,
-    c.cert_end_date,
-    card_vat_rate
+
+prefin AS (
+    SELECT
+        t.id,
+        t.file_name,
+        t.number,
+        t.date_from,
+
+        concat(
+            'УПД №: ',
+            t.number,
+            ' от ',
+            strftime(CAST(t.date_from AS DATE), '%d.%m.%Y')
+        ) AS full_name,
+
+        t.upd_pos,
+        t.upd_sa_name,
+
+        c.sa_pid,
+        c.brand,
+
+        t.upd_title,
+
+        string_agg(DISTINCT cp.title, ' | ') AS cards_titles,
+
+        COALESCE(
+            nullif(trim(CAST(t.upd_size AS VARCHAR)), ''),
+            CASE
+                WHEN list_count(cz.available_sizes) = 1
+                    THEN CAST(cz.available_sizes[1] AS VARCHAR)
+                ELSE ''
+            END
+        ) AS upd_size,
+
+        cz.available_sizes,
+
+        t.upd_vat_rate,
+
+        COALESCE(c.vat_rate, v.rate) AS card_vat_rate,
+
+        c.cert_end_date,
+
+        CASE
+            WHEN c.cert_end_date < t.date_from
+                THEN 'Просрочен сертификат'
+            WHEN c.cert_end_date IS NULL
+                THEN 'Нет сертификата'
+            ELSE 'Ok'
+        END AS cert_status
+
+    FROM upd.megamall_adjust AS t
+
+    LEFT JOIN cards.product AS c
+        ON c.sa_pid = t.upd_sa_name
+
+    LEFT JOIN cards.product AS cp
+        ON cp.sa_name = c.sa_pid
+
+    LEFT JOIN cards_sizes AS cz
+        ON cz.nm_pid = c.nm_id
+
+    LEFT JOIN main.vat AS v
+        ON t.date_from >= v.date_from
+       AND t.date_from < v.date_to
+
+    GROUP BY
+        t.id,
+        t.file_name,
+        t.number,
+        t.date_from,
+        t.upd_pos,
+        t.upd_sa_name,
+        c.sa_pid,
+        c.brand,
+        t.upd_title,
+        upd_size,
+        cz.available_sizes,
+        t.upd_vat_rate,
+        c.vat_rate,
+        c.cert_end_date,
+        card_vat_rate
 )
-select 
-t.id,
-t.file_name,
-t.full_name,
-t.upd_pos,
-t.upd_sa_name,
-t.sa_pid,
-t.brand,
-t.upd_title,
-t.cards_titles,
-lower(t.cards_titles) LIKE
-        '%' || lower(regexp_extract(t.upd_title, '^([^\s]+)', 1)) || '%'
-        AS name_match,
-t.upd_size,
-t.available_sizes,
-LIST_CONTAINS(t.available_sizes,t.upd_size) as size_match,
-t.upd_vat_rate,
-t.card_vat_rate,
-t.upd_vat_rate = t.card_vat_rate as match_vats,
-t.cert_end_date,
-t.cert_status,
-case when t.cert_status = 'Ok' then true else false end as cert_match,
-s."upd_unit",
-s."upd_qty",
-s."upd_price_vatless",
-s."upd_amount_vatless",
-s."upd_vat_amount",
-s."upd_amount_vatadd"
+
+
+SELECT
+    t.id,
+    t.file_name,
+    t.full_name,
+
+    t.upd_pos,
+    t.upd_sa_name,
+    t.sa_pid,
+
+    CASE
+        WHEN t.sa_pid IS NULL THEN FALSE
+        ELSE TRUE
+    END AS match_article,
+
+    t.brand,
+
+    t.upd_title,
+    t.cards_titles,
+
+    (
+        lower(t.cards_titles) LIKE
+        (
+            '%' ||
+            lower(regexp_extract(t.upd_title, '^([^\s]+)', 1))
+            || '%'
+        )
+    ) AS name_match,
+
+    t.upd_size,
+    t.available_sizes,
+
+    list_contains(t.available_sizes, t.upd_size) AS size_match,
+
+    t.upd_vat_rate,
+    t.card_vat_rate,
+
+    (t.upd_vat_rate = t.card_vat_rate) AS match_vats,
+
+    t.cert_end_date,
+    t.cert_status,
+
+    CASE
+        WHEN t.cert_status = 'Ok'
+            THEN CAST('t' AS BOOLEAN)
+        ELSE CAST('f' AS BOOLEAN)
+    END AS cert_match,
+
+    s.upd_unit,
+    s.upd_qty,
+    s.upd_price_vatless,
+    s.upd_amount_vatless,
+    s.upd_vat_amount,
+    s.upd_amount_vatadd,
+
+    s.supplier,
+    s.date_from,
+    s.number
+
+FROM prefin AS t
+
+LEFT JOIN upd.megamall_adjust AS s
+    ON s.id = t.id;
 
 
 
-from prefin t
-left join upd.megamall_adjust s on s.id = t.id
+select
+date_from,
+field,
+btn,
+val / 100 as amount
+ from sales.sales_long
+where field = 'deduction'
+and date_from <= '2025-01-01' and val < 0
+order by date_from;
+
+
+-- нормализированные упд для импорта в базу данных
+select distinct nm_id, chrt_id, tech_size from cards.sizes;
+
+select distinct 
+"date_from",
+"number",
+
+from upd.megamall_vs_cards;
+
+
+
+
+
 
 

@@ -38,7 +38,48 @@ UPD_LIST = {
         "dropna_col": "1",
         "supplier": "ООО «МЕГАМОЛСТРОЙ»",
         "sheet": "Лист_1"
-    }
+    },
+    "УПД_74_2025-08-14.xlsx": {
+        "number": "74",
+        "date": "2025-08-14",
+        "columns": "B:BS",
+        "header_row": 13,
+        "nrows":730,
+        "dropna_col": "1",
+        "supplier": "ООО «МЕГАМОЛСТРОЙ»",
+        "sheet": "Лист_1"
+    },
+    "УПД_26_2026-03-18.xlsx": {
+        "number": "26",
+        "date": "2026-03-18",
+        "columns": "B:BS",
+        "header_row": 15,
+        "nrows":66,
+        "dropna_col": "1",
+        "supplier": "ООО «МЕГАМОЛСТРОЙ»",
+        "sheet": "Лист_1"
+    },
+    "УПД_27_2026-03-18.xlsx": {
+        "number": "27",
+        "date": "2026-03-18",
+        "columns": "B:BS",
+        "header_row": 15,
+        "nrows":522,
+        "dropna_col": "1",
+        "supplier": "ООО «МЕГАМОЛСТРОЙ»",
+        "sheet": "Лист_1"
+    },
+    "УПД_75_2025-08-14.xlsx": {
+        "number": "75",
+        "date": "2026-03-18",
+        "columns": "B:BS",
+        "header_row": 13,
+        "nrows":1389,
+        "dropna_col": "1",
+        "supplier": "ООО «МЕГАМОЛСТРОЙ»",
+        "sheet": "Лист_1"
+    },
+    
     }
 
 

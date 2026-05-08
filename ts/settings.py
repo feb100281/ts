@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'accounting_analysis',
     "wb",
     "budget",
+    "cards",
     "mptt",    
     "jsoneditor",
     "app_wb",
