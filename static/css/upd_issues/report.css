@@ -1,0 +1,337 @@
+/* static/css/upd_issues/report.css */
+@page {
+    size: A4;
+    margin: 8mm 10mm 6mm 10mm;
+}
+
+body {
+    font-family: DejaVu Sans, Arial, sans-serif;
+    font-size: 11px;
+    color: #1f1f1f;
+    margin: 0;
+    padding: 0;
+    line-height: 1.4;
+}
+
+/* Шапка письма */
+.header {
+    margin-bottom: 16px;
+    border-bottom: 1px solid #d9d9d9;
+    padding-bottom: 10px;
+}
+
+.title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    line-height: 1.2;
+    color: #2f6656;
+}
+
+.subtitle {
+    font-size: 10px;
+    color: #666666;
+    line-height: 1.5;
+}
+
+.date {
+    margin-top: 4px;
+    font-size: 9px;
+    color: #7a7a7a;
+}
+
+/* Обращение и текст письма */
+.greeting {
+    margin: 16px 0 12px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a3f3a;
+}
+
+.letter-content {
+    margin: 12px 0;
+    text-align: justify;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.letter-content p {
+    margin: 8px 0;
+}
+
+.letter-content ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.letter-content li {
+    margin: 4px 0;
+}
+
+/* Сводка по ошибкам (красивые карточки как в budget.css) */
+.summary-box {
+    margin: 16px 0;
+    padding: 12px 14px;
+    background: #fbfbfb;
+    border: 1px solid #d9d9d9;
+    border-left: 4px solid #2f6656;
+}
+
+.summary-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #2f6656;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.summary-grid {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.summary-card {
+    flex: 1;
+    min-width: 100px;
+    background: #ffffff;
+    border: 1px solid #e0e8e5;
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: center;
+}
+
+.summary-card .label {
+    font-size: 8px;
+    color: #5b6b66;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 5px;
+}
+
+.summary-card .value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a3f3a;
+}
+
+.summary-card .value.error {
+    color: #c62828;
+}
+
+/* Таблица с файлами */
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 8.5px;
+}
+
+table.data th,
+table.data td {
+    border: 1px solid #d9d9d9;
+    padding: 5px 6px;
+    vertical-align: middle;
+    word-wrap: break-word;
+}
+
+table.data th {
+    background: #2f6656;
+    color: #ffffff;
+    font-weight: 700;
+    text-align: center;
+}
+
+table.data tbody tr:nth-child(even) {
+    background: #f7f7f7;
+}
+
+table.data td.left {
+    text-align: left;
+}
+
+table.data td.center {
+    text-align: center;
+}
+
+table.data td.right {
+    text-align: right;
+}
+
+.file-name {
+    font-weight: 600;
+    color: #2f6656;
+}
+
+.supplier-name {
+    color: #666666;
+    font-size: 8px;
+}
+
+.error-count {
+    font-weight: 700;
+    color: #c62828;
+}
+
+.total-row {
+    background: #eef4f2 !important;
+    font-weight: 700;
+}
+
+.total-row td {
+    border-top: 2px solid #2f6656;
+}
+
+/* Подпись */
+.signature {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #d9d9d9;
+}
+
+.signature-name {
+    font-weight: 700;
+    margin-top: 8px;
+    font-size: 10px;
+}
+
+/* Футер */
+.footer {
+    margin-top: 20px;
+    font-size: 7.5px;
+    color: #8a9e98;
+    text-align: center;
+    padding-top: 8px;
+    border-top: 1px solid #d9d9d9;
+}
+
+/* Вспомогательные классы */
+.positive-text {
+    color: #2e7d32;
+    font-weight: 600;
+}
+
+.negative-text {
+    color: #c62828;
+    font-weight: 600;
+}
+
+.muted {
+    color: #8c8c8c;
+}
+
+.small-note {
+    font-size: 8px;
+    color: #8a9e98;
+    margin-top: 4px;
+}
+
+.nowrap {
+    white-space: nowrap;
+}
+
+.mt-8 {
+    margin-top: 8px;
+}
+
+.mb-8 {
+    margin-bottom: 8px;
+}
+
+.mt-16 {
+    margin-top: 16px;
+}
+
+.mb-16 {
+    margin-bottom: 16px;
+}
+
+
+/* Добавить в конец файла */
+
+/* Секция поставщика */
+.supplier-section {
+    margin-bottom: 24px;
+    page-break-inside: avoid;
+}
+
+.supplier-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 16px 0 10px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #d9d9d9;
+}
+
+.supplier-badge {
+    font-size: 9px;
+    font-weight: 600;
+    color: #ffffff;
+    background: #2f6656;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+}
+
+.supplier-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a3f3a;
+}
+
+/* Итоговая строка по поставщику */
+.total-row {
+    background: #eef4f2 !important;
+    font-weight: 700;
+}
+
+.total-row td {
+    border-top: 2px solid #2f6656;
+}
+
+/* Общий итог */
+.total-section {
+    margin-top: 16px;
+    page-break-inside: avoid;
+}
+
+.grand-total {
+    background: #2f6656 !important;
+}
+
+.grand-total td {
+    color: #ffffff;
+    font-weight: 700;
+    border-top: 2px solid #1a3f3a;
+}
+
+/* Подпись */
+.signature {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid #d9d9d9;
+}
+
+.signature-name {
+    font-weight: 700;
+    margin-top: 6px;
+    font-size: 11px;
+}
+
+.signature-date {
+    font-size: 9px;
+    color: #666666;
+    margin-top: 2px;
+}
+
+/* Футер */
+.footer {
+    margin-top: 20px;
+    font-size: 7.5px;
+    color: #8a9e98;
+    text-align: center;
+    padding-top: 8px;
+    border-top: 1px solid #d9d9d9;
+}

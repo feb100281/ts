@@ -1,9 +1,10 @@
 # ts/views.py
-from datetime import date
-from django.http import JsonResponse
+from datetime import date, datetime
+from django.http import JsonResponse, HttpResponse, HttpResponseBadRequest
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Count
 from django.db.models import Q
+from django.contrib.admin.views.decorators import staff_member_required
 
 from contracts.models import Contracts, Conditions, CfItemAuto
 from counterparties.models import Counterparty
@@ -94,6 +95,31 @@ def treasury_status(request):
             "admin_url": f"{changelist}?cp_final__isnull=1",
         },
     })
+    
+
+@staff_member_required
+def export_upd_issues(request):
+    """Экспорт косяков по УПД в ZIP архив (отдельный Excel на каждый УПД)"""
+    from utils.upd_issues.builder import UpdIssuesReportGenerator
+    
+    try:
+        generator = UpdIssuesReportGenerator()
+        output = generator.generate()
+        
+        filename = f"UPD_Issues_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/zip'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except ValueError as e:
+        return HttpResponse(str(e), status=404)
+    except Exception as e:
+        return HttpResponseBadRequest(f"Ошибка при формировании отчета: {str(e)}")
     
     
 @login_required

@@ -252,6 +252,7 @@ JAZZMIN_SETTINGS = {
         {"name": "Скачать ManPack", "url": "export_manpack", "new_window": False},
         {"name": "Скачать остатки", "url": "export_stocks", "new_window": False},
         {"name": "Анализ бюджета", "url": "export_budget_analysis", "new_window": False},
+        {"name": "Скачать косяки по УПД", "url": "export_upd_issues", "new_window": False},
     ],
     
     # "usermenu_links": [

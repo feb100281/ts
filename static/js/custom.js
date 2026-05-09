@@ -76,6 +76,7 @@ document.addEventListener("click", function (event) {
     'Скачать ManPack': "fa-solid fa-file-excel",
     'Скачать остатки': "fa-solid fa-boxes", 
     'Анализ бюджета': "fa-solid fa-chart-pie",
+    'Скачать косяки по УПД': "fa-solid fa-file-invoice",
   };
 
   function enhanceTopMenu() {
@@ -239,6 +240,8 @@ document.addEventListener("click", function (event) {
     const stocksLink = links.find((a) => getLinkLabel(a) === "Скачать остатки");
     const budgetAnalysisLink = links.find((a) => getLinkLabel(a) === "Анализ бюджета");
     const budgetAnalysisLi = budgetAnalysisLink ? budgetAnalysisLink.closest(".nav-item") : null;
+    const updLink = links.find((a) => getLinkLabel(a) === "Скачать косяки по УПД");
+
 
 
     if (!glLink && !arapLink && !contractsCheckLink && !manpackLink && !stocksLink && !budgetAnalysisLink) return;
@@ -250,10 +253,11 @@ document.addEventListener("click", function (event) {
     const contractsCheckLi = contractsCheckLink ? contractsCheckLink.closest(".nav-item") : null;
     const manpackLi = manpackLink ? manpackLink.closest(".nav-item") : null;
     const stocksLi = stocksLink ? stocksLink.closest(".nav-item") : null;
+    const updLi = updLink ? updLink.closest(".nav-item") : null;
 
-    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || stocksLi || budgetAnalysisLi;
+    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || stocksLi || budgetAnalysisLi || updLi;
 
-    [glLi, arapLi, contractsCheckLi, manpackLi, stocksLi, budgetAnalysisLi].forEach((li) => {
+    [glLi, arapLi, contractsCheckLi, manpackLi, stocksLi, budgetAnalysisLi, updLi].forEach((li) => {
       if (li) li.remove();
     });
 
@@ -318,12 +322,21 @@ document.addEventListener("click", function (event) {
           }
         : null,
         
-         budgetAnalysisLink ? {
+      budgetAnalysisLink ? {
         href: budgetAnalysisLink.getAttribute("href") || "#",
         label: "Анализ бюджета",
         icon: "fa-solid fa-chart-pie",
         className: "jm-budget-analysis-trigger",
     } : null,
+
+    updLink ? {
+        href: updLink.getAttribute("href") || "#",
+        label: "Косяки по УПД",
+        icon: "fa-solid fa-file-invoice",
+        className: "jm-upd-trigger",
+      } : null,
+
+    
         
     ].filter(Boolean);
 
