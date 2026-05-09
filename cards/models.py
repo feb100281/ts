@@ -1,7 +1,8 @@
 from django.db import models
 from counterparties.models import Counterparty
 from contracts.models import Contracts
-
+from django.contrib.postgres.fields import ArrayField
+from utils.choises import CURRENCY_CHOISE
 
 class WbCardRaw(models.Model):
 
@@ -154,7 +155,10 @@ class UpdDocument(models.Model):
         verbose_name_plural = 'УПД'
 
     def __str__(self):
-        return f'{self.number} от {self.date}'
+        return f'{self.number} от {self.date.strftime('%d.%m.%Y')}'
+
+
+
 
 def upd_file_upload_to(instance, filename):
     return f"upd/{instance.upd_document_id}/{filename}"
@@ -191,10 +195,8 @@ class UpdDocumentFile(models.Model):
     def __str__(self):
         return self.name or self.file.name
 
-from django.contrib.postgres.fields import ArrayField
-from django.db import models
 
-
+# Придаток для карточек просто
 class WbProduct(models.Model):
 
     card = models.OneToOneField(
@@ -248,3 +250,177 @@ class WbProduct(models.Model):
 
     def __str__(self):
         return f'{self.card_id} — {self.sa_name or self.title}'
+
+
+# Основная модель
+
+class UPDData(models.Model):
+
+    upd_document = models.ForeignKey(
+        UpdDocument,
+        on_delete=models.CASCADE,
+        related_name='income_lines',
+        verbose_name='УПД',
+        null=True,
+        blank=True,
+    )
+
+    upd_pos = models.IntegerField(
+        verbose_name='Позиция УПД',
+        null=True,
+        blank=True,
+    )
+
+    brand = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='Бренд',
+    )
+
+    upd_sa_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='Артикул из УПД',
+    )
+
+    upd_title = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name='Название из УПД',
+    )
+
+    nm = models.ForeignKey(
+        WbCardRaw,
+        on_delete=models.PROTECT,
+        db_column='nm_id',
+        related_name='upd_income_lines',
+        null=True,
+        blank=True,
+        verbose_name='Карточка WB',
+    )
+
+    proposed_articles = ArrayField(
+        models.CharField(max_length=100),
+        default=list,
+        blank=True,
+        null=True,
+        verbose_name='Предполагаемые артикли',
+    )
+
+    name_match = models.BooleanField(
+        default=False,
+        verbose_name='Совпадение названия',
+    )
+
+    upd_size = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        verbose_name='Размер из УПД',
+    )
+
+    chrt = models.ForeignKey(
+        WbSizes,
+        on_delete=models.PROTECT,
+        db_column='chrt_id',
+        related_name='upd_income_lines',
+        null=True,
+        blank=True,
+        verbose_name='Размер WB',
+    )
+
+    available_sizes = ArrayField(
+        models.CharField(max_length=100),
+        default=list,
+        blank=True,
+        null=True,
+        verbose_name='Доступные размеры',
+    )
+
+    upd_vat_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Ставка НДС в УПД',
+    )
+
+    card_vat_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Ставка НДС в карточке',
+    )
+
+    upd_unit = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        verbose_name='Ед. изм.',
+    )
+
+    upd_qty = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Количество',
+    )
+
+    upd_price_vatless = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Цена без НДС',
+    )
+
+    upd_amount_vatless = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Стоимость без НДС',
+    )
+
+    upd_vat_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='НДС',
+    )
+
+    upd_amount_vatadd = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Стоимость с НДС',
+    )
+
+    man_cost_per_unit = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Управленческая себестоимость без НДС',
+    )
+
+    currency_code = models.CharField(
+        max_length=10,
+        choices=CURRENCY_CHOISE,
+        default='RUB',
+        verbose_name='Валюта',
+    )
+
+    class Meta:
+        db_table = 'upd_income_lines'
+        verbose_name = 'Данные УПД'
+        verbose_name_plural = 'Приходы'
+
+    def __str__(self):
+        return f'{self.upd_document_id or "-"} / {self.upd_pos} / {self.upd_sa_name}'
