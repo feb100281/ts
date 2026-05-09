@@ -1,13 +1,17 @@
 from django.contrib import admin
-
+from django.db.models import Count, Q, F
 from django.utils.html import format_html
 from .models import WbProduct
+from django.utils.html import format_html
+from django.urls import reverse
 
 from .models import (
     Lot,
     LotFile,
     UpdDocument,
     UpdDocumentFile,
+    WbCardRaw,
+    WbSizes
 )
 
 
@@ -55,37 +59,100 @@ class UpdDocumentFileInline(admin.TabularInline):
 
 
 @admin.register(UpdDocument)
+
 class UpdDocumentAdmin(admin.ModelAdmin):
+
     list_display = (
-        'number',
+        '__str__',
         'date',
         'lot',
         'counterparty',
         'contract',
+        'comment',
+        'nm_missing_count',
+        'chrt_missing_count',
+        'name_mismatch_count',
+        'vat_mismatch_count', 
+        'dash_link',       
     )
-
     list_filter = (
         'date',
         'lot',
         'counterparty',
     )
-
     search_fields = (
         'number',
         'comment',
     )
-
     autocomplete_fields = (
         'lot',
         'counterparty',
         'contract',
     )
-
     inlines = [
         UpdDocumentFileInline,
     ]
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(
+            nm_missing=Count(
+                'income_lines',
+                filter=Q(income_lines__nm__isnull=True),
+            ),
+            chrt_missing=Count(
+                'income_lines',
+                filter=Q(income_lines__chrt__isnull=True),
+            ),
+            name_mismatch=Count(
+                'income_lines',
+                filter=Q(income_lines__name_match=False),
+            ),
+            vat_mismatch=Count(
+                'income_lines',
+                filter=(
+                    Q(income_lines__upd_vat_rate__isnull=False)
+                    &
+                    Q(income_lines__upd_vat_rate__gt=0)
+                    &
+                    ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
+                ),
+            ),
+        )
 
-# Register your models here.
+    @admin.display(description='Нет nm_id')
+    def nm_missing_count(self, obj):
+        return obj.nm_missing
+
+    @admin.display(description='Нет chrt_id')
+    def chrt_missing_count(self, obj):
+        return obj.chrt_missing
+
+    @admin.display(description='Не совпало название')
+    def name_mismatch_count(self, obj):
+        return obj.name_mismatch
+
+    @admin.display(description='Проблема НДС')
+    def vat_mismatch_count(self, obj):
+        return obj.vat_mismatch
+    
+    @admin.display(description='Разбор')
+    def dash_link(self, obj):
+        url = f"/apps/app/cards_app/?object_id={obj.id}"
+        return format_html(
+            '<a class="button" href="{}" target="_blank">Открыть</a>',
+            url
+        )
+    class Media:
+
+        css = {
+            "all": (
+                "css/admin_overrides.css",
+                "css/wide-table.css",
+            )
+        }
+
+ 
+
 @admin.register(WbProduct)
 
 class WbProductAdmin(admin.ModelAdmin):
@@ -190,3 +257,16 @@ class WbProductAdmin(admin.ModelAdmin):
         )
 
     photo_preview.short_description = 'Фото'
+    
+    class Media:
+        css = {
+            "all": (
+                "css/admin_overrides.css",
+                "css/wide-table.css",
+                "css/manual_admin_groups.css",
+            )
+        }
+    
+    
+
+

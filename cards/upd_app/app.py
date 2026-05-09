@@ -1,40 +1,43 @@
 from django_plotly_dash import DjangoDash
-from .mainwindow import MainWindow
-# from utils.dash_components.common import THEME
-from utils.dash_components.styles import corporate_theme
-from dash_mantine_components import MantineProvider, Container
 from dash import html, dcc, Input, Output
+import dash_mantine_components as dmc
 import urllib.parse
+from .upd_form import UpdForm
+import dash_mantine_components as dmc
+
 
 scripts = [
     "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.8/dayjs.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.8/locale/ru.min.js",
-    "/static/js/dashapps.js"
+    "/static/dash_ag_grid/dash_ag_grid.min.js",
+    # "/static/js/dashapps.js"
+
 ]
+    
+
 styles = [
-    "/static/fonts/glyphs.css",
+    # "/static/fonts/glyphs.css",
     # "/static/css/dash/clssic_tables.css",
-    "/static/css/dash/corporate_sty.css",
+    # "/static/css/dash/corporate_sty.css",
+    "/static/css/dash/aggrid_compact.css",
 ]
 
 app = DjangoDash(
-    "dailysales_app",
+    "cards_app",
     external_scripts=scripts,
     external_stylesheets=styles,
-    suppress_callback_exceptions=True,
-    serve_locally=True,
+    suppress_callback_exceptions=True,    
 )
 
-app.layout = MantineProvider(
-    forceColorScheme="light",
-    theme=corporate_theme,
+app.layout = dmc.MantineProvider(   
     withCssVariables=True,
     withGlobalClasses=True,
     children=[
         dcc.Location(id="url"),           # триггер на загрузку не пройдет
-        Container(id="page",fluid=True),              # сюда отрисуем окно
+        dmc.Container(id="page",fluid=True),              # сюда отрисуем окно
     ],
 )
+
 
 @app.callback(
     Output("page", "children"),
@@ -48,9 +51,8 @@ def update_from_url(search):
     object_id = params.get("object_id", [None])[0]
 
     if not object_id:
-        return "NOT FOUND" 
+        return "NOT FOUND"
 
-    content = MainWindow(object_id)
+    content = UpdForm(object_id)
 
     return content.layout()
-

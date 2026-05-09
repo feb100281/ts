@@ -239,8 +239,143 @@ select distinct
 from upd.megamall_vs_cards;
 
 
+with a as 
+(
+select id, number, date
+from read_csv('/Users/pavelustenko/Downloads/cards_upddocument.csv')
+)
+select 
+
+t.upd_pos::int as upd_pos,
+t.brand,
+t."upd_sa_name",
+t.upd_title,
+null as proposed_articles, -- это список
+t.name_match,
+t."upd_size",
+t.available_sizes,
+t.upd_vat_rate,
+t.card_vat_rate,
+t.upd_unit,
+t.upd_qty::double as upd_qty,
+t.upd_price_vatless::double as upd_price_vatless,
+t.upd_amount_vatless::double as upd_amount_vatless,
+t.upd_vat_amount::double as upd_vat_amount,
+t.upd_amount_vatadd::double as upd_amount_vatadd,
+null::double as man_cost_per_unit,
+'RUB'::text as currency_code,
+s."chrt_id",
+c."nm_id"::bigint as nm_id,
+a.id::bigint as upd_document_id
+from upd.megamall_vs_cards t
+left join cards.product as c on c.sa_name = t.upd_sa_name
+left join cards.sizes s on s.nm_id = c.nm_id and s.tech_size = t.upd_size
+left join a on a.number = t.number and a.date = t.date_from;
+
+ATTACH '
+dbname=ts_db
+host=127.0.0.1
+port=5433
+user=ts_user
+password=Dec8108079
+' AS pg (TYPE postgres);
 
 
+-- INSERT INTO pg.public.upd_income_lines (
 
+--     upd_pos,
+--     brand,
+--     upd_sa_name,
+--     upd_title,
+--     proposed_articles,
+--     name_match,
+--     upd_size,
+--     available_sizes,
+--     upd_vat_rate,
+--     card_vat_rate,
+--     upd_unit,
+--     upd_qty,
+--     upd_price_vatless,
+--     upd_amount_vatless,
+--     upd_vat_amount,
+--     upd_amount_vatadd,
+--     man_cost_per_unit,
+--     currency_code,
+--     chrt_id,
+--     nm_id,
+--     upd_document_id
+
+-- )
+
+-- WITH a AS (
+
+--     SELECT
+--         id,
+--         number,
+--         date
+
+--     FROM read_csv(
+--         '/Users/pavelustenko/Downloads/cards_upddocument.csv',
+--         AUTO_DETECT=TRUE
+--     )
+
+-- )
+
+-- SELECT
+
+--     t.upd_pos::int as upd_pos,
+
+--     t.brand,
+
+--     t.upd_sa_name,
+
+--     t.upd_title,
+
+--     null as proposed_articles,
+
+--     t.name_match,
+
+--     t.upd_size,
+
+--     t.available_sizes,
+
+--     t.upd_vat_rate::double as upd_vat_rate,
+
+--     t.card_vat_rate::double as card_vat_rate,
+
+--     t.upd_unit,
+
+--     t.upd_qty::double as upd_qty,
+
+--     t.upd_price_vatless::double as upd_price_vatless,
+
+--     t.upd_amount_vatless::double as upd_amount_vatless,
+
+--     t.upd_vat_amount::double as upd_vat_amount,
+
+--     t.upd_amount_vatadd::double as upd_amount_vatadd,
+
+--     null::double as man_cost_per_unit,
+
+--     'RUB'::text as currency_code,
+
+--     s.chrt_id,
+
+--     c.nm_id::bigint as nm_id,
+
+--     a.id::bigint as upd_document_id
+
+-- FROM upd.megamall_vs_cards t
+
+-- LEFT JOIN cards.product c
+--     ON c.sa_name = t.upd_sa_name
+
+-- LEFT JOIN cards.sizes s
+--     ON s.nm_id = c.nm_id
+--    AND s.tech_size = t.upd_size
+
+-- LEFT JOIN a
+--     ON a.number = t.number
+--    AND a.date = t.date_from;
 
 
