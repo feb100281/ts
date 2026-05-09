@@ -477,9 +477,9 @@ JAZZMIN_UI_TWEAKS = {
 #     "ws_route": "ws/channel",  # нужно для WebSocket соединений (если используете live updates)
 # }
 
-PLOTLY_COMPONENTS = [
-    "dash_ag_grid",
-]
+# PLOTLY_COMPONENTS = [
+#     "dash_ag_grid",
+# ]
 
 # # Также попробуйте явно отключить
 # import os

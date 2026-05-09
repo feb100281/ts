@@ -4,7 +4,7 @@ import dash_mantine_components as dmc
 import urllib.parse
 from .upd_form import UpdForm
 import dash_mantine_components as dmc
-
+from .modals import SizeModal
 
 scripts = [
     "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.8/dayjs.min.js",
@@ -28,13 +28,19 @@ app = DjangoDash(
     external_stylesheets=styles,
     suppress_callback_exceptions=True,    
 )
+sizemodal = SizeModal()
+sizemodal.registered_callbacks(app)
 
 app.layout = dmc.MantineProvider(   
     withCssVariables=True,
     withGlobalClasses=True,
     children=[
         dcc.Location(id="url"),           # триггер на загрузку не пройдет
-        dmc.Container(id="page",fluid=True),              # сюда отрисуем окно
+        dmc.Container(id="page",fluid=True),    
+        dcc.Store(id='id_row_store',storage_type='local'),
+        dcc.Store(id='nm_id_store',storage_type='local'),
+        dcc.Store(id='chrt_id_store',storage_type='local')
+        
     ],
 )
 
