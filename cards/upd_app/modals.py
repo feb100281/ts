@@ -3,7 +3,7 @@ import dash_mantine_components as dmc
 from django.urls import reverse, NoReverseMatch
 from cards.models import UpdDocument
 import dash_ag_grid as dag
-from .data import get_grid_data, get_size_options
+from .data import get_grid_data, get_size_options,update_size
 from dash import dcc
 from dash import Input, Output, no_update, State
 
@@ -11,10 +11,8 @@ class SizeModal:
     def __init__(self):
         pass
     
-    def update_modal(self, nm_id,chrt_id):
-
+    def update_modal(self, nm_id):
         data = get_size_options(nm_id)
-
         return dmc.Stack(
             [
                 dmc.RadioGroup(
@@ -33,6 +31,8 @@ class SizeModal:
                     children="Применить",
                     disabled=True
                 ),
+                
+            
 
             ],
             gap="sm",
@@ -41,16 +41,19 @@ class SizeModal:
         
     
     def layout(self):
-        return dmc.Modal(
+        return dmc.Modal(            
                 id="size-modal",
                 title="Выбор размера WB",
                 opened=False,
                 size="xl",
                 children=[
-                    dmc.Container(children=[],id="chrt-modal-content",fluid=True)
-                    
+                    dmc.Container(children=
+                        [
+                                          
+                        ],
+                        id="chrt-modal-content",
+                        fluid=True)                    
                 ],
-
             )
     
     def registered_callbacks(self,app):
@@ -60,12 +63,13 @@ class SizeModal:
             Output("chrt-modal-content", "children"),
             Output("id_row_store", "data"),
             Output("chrt_id_store", "data"),
-            Input('upd-grid', "cellClicked"),
+            Input('upd-grid', "cellDoubleClicked"),
             Input("upd-grid", "rowData"),
 
             prevent_initial_call=True,
         )
         def open_chrt_modal(cell, row_data):
+            print(cell)
             if not cell:
                 return no_update, no_update, no_update,no_update
             
@@ -86,22 +90,58 @@ class SizeModal:
             nm_id = row.get("nm_id")
             return (
                 True,
-                self.update_modal(nm_id,chrt_id),
+                self.update_modal(nm_id),
                 upd_line_id,
                 chrt_id
             )
         
         @app.callback(
-            Output('insert-btn', "disabled"),
-            Output('chrt_id_store', "data"),
+            Output('insert-btn', "disabled"),  
+            Output('selected_chrt','data'),          
             Input('size-radio','value'),
-            State('id_row_store','data'),
             State('chrt_id_store','data')
         )
-        def make_chose(val,pqsl_id,chrt_id_store):
-            if chrt_id_store:
-               return False, chrt_id_store
-            
+        def make_chose(val,chrt_id_store):
+            print(val,chrt_id_store)
+            if not chrt_id_store:
+               if val:
+                    return False, val
+               if not val:
+                   return True, no_update
             else:
-                return True, chrt_id_store
-            
+                return True, no_update
+        
+        @app.callback(
+            Output("sucseess-notification", "sendNotifications"),
+            Output("upd-grid", "rowData", allow_duplicate=True),
+
+            Input("insert-btn", "n_clicks"),
+
+            State("id_row_store", "data"),
+            State("selected_chrt", "data"),
+            State("upd-id-store", "data"),
+
+            prevent_initial_call=True,
+        )
+        def insert_new_item(n_click, row_id, chrt_id, upd_id):
+
+            if not n_click:
+                return no_update, no_update
+
+            update_size(row_id, chrt_id)
+
+            df = get_grid_data(upd_id)
+
+            return (
+                [
+                    dict(
+                        title="Удачно!",
+                        id="show-notify",
+                        action="show",
+                        message=f"Строка ID {row_id}: размер обновлен на {chrt_id}",
+                        color="green",
+                    )
+                ],
+                df.to_dict("records"),
+            )
+                

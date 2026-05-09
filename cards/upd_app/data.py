@@ -1,48 +1,65 @@
 from conns import get_duckdb_conn_with_pg, connect_db
 import pandas as pd
 
-def get_grid_data(upd_id)->pd.DataFrame:
+def get_grid_data(upd_id) -> pd.DataFrame:
     with get_duckdb_conn_with_pg() as conn:
         df = conn.sql(
             """ 
-            with a as(
-                select 
-                nm_id,
-                list(distinct tech_size order by tech_size) as available_sizes
-                from analytics.cards.sizes
-                group by nm_id
+            WITH available AS (
+                SELECT 
+                    nm_id,
+                    list(distinct tech_size order by tech_size) as available_sizes
+                FROM analytics.cards.sizes
+                GROUP BY nm_id
+            ),
+
+            size_options AS (
+                SELECT
+                    nm_id,
+                    list(
+                        DISTINCT concat(chrt_id::text, ' | ', tech_size)
+                        ORDER BY concat(chrt_id::text, ' | ', tech_size)
+                    ) AS size_options
+                FROM analytics.cards.sizes
+                GROUP BY nm_id
             )
-            
+
             SELECT
-            t.id,
-            t.upd_pos,
-            t.brand,
-            t.upd_title,
-            t.upd_sa_name,
-            p.sa_name,
-            t.nm_id,
-            t.upd_size,
-            s.tech_size,
-            t.chrt_id,
-            a.available_sizes,
-            t.upd_qty,
-            t.upd_price_vatless,
-            t.upd_amount_vatadd,
-            t.upd_vat_rate,            
-            t.man_cost_per_unit,
-            t.currency_code
-            from pg.public.upd_income_lines t            
-            left join analytics.cards.product p on p.nm_id = t.nm_id
-            left join analytics.cards.sizes s on s.chrt_id = t.chrt_id
-            left join a on a.nm_id = t.nm_id
-            where upd_document_id = ?
-            
+                t.id,
+                t.upd_pos,
+                t.brand,
+                t.upd_title,
+                t.upd_sa_name,
+                p.sa_name,
+                t.nm_id,
+                t.upd_size,
+                s.tech_size,
+                t.chrt_id,
+                available.available_sizes,
+                size_options.size_options,
+                t.upd_qty,
+                t.upd_price_vatless,
+                t.upd_amount_vatadd,
+                t.upd_vat_rate,            
+                t.man_cost_per_unit,
+                t.currency_code
+            FROM pg.public.upd_income_lines t            
+            LEFT JOIN analytics.cards.product p 
+                ON p.nm_id = t.nm_id
+            LEFT JOIN analytics.cards.sizes s 
+                ON s.chrt_id = t.chrt_id
+            LEFT JOIN available 
+                ON available.nm_id = t.nm_id
+            LEFT JOIN size_options 
+                ON size_options.nm_id = t.nm_id
+            WHERE upd_document_id = ?
             """,
             params=[upd_id]
         ).df()
+
+    return df
         
     
-    return df
 
 def get_size_options(nm_id):
 
@@ -65,3 +82,14 @@ def get_size_options(nm_id):
     ]
     return data
     
+def update_size(row_id,chrt_id):
+    with connect_db() as conn:
+        conn.execute(
+            """ 
+            UPDATE public.upd_income_lines
+            set chrt_id = %s
+            where id = %s
+            """,
+            (chrt_id, row_id)      
+        )
+        conn.commit()
