@@ -277,7 +277,6 @@ dbname=ts_db
 host=127.0.0.1
 port=5433
 user=ts_user
-password=Dec8108079
 ' AS pg (TYPE postgres);
 
 

@@ -61,3 +61,32 @@ def get_duckdb_conn()->duckdb.DuckDBPyConnection:
     con.execute(f"ATTACH '{conn_str}' AS pg (TYPE postgres);")
 
     return con
+
+
+def get_duckdb_conn_with_pg() -> duckdb.DuckDBPyConnection:
+
+    db_path = os.getenv("DUCKDB_PATH")
+
+    print(f"Using DuckDB: {db_path}")
+
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+    con = duckdb.connect(db_path, read_only=True)
+
+    con.execute("INSTALL postgres;")
+
+    con.execute("LOAD postgres;")
+
+    conn_str = get_psql_conn_str()
+
+    try:
+
+        con.execute(f"ATTACH '{conn_str}' AS pg (TYPE postgres);")
+
+    except duckdb.BinderException as e:
+
+        if 'database with name "pg" already exists' not in str(e):
+
+            raise
+
+    return con
