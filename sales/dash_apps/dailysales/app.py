@@ -22,6 +22,7 @@ app = DjangoDash(
     external_scripts=scripts,
     external_stylesheets=styles,
     suppress_callback_exceptions=True,
+    serve_locally=True,
 )
 
 app.layout = MantineProvider(
@@ -47,7 +48,7 @@ def update_from_url(search):
     object_id = params.get("object_id", [None])[0]
 
     if not object_id:
-        return "NOT FOUND"
+        return "NOT FOUND" 
 
     content = MainWindow(object_id)
 

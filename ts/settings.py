@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'accounting_analysis',
     "wb",
     "budget",
+    "cards",
     "mptt",    
     "jsoneditor",
     "app_wb",
@@ -477,8 +478,9 @@ JAZZMIN_UI_TWEAKS = {
 #     "ws_route": "ws/channel",  # нужно для WebSocket соединений (если используете live updates)
 # }
 
-# # Полностью пустой список компонентов
-# PLOTLY_COMPONENTS = []
+# PLOTLY_COMPONENTS = [
+#     "dash_ag_grid",
+# ]
 
 # # Также попробуйте явно отключить
 # import os

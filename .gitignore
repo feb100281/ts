@@ -22,4 +22,5 @@ Thumbs.db
 *.duckdb
 *.db
 *.zip
+*.sql
 /data/
