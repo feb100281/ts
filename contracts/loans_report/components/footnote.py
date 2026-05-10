@@ -1,9 +1,11 @@
-# inventories/reporting/excel/components/footnote.py
+# contracts/loans_report/components/footnote.py
 from openpyxl.styles import Font, Alignment
-from ..styles.theme import COLORS
+from ..styles import COLORS
 
 
 class Footnote:
+    """Класс для отрисовки сносок"""
+    
     def __init__(self, worksheet):
         self.ws = worksheet
     
@@ -13,3 +15,8 @@ class Footnote:
         cell.font = Font(name="Roboto", size=font_size, italic=True, color=COLORS["text_gray"])
         cell.alignment = Alignment(horizontal='left', vertical='center')
         return row + 1
+
+
+def create_footnote(worksheet):
+    """Создает экземпляр Footnote"""
+    return Footnote(worksheet)

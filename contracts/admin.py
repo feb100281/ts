@@ -553,24 +553,71 @@ class ContractsAdmin(admin.ModelAdmin):
 
         return qs
 
-    # def condition_accruals_preview(self, request, condition_id: int):
-    #     cond = get_object_or_404(
-    #         Conditions.objects.select_related("contract", "accounting_method"),
-    #         pk=condition_id
-    #     )
+    
+    
+    
+    
+    def get_urls(self):
+        from django.urls import path
+        
+        urls = super().get_urls()
+        custom_urls = [
+            path('loans-report/', self.loans_report, name='contracts-loans-report'),
+        ]
+        return custom_urls + urls
+    
+    
 
-    #     result = preview_accruals(cond, anchor_date=date.today())
-
-    #     context = {
-    #         "condition": cond,
-    #         "contract": cond.contract,
-    #         "result": result,
-    #         "rows": result.get("rows", []) or [],
-    #         "total": result.get("total"),
-    #     }
-
-    #     return TemplateResponse(request, "contracts/accruals_print.html", context)
-
+    def loans_report(self, request):
+        """
+        Эндпоинт для генерации отчёта по договорам займа и кредитным договорам.
+        """
+        import json
+        from django.http import JsonResponse, HttpResponse
+        from django.core.files.base import ContentFile
+        from django.core.files.storage import default_storage
+        from django.conf import settings
+        import os
+        from datetime import datetime
+        
+        # Импортируем наш генератор отчета
+        from loans_report import LoansReportGenerator
+        
+        if request.method == 'POST':
+            try:
+                data = json.loads(request.body)
+                report_date = data.get('report_date')
+                
+                if not report_date:
+                    return JsonResponse({'error': 'Не указана дата отчёта'}, status=400)
+                
+                # Генерируем отчет
+                generator = LoansReportGenerator()
+                excel_data = generator.generate(report_date)
+                
+                # Формируем имя файла
+                date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"loans_report_{report_date}_{date_str}.xlsx"
+                
+                # Создаем HTTP ответ с файлом
+                response = HttpResponse(
+                    excel_data.getvalue(),
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                
+                return response
+                
+            except ValueError as e:
+                return JsonResponse({'error': str(e)}, status=400)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'error': f'Ошибка при генерации отчёта: {str(e)}'}, status=500)
+        
+        return JsonResponse({'error': 'Метод не поддерживается'}, status=405)
+    
+    
     @admin.display(description="Файлы", ordering="_files_count")
     def files_badge(self, obj):
         n = getattr(obj, "_files_count", 0) or 0
@@ -683,27 +730,6 @@ class ContractsAdmin(admin.ModelAdmin):
             cr_txt,
         )
 
-    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
-    #     field = super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    #     if db_field.name == "pid":
-    #         obj_id = request.resolver_match.kwargs.get("object_id")
-    #         if obj_id:
-    #             try:
-    #                 obj = Contracts.objects.select_related("cp").get(pk=obj_id)
-    #                 field.queryset = Contracts.objects.filter(cp=obj.cp).order_by(
-    #                     "-date"
-    #                 )
-    #                 # если хочешь выбирать только “основные” договоры:
-    #                 # field.queryset = field.queryset.filter(pid__isnull=True)
-    #             except Contracts.DoesNotExist:
-    #                 field.queryset = Contracts.objects.none()
-    #         else:
-    #             # форма создания: пока cp не выбран — скрываем варианты
-    #             field.queryset = Contracts.objects.none()
-
-    #     return field
-    
     
     
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -820,7 +846,9 @@ class ContractsAdmin(admin.ModelAdmin):
                 "css/admin_overrides.css",
             )
         }
-        js = ("js/conditions_inline_collapse.js",)
+        js = ("js/conditions_inline_collapse.js", )
+        
+
 
 
 #####-----ФУНКЦИИ-----#####
