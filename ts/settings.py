@@ -372,6 +372,22 @@ JAZZMIN_SETTINGS = {
         "accounting_analysis.AccountingAnalysis": "fa-solid fa-calculator",
         "accounting_analysis.AnalysisScript": "fa-solid fa-gears",
         "accounting_analysis.AccountingMetric": "fa-solid fa-chart-line",
+        
+         # --- УПД И ЛОТЫ ---
+        "cards": "fa-solid fa-boxes-stacked",
+        "cards.WbCardRaw": "fa-solid fa-id-card",
+        "cards.WbSizes": "fa-solid fa-ruler-combined",
+        "cards.WbBarcodes": "fa-solid fa-barcode",
+
+        "cards.WbProduct": "fa-solid fa-shirt",
+
+        "cards.Lot": "fa-solid fa-box-open",
+        "cards.LotFile": "fa-solid fa-folder-open",
+
+        "cards.UpdDocument": "fa-solid fa-file-invoice",
+        "cards.UpdDocumentFile": "fa-solid fa-file-circle-check",
+
+        "cards.UPDData": "fa-solid fa-table-list",
     
 
 
@@ -402,6 +418,7 @@ JAZZMIN_SETTINGS = {
         "properties",      # Объекты недвижимости
         "counterparties",  # Контрагенты
         "contracts",       # Договоры 
+        'cards',           # УПД и приходы 
         'sales',           # Продажи 
         'treasury',        # Казначейство 
         'budget',          # Бюджет 
