@@ -1,3 +1,4 @@
+# inventories/reporting/excel/components/kpi_cards.py
 from openpyxl.styles import Font, PatternFill, Alignment
 from ..styles.theme import COLORS, BORDERS, ALIGNMENTS
 

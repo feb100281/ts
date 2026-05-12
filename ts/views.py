@@ -200,6 +200,10 @@ def accruals_control_status(request):
             "admin_url": "/admin/contracts/contracts/?has_accrual_fn=no",
         },
     })
+    
+    
+
+
 
 
 

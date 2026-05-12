@@ -17,6 +17,7 @@ from .admin_exports import (
     export_budget_analysis,        
 )
 
+
 from inventories.views import export_stocks_excel, export_stocks_map
 
 login_view = auth_views.LoginView.as_view(
@@ -38,6 +39,7 @@ urlpatterns = [
     path("admin/api/budgets/", admin.site.admin_view(api_budgets), name="api_budgets"),
     path("admin/export/budget-analysis/", admin.site.admin_view(export_budget_analysis), name="export_budget_analysis"),
     path("admin/export/upd-issues/", export_upd_issues, name="export_upd_issues"), 
+    
     path("apps/", include('django_plotly_dash.urls')),
 
     path("admin/", admin.site.urls),

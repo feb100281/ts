@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Min, Max
+from django.http import HttpResponse, HttpResponseBadRequest
 
 from .models import Conditions
 
@@ -403,158 +404,39 @@ def contract_reconciliation_preview(request, contract_id: int):
 
     return TemplateResponse(request, "admin/contracts/reconciliation_print.html", context)
 
-     
 
-# @staff_member_required
-# def contract_reconciliation_preview(request, contract_id: int):
-#     contract = get_object_or_404(
-#         Contracts.objects.select_related("cp", "title"),
-#         pk=contract_id
-#     )
+
+
+@staff_member_required
+def export_loans_report(request):
+    """Экспорт отчёта по договорам займа и кредитным договорам в Excel"""
+    from datetime import datetime
+    from django.http import HttpResponse, HttpResponseBadRequest
     
-#     date_from_str = request.GET.get("date_from")
-#     date_to_str = request.GET.get("date_to")
-
-#     report_date = date.today()
-
-#     if date_from_str:
-#         date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
-#     else:
-#         cond_agg = Conditions.objects.filter(contract=contract).aggregate(
-#             min_start=Min("date_start"),
-#         )
-
-#         cf_agg = CfData.objects.filter(contract=contract).aggregate(
-#             min_date=Min("date"),
-#         )
-
-#         split_agg = CfSplits.objects.filter(contract=contract).aggregate(
-#             min_date=Min("transaction__date"),
-#         )
-
-#         candidate_starts = [
-#             cond_agg.get("min_start"),
-#             cf_agg.get("min_date"),
-#             split_agg.get("min_date"),
-#             contract.date,
-#         ]
-#         candidate_starts = [d for d in candidate_starts if d]
-
-#         date_from = min(candidate_starts) if candidate_starts else (contract.date or date.today())
-
-#     if date_to_str:
-#         date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
-#     else:
-#         date_to = get_contract_full_horizon_date(contract)
-
-#     if date_to < date_from:
-#         date_to = date_from
-
-#     result = build_contract_reconciliation(
-#         contract=contract,
-#         date_from=date_from,
-#         date_to=date_to,
-#         report_date=report_date,
-#     )
+    # Получаем дату из GET параметра
+    report_date = request.GET.get('report_date')
     
-#     # ------------------------------------------
-#     # ### ВСЕ ПРЕВЬЮ В ТРИ СТРОЧКИ!!! ЗАКОМЕНТЬ ПОТОМ ЕСЛИ ЧТО ЭТО ОТ ПАШИ
-#     # #ВАЖНО СЧИТАЕМ ПО PID
-#     root_id = contract.pid_id or contract.id
-#     # df = pd.read_sql(get_sql(root_id),connection)
-#     df = pd.read_sql(get_sql(), connection, params=[root_id])
+    if not report_date:
+        return HttpResponseBadRequest("Не указана дата отчёта")
     
-#     contract_name_from_mv = None
-#     if not df.empty and "contract_name" in df.columns:
-#         non_empty_names = df["contract_name"].dropna().astype(str).str.strip()
-#         non_empty_names = non_empty_names[non_empty_names != ""]
-#         if not non_empty_names.empty:
-#             contract_name_from_mv = non_empty_names.iloc[0]
-
-    
-#     #Делаем сверку    
-#     # rows_new = {
-#     # "rows": df.to_dict(orient="records")
-#     # }    
-#     # #ХОД КОНЕМ ЧТО БЫ НЕ КОПАТЬСЯ В 2 тыс срок services
-#     # result["rows"] = rows_new["rows"]
-#     # result["total_accruals"] = df['accrual'].sum()
-#     # result["total_payments"] = df['payment'].sum()    
-#     # result["current_accruals"] = df['accrual'].sum()  ### Не увенер просто так сделал
-#     # result["current_balance"] = df['accrual'].sum() - df['payment'].sum() 
-#     # result["closing_balance"] = df['accrual'].sum() - df['payment'].sum() 
-#     # ВСЕ ОСТАЛЬНОЕ МОЖНО ЧЕРЕЗ DF найти и передать в шаблон.
-#     # #ДЖАНГО НЕ ЮЗАЕМ В РАСЧЕТАХ
-    
-#     if df.empty:
-#         df = pd.DataFrame(columns=[
-#             "accrual", "balance", "comment", "description", "doc_label",
-#             "loan_issue", "loan_principal_return", "payment",
-#             "period_from", "period_to", "row_date",
-#             "row_type", "row_type_label", "sort_order", "contract_name"
-#         ])
-
-#     for col in ["accrual", "payment", "loan_issue", "loan_principal_return"]:
-#         if col in df.columns:
-#             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
-#     if "row_date" in df.columns:
-#         df["row_date"] = pd.to_datetime(df["row_date"], errors="coerce").dt.date
-
-#     # 1. Полный период — всё, что есть в базе
-#     full_df = df.copy()
-
-#     # 2. Срез на текущую дату
-#     current_df = df[df["row_date"] <= report_date].copy()
-
-#     # Считаем бегущее сальдо для таблицы за весь период
-#     if not full_df.empty:
-#         full_df["balance"] = result.get("opening_balance", 0) + (full_df["accrual"] - full_df["payment"]).cumsum()
-#     else:
-#         full_df["balance"] = pd.Series(dtype="float64")
-
-#     # Считаем сальдо на текущую дату
-#     if not current_df.empty:
-#         current_df["balance"] = result.get("opening_balance", 0) + (current_df["accrual"] - current_df["payment"]).cumsum()
-#     else:
-#         current_df["balance"] = pd.Series(dtype="float64")
-
-#     # Данные для таблицы — за весь период
-#     result["rows"] = full_df.to_dict(orient="records")
-
-#     # Итого за весь период
-#     result["total_accruals"] = full_df["accrual"].sum()
-#     result["total_payments"] = full_df["payment"].sum()
-#     result["closing_balance"] = result.get("opening_balance", 0) + result["total_accruals"] - result["total_payments"]
-
-#     # На текущую дату
-#     result["current_accruals"] = current_df["accrual"].sum()
-#     result["current_payments"] = current_df["payment"].sum()
-#     result["current_balance"] = result.get("opening_balance", 0) + result["current_accruals"] - result["current_payments"]
-    
-#     # result["closing_balance_status"] = get_balance_status(result["closing_balance"])
-#     # result["closing_balance_comment"] = get_balance_comment(result["closing_balance"])
-#     # result["closing_balance_status_class"] = get_balance_status_class(result["closing_balance"])
-
-#     # result["current_balance_status"] = get_balance_status(result["current_balance"])
-#     # result["current_balance_comment"] = get_balance_comment(result["current_balance"])
-#     # result["current_balance_status_class"] = get_balance_status_class(result["current_balance"])
-#     # ------------------------------------------
-    
-    
-#     has_loan = Conditions.objects.filter(
-#             contract=contract,
-#             accrual_fn__in=LOAN_ACCRUAL_FNS,
-#         ).exists()
-    
-#     context = {
-#         **result,
-#         "contract": contract,
-#         "result": result,
-#         "has_loan": has_loan,
-#          "contract_name_from_mv": contract_name_from_mv,
-#     }
-    
-    
-
-#     return TemplateResponse(request, "admin/contracts/reconciliation_print.html", context)
+    try:
+        # Используем ваш билдер
+        from contracts.loans_report.builder import LoansReportGenerator
+        
+        generator = LoansReportGenerator()
+        output = generator.generate(report_date)
+        
+        filename = f"Loans_Report_{report_date}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return HttpResponseBadRequest(f"Ошибка: {str(e)}")
