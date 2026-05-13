@@ -51,23 +51,25 @@ class LotAdmin(admin.ModelAdmin):
     ]
 
 
+
 class UpdDocumentFileInline(admin.TabularInline):
     model = UpdDocumentFile
     extra = 0
-    fields = ('name', 'file_link', 'uploaded_at')
+
+    fields = ('name', 'file', 'file_link', 'uploaded_at')
     readonly_fields = ('file_link', 'uploaded_at')
 
     def file_link(self, obj):
-        if obj.file:
-            url = obj.file.url
+        if obj and obj.file:
             return format_html(
                 '<a href="{}" target="_blank" style="background:#f1f5f9; padding:4px 8px; border-radius:4px; text-decoration:none;">📄 Просмотр</a>',
-                url
+                obj.file.url
             )
         return '-'
 
     file_link.short_description = 'Файл'
-
+    
+    
 
 class UpdProblemFilter(admin.SimpleListFilter):
     title = 'Проблемы в УПД'
@@ -87,51 +89,32 @@ class UpdProblemFilter(admin.SimpleListFilter):
         value = self.value()
 
         if value == 'nm_missing':
-            return queryset.filter(
-                income_lines__nm__isnull=True
-            ).distinct()
+            return queryset.filter(nm_missing__gt=0)
 
         if value == 'chrt_missing':
-            return queryset.filter(
-                income_lines__chrt__isnull=True
-            ).distinct()
+            return queryset.filter(chrt_missing__gt=0)
 
         if value == 'name_mismatch':
-            return queryset.filter(
-                income_lines__name_match=False
-            ).distinct()
+            return queryset.filter(name_mismatch__gt=0)
 
         if value == 'vat_mismatch':
-            return queryset.filter(
-                income_lines__upd_vat_rate__isnull=False,
-                income_lines__upd_vat_rate__gt=0,
-            ).exclude(
-                income_lines__upd_vat_rate=F('income_lines__card_vat_rate')
-            ).distinct()
+            return queryset.filter(vat_mismatch__gt=0)
 
         if value == 'has_any_problem':
             return queryset.filter(
-                Q(income_lines__nm__isnull=True)
-                | Q(income_lines__chrt__isnull=True)
-                | Q(income_lines__name_match=False)
-                | (
-                    Q(income_lines__upd_vat_rate__isnull=False)
-                    & Q(income_lines__upd_vat_rate__gt=0)
-                    & ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
-                )
-            ).distinct()
+                Q(nm_missing__gt=0)
+                | Q(chrt_missing__gt=0)
+                | Q(name_mismatch__gt=0)
+                | Q(vat_mismatch__gt=0)
+            )
 
         if value == 'no_problem':
-            return queryset.exclude(
-                Q(income_lines__nm__isnull=True)
-                | Q(income_lines__chrt__isnull=True)
-                | Q(income_lines__name_match=False)
-                | (
-                    Q(income_lines__upd_vat_rate__isnull=False)
-                    & Q(income_lines__upd_vat_rate__gt=0)
-                    & ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
-                )
-            ).distinct()
+            return queryset.filter(
+                nm_missing=0,
+                chrt_missing=0,
+                name_mismatch=0,
+                vat_mismatch=0,
+            )
 
         return queryset
 
