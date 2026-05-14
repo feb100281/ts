@@ -1,3 +1,4 @@
+# cards/upd_app/data.py
 from conns import get_duckdb_conn_with_pg, connect_db
 import pandas as pd
 
