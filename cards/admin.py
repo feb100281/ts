@@ -5,6 +5,7 @@ import os
 from django.contrib import admin
 from django.db.models import Count, Q, F, Sum
 from django.utils.html import format_html
+from .reporting.builder import MissingFieldsReportGenerator
 
 from .models import (
     Lot,
@@ -123,6 +124,7 @@ class UpdProblemFilter(admin.SimpleListFilter):
 class UpdDocumentAdmin(admin.ModelAdmin):
     change_list_template = "admin/cards/upddocument/change_list.html"
     date_hierarchy = "date"
+    actions = ['export_complete_package']
 
     list_display = (
        'counterparty_short',
@@ -169,105 +171,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         UpdDocumentFileInline,
     ]
 
-    # def get_queryset(self, request):
-    #     qs = super().get_queryset(request)
 
-    #     return qs.annotate(
-    #         total_amount_vatadd=Sum('income_lines__upd_amount_vatadd'),
-    #         total_qty=Sum('income_lines__upd_qty'),
-    #         lines_count=Count('income_lines', distinct=True),
-
-    #         nm_missing=Count(
-    #             'income_lines',
-    #             filter=Q(income_lines__nm__isnull=True),
-    #             distinct=True,
-    #         ),
-    #         chrt_missing=Count(
-    #             'income_lines',
-    #             filter=Q(income_lines__chrt__isnull=True),
-    #             distinct=True,
-    #         ),
-    #         name_mismatch=Count(
-    #             'income_lines',
-    #             filter=Q(income_lines__name_match=False),
-    #             distinct=True,
-    #         ),
-    #         vat_mismatch=Count(
-    #             'income_lines',
-    #             filter=(
-    #                 Q(income_lines__upd_vat_rate__isnull=False)
-    #                 & Q(income_lines__upd_vat_rate__gt=0)
-    #                 & ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
-    #             ),
-    #             distinct=True,
-    #         ),
-    #     )
-
-    # def changelist_view(self, request, extra_context=None):
-    #     cl = self.get_changelist_instance(request)
-    #     full_queryset = cl.get_queryset(request)
-
-    #     total_stats = full_queryset.aggregate(
-
-    #         total_amount_vatadd=Sum(
-    #             'income_lines__upd_amount_vatadd'
-    #         ),
-
-    #         total_qty=Sum(
-    #             'income_lines__upd_qty'
-    #         ),
-
-    #         total_lines_count=Count(
-    #             'income_lines'
-    #         ),
-
-    #         total_nm_missing=Count(
-    #             'income_lines',
-    #             filter=Q(income_lines__nm__isnull=True)
-    #         ),
-
-    #         total_chrt_missing=Count(
-    #             'income_lines',
-    #             filter=Q(income_lines__chrt__isnull=True)
-    #         ),
-
-    #         total_name_mismatch=Count(
-    #             'income_lines',
-    #             filter=Q(income_lines__name_match=False)
-    #         ),
-
-    #         total_vat_mismatch=Count(
-    #             'income_lines',
-    #             filter=(
-    #                 Q(income_lines__upd_vat_rate__isnull=False)
-    #                 &
-    #                 Q(income_lines__upd_vat_rate__gt=0)
-    #                 &
-    #                 ~Q(
-    #                     income_lines__upd_vat_rate=F(
-    #                         'income_lines__card_vat_rate'
-    #                     )
-    #                 )
-    #             )
-    #         ),
-    #     )
-
-    #     extra_context = extra_context or {}
-
-    #     extra_context['total_stats'] = {
-    #         'amount_vatadd': total_stats['total_amount_vatadd'] or 0,
-    #         'qty': total_stats['total_qty'] or 0,
-    #         'lines_count': total_stats['total_lines_count'] or 0,
-    #         'nm_missing': total_stats['total_nm_missing'] or 0,
-    #         'chrt_missing': total_stats['total_chrt_missing'] or 0,
-    #         'name_mismatch': total_stats['total_name_mismatch'] or 0,
-    #         'vat_mismatch': total_stats['total_vat_mismatch'] or 0,
-    #     }
-
-    #     return super().changelist_view(
-    #         request,
-    #         extra_context=extra_context
-    #     )
     
     
     
@@ -476,6 +380,18 @@ class UpdDocumentAdmin(admin.ModelAdmin):
             obj.id,
             obj.date.strftime("%d.%m.%Y")
         )
+        
+        
+        
+    @admin.action(description='📦 Выгрузить полный пакет (оба отчета + PDF)')
+    def export_complete_package(self, request, queryset):
+        """Экшен для выгрузки ZIP-архива с отчетами и PDF"""
+        upd_ids = list(queryset.values_list('id', flat=True))
+        
+        generator = MissingFieldsReportGenerator()
+        response = generator.get_report_response('both', upd_ids)
+        
+        return response
 
 
     @staticmethod
