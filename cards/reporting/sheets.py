@@ -406,3 +406,106 @@ class MissingChrtSheet(BaseReportSheet):
             safe_number(item.get("upd_price_vatadd")),
             safe_number(item.get("upd_amount_vatadd")),
         ]
+        
+
+class VatMismatchSheet(BaseReportSheet):
+    """Лист с товарами, где не совпадает НДС в УПД и карточке WB"""
+
+    sheet_name = "Несовпадение_НДС"
+    title = "ОТЧЕТ: НЕСОВПАДЕНИЕ СТАВОК НДС"
+
+    end_col = 13
+
+    table_headers = [
+        "Артикул в УПД",
+        "Бренд",
+        "Название товара",
+        "Размер",
+        "NM_ID",
+        "Артикул WB",
+        "Ставка НДС в УПД",
+        "Ставка НДС в карточке",
+        "УПД",
+        "Контрагенты",
+        "Кол-во",
+        "Цена за ед. с НДС",
+        "Сумма с НДС",
+    ]
+
+    numeric_cols = [11]
+    money_cols = [12, 13]
+    manual_fill_cols = [7, 8]
+
+    total_label_col = 9
+    total_cols = [
+        (11, "upd_qty"),
+        (13, "upd_amount_vatadd"),
+    ]
+
+    column_widths = {
+        "A": 18,
+        "B": 15,
+        "C": 45,
+        "D": 12,
+        "E": 14,
+        "F": 18,
+        "G": 18,
+        "H": 18,
+        "I": 35,
+        "J": 30,
+        "K": 15,
+        "L": 18,
+        "M": 18,
+    }
+    
+    def _get_stats_rows(self):
+        return [
+            {
+                "title": "УПД",
+                "value": self.stats.get("total_upd_count", 0),
+                "width": 2,
+            },
+            {
+                "title": "Строк всего",
+                "value": self.stats.get("total_lines", 0),
+                "width": 2,
+            },
+            {
+                "title": "Несовпадение НДС",
+                "value": self.stats.get("vat_mismatch_count", 0),
+                "width": 3,
+            },
+            {
+                "title": "Кол-во",
+                "value": self._format_number(self.stats.get("vat_mismatch_qty", 0)),
+                "width": 2,
+            },
+            {
+                "title": "Сумма с НДС",
+                "value": self._format_currency(self.stats.get("vat_mismatch_amount", 0)),
+                "width": 4,
+            },
+        ]
+        
+    def _get_row_values(self, item):
+        upd_vat = item.get("upd_vat_rate", 0)
+        card_vat = item.get("card_vat_rate", 0)
+        
+        upd_vat_str = f"{int(upd_vat)}%" if upd_vat and upd_vat > 0 else "—"
+        card_vat_str = f"{int(card_vat)}%" if card_vat and card_vat > 0 else "—"
+        
+        return [
+            safe_text(item.get("upd_sa_name")),
+            safe_text(item.get("brand")),
+            short_text(item.get("upd_title")),
+            safe_text(item.get("upd_size")),
+            safe_text(item.get("nm_id")),
+            safe_text(item.get("wb_sa_name")),
+            upd_vat_str,
+            card_vat_str,
+            safe_text(item.get("upd_info")),
+            safe_text(item.get("counterparty_name")),
+            safe_number(item.get("upd_qty")),
+            safe_number(item.get("upd_price_vatadd")),
+            safe_number(item.get("upd_amount_vatadd")),
+        ]

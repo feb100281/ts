@@ -268,7 +268,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     def export_complete_package(self, request, queryset):
         upd_ids = list(queryset.values_list('id', flat=True))
         generator = MissingFieldsReportGenerator()
-        response = generator.get_report_response('both', upd_ids)
+        response = generator.get_report_response( upd_ids)
         return response
 
     @staticmethod
