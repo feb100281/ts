@@ -9,251 +9,108 @@
   {% url cl.opts|admin_urlname:'add' as add_url %}
 
   <div class="upd-page-header">
-
     <div class="upd-title-wrap">
-
-      <div class="upd-logo">
-        УПД
-      </div>
-
+      <div class="upd-logo">УПД</div>
       <div>
-        <div class="upd-eyebrow">
-          Документы
-        </div>
-
-        <div class="upd-title">
-          Управление УПД
-        </div>
+        <div class="upd-eyebrow">Документы</div>
+        <div class="upd-title">Управление УПД</div>
       </div>
-
     </div>
-
     <div class="upd-header-actions">
-
       {% if has_add_permission %}
-        <a href="{{ add_url }}" class="upd-add-button">
-          + Добавить УПД
-        </a>
+        <a href="{{ add_url }}" class="upd-add-button">+ Добавить УПД</a>
       {% endif %}
-
     </div>
-
   </div>
 
   <div class="upd-breadcrumb-row">
-
     <nav>
-      <a href="{% url 'admin:index' %}">
-        Главная
-      </a>
-
+      <a href="{% url 'admin:index' %}">Главная</a>
       <span>/</span>
-
-      <a href="{% url 'admin:cards_upddocument_changelist' %}">
-        УПД
-      </a>
-
+      <a href="{% url 'admin:cards_upddocument_changelist' %}">УПД</a>
       <span>/</span>
-
-      <strong>
-        Документы
-      </strong>
+      <strong>Документы</strong>
     </nav>
-
-    <div>
-      {{ cl.result_count }} записей
-    </div>
-
+    <div>{{ cl.result_count }} записей</div>
   </div>
 
-
-  <!-- KPI -->
-
+  <!-- KPI - общая информация -->
   <div class="upd-summary-grid">
-
     <div class="upd-card upd-card-main">
-
-      <div class="upd-card-label">
-        Сумма с НДС
-      </div>
-
-      <div class="upd-card-value">
-        {{ total_stats.amount_vatadd|default:"0"|floatformat:0|intcomma }} ₽
-      </div>
-
-      <div class="upd-card-note">
-        по выбранным УПД
-      </div>
-
+      <div class="upd-card-label">Сумма с НДС</div>
+      <div class="upd-card-value">{{ total_stats.amount_vatadd|default:"0"|floatformat:0|intcomma }} ₽</div>
+      <div class="upd-card-note">по выбранным УПД</div>
     </div>
-
 
     <div class="upd-card">
-
-      <div class="upd-card-label">
-        Количество товаров
-      </div>
-
-      <div class="upd-card-value">
-        {{ total_stats.qty|default:"0"|floatformat:2|intcomma }}
-      </div>
-
-      <div class="upd-card-note">
-        суммарное количество
-      </div>
-
+      <div class="upd-card-label">Количество товаров</div>
+      <div class="upd-card-value">{{ total_stats.qty|default:"0"|floatformat:2|intcomma }}</div>
+      <div class="upd-card-note">суммарное количество</div>
     </div>
-
 
     <div class="upd-card">
-
-      <div class="upd-card-label">
-        Строк УПД
-      </div>
-
-      <div class="upd-card-value">
-        {{ total_stats.lines_count|default:"0"|intcomma }}
-      </div>
-
-      <div class="upd-card-note">
-        позиций в документах
-      </div>
-
+      <div class="upd-card-label">Строк УПД</div>
+      <div class="upd-card-value">{{ total_stats.lines_count|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">позиций в документах</div>
     </div>
-
 
     <div class="upd-card">
+      <div class="upd-card-label">Количество УПД</div>
+      <div class="upd-card-value">{{ cl.result_count|intcomma }}</div>
+      <div class="upd-card-note">документов в выборке</div>
+    </div>
+  </div>
 
-      <div class="upd-card-label">
-        Количество УПД
+
+
+  <!-- ERRORS - проблемы -->
+  <div class="upd-summary-grid upd-summary-grid-errors">
+    <div class="upd-card upd-card-danger">
+      <div class="upd-card-label">Нет nm_id</div>
+      <div class="upd-card-value">{{ total_stats.nm_missing|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">позиций без карточки WB</div>
+      <div class="upd-card-amount">
+        {{ total_stats.nm_missing_amount|default:"0"|floatformat:0|intcomma }} ₽
+        <span class="upd-card-percent">({{ total_stats.nm_missing_percent }}%)</span>
       </div>
+    </div>
 
-      <div class="upd-card-value">
-        {{ cl.result_count|intcomma }}
+    <div class="upd-card upd-card-danger">
+      <div class="upd-card-label">Нет chrt_id</div>
+      <div class="upd-card-value">{{ total_stats.chrt_missing|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">позиций без размера</div>
+      <div class="upd-card-amount">
+        {{ total_stats.chrt_missing_amount|default:"0"|floatformat:0|intcomma }} ₽
+        <span class="upd-card-percent">({{ total_stats.chrt_missing_percent }}%)</span>
       </div>
+    </div>
 
-      <div class="upd-card-note">
-        документов в выборке
+    <div class="upd-card upd-card-danger">
+      <div class="upd-card-label">Не совпало название</div>
+      <div class="upd-card-value">{{ total_stats.name_mismatch|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">позиций с расхождением</div>
+      <div class="upd-card-amount">
+        {{ total_stats.name_mismatch_amount|default:"0"|floatformat:0|intcomma }} ₽
+        <span class="upd-card-percent">({{ total_stats.name_mismatch_percent }}%)</span>
       </div>
-
     </div>
 
+    <div class="upd-card upd-card-danger">
+      <div class="upd-card-label">Проблема НДС</div>
+      <div class="upd-card-value">{{ total_stats.vat_mismatch|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">несовпадение ставок</div>
+      <div class="upd-card-amount">
+        {{ total_stats.vat_mismatch_amount|default:"0"|floatformat:0|intcomma }} ₽
+        <span class="upd-card-percent">({{ total_stats.vat_mismatch_percent }}%)</span>
+      </div>
+    </div>
   </div>
-
-
-  <!-- ERRORS -->
-
-<div class="upd-summary-grid upd-summary-grid-errors">
-
-  <div class="upd-card upd-card-danger">
-
-    <div class="upd-card-label">
-      Нет nm_id
-    </div>
-
-    <div class="upd-card-value">
-      {{ total_stats.nm_missing|default:"0"|intcomma }}
-    </div>
-
-    <div class="upd-card-note">
-      позиций без карточки WB
-    </div>
-
-    <!-- ДОБАВЛЯЕМ СУММУ И ПРОЦЕНТ -->
-    <div class="upd-card-amount">
-      {{ total_stats.nm_missing_amount|default:"0"|floatformat:0|intcomma }} ₽
-      <span class="upd-card-percent">
-        ({{ total_stats.nm_missing_percent }}%)
-      </span>
-    </div>
-
-  </div>
-
-
-  <div class="upd-card upd-card-danger">
-
-    <div class="upd-card-label">
-      Нет chrt_id
-    </div>
-
-    <div class="upd-card-value">
-      {{ total_stats.chrt_missing|default:"0"|intcomma }}
-    </div>
-
-    <div class="upd-card-note">
-      позиций без размера
-    </div>
-
-    <!-- ДОБАВЛЯЕМ СУММУ И ПРОЦЕНТ -->
-    <div class="upd-card-amount">
-      {{ total_stats.chrt_missing_amount|default:"0"|floatformat:0|intcomma }} ₽
-      <span class="upd-card-percent">
-        ({{ total_stats.chrt_missing_percent }}%)
-      </span>
-    </div>
-
-  </div>
-
-
-  <div class="upd-card upd-card-danger">
-
-    <div class="upd-card-label">
-      Не совпало название
-    </div>
-
-    <div class="upd-card-value">
-      {{ total_stats.name_mismatch|default:"0"|intcomma }}
-    </div>
-
-    <div class="upd-card-note">
-      позиций с расхождением
-    </div>
-
-    <!-- ДОБАВЛЯЕМ СУММУ И ПРОЦЕНТ -->
-    <div class="upd-card-amount">
-      {{ total_stats.name_mismatch_amount|default:"0"|floatformat:0|intcomma }} ₽
-      <span class="upd-card-percent">
-        ({{ total_stats.name_mismatch_percent }}%)
-      </span>
-    </div>
-
-  </div>
-
-
-  <div class="upd-card upd-card-danger">
-
-    <div class="upd-card-label">
-      Проблема НДС
-    </div>
-
-    <div class="upd-card-value">
-      {{ total_stats.vat_mismatch|default:"0"|intcomma }}
-    </div>
-
-    <div class="upd-card-note">
-      несовпадение ставок
-    </div>
-
-    <!-- ДОБАВЛЯЕМ СУММУ И ПРОЦЕНТ -->
-    <div class="upd-card-amount">
-      {{ total_stats.vat_mismatch_amount|default:"0"|floatformat:0|intcomma }} ₽
-      <span class="upd-card-percent">
-        ({{ total_stats.vat_mismatch_percent }}%)
-      </span>
-    </div>
-
-  </div>
-
-</div>
-
 
 {% endblock %}
-
 
 {% block filters %}
   {{ block.super }}
 {% endblock %}
-
 
 {% block extrahead %}
   {{ block.super }}
@@ -376,6 +233,14 @@
       margin-bottom: 22px;
     }
 
+    /* Новая сетка для статистики по суммам */
+    .upd-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+
     .upd-card {
       position: relative;
       overflow: hidden;
@@ -398,6 +263,10 @@
 
     .upd-card-main::before {
       background: #0f172a;
+    }
+
+    .upd-card-light::before {
+      background: #94a3b8;
     }
 
     .upd-card-danger {
@@ -425,6 +294,22 @@
       color: #0f172a;
       line-height: 1.15;
       word-break: break-word;
+    }
+
+    .upd-card-value-min {
+      color: #22c55e;
+    }
+
+    .upd-card-value-max {
+      color: #ef4444;
+    }
+
+    .upd-card-value-avg {
+      color: #3b82f6;
+    }
+
+    .upd-card-value-median {
+      color: #8b5cf6;
     }
 
     .upd-card-danger .upd-card-value {
@@ -504,36 +389,36 @@
       background: #e2e8f0 !important;
     }
 
-      .upd-card-amount {
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid #f1f5f9;
-    font-size: 15px;
-    font-weight: 700;
-    color: #dc2626;
-  }
+    .upd-card-amount {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #f1f5f9;
+      font-size: 15px;
+      font-weight: 700;
+      color: #dc2626;
+    }
 
-  .upd-card-percent {
-    font-size: 12px;
-    font-weight: 600;
-    color: #94a3b8;
-    margin-left: 6px;
-  }
+    .upd-card-percent {
+      font-size: 12px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-left: 6px;
+    }
 
-  /* Для карточек без проблем (опционально) */
-  .upd-card:not(.upd-card-danger) .upd-card-amount {
-    border-top-color: #e2e8f0;
-    color: #0f172a;
-  }
+    /* Для карточек без проблем (опционально) */
+    .upd-card:not(.upd-card-danger) .upd-card-amount {
+      border-top-color: #e2e8f0;
+      color: #0f172a;
+    }
 
-  .upd-card:not(.upd-card-danger) .upd-card-percent {
-    color: #64748b;
-  }
-  
+    .upd-card:not(.upd-card-danger) .upd-card-percent {
+      color: #64748b;
+    }
 
     @media (max-width: 1600px) {
 
-      .upd-summary-grid {
+      .upd-summary-grid,
+      .upd-stats-grid {
         grid-template-columns: repeat(4, minmax(180px, 1fr));
       }
 
@@ -541,7 +426,8 @@
 
     @media (max-width: 900px) {
 
-      .upd-summary-grid {
+      .upd-summary-grid,
+      .upd-stats-grid {
         grid-template-columns: 1fr;
       }
 

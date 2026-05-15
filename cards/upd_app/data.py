@@ -83,14 +83,15 @@ def get_size_options(nm_id):
     ]
     return data
     
-def update_size(row_id,chrt_id):
+def update_size(row_id, chrt_id):
     with connect_db() as conn:
-        conn.execute(
-            """ 
-            UPDATE public.upd_income_lines
-            set chrt_id = %s
-            where id = %s
-            """,
-            (chrt_id, row_id)      
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE public.upd_income_lines
+                SET chrt_id = %s
+                WHERE id = %s
+                """,
+                (int(chrt_id), int(row_id))
+            )
         conn.commit()
