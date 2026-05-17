@@ -226,10 +226,9 @@ JAZZMIN_SETTINGS = {
     # "site_favicon": "/img/logo_short.png",
     "custom_css": "css/custom.css",
     "custom_js": "js/custom.js",
-    # "custom_js": [
-    #     "js/custom.js",
-    #     "js/manpack_export.js",
-    # ],
+    
+   
+
     
     "changeform_format": "horizontal_tabs",
 
@@ -251,8 +250,8 @@ JAZZMIN_SETTINGS = {
         {"name": "Скачать проверку договоров GL/PL/BS CSV", "url": "export_contracts_gl_check"},
         {"name": "Скачать ManPack", "url": "export_manpack", "new_window": False},
         {"name": "Скачать остатки", "url": "export_stocks", "new_window": False},
-        {"name": "Анализ бюджета", "url": "export_budget_analysis", "new_window": False},
-        {"name": "Скачать косяки по УПД", "url": "export_upd_issues", "new_window": False},
+        {"name": "Контроль выручки", "url": "export_budget_analysis", "new_window": False},
+    
     ],
     
     # "usermenu_links": [

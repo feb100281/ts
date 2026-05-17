@@ -2,8 +2,21 @@
 {% load admin_urls humanize %}
 
 {% block breadcrumbs %}{% endblock %}
-{% block object-tools %}{% endblock %}
+
 {% block title %}УПД — Управление документами{% endblock %}
+
+{% block object-tools %}
+<div class="upd-object-tools">
+    <a href="{% url 'admin:cards_upddocument_reconcile' %}" class="upd-reconcile-button" target="_blank">
+        🔄 Сверка с 1С
+    </a>
+    {% if has_add_permission %}
+        <a href="{% url cl.opts|admin_urlname:'add' %}" class="upd-add-button">
+            + Добавить УПД
+        </a>
+    {% endif %}
+</div>
+{% endblock %}
 
 {% block content_title %}
   {% url cl.opts|admin_urlname:'add' as add_url %}
@@ -15,11 +28,6 @@
         <div class="upd-eyebrow">Документы</div>
         <div class="upd-title">Управление УПД</div>
       </div>
-    </div>
-    <div class="upd-header-actions">
-      {% if has_add_permission %}
-        <a href="{{ add_url }}" class="upd-add-button">+ Добавить УПД</a>
-      {% endif %}
     </div>
   </div>
 
@@ -60,8 +68,6 @@
       <div class="upd-card-note">документов в выборке</div>
     </div>
   </div>
-
-
 
   <!-- ERRORS - проблемы -->
   <div class="upd-summary-grid upd-summary-grid-errors">
@@ -116,7 +122,6 @@
   {{ block.super }}
 
   <style>
-
     .upd-page-header {
       display: flex;
       align-items: flex-start;
@@ -162,10 +167,33 @@
       color: #0f172a;
     }
 
-    .upd-header-actions {
+    .upd-object-tools {
       display: flex;
       align-items: center;
       gap: 10px;
+      justify-content: flex-end;
+      margin-bottom: 15px;
+    }
+
+    .upd-reconcile-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 7px 14px;
+      background: #22c55e;
+      color: #ffffff !important;
+      border: 1px solid #16a34a;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none !important;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .upd-reconcile-button:hover {
+      background: #16a34a;
+      transform: translateY(-1px);
     }
 
     .upd-add-button {
@@ -180,7 +208,7 @@
       font-size: 12px;
       font-weight: 600;
       text-decoration: none !important;
-      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.14);
+      border-radius: 4px;
       transition: all 0.2s ease;
     }
 
@@ -233,7 +261,6 @@
       margin-bottom: 22px;
     }
 
-    /* Новая сетка для статистики по суммам */
     .upd-stats-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(180px, 1fr));
@@ -249,6 +276,7 @@
       border: 1px solid #e2e8f0;
       padding: 16px 15px;
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      border-radius: 6px;
     }
 
     .upd-card::before {
@@ -370,6 +398,7 @@
       padding: 6px 10px;
       font-weight: 700;
       text-align: center;
+      border-radius: 4px;
     }
 
     .upd-ok-cell {
@@ -379,6 +408,7 @@
       color: #94a3b8;
       padding: 6px 10px;
       text-align: center;
+      border-radius: 4px;
     }
 
     .button {
@@ -405,7 +435,6 @@
       margin-left: 6px;
     }
 
-    /* Для карточек без проблем (опционально) */
     .upd-card:not(.upd-card-danger) .upd-card-amount {
       border-top-color: #e2e8f0;
       color: #0f172a;
@@ -416,16 +445,13 @@
     }
 
     @media (max-width: 1600px) {
-
       .upd-summary-grid,
       .upd-stats-grid {
         grid-template-columns: repeat(4, minmax(180px, 1fr));
       }
-
     }
 
     @media (max-width: 900px) {
-
       .upd-summary-grid,
       .upd-stats-grid {
         grid-template-columns: 1fr;
@@ -435,9 +461,11 @@
         align-items: flex-start;
         flex-direction: column;
       }
-
+      
+      .upd-object-tools {
+        justify-content: flex-start;
+      }
     }
-
   </style>
 
 {% endblock %}

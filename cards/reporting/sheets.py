@@ -271,12 +271,12 @@ class MissingNmSheet(BaseReportSheet):
                 "width": 2,
             },
             {
-                "title": "Строк всего",
+                "title": "Строк всего в УПД",
                 "value": self.stats.get("total_lines", 0),
                 "width": 2,
             },
             {
-                "title": "Без NM_ID",
+                "title": "Строк в УПД без NM_ID",
                 "value": self.stats.get("missing_nm_count", 0),
                 "width": 2,
             },
@@ -368,12 +368,12 @@ class MissingChrtSheet(BaseReportSheet):
                 "width": 2,
             },
             {
-                "title": "Строк всего",
+                "title": "Строк всего в УПД",
                 "value": self.stats.get("total_lines", 0),
                 "width": 2,
             },
             {
-                "title": "Без CHRT_ID",
+                "title": "Строк в УПД без CHRT_ID",
                 "value": self.stats.get("missing_chrt_count", 0),
                 "width": 3,
             },
@@ -466,22 +466,22 @@ class VatMismatchSheet(BaseReportSheet):
                 "width": 2,
             },
             {
-                "title": "Строк всего",
+                "title": "Строк всего в УПД",
                 "value": self.stats.get("total_lines", 0),
                 "width": 2,
             },
             {
-                "title": "Несовпадение НДС",
+                "title": "Строк в УПД с несовпадением НДС",
                 "value": self.stats.get("vat_mismatch_count", 0),
                 "width": 3,
             },
             {
-                "title": "Кол-во",
+                "title": "Кол-во с несовпадением НДС",
                 "value": self._format_number(self.stats.get("vat_mismatch_qty", 0)),
                 "width": 2,
             },
             {
-                "title": "Сумма с НДС",
+                "title": "Сумма с НДС (с несовпадением НДС)",
                 "value": self._format_currency(self.stats.get("vat_mismatch_amount", 0)),
                 "width": 4,
             },

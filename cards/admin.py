@@ -8,6 +8,11 @@ from .reporting.builder import MissingFieldsReportGenerator
 from .models import (
     Lot, LotFile, UpdDocument, UpdDocumentFile, WbProduct
 )
+from django.urls import path
+from django.shortcuts import render
+from django.http import HttpResponse
+from .forms import UpdReconciliationForm
+from .reconciliation import run_reconciliation
 
 
 class LotFileInline(admin.TabularInline):
@@ -91,7 +96,7 @@ class UpdProblemFilter(admin.SimpleListFilter):
 class UpdDocumentAdmin(admin.ModelAdmin):
     change_list_template = "admin/cards/upddocument/change_list.html"
     date_hierarchy = "date"
-    actions = ['export_complete_package']
+    actions = ['export_complete_package' ]
 
     list_display = (
         'counterparty_short',
@@ -224,6 +229,44 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         }
 
         return super().changelist_view(request, extra_context=extra_context)
+    
+    
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('reconcile/', self.admin_site.admin_view(self.reconcile_view), name='cards_upddocument_reconcile'),
+        ]
+        return custom_urls + urls
+
+    
+    
+    def reconcile_view(self, request):
+        """Вьюха для сверки всех УПД с файлом 1С"""
+        from .forms import UpdReconciliationForm
+        from .reconciliation import run_reconciliation
+        
+        if request.method == 'POST':
+            form = UpdReconciliationForm(request.POST, request.FILES)
+            if form.is_valid():
+                try:
+                    excel_file = request.FILES['excel_file']
+                    output = run_reconciliation(excel_file)
+                    
+                    response = HttpResponse(
+                        output.getvalue(),
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+                    response['Content-Disposition'] = 'attachment; filename=upd_reconciliation_report.xlsx'
+                    return response
+                except Exception as e:
+                    from django.contrib import messages
+                    messages.error(request, f'Ошибка: {str(e)}')
+        else:
+            form = UpdReconciliationForm()
+        
+        return render(request, 'admin/cards/upddocument/reconcile.html', {'form': form})
+
     
     @staticmethod
     def _calc_percent(amount, total):
