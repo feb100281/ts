@@ -1,9 +1,11 @@
+# cards/upd_app/app.py
 from django_plotly_dash import DjangoDash
 from dash import html, dcc, Input, Output, no_update
 import dash_mantine_components as dmc
 import urllib.parse
 
 from .upd_form import UpdForm
+from .modals import SizeModal
 from .callbacks import register_callbacks
 
 
@@ -26,6 +28,9 @@ app = DjangoDash(
 )
 
 register_callbacks(app)
+
+size_modal = SizeModal()
+size_modal.registered_callbacks(app)
 
 app.layout = dmc.MantineProvider(
     withCssVariables=True,

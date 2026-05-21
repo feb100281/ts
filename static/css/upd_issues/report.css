@@ -335,3 +335,111 @@ table.data td.right {
     padding-top: 8px;
     border-top: 1px solid #d9d9d9;
 }
+
+
+
+/* Дополнительные стили для прогресс-бара */
+.progress-container {
+    margin: 12px 0;
+}
+
+.progress-label {
+    font-size: 9px;
+    color: #666666;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.progress-bar-bg {
+    background: #E0E0E0;
+    border-radius: 8px;
+    height: 8px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.3s ease;
+}
+
+/* Адаптация summary-box под разные типы */
+.summary-box {
+    margin: 16px 0;
+    padding: 12px 14px;
+    background: #FBFBFB;
+    border: 1px solid #D9D9D9;
+    border-left: 4px solid #2F6656;
+    border-radius: 4px;
+}
+
+.summary-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #2F6656;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.summary-grid {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.summary-card {
+    flex: 1;
+    min-width: 100px;
+    background: #FFFFFF;
+    border: 1px solid #E0E8E5;
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: center;
+}
+
+.summary-card .label {
+    font-size: 8px;
+    color: #5B6B66;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 5px;
+}
+
+.summary-card .value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1A3F3A;
+}
+
+.small-note {
+    font-size: 8px;
+    color: #8A9E98;
+    margin-top: 4px;
+}
+
+/* Адаптация заголовка секции */
+.supplier-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 16px 0 10px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #D9D9D9;
+}
+
+.supplier-badge {
+    font-size: 9px;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: #2F6656;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+}
+
+.supplier-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1A3F3A;
+}

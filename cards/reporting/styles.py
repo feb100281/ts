@@ -1,7 +1,6 @@
-# utils/upd_issues/styles/theme.py
+# cards/reporting/styles.py
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 
-# Цвета для отчета по косякам УПД (зеленая тема)
 COLORS = {
     "dark_green": "2F6656",
     "light_green": "E7F1ED",
@@ -15,10 +14,8 @@ COLORS = {
     "back_text_green": "1F5E4E",
     "error_red": "C62828",
     "error_bg": "FFEBEE",
-    "expired_bg": "FFEBEE",
-    "expired_text": "D32F2F",
-    "expiring_bg": "FFF3E0",
-    "expiring_text": "FF9800",
+    "warning_orange": "FF9800",
+    "warning_bg": "FFF3E0",
 }
 
 FILLS = {
@@ -28,6 +25,7 @@ FILLS = {
     "total": PatternFill("solid", fgColor=COLORS["total_green"]),
     "summary": PatternFill("solid", fgColor=COLORS["summary_fill"]),
     "error": PatternFill("solid", fgColor=COLORS["error_bg"]),
+    "warning": PatternFill("solid", fgColor=COLORS["warning_bg"]),
     "none": PatternFill(fill_type=None),
 }
 
@@ -35,9 +33,11 @@ FONTS = {
     "title": Font(name="Roboto", size=16, bold=True, color=COLORS["dark_green"]),
     "subtitle": Font(name="Roboto", size=11, color=COLORS["text_gray"]),
     "header": Font(name="Roboto", size=10, bold=True, color=COLORS["white"]),
-    "error": Font(name="Roboto", size=9, bold=True, color=COLORS["error_red"]),
     "normal": Font(name="Roboto", size=9, color=COLORS["black"]),
+    "muted": Font(name="Roboto", size=9, color=COLORS["text_gray"]),
     "total": Font(name="Roboto", size=11, bold=True, color=COLORS["dark_green"]),
+    "error": Font(name="Roboto", size=9, bold=True, color=COLORS["error_red"]),
+    "link": Font(name="Roboto", size=9, bold=True, color=COLORS["dark_green"], underline="single"),
 }
 
 thin = Side(style="thin", color=COLORS["border_gray"])
@@ -50,6 +50,6 @@ BORDERS = {
 
 ALIGNMENTS = {
     "left": Alignment(horizontal="left", vertical="center", wrap_text=True),
-    "center": Alignment(horizontal="center", vertical="center"),
+    "center": Alignment(horizontal="center", vertical="center", wrap_text=True),
     "right": Alignment(horizontal="right", vertical="center"),
 }
