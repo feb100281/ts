@@ -170,90 +170,66 @@ WHERE rn = 1;
 RAW_TABLE = """ 
     
 CREATE OR REPLACE TABLE sales.wb_raw AS
+WITH latest AS (
+    SELECT
+        rrd_id,
+        MAX(_loaded_at) AS _loaded_at
+    FROM sales.realization_raw
+    WHERE rrd_id IS NOT NULL
+    GROUP BY rrd_id
+),
+
+src AS (
+    SELECT
+        r.rrd_id,
+        r.rr_dt::DATE AS rr_dt,
+        r.date_from::DATE AS date_from,
+        r.payload::JSON AS j,
+        r._loaded_at
+    FROM sales.realization_raw r
+    INNER JOIN latest l
+        ON r.rrd_id = l.rrd_id
+       AND r._loaded_at = l._loaded_at
+)
+
 SELECT
     rrd_id,
     rr_dt,
     date_from,
 
-    nm_id,
-    report_type,
-    ts_name,
-    sop_name,
-    dtn,
-    report_id,
-    barcode,
-    srid,
-    gi_id,
-    currency_name,
-    btn,
+    json_extract(j, '$.nmId')::BIGINT AS nm_id,
+    json_extract(j, '$.reportType')::INT AS report_type,
+    json_extract_string(j, '$.techSize') AS ts_name,
+    json_extract_string(j, '$.sellerOperName') AS sop_name,
+    json_extract_string(j, '$.docTypeName') AS dtn,
+    json_extract_string(j, '$.reportId') AS report_id,
+    json_extract_string(j, '$.sku') AS barcode,
+    json_extract_string(j, '$.srid') AS srid,
+    json_extract_string(j, '$.giId') AS gi_id,
+    json_extract_string(j, '$.currency') AS currency_name,
+    json_extract_string(j, '$.bonusTypeName') AS btn,
 
-    comissioning_percent,
-    sale_percent,
-    quantity,
+    json_extract(j, '$.commissionPercent')::DOUBLE AS comissioning_percent,
+    json_extract(j, '$.salePercent')::DOUBLE AS sale_percent,
+    json_extract(j, '$.quantity')::DOUBLE AS quantity,
 
-    retail_price,
-    retail_amount,
-    loyalty_discount,
-    ppvz_for_pay,
-    delivery_rub,
-    storage_fee,
-    acceptance,
-    deduction,
-    penalty,
-    additional_payment,
-    cashback_amount,
-    cashback_commission_change,
-    payment_schedule,
+    json_extract(j, '$.retailPrice')::DOUBLE AS retail_price,
+    json_extract(j, '$.retailAmount')::DOUBLE AS retail_amount,
+    json_extract(j, '$.loyaltyDiscount')::DOUBLE AS loyalty_discount,
+    json_extract(j, '$.forPay')::DOUBLE AS ppvz_for_pay,
+    json_extract(j, '$.deliveryService')::DOUBLE AS delivery_rub,
+    json_extract(j, '$.paidStorage')::DOUBLE AS storage_fee,
+    json_extract(j, '$.paidAcceptance')::DOUBLE AS acceptance,
+    json_extract(j, '$.deduction')::DOUBLE AS deduction,
+    json_extract(j, '$.penalty')::DOUBLE AS penalty,
+    json_extract(j, '$.additionalPayment')::DOUBLE AS additional_payment,
+    json_extract(j, '$.cashbackAmount')::DOUBLE AS cashback_amount,
+    json_extract(j, '$.cashbackCommissionChange')::DOUBLE AS cashback_commission_change,
+    json_extract(j, '$.paymentSchedule')::DOUBLE AS payment_schedule,
 
     _loaded_at
-FROM (
-    SELECT
-        rrd_id,
-        rr_dt::DATE AS rr_dt,
-        date_from::DATE AS date_from,
 
-        json_extract_string(payload, '$.nmId')::BIGINT AS nm_id,
-        json_extract_string(payload, '$.reportType')::INT AS report_type,
-        json_extract_string(payload, '$.techSize') AS ts_name,
-        json_extract_string(payload, '$.sellerOperName') AS sop_name,
-        json_extract_string(payload, '$.docTypeName') AS dtn,
-        json_extract_string(payload, '$.reportId') AS report_id,
-        json_extract_string(payload, '$.sku') AS barcode,
-        json_extract_string(payload, '$.srid') AS srid,
-        json_extract_string(payload, '$.giId') AS gi_id,
-        json_extract_string(payload, '$.currency') AS currency_name,
-        json_extract_string(payload, '$.bonusTypeName') AS btn,
-        json_extract_string(payload, '$.country') AS country,
-
-        json_extract_string(payload, '$.commissionPercent')::DOUBLE AS comissioning_percent,
-        json_extract_string(payload, '$.salePercent')::DOUBLE AS sale_percent,
-        json_extract_string(payload, '$.quantity')::DOUBLE AS quantity,
-
-        json_extract_string(payload, '$.retailPrice')::DOUBLE AS retail_price,
-        json_extract_string(payload, '$.retailAmount')::DOUBLE AS retail_amount,
-        json_extract_string(payload, '$.loyaltyDiscount')::DOUBLE AS loyalty_discount,
-        json_extract_string(payload, '$.forPay')::DOUBLE AS ppvz_for_pay,
-        json_extract_string(payload, '$.deliveryService')::DOUBLE AS delivery_rub,
-        json_extract_string(payload, '$.paidStorage')::DOUBLE AS storage_fee,
-        json_extract_string(payload, '$.paidAcceptance')::DOUBLE AS acceptance,
-        json_extract_string(payload, '$.deduction')::DOUBLE AS deduction,
-        json_extract_string(payload, '$.penalty')::DOUBLE AS penalty,
-        json_extract_string(payload, '$.additionalPayment')::DOUBLE AS additional_payment,
-        json_extract_string(payload, '$.cashbackAmount')::DOUBLE AS cashback_amount,
-        json_extract_string(payload, '$.cashbackCommissionChange')::DOUBLE AS cashback_commission_change,
-        json_extract_string(payload, '$.paymentSchedule')::DOUBLE AS payment_schedule,
-
-        _loaded_at,
-
-        ROW_NUMBER() OVER (
-            PARTITION BY rrd_id
-            ORDER BY _loaded_at DESC
-        ) AS rn
-
-    FROM sales.realization_raw
-    WHERE rrd_id IS NOT NULL
-)
-WHERE rn = 1;
+FROM src;
 """
 
 SALES_LONG = """ 
@@ -556,43 +532,34 @@ class Command(BaseCommand):
                 # wb_raw / new_rows
                 # =========================
 
-                try:
-                    new_rows = con.sql("""
-                        SELECT *
-                        FROM sales.realization_raw
-                        WHERE rrd_id NOT IN (
-                            SELECT rrd_id FROM sales.wb_raw
-                        )
-                    """)
-                except Exception:
-                    con.execute(RAW_TABLE)
+                self.stdout.write(
 
-                    new_rows = con.sql("""
-                        SELECT *
-                        FROM sales.realization_raw
-                        WHERE rrd_id NOT IN (
-                            SELECT rrd_id FROM sales.wb_raw
-                        )
-                    """)
+                    self.style.NOTICE(
 
-                con.register("new_rows", new_rows)
+                        "Rebuilding sales.wb_raw..."
 
-                nr = con.sql(
-                    "SELECT COUNT(*) FROM new_rows"
-                ).fetchone()[0]
-
-                if nr > 0:
-                    insert_new_rows(con)
-                    self.stdout.write(
-                        self.style.SUCCESS(f"Rows inserted: {nr}")
                     )
-                else:
-                    self.stdout.write(
-                        self.style.SUCCESS("Nothing to insert")
-                    )
+
+                )
+
+                con.execute(RAW_TABLE)
+
+                cnt = con.execute("""
+
+                    SELECT COUNT(*)
+
+                    FROM sales.wb_raw
+
+                """).fetchone()[0]
 
                 self.stdout.write(
-                    self.style.SUCCESS("Table wb_raw and products were renewed")
+
+                    self.style.SUCCESS(
+
+                        f"sales.wb_raw rebuilt ({cnt:,} rows)"
+
+                    )
+
                 )
 
                 # =========================

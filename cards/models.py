@@ -424,3 +424,47 @@ class UPDData(models.Model):
 
     def __str__(self):
         return f'{self.upd_document_id or "-"} / {self.upd_pos} / {self.upd_sa_name}'
+
+class USK(models.Model):
+    sa_name = models.CharField(
+        max_length=100,
+        db_index=True
+    )
+
+    card_id = models.BigIntegerField(
+        db_index=True
+    )
+
+    usk_sa_name = models.CharField(
+        max_length=100,
+        db_index=True
+    )
+
+    usk = models.BigIntegerField(
+        db_index=True
+    )
+
+    upd_sa_names = ArrayField(
+        models.CharField(max_length=100),
+        default=list,
+        blank=True,
+        null=True
+    )
+
+    def __str__(self):
+        return str(self.usk)
+
+
+class UskUpd(models.Model):
+    upd_sa_name = models.CharField(
+        max_length=100,
+        db_index=True
+    )
+
+    usk = models.BigIntegerField(
+        db_index=True
+    )
+
+    def __str__(self):
+        return self.upd_sa_name
+    
