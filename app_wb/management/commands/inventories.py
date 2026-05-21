@@ -15,7 +15,7 @@ from psycopg import Connection
 import pandas as pd
 import numpy as np
 
-from cards.models import WbProduct, UPDData, USK, UskUpd
+from cards.models import WbProduct, UPDData, USK, UskUpd, UpdDocument
 
 load_dotenv()
 
@@ -135,6 +135,10 @@ class Command(BaseCommand):
                     UPDData.objects.all(),
                     UPDData
                 )
+                upd_documets_df = self._prepare_df(
+                    UpdDocument.objects.all(),
+                    UpdDocument
+                )
                 con.execute("""
                     CREATE SCHEMA IF NOT EXISTS inventories
                 """)
@@ -154,6 +158,11 @@ class Command(BaseCommand):
                 con.execute("""
                     CREATE OR REPLACE TABLE inventories.upd_income
                     AS SELECT * FROM income_lines_df
+                """)
+                
+                con.execute("""
+                    CREATE OR REPLACE TABLE inventories.upd_documents
+                    AS SELECT * FROM upd_documets_df
                 """)
                 
                 self.stdout.write(
