@@ -101,6 +101,231 @@ usk
 from inventories.usk;
 """
 
+MAKE_SALES_GL = """ 
+create or replace table inventories.sales_gl as
+with a as (
+    select
+        rrd_id,
+        nm_id,
+        date_from,
+        oper,
+        val
+    from sales.sales_long
+    where field = 'retail_price'
+),
+
+dt_rows as (
+    select
+        *,
+        row_number() over (
+            partition by nm_id, val
+            order by date_from, rrd_id
+        ) as rn
+    from a
+    where oper = 'dt'
+),
+
+cr_rows as (
+    select
+        *,
+        row_number() over (
+            partition by nm_id, val
+            order by date_from, rrd_id
+        ) as rn
+    from a
+    where oper = 'cr'
+),
+
+matched as (
+    select
+        d.rrd_id
+    from dt_rows d
+    join cr_rows c
+        on d.nm_id = c.nm_id
+       and d.val = c.val
+       and d.rn = c.rn
+)
+
+select
+    t.rrd_id,
+    t.nm_id,
+    COALESCE(u.usk,t.nm_id) as usk,
+    t.date_from,
+    0::bigint as dt,
+    t.val::bigint as cr
+from dt_rows t
+left join inventories.usk u on u.card_id = t.nm_id
+where rrd_id not in (
+    select rrd_id
+    from matched
+);
+"""
+MAKE_INV_GL = """ 
+CREATE OR REPLACE TABLE inventories.inv_gl AS
+SELECT
+    row_number() OVER (
+        ORDER BY
+            u.date,
+            t.upd_document_id,
+            t.nm_id,
+            t.chrt_id
+    ) AS id,
+
+    u.date AS date_from,
+    t.upd_document_id,
+    t.nm_id AS usk,
+    t.brand,
+    t.chrt_id,    
+
+    COALESCE(round(t.upd_price_vatless * 100, 0),0)::BIGINT AS dt,
+    0::BIGINT AS cr,
+    COALESCE(round(t.man_cost_per_unit * 100, 0),0)::BIGINT AS dt_man,
+    0::BIGINT AS cr_man,
+    0::bigint as cr_rev,
+    0::bigint as rrd_id
+
+FROM inventories.upd_income t
+LEFT JOIN inventories.upd_documents u
+    ON u.id = t.upd_document_id,
+UNNEST(range(CAST(t.upd_qty AS BIGINT))) x(i)
+
+WHERE t.nm_id IS NOT NULL;
+"""
+
+MAKE_WRITE_OFF = """ 
+create or replace table inventories.write_off as
+WITH sales AS (
+    SELECT
+        usk,
+        list(date_from ORDER BY date_from, rrd_id) AS sales_dates,
+        list(cr ORDER BY date_from, rrd_id) AS sales_cr,
+        list(rrd_id ORDER BY date_from, rrd_id) AS rrd_ids
+    FROM inventories.sales_gl
+    GROUP BY usk
+),
+
+inv AS (
+    SELECT
+        usk,
+        list(id ORDER BY date_from, id) AS inv_ids,
+        list(date_from ORDER BY date_from, id) AS inv_dates,
+        list(dt ORDER BY date_from, id) AS inv_dt
+    FROM inventories.inv_gl
+    WHERE usk IS NOT NULL
+    GROUP BY usk
+)
+
+SELECT
+    coalesce(i.usk, s.usk) AS usk,
+
+    i.inv_ids,
+    i.inv_dates,
+    i.inv_dt,
+
+    s.sales_dates,
+    s.sales_cr,
+    s.rrd_ids,
+
+    case
+        when s.sales_dates is null then 0
+        else len(s.sales_dates)
+    end as sales_qty,
+
+    case
+        when i.inv_ids is null then 0
+        else len(i.inv_ids)
+    end as inv_qty
+
+FROM inv i
+FULL OUTER JOIN sales s
+    ON i.usk = s.usk;
+"""
+
+MAKE_FINAL_GL = """ 
+CREATE OR REPLACE TABLE inventories.inv_gl_final AS
+
+WITH x AS (
+    SELECT
+        usk,
+        case
+            when inv_qty > sales_qty
+                then sales_qty
+            else inv_qty
+        end as cut_qty,
+        inv_ids,
+        inv_dt,
+        sales_dates,
+        sales_cr,
+        rrd_ids
+    FROM inventories.write_off
+    WHERE sales_qty > 0
+      AND inv_qty > 0
+),
+
+cut AS (
+    SELECT
+        usk,
+        list_slice(inv_ids, 1, cut_qty) AS inv_ids,
+        list_slice(inv_dt, 1, cut_qty) AS inv_dt,
+        list_slice(sales_dates, 1, cut_qty) AS sales_dates,
+        list_slice(sales_cr, 1, cut_qty) AS sales_cr,
+        list_slice(rrd_ids, 1, cut_qty) AS rrd_ids
+    FROM x
+),
+
+fifo_cr AS (
+    SELECT
+        NULL::BIGINT AS id,
+        unnest(sales_dates) AS date_from,
+        NULL::BIGINT AS upd_document_id,
+        usk,
+        NULL AS brand,
+        NULL::BIGINT AS chrt_id,
+
+        0::BIGINT AS dt,
+        unnest(inv_dt) AS cr,
+
+        0::BIGINT AS dt_man,
+        0::BIGINT AS cr_man,
+
+        unnest(sales_cr) AS cr_rev,
+        unnest(rrd_ids) AS rrd_id
+    FROM cut
+)
+
+SELECT
+    id,
+    date_from,
+    upd_document_id,
+    usk,
+    brand,
+    chrt_id,
+    dt,
+    cr,
+    dt_man,
+    cr_man,
+    cr_rev,
+    rrd_id
+FROM inventories.inv_gl
+
+UNION ALL
+
+SELECT
+    id,
+    date_from,
+    upd_document_id,
+    usk,
+    brand,
+    chrt_id,
+    dt,
+    cr,
+    dt_man,
+    cr_man,
+    cr_rev,
+    rrd_id
+FROM fifo_cr;
+"""
+
 def update_usk_table(df:pd.DataFrame):
     pass
 
@@ -123,6 +348,34 @@ class Command(BaseCommand):
         db_path = os.getenv("DUCKDB_PATH")
         try:
             with duckdb.connect(db_path) as con:
+                
+                was_no_keys = 0
+                was_no_costs = 0
+                try:
+                    was_keys = con.execute(
+                        """ 
+                        select count(*)
+                        from (
+                        select 
+                        t.card_id,
+                        u.usk
+                        from inventories.wb_product t
+                        left join inventories.usk u on u.card_id = t.card_id
+                        where u.usk is null
+                        )
+                        """
+                    ).fetchone()[0]
+                    
+                    was_sales_wo_costs = con.execute("select sum(sales_qty) from inventories.write_off where inv_qty = 0").fetchone()[0]
+                    
+                    was_no_keys = was_keys
+                    was_no_costs = was_sales_wo_costs
+                
+                except:
+                    self.stdout.write(
+                    self.style.NOTICE("Пока таблицы не созданы")
+                )
+                
                 self.stdout.write(
                     self.style.NOTICE("Получаем обновленные данные из карточек и УПЛ")
                 )
@@ -176,6 +429,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS("Расчет ключей завершен")                    
                 )
+                
                 self.stdout.write(
                     self.style.NOTICE("Импортируем ключи в базу данных и обновляем таблицы")
                 )
@@ -263,10 +517,53 @@ class Command(BaseCommand):
                         WHERE u.upd_sa_name = m.upd_sa_name
                     """)
                 
+                con.execute(
+                    """ 
+                    UPDATE inventories.upd_income u
+                    SET nm_id = m.usk
+                    FROM inventories.usk_upd m
+                    WHERE u.upd_sa_name = m.upd_sa_name 
+                    """
+                )
+                
                 self.stdout.write(
                     self.style.SUCCESS("USK обновлены для всех приходов по УПД")                    
-                )                  
-        
+                )  
+                
+                self.stdout.write(
+                    self.style.NOTICE("Делаем таблицы для списаний продаж")                    
+                )
+                con.execute(MAKE_SALES_GL)
+                con.execute(MAKE_INV_GL)
+                con.execute(MAKE_WRITE_OFF)
+                con.execute(MAKE_FINAL_GL)
+                
+                self.stdout.write(
+                    self.style.SUCCESS("Основные таблицы inventorie.write_off и inventorie.inv_gl_final созданы")                    
+                )
+                now_keys = con.execute(
+                        """ 
+                        select count(*)
+                        from (
+                        select 
+                        t.card_id,
+                        u.usk
+                        from inventories.wb_product t
+                        left join inventories.usk u on u.card_id = t.card_id
+                        where u.usk is null
+                        )
+                        """
+                    ).fetchone()[0]
+                
+                self.stdout.write(
+                    self.style.WARNING(f"Не было ключей {was_no_keys} / стало ключей {now_keys}")                    
+                )      
+                
+                now_no_costs = con.execute("select sum(sales_qty) from inventories.write_off where inv_qty = 0").fetchone()[0]
+                
+                self.stdout.write(
+                    self.style.WARNING(f"Не было себестоимости для  {was_no_costs} продаж / стало  {now_no_costs}")                    
+                )   
         
         except Exception as e:
             raise CommandError(f"DuckDB error: {e}")
