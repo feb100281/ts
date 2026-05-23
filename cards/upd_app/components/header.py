@@ -1,5 +1,7 @@
 # cards/upd_app/components/header.py
+
 import dash_mantine_components as dmc
+from dash import dcc
 
 
 def build_upd_header(upd):
@@ -28,32 +30,52 @@ def build_upd_header(upd):
                         align="center",
                     ),
 
-                    
-                    dmc.Badge(
-                        str(upd.counterparty),
-                        color="blue",
-                        variant="outline",
-                        size="lg",
-                        radius="sm",
-                        style={
-                            "fontWeight": 600,
-                            "paddingLeft": "14px",
-                            "paddingRight": "14px",
-                        },
+                    dmc.Group(
+                        [
+                            dmc.Badge(
+                                str(upd.counterparty),
+                                color="blue",
+                                variant="outline",
+                                size="lg",
+                                radius="sm",
+                            ),
+
+                            dcc.Upload(
+                                id="upd-upload",
+                                multiple=False,
+                                accept=".parquet",
+                                children=dmc.Button(
+                                    "📦 parquet",
+                                    variant="light",
+                                    color="green",
+                                ),
+                            ),
+
+                            dmc.Text(
+                                "Файл не выбран",
+                                id="upload-filename",
+                                size="sm",
+                                c="dimmed",
+                                maw=220,
+                                truncate="end",
+                            ),
+
+                            dmc.Button(
+                                "Импорт",
+                                id="import-upd-btn",
+                                color="blue",
+                            ),
+                        ],
+                        gap="sm",
+                        align="center",
                     ),
                 ],
                 justify="space-between",
                 align="center",
             ),
-
-           
         ],
         p="md",
         radius="md",
         withBorder=True,
         mb="lg",
-       
     )
-
-
-
