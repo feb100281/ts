@@ -1,3 +1,4 @@
+# cards/upd_app/modals.py
 from dash_iconify import DashIconify
 import dash_mantine_components as dmc
 from django.urls import reverse, NoReverseMatch
@@ -96,24 +97,25 @@ class SizeModal:
             )
         
         @app.callback(
-            Output('insert-btn', "disabled"),  
-            Output('selected_chrt','data'),          
-            Input('size-radio','value'),
-            State('chrt_id_store','data')
+            Output("insert-btn", "disabled"),
+            Output("selected_chrt", "data"),
+            Input("size-radio", "value"),
+            State("chrt_id_store", "data"),
         )
-        def make_chose(val,chrt_id_store):
-            print(val,chrt_id_store)
-            if not chrt_id_store:
-               if val:
-                    return False, val
-               if not val:
-                   return True, no_update
-            else:
+        def make_chose(val, current_chrt_id):
+
+            if not val:
                 return True, no_update
+
+            if str(val) == str(current_chrt_id):
+                return True, no_update
+
+            return False, val
         
         @app.callback(
-            Output("sucseess-notification", "sendNotifications"),
+            Output("success-notification", "sendNotifications"),
             Output("upd-grid", "rowData", allow_duplicate=True),
+            Output("size-modal", "opened", allow_duplicate=True),
 
             Input("insert-btn", "n_clicks"),
 
@@ -126,7 +128,10 @@ class SizeModal:
         def insert_new_item(n_click, row_id, chrt_id, upd_id):
 
             if not n_click:
-                return no_update, no_update
+                return no_update, no_update, no_update
+
+            if not row_id or not chrt_id:
+                return no_update, no_update, no_update
 
             update_size(row_id, chrt_id)
 
@@ -143,5 +148,5 @@ class SizeModal:
                     )
                 ],
                 df.to_dict("records"),
+                False,
             )
-                

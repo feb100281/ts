@@ -1,3 +1,4 @@
+# cards/models.py
 from django.db import models
 from counterparties.models import Counterparty
 from contracts.models import Contracts
@@ -155,7 +156,8 @@ class UpdDocument(models.Model):
         verbose_name_plural = 'УПД'
 
     def __str__(self):
-        return f'{self.number} от {self.date.strftime('%d.%m.%Y')}'
+        return f"{self.number} от {self.date.strftime('%d.%m.%Y')}"
+
 
 
 

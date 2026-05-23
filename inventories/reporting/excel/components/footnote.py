@@ -1,3 +1,4 @@
+# inventories/reporting/excel/components/footnote.py
 from openpyxl.styles import Font, Alignment
 from ..styles.theme import COLORS
 

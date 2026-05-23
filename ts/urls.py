@@ -7,7 +7,6 @@ from django.conf.urls.static import static
 
 from .views import fx_status, cp_issues_status, treasury_status
 from contracts.views import contracts_issues_status
-from ts.views import export_upd_issues 
 from .admin_exports import (
     export_pl_for_csv,
     export_arap_to_date,
@@ -16,6 +15,7 @@ from .admin_exports import (
     api_budgets,                   
     export_budget_analysis,        
 )
+
 
 from inventories.views import export_stocks_excel, export_stocks_map
 
@@ -37,7 +37,9 @@ urlpatterns = [
     path("admin/export/manpack/", admin.site.admin_view(export_manpack), name="export_manpack"),
     path("admin/api/budgets/", admin.site.admin_view(api_budgets), name="api_budgets"),
     path("admin/export/budget-analysis/", admin.site.admin_view(export_budget_analysis), name="export_budget_analysis"),
-    path("admin/export/upd-issues/", export_upd_issues, name="export_upd_issues"), 
+
+
+    
     path("apps/", include('django_plotly_dash.urls')),
 
     path("admin/", admin.site.urls),

@@ -189,6 +189,30 @@
               💼 Открыть дебиторов / кредиторов
             </button>
           </form>
+
+          <!-- НОВАЯ КНОПКА: Отчёт по займам и кредитным договорам -->
+          <button
+            id="loans-report-btn"
+            type="button"
+            style="
+              width:100%;
+              height:34px;
+              border:none;
+              border-radius:2px;
+              background:#059669;
+              color:#fff;
+              font-size:13px;
+              font-weight:700;
+              cursor:pointer;
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              gap:8px;
+            "
+          >
+            <i class="fa-solid fa-file-invoice-dollar"></i>
+            📊 Отчёт по займам и кредитам
+          </button>
         </div>
       </div>
     </div>
@@ -226,8 +250,42 @@
 {% block extrahead %}
   {{ block.super }}
 
+  <!-- Подключаем внешний JS файл для отчёта по займам -->
+  <script src="{% static 'js/loans_report_modal.js' %}"></script>
+
+  <style>
+    #result_list tbody tr:hover { background: rgba(2,132,199,0.06); }
+    #changelist #toolbar { border-radius: 2px; overflow: hidden; }
+
+    #changelist-form .results {
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #result_list {
+      border-radius: 0;
+      overflow: visible;
+    }
+
+    #result_list thead th {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--body-bg, #fff);
+    }
+
+    #result_list thead th a {
+      background: inherit;
+    }
+
+    #result_list thead {
+      box-shadow: 0 2px 0 rgba(0,0,0,.06);
+    }
+  </style>
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      // Клик по строке таблицы
       const rows = document.querySelectorAll('#result_list tbody tr');
 
       rows.forEach(function (row) {
@@ -246,6 +304,7 @@
         });
       });
 
+      // Синхронизация месяца для существующих отчётов
       const monthInput = document.getElementById('report-month');
       const accrualsMonthInput = document.getElementById('accruals-report-month');
       const debtMonthInput = document.getElementById('debt-report-month');
@@ -279,36 +338,6 @@
       }
     });
   </script>
-
-  <style>
-    #result_list tbody tr:hover { background: rgba(2,132,199,0.06); }
-    #changelist #toolbar { border-radius: 2px; overflow: hidden; }
-
-    #changelist-form .results {
-      border-radius: 2px;
-      overflow: hidden;
-    }
-
-    #result_list {
-      border-radius: 0;
-      overflow: visible;
-    }
-
-    #result_list thead th {
-      position: sticky;
-      top: 0;
-      z-index: 5;
-      background: var(--body-bg, #fff);
-    }
-
-    #result_list thead th a {
-      background: inherit;
-    }
-
-    #result_list thead {
-      box-shadow: 0 2px 0 rgba(0,0,0,.06);
-    }
-  </style>
 {% endblock %}
 
 {% block content %}

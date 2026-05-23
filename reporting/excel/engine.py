@@ -171,6 +171,7 @@ def build_manpack(date_to=None, output_path=None):
     pl_df = get_pl_report(date_to)
     ws_pl = wb["PL"]
     style_pl_sheet(ws_pl, pl_df, date_to=date_to)
+
     
     # 1.3 COGS realization
     cogs_real_payload = get_cogs_realization_report(date_to)
