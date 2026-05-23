@@ -5,7 +5,7 @@ from cards.models import UpdDocument
 from .components.header import build_upd_header
 from .components.summary_cards import build_upd_summary_cards
 from .components.grid import build_upd_grid
-from dash import dcc
+from dash import dcc,html
 
 
 from .data import get_grid_data
@@ -42,9 +42,7 @@ class UpdForm:
                 dcc.Store(id="chrt_id_store"),
                 dcc.Store(id="selected_chrt"),
 
-                dmc.NotificationProvider(
-                    id="success-notification"
-                ),
+                html.Div(id="alert-slot"),
 
                 self.header,
                 self.summary_cards(),
