@@ -38,31 +38,35 @@ def connect_db():
     )
     
 FIND_KEY = """
-CREATE or replace table inventories.stock_key as
-with upd as (
-    select
+CREATE OR REPLACE TABLE inventories.stock_key AS
+
+WITH upd AS (
+    SELECT
         upd_sa_name,
-        trim(left(upd_sa_name, 10)) as prefix
-    from inventories.upd_income
+        trim(left(upd_sa_name, 10)) AS prefix,
+        trim(left(upd_sa_name, 9)) AS prefix9
+    FROM inventories.upd_income
 ),
 
-matched as (
-    select
+matched AS (
+    SELECT
         t.upd_sa_name,
-        list(distinct p.sa_name order by p.sa_name) as sa_names
-    from upd t
-    left join inventories.wb_product p
-        on starts_with(p.sa_name, t.prefix)
-    group by t.upd_sa_name
+        list(distinct p.sa_name ORDER BY p.sa_name) AS sa_names
+    FROM upd t
+    LEFT JOIN inventories.wb_product p
+        ON starts_with(p.sa_name, t.prefix)
+        OR starts_with(p.sa_name, '0' || t.prefix9)
+    GROUP BY t.upd_sa_name
 )
 
-select
+SELECT
     upd_sa_name,
     sa_names,
-    sa_names[1] as stock_key
-from matched;
+    sa_names[1] AS stock_key
+FROM matched;
 
 """
+
 
 MAKE_USK = """
 CREATE or replace table inventories.usk as
@@ -93,6 +97,7 @@ left join inventories.wb_product p on p.sa_name = a.sa_name
 left join inventories.wb_product pa on pa.sa_name = a.usk;
 """
 
+
 MAKE_UPD_USK = """ 
 CREATE or replace table inventories.usk_upd as
 SELECT DISTINCT
@@ -100,6 +105,7 @@ unnest(upd_sa_names) as upd_sa_name,
 usk
 from inventories.usk;
 """
+
 
 MAKE_SALES_GL = """ 
 create or replace table inventories.sales_gl as
@@ -160,6 +166,8 @@ where rrd_id not in (
     from matched
 );
 """
+
+
 MAKE_INV_GL = """ 
 CREATE OR REPLACE TABLE inventories.inv_gl AS
 SELECT
