@@ -9,4 +9,5 @@ class CardsConfig(AppConfig):
     def ready(self):       
             # Импортируем Dash-приложение при старте Django
             from .upd_app.app import app as cards_app
+            from .wo_app.app import app as wo_app
             

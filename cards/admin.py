@@ -13,7 +13,7 @@ from django.shortcuts import render
 from django.http import HttpResponse
 from .forms import UpdReconciliationForm
 from .reconciliation import run_reconciliation
-
+from .models import WODashboard
 
 class LotFileInline(admin.TabularInline):
     model = LotFile
@@ -412,3 +412,45 @@ class WbProductAdmin(admin.ModelAdmin):
         css = {
             "all": ("css/admin_overrides.css", "css/wide-table.css", "css/manual_admin_groups.css")
         }
+    
+    
+   
+# cards/admin.py
+
+
+# cards/admin.py
+
+from django.contrib import admin
+from django.utils.html import format_html
+
+from .models import WODashboard
+
+
+@admin.register(WODashboard)
+class WODashboardAdmin(admin.ModelAdmin):
+
+    change_list_template = (
+        "admin/cards/wodashboard/wo_dashboard.html"
+    )
+
+    def has_add_permission(
+        self,
+        request
+    ):
+        return False
+
+    def has_delete_permission(
+        self,
+        request,
+        obj=None
+    ):
+        return False
+
+    def get_queryset(
+        self,
+        request
+    ):
+        return (
+            self.model.objects.none()
+        )
+
