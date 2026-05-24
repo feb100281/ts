@@ -469,4 +469,10 @@ class UskUpd(models.Model):
 
     def __str__(self):
         return self.upd_sa_name
-    
+
+
+class WODashboard(models.Model):
+    class Meta:
+        managed = False
+        verbose_name = "Write Off Dashboard"
+        verbose_name_plural = "Write Off Dashboard"
