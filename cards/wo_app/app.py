@@ -24,6 +24,8 @@ app = DjangoDash(
 
 MW = MainWindow()
 
+MW.registered_callbacks(app)
+
 app.layout = dmc.MantineProvider(
     withCssVariables=True,
     withGlobalClasses=True,
@@ -31,13 +33,7 @@ app.layout = dmc.MantineProvider(
         
         MW.layout()
 
-        # dmc.NotificationContainer(
-        #     id="notification-container"
-        # ),
-
-        # dcc.Location(id="url"),
-        # dmc.Container(id="page", fluid=True),
-        # html.Div(id="dummy", style={"display": "none"}),
+        
     ],
 )
 
