@@ -2,9 +2,6 @@ import dash_mantine_components as dmc
 from reports.app.rpts.report_context import ReportContext
 
 
-
-
-
 def slide1(ctx:ReportContext):
     return dmc.Container(
         [
