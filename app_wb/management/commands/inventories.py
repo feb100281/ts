@@ -115,6 +115,7 @@ with a as (
         nm_id,
         date_from,
         oper,
+        vat_rate,
         val
     from sales.sales_long
     where field = 'retail_price'
@@ -157,6 +158,7 @@ select
     t.nm_id,
     COALESCE(u.usk,t.nm_id) as usk,
     t.date_from,
+    t.vat_rate,
     0::bigint as dt,
     t.val::bigint as cr
 from dt_rows t
@@ -207,7 +209,8 @@ WITH sales AS (
         usk,
         list(date_from ORDER BY date_from, rrd_id) AS sales_dates,
         list(cr ORDER BY date_from, rrd_id) AS sales_cr,
-        list(rrd_id ORDER BY date_from, rrd_id) AS rrd_ids
+        list(rrd_id ORDER BY date_from, rrd_id) AS rrd_ids,
+        list(vat_rate ORDER BY date_from, rrd_id) as vat_rates
     FROM inventories.sales_gl
     GROUP BY usk
 ),
@@ -233,6 +236,7 @@ SELECT
     s.sales_dates,
     s.sales_cr,
     s.rrd_ids,
+    s.vat_rates,
 
     case
         when s.sales_dates is null then 0
@@ -333,6 +337,47 @@ SELECT
     rrd_id
 FROM fifo_cr;
 """
+
+
+MAKE_GL_MAIN = """
+CREATE OR REPLACE TABLE inventories.gl_main AS
+WITH x AS (
+    SELECT
+        usk,
+        sales_dates,
+        sales_cr,
+        vat_rates,
+        rrd_ids,
+        list_resize(
+            inv_ids,
+            sales_qty,
+            0
+        ) AS inv_ids,
+        list_resize(
+            inv_dt,
+            sales_qty,
+            0
+        ) AS inv_dt
+    FROM inventories.write_off
+    WHERE sales_qty > 0
+)
+SELECT
+    usk,
+    unnest(inv_ids) AS inv_id,
+    unnest(inv_dt) AS cr,
+    unnest(sales_dates)
+        AS sales_date,
+    coalesce(
+        unnest(vat_rates),
+        0
+    ) AS vat_rate,
+    unnest(sales_cr)
+        AS cr_rev,
+    unnest(rrd_ids)
+        AS rrd_id
+FROM x;
+"""
+
 
 def update_usk_table(df:pd.DataFrame):
     pass
@@ -545,9 +590,9 @@ class Command(BaseCommand):
                 con.execute(MAKE_INV_GL)
                 con.execute(MAKE_WRITE_OFF)
                 con.execute(MAKE_FINAL_GL)
-                
+                con.execute(MAKE_GL_MAIN)
                 self.stdout.write(
-                    self.style.SUCCESS("Основные таблицы inventorie.write_off и inventorie.inv_gl_final созданы")                    
+                    self.style.SUCCESS("Основные таблицы inventorie.gl_main, inventorie.write_off и inventorie.inv_gl_final созданы")                    
                 )
                 now_keys = con.execute(
                         """ 
