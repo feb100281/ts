@@ -5,7 +5,7 @@ import duckdb
 from duckdb import DuckDBPyConnection
 import json
 from django.core.management.base import BaseCommand, CommandError
-
+from django.core.management import call_command
 from dotenv import load_dotenv
 
 import psycopg
@@ -601,6 +601,13 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.WARNING("Skip wb_distribution update")
                     )
+                
+                self.stdout.write("Запускаем write off ETL")
+
+                call_command("wo")
+                self.stdout.write(
+                    self.style.SUCCESS("Готово")
+                )
 
         except Exception as e:
             raise CommandError(f"DuckDB error: {e}")
