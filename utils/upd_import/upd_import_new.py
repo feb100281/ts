@@ -1,62 +1,3 @@
-# # ЭТО НОВЫЕ ИМПОРТЫ
-# import pandas as pd
-
-# from pathlib import Path
-
-
-# source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/all_stock_upd')
-
-# # source_folder = Path('/Users/pavelustenko/Downloads/2024')
-# base_path = Path.cwd()
-# upd_path = base_path / "data" / "all_stock_upd"
-# upd_path.mkdir(parents=True, exist_ok=True)
-
-# UPD_LIST = {
-
-#     "УПД HM-047 от 12 марта 2026 г.xlsx": {
-#         "number": "HM-047",
-#         "date": "2026-03-12",
-#         "columns": "B:N",
-#         "header_row": 8,
-#         "nrows":3566,
-#         "dropna_col": "№",
-#         "supplier": "ЗАО «Арминвест»",
-#         "sheet": "1. Счет-Фактура"
-#     },
-    
-    
-    
-           
-# }
-
-
-# for filename, config in UPD_LIST.items():
-
-#     df = pd.read_excel(
-#     source_folder / filename,
-#     sheet_name=config["sheet"],
-#     skiprows=config["header_row"],
-#     usecols=config["columns"],
-#     nrows=config["nrows"],
-#     dtype=str,
-#     )
-#     df.columns = df.columns.astype(str).str.strip()
-#     df = df.dropna(subset=[config["dropna_col"]])
-#     df = df.loc[:, ~df.columns.str.startswith('Unnamed')]
-#     print(df.columns)
-#     df['file_name'] = filename
-#     df['number'] = config['number']
-#     df['date']=config['date']
-#     df['supplier']=config['supplier']
-    
-#     output_file = upd_path / f"{Path(filename).stem}.parquet"
-#     df.to_parquet(output_file, index=False)
-
-#     print(f"Saved: {output_file} | rows: {len(df)}")
-
-
-
-
 # utils/upd_import/upd_import_new.py
 
 import pandas as pd
@@ -64,7 +5,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 
-source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/all_stock_upd')
+source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/! УПД')
 
 base_path = Path.cwd()
 upd_path = base_path / "data" / "all_stock_upd"
@@ -72,12 +13,12 @@ upd_path.mkdir(parents=True, exist_ok=True)
 
 
 UPD_LIST = {
-    "УПД HM-047 от 12 марта 2026 г.xlsx": {
-        "number": "HM-047",
-        "date": "2026-03-12",
-        "columns": "B:N",
-        "header_row": 17,
-        "nrows": 3566,
+    "47 УПД HM-013 от 10.10.2024.xlsx": {
+        "number": "HM-013",
+        "date": "2024-10-10",
+        "columns": "B:P",
+        "header_row": 18,
+        "nrows": 102,
         "dropna_col": "№",
         "supplier": "ЗАО «Арминвест»",
         "sheet": "1. Счет-Фактура"
