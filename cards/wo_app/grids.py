@@ -6,7 +6,7 @@ import pandas as pd
 
 def grid_date(start=None, end=None):
 
-    row_data = get_data_by_date(start,end).to_dict(orient='records')
+    row_data = get_data_by_date(start, end).to_dict(orient='records')
 
     if not row_data:
         return dmc.Alert(
@@ -16,7 +16,7 @@ def grid_date(start=None, end=None):
         )
 
     return dag.AgGrid(
-        id='dates_grid',
+        id="dates_grid",
 
         rowData=row_data,
 
@@ -36,7 +36,9 @@ def grid_date(start=None, end=None):
                 "type": "numericColumn",
                 "valueFormatter": {
                     "function": """
-                    d3.format(',.2f')(params.value)
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
                     """
                 },
             },
@@ -48,7 +50,9 @@ def grid_date(start=None, end=None):
                 "type": "numericColumn",
                 "valueFormatter": {
                     "function": """
-                    d3.format(',.2f')(params.value)
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
                     """
                 },
             },
@@ -60,7 +64,9 @@ def grid_date(start=None, end=None):
                 "type": "numericColumn",
                 "valueFormatter": {
                     "function": """
-                    d3.format(',.2f')(params.value)
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
                     """
                 },
             },
@@ -72,7 +78,9 @@ def grid_date(start=None, end=None):
                 "type": "numericColumn",
                 "valueFormatter": {
                     "function": """
-                    d3.format(',.2f')(params.value)
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
                     """
                 },
             },
