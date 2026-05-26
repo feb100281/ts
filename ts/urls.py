@@ -37,6 +37,7 @@ urlpatterns = [
     path("admin/export/manpack/", admin.site.admin_view(export_manpack), name="export_manpack"),
     path("admin/api/budgets/", admin.site.admin_view(api_budgets), name="api_budgets"),
     path("admin/export/budget-analysis/", admin.site.admin_view(export_budget_analysis), name="export_budget_analysis"),
+    path("reports/", include("reports.urls")),
 
 
     

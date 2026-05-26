@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "jsoneditor",
     "app_wb",
     "inventories",
+    "reports",    
     "app_deliveries",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
