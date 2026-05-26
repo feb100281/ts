@@ -1,8 +1,10 @@
+# utils/upd_import/all_upd_stock.py
 import pandas as pd
 from pathlib import Path
 import re
 
 source_folder = Path('/Users/daria/Desktop/ТРЕНДСЕТТЕР/Бух данные/upds/all_stock_upd')
+
 base_path = Path.cwd()
 upd_path = base_path / "data" / "all_stock_upd"
 upd_path.mkdir(parents=True, exist_ok=True)

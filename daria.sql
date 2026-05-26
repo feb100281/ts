@@ -54,3 +54,15 @@ CREATE OR REPLACE VIEW  upd.megamall_vs_cards AS WITH cards_sizes AS (SELECT t.n
 
 
 
+SELECT
+
+    round(sum(cr) / 100.0, 2) AS cogs
+
+FROM inventories.inv_gl_final
+
+WHERE date_from >= DATE '2026-03-01'
+
+  AND date_from < DATE '2026-04-01';
+
+
+
