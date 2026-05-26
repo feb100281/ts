@@ -9,6 +9,8 @@ from django.db import connection
 
 from dotenv import load_dotenv
 
+from conns import get_duckdb_conn_with_opt
+
 import psycopg
 from psycopg.rows import dict_row
 from psycopg import Connection
@@ -255,7 +257,6 @@ FULL OUTER JOIN sales s
 
 MAKE_FINAL_GL = """ 
 CREATE OR REPLACE TABLE inventories.inv_gl_final AS
-
 WITH x AS (
     SELECT
         usk,
@@ -287,10 +288,10 @@ cut AS (
 
 fifo_cr AS (
     SELECT
-        NULL::BIGINT AS id,
-        unnest(sales_dates) AS date_from,
-        NULL::BIGINT AS upd_document_id,
-        usk,
+        -- NULL::BIGINT AS id,
+        unnest(inv_ids) as id,
+        unnest(sales_dates) AS date_from,        
+        cut.usk,
         NULL AS brand,
         NULL::BIGINT AS chrt_id,
 
@@ -303,6 +304,7 @@ fifo_cr AS (
         unnest(sales_cr) AS cr_rev,
         unnest(rrd_ids) AS rrd_id
     FROM cut
+   
 )
 
 SELECT
@@ -323,19 +325,20 @@ FROM inventories.inv_gl
 UNION ALL
 
 SELECT
-    id,
-    date_from,
-    upd_document_id,
-    usk,
-    brand,
-    chrt_id,
-    dt,
-    cr,
-    dt_man,
-    cr_man,
-    cr_rev,
-    rrd_id
-FROM fifo_cr;
+    t.id,
+    t.date_from,
+    i.upd_document_id as upd_document_id,
+    t.usk,
+    t.brand,
+    t.chrt_id,
+    t.dt,
+    t.cr,
+    t.dt_man,
+    t.cr_man,
+    t.cr_rev,
+    t.rrd_id
+FROM fifo_cr t
+left join inventories.inv_gl i on i.id = t.id;
 """
 
 
@@ -400,7 +403,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         db_path = os.getenv("DUCKDB_PATH")
         try:
-            with duckdb.connect(db_path) as con:
+            with get_duckdb_conn_with_opt() as con:
                 
                 was_no_keys = 0
                 was_no_costs = 0
@@ -591,6 +594,18 @@ class Command(BaseCommand):
                 con.execute(MAKE_WRITE_OFF)
                 con.execute(MAKE_FINAL_GL)
                 con.execute(MAKE_GL_MAIN)
+                
+                con.execute("""
+                    DROP TABLE IF EXISTS pg.gl.inv_gl_final
+                """)
+
+                con.execute("""
+                    CREATE TABLE pg.gl.inv_gl_final AS
+                    SELECT *
+                    FROM gl_main
+                """)
+                    
+                
                 self.stdout.write(
                     self.style.SUCCESS("Основные таблицы inventorie.gl_main, inventorie.write_off и inventorie.inv_gl_final созданы")                    
                 )
