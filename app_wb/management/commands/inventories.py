@@ -591,9 +591,9 @@ class Command(BaseCommand):
                 )
                 con.execute(MAKE_SALES_GL)
                 con.execute(MAKE_INV_GL)
-                con.execute(MAKE_WRITE_OFF)
-                con.execute(MAKE_FINAL_GL)
+                con.execute(MAKE_WRITE_OFF)                
                 con.execute(MAKE_GL_MAIN)
+                con.execute(MAKE_FINAL_GL)
                 
                 con.execute("""
                     DROP TABLE IF EXISTS pg.gl.inv_gl_final
@@ -602,7 +602,7 @@ class Command(BaseCommand):
                 con.execute("""
                     CREATE TABLE pg.gl.inv_gl_final AS
                     SELECT *
-                    FROM gl_main
+                    FROM inventories.inv_gl_final
                 """)
                     
                 
