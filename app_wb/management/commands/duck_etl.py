@@ -587,6 +587,13 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS("Table sales_long was renewed")
                 )
+                self.stdout.write("Запускаем write off ETL")
+
+                call_command("wo")
+                self.stdout.write(
+                    self.style.SUCCESS("Готово")
+                )
+
 
                 # =========================
                 # optional update
@@ -602,12 +609,6 @@ class Command(BaseCommand):
                         self.style.WARNING("Skip wb_distribution update")
                     )
                 
-                self.stdout.write("Запускаем write off ETL")
-
-                call_command("wo")
-                self.stdout.write(
-                    self.style.SUCCESS("Готово")
-                )
-
+                
         except Exception as e:
             raise CommandError(f"DuckDB error: {e}")
