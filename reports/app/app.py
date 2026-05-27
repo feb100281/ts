@@ -9,6 +9,7 @@ from .builder import ReportBuilder
 scripts = [
     "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.8/dayjs.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.8/locale/ru.min.js",
+    "/static/js/dmc.js",
 ]
 
 
