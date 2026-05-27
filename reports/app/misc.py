@@ -123,7 +123,7 @@ def fancy_table(
         withTableBorder=True,
         withColumnBorders=True,
         horizontalSpacing="md",
-        verticalSpacing="xs",
+        verticalSpacing="2",
     )
 
     if title:

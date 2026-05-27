@@ -2,6 +2,7 @@ import dash_mantine_components as dmc
 from datetime import date
 from dash_iconify import DashIconify
 from cards.wo_app.data import get_data_by_date
+from .data import get_inventorie
 from ...misc import(
     paper_card,
     fancy_numbers,
@@ -54,10 +55,67 @@ costs_card = paper_card(
     )
 )
 
+
+inv_chart_df = get_inventorie(date(2023,10,31))
+inv_chart_df = inv_chart_df[inv_chart_df['year'] > 2023].copy()
+chart_df = inv_chart_df[['period','inventories']]
+
+inventory_chart = dmc.AreaChart(
+    h=220,
+    w="95%",
+
+    data=chart_df.to_dict("records"),
+
+    dataKey="period",
+
+    series=[
+        {
+            "name": "inventories",
+            "label": "Запасы",
+            "color": "grape",
+        }
+    ],
+
+    curveType="Step",
+
+    withDots=False,
+    withLegend=False,
+
+    gridAxis="y",
+
+    tickLine="x",
+
+    withXAxis=True,
+    withYAxis=True,
+
+    withTooltip=False,
+
+    yAxisLabel="млн ₽",
+    withPointLabels=True,
+
+    valueFormatter={"function": "formatMillions"},
+)
+
+
+chart_title = dmc.Group(
+    [
+        DashIconify(icon='streamline-stickies-color:refund-product-reciept',width=26),
+        dmc.Title("Изменения запасов",order=3)
+    ]
+)
+
+chart_card = paper_card(
+    chart_title,
+    inventory_chart
+)
+
+
 def layout(report=None, filters=None):
     return dmc.Container(
         [
-            costs_card
+            costs_card,
+            dmc.Space(h=10),
+            chart_card
         ],
         fluid=True
     )
