@@ -1,7 +1,7 @@
 # app/misc.py
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
-
+import pandas as pd
 
 """ 
 Сюда давай пихать функции которые используют все слайды
@@ -68,3 +68,74 @@ def fancy_numbers(
         align="flex-start",
         **kwargs,
     )
+
+
+
+
+def fancy_table(
+    df: pd.DataFrame,
+    title: str = None,
+    precision: int = 0,
+):
+
+    table_df = df.copy().reset_index()
+
+    table_df = table_df.fillna(0)
+
+    for col in table_df.columns:
+
+        if pd.api.types.is_numeric_dtype(
+            table_df[col]
+        ):
+            table_df[col] = table_df[col].map(
+                lambda x:
+                f"{x:,.{precision}f}"
+            )
+
+    header = dmc.TableThead(
+        dmc.TableTr(
+            [
+                dmc.TableTh(str(col))
+                for col in table_df.columns
+            ]
+        )
+    )
+
+    body = dmc.TableTbody(
+        [
+            dmc.TableTr(
+                [
+                    dmc.TableTd(value)
+                    for value in row
+                ]
+            )
+            for row in table_df.values
+        ]
+    )
+
+    table = dmc.Table(
+        [
+            header,
+            body,
+        ],
+        striped=True,
+        highlightOnHover=True,
+        withTableBorder=True,
+        withColumnBorders=True,
+        horizontalSpacing="md",
+        verticalSpacing="xs",
+    )
+
+    if title:
+        return dmc.Stack(
+            [
+                dmc.Title(
+                    title,
+                    order=4,
+                ),
+                table,
+            ],
+            gap="xs",
+        )
+
+    return table

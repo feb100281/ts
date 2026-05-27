@@ -90,6 +90,7 @@ def get_data_by_item(start, end):
             from (
             select 
             t.usk,
+            
             sum(t.cr_rev) as amount,
             sum(t.cr_rev) -
             sum(t.cr_rev / (100+t.vat_rate) * 100) as vat_amount,
