@@ -9,21 +9,26 @@ https://docs.djangoproject.com/en/6.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+
 # Загружаем .env
 load_dotenv()
+from django.urls import reverse_lazy
+from .unfold_settings import UNFOLD_SETTINGD
+
 
 # TELEGRAM_TOKEN = ""
-# TELEGRAM_ADMIN_CHAT_ID = 
+# TELEGRAM_ADMIN_CHAT_ID =
 # 1326519741
 
 # ---------------------------
 # External API settings
 # ---------------------------
 CBR_DAILY_URL = "https://www.cbr.ru/scripts/XML_daily.asp"
-CHECKO_API_KEY = 'SIwfo6CFilGM4fUX'
+CHECKO_API_KEY = "SIwfo6CFilGM4fUX"
 CHECKO_API_BANK_URL = "https://api.checko.ru/v2/bank"
 CHECKO_API_COMPANY_URL = "https://api.checko.ru/v2/company"
 
@@ -36,14 +41,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'fallback_secret_key')
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback_secret_key")
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
-ALLOWED_HOSTS = ['127.0.0.1','localhost','62.109.2.166']
+DEBUG = os.getenv("DEBUG", "False") == "True"
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "62.109.2.166"]
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
-
-
 
 
 # Quick-start development settings - unsuitable for production
@@ -57,7 +60,9 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 # Application definition
 
 INSTALLED_APPS = [
-    "jazzmin",
+    "unfold",
+    "unfold.contrib.inlines",
+    "unfold.contrib.forms",
     "macro",
     "corporate",
     "counterparties",
@@ -65,15 +70,15 @@ INSTALLED_APPS = [
     "treasury",
     "sales",
     "grossbook",
-    'accounting_analysis',
+    "accounting_analysis",
     "wb",
     "budget",
     "cards",
-    "mptt",    
+    "mptt",
     "jsoneditor",
     "app_wb",
     "inventories",
-    "reports",    
+    "reports",
     "app_deliveries",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
@@ -94,14 +99,12 @@ INSTALLED_APPS = [
 # FRED_API_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 
-
 # INSTALLED_APPS += ['dpd_static_support']
 # MIDDLEWARE += ['whitenoise.middleware.WhiteNoiseMiddleware']
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django_plotly_dash.middleware.BaseMiddleware",
     "django_plotly_dash.middleware.ExternalRedirectionMiddleware",
@@ -119,7 +122,7 @@ ROOT_URLCONF = "ts.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -139,13 +142,13 @@ WSGI_APPLICATION = "ts.wsgi.application"
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
-        'NAME': os.getenv('DB_NAME', 'ts_db'),
-        'USER': os.getenv('DB_USER', 'ts_user'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'strong_password'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
+    "default": {
+        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+        "NAME": os.getenv("DB_NAME", "ts_db"),
+        "USER": os.getenv("DB_USER", "ts_user"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "strong_password"),
+        "HOST": os.getenv("DB_HOST", "localhost"),
+        "PORT": os.getenv("DB_PORT", "5432"),
     }
 }
 
@@ -172,7 +175,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000
-X_FRAME_OPTIONS = 'SAMEORIGIN'
+X_FRAME_OPTIONS = "SAMEORIGIN"
 
 from django.conf.locale.ru import formats as ru_formats
 from django.conf import settings
@@ -183,8 +186,6 @@ LANGUAGES = [
     ("en", "English"),
     ("ru", "Русский"),
 ]
-
-
 
 
 ru_formats.DECIMAL_SEPARATOR = "."
@@ -201,9 +202,9 @@ USE_TZ = False
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"       # collectstatic будет здесь
+STATIC_ROOT = BASE_DIR / "staticfiles"  # collectstatic будет здесь
 STATICFILES_DIRS = [
-    BASE_DIR / "static",                     # твоя статика для разработки
+    BASE_DIR / "static",  # твоя статика для разработки
 ]
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -214,8 +215,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-JAZZMIN_SETTINGS = {
 
+UNFOLD = UNFOLD_SETTINGD
+
+
+JAZZMIN_SETTINGS = {
     "site_title": "ТРЕНДСЕТТЕР",
     "site_header": "ТРЕНДСЕТТЕР header",
     "site_brand": "Админпанель",
@@ -227,87 +231,80 @@ JAZZMIN_SETTINGS = {
     # "site_favicon": "/img/logo_short.png",
     "custom_css": "css/custom.css",
     "custom_js": "js/custom.js",
-    
-   
-
-    
     "changeform_format": "horizontal_tabs",
-
-
-
-    #"hide_apps": ['scr'],
+    # "hide_apps": ['scr'],
     # "hide_models": ['rr.cart'],
     "topmenu_links": [
-        {"name": "Home", },
+        {
+            "name": "Home",
+        },
         {"model": "auth.User"},
-        {"model": "macro.CurrencyRate"}, 
+        {"model": "macro.CurrencyRate"},
         {"model": "macro.CalendarExceptions"},
         {"model": "counterparties.Counterparty"},
         {"model": "contracts.Contracts"},
         {"model": "treasury.BankStatements"},
         {"name": "Запустить GL ETL", "url": "run_gl_etl", "new_window": False},
         {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
-        {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
-        {"name": "Скачать проверку договоров GL/PL/BS CSV", "url": "export_contracts_gl_check"},
+        {
+            "name": "Скачать дебиторы/кредиторы CSV",
+            "url": "export_arap_to_date",
+            "new_window": False,
+        },
+        {
+            "name": "Скачать проверку договоров GL/PL/BS CSV",
+            "url": "export_contracts_gl_check",
+        },
         {"name": "Скачать ManPack", "url": "export_manpack", "new_window": False},
         {"name": "Скачать остатки", "url": "export_stocks", "new_window": False},
-        {"name": "Контроль выручки", "url": "export_budget_analysis", "new_window": False},
-    
+        {
+            "name": "Контроль выручки",
+            "url": "export_budget_analysis",
+            "new_window": False,
+        },
     ],
-    
     # "usermenu_links": [
     #     {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
     #     {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
     # ],
-
     "show_collapse": True,
-
-
     "related_modal_active": True,
-
-
     "icons": {
-    #     # --- НЕДВИЖИМОСТЬ ---
-    #     "properties": "fa-solid fa-city",
-
-    #     "properties.ProperyGroup": "fa-solid fa-city",
-    #     "properties.Property": "fa-solid fa-building",
-    #     "properties.PropertyDocs": "fa-solid fa-file-alt",
-    #     "properties.PropetyImages": "fa-solid fa-image",
-    #     "properties.PropertyValuation": "fa-solid fa-search-dollar",
-    #     "properties.PropertyKadastrValue": "fa-solid fa-balance-scale",
-    #     "properties.Floor": "fa-solid fa-stairs",
-    #     "properties.FloorPlan": "fa-solid fa-project-diagram",
-    #     "properties.FloorSections": "fa-solid fa-th-large",
-    #     "properties.PremisesType": "fa-solid fa-tags",
-    #     "properties.PremissStatus": "fa-solid fa-circle-check",
-    #     "properties.PremissGroups": "fa-solid fa-layer-group",
-    #     "properties.Premises": "fa-solid fa-door-open",
-    #     "properties.PremisesDocs": "fa-solid fa-file-alt",
-    #     "properties.PremisesImages": "fa-solid fa-image",
-    #     "properties.Room": "fa-solid fa-vector-square",
-    #     "properties.PremisesBasket": "fa-solid fa-basket-shopping",
-
-    #     # --- КОНТРАГЕНТЫ ---
+        #     # --- НЕДВИЖИМОСТЬ ---
+        #     "properties": "fa-solid fa-city",
+        #     "properties.ProperyGroup": "fa-solid fa-city",
+        #     "properties.Property": "fa-solid fa-building",
+        #     "properties.PropertyDocs": "fa-solid fa-file-alt",
+        #     "properties.PropetyImages": "fa-solid fa-image",
+        #     "properties.PropertyValuation": "fa-solid fa-search-dollar",
+        #     "properties.PropertyKadastrValue": "fa-solid fa-balance-scale",
+        #     "properties.Floor": "fa-solid fa-stairs",
+        #     "properties.FloorPlan": "fa-solid fa-project-diagram",
+        #     "properties.FloorSections": "fa-solid fa-th-large",
+        #     "properties.PremisesType": "fa-solid fa-tags",
+        #     "properties.PremissStatus": "fa-solid fa-circle-check",
+        #     "properties.PremissGroups": "fa-solid fa-layer-group",
+        #     "properties.Premises": "fa-solid fa-door-open",
+        #     "properties.PremisesDocs": "fa-solid fa-file-alt",
+        #     "properties.PremisesImages": "fa-solid fa-image",
+        #     "properties.Room": "fa-solid fa-vector-square",
+        #     "properties.PremisesBasket": "fa-solid fa-basket-shopping",
+        #     # --- КОНТРАГЕНТЫ ---
         "counterparties": "fa-solid fa-address-book",
         "counterparties.Counterparty": "fa-solid fa-handshake",
         "counterparties.Tenant": "fa-solid fa-user-tie",
         "counterparties.Gr": "fa-solid fa-people-group",
         "counterparties.Glyph": "fa-solid fa-icons",
-
-    #     # --- СОБСТВЕННИКИ ---
+        #     # --- СОБСТВЕННИКИ ---
         "corporate": "fa-solid fa-building-user",
         "corporate.Owners": "fa-solid fa-building-circle-check",
         "corporate.Countries": "fa-solid fa-globe",
-
         # --- БАНКИ ---
         "corporate.Bank": "fa-solid fa-landmark",
         "corporate.BankAccount": "fa-solid fa-credit-card",
-        
         "corporate.COA": "fa-solid fa-sitemap",
         "corporate.CfItems": "fa-solid fa-money-bill-transfer",
-
-    #     # --- МАКРОЭКОНОМИКА ---
+        #     # --- МАКРОЭКОНОМИКА ---
         "macro": "fa-solid fa-chart-line",
         "macro.WACC": "fa-solid fa-percent",
         "macro.Inflation": "fa-solid fa-arrow-trend-up",
@@ -316,166 +313,126 @@ JAZZMIN_SETTINGS = {
         "macro.TaxesList": "fa-solid fa-file-invoice-dollar",
         "macro.CurrencyRate": "fa-solid fa-coins",
         "macro.MarketSnapshot": "fa-solid fa-magnifying-glass-chart",
-        
-    #     # --- ПРОДАЖИ --- 
+        #     # --- ПРОДАЖИ ---
         "sales": "fa-solid fa-chart-column",
         "sales.MVSalesDaily": "fa-solid fa-calendar-day",
-            # "fa-solid fa-calendar-day",
-        "sales.MVDataMartProduct":  "fa-solid fa-shirt",
+        # "fa-solid fa-calendar-day",
+        "sales.MVDataMartProduct": "fa-solid fa-shirt",
         "sales.WBDocument": "fa-solid fa-file-invoice",
-
-    #     # --- Договоры ---
+        #     # --- Договоры ---
         "contracts": "fa-solid fa-file-signature",
         "contracts.contracts": "fa-solid fa-file-signature",
-    #     "la.Subject": "fa-solid fa-cubes",
-    #     "la.LaSubjectConditions": "fa-solid fa-link",
-    #     "la.LeaseTermsTypes": "fa-solid fa-percent",
-    #     "la.Conditions": "fa-solid fa-sliders-h",
-    #     "la.ConditionsTerms": "fa-solid fa-equals",
-    #     "la.Indexation": "fa-solid fa-arrow-trend-up",
-    #     "la.ProjectsType": "fa-solid fa-diagram-project",
+        #     "la.Subject": "fa-solid fa-cubes",
+        #     "la.LaSubjectConditions": "fa-solid fa-link",
+        #     "la.LeaseTermsTypes": "fa-solid fa-percent",
+        #     "la.Conditions": "fa-solid fa-sliders-h",
+        #     "la.ConditionsTerms": "fa-solid fa-equals",
+        #     "la.Indexation": "fa-solid fa-arrow-trend-up",
+        #     "la.ProjectsType": "fa-solid fa-diagram-project",
         "contracts.ContractsTitle": "fa-solid fa-list-ul",
         "contracts.AccuralFn": "fa-solid fa-gears",
-    #     "la.AmendmentsType": "fa-solid fa-file-pen",
-    #     "la.LaFiles": "fa-solid fa-file-upload",
-    #     "la.LaEventLog": "fa-solid fa-clipboard-list",
-    #     "la.LaManage": "fa-solid fa-sitemap",
-
-    #     # --- ГЛАВАЯ КНИГА ---
+        #     "la.AmendmentsType": "fa-solid fa-file-pen",
+        #     "la.LaFiles": "fa-solid fa-file-upload",
+        #     "la.LaEventLog": "fa-solid fa-clipboard-list",
+        #     "la.LaManage": "fa-solid fa-sitemap",
+        #     # --- ГЛАВАЯ КНИГА ---
         "grossbook": "fa-solid fa-book",
         "grossbook.Manual": "fa-solid fa-book-bookmark",
-
-    #     # --- Телеграмм-бот ---
-    #     "botconfig": "fa-brands fa-telegram",
-    #     "botconfig.BotDataSource": "fa-solid fa-database",
-    #     "botconfig.BotCommand": "fa-solid fa-terminal",
-    #     "botconfig.BotEvent": "fa-solid fa-list-check",
-    #     "botconfig.BotControl": "fa-solid fa-robot",
-
-    #     "botconfig.BotUser": "fa-solid fa-circle-user",
-    
-    
-    #     # --- КАЗНАЧЕЙСТВО ---
+        #     # --- Телеграмм-бот ---
+        #     "botconfig": "fa-brands fa-telegram",
+        #     "botconfig.BotDataSource": "fa-solid fa-database",
+        #     "botconfig.BotCommand": "fa-solid fa-terminal",
+        #     "botconfig.BotEvent": "fa-solid fa-list-check",
+        #     "botconfig.BotControl": "fa-solid fa-robot",
+        #     "botconfig.BotUser": "fa-solid fa-circle-user",
+        #     # --- КАЗНАЧЕЙСТВО ---
         "treasury": "fa-solid fa-wallet",
         "treasury.BankStatements": "fa-solid fa-receipt",
         "treasury.CfData": "fa-solid fa-arrows-rotate",
         "treasury.ContractsRexex": "fa-solid fa-robot",
-        
         # --- БЮДЖЕТ ---
         "budget": "fa-solid fa-chart-pie",
         "budget.BudgetVersion": "fa-solid fa-layer-group",
         "budget.Gl": "fa-solid fa-scale-balanced",
-        
-        
         # --- АНАЛИЗ ФАЙЛОВ БУХГАЛТЕРИИ ---
         "accounting_analysis": "fa-solid fa-magnifying-glass-chart",
         "accounting_analysis.AccountingAnalysis": "fa-solid fa-calculator",
         "accounting_analysis.AnalysisScript": "fa-solid fa-gears",
         "accounting_analysis.AccountingMetric": "fa-solid fa-chart-line",
-        
-         # --- УПД И ЛОТЫ ---
+        # --- УПД И ЛОТЫ ---
         "cards": "fa-solid fa-boxes-stacked",
         "cards.WbCardRaw": "fa-solid fa-id-card",
         "cards.WbSizes": "fa-solid fa-ruler-combined",
         "cards.WbBarcodes": "fa-solid fa-barcode",
-
         "cards.WbProduct": "fa-solid fa-shirt",
-
         "cards.Lot": "fa-solid fa-box-open",
         "cards.LotFile": "fa-solid fa-folder-open",
-
         "cards.UpdDocument": "fa-solid fa-file-invoice",
         "cards.UpdDocumentFile": "fa-solid fa-file-circle-check",
-
         "cards.UPDData": "fa-solid fa-table-list",
-    
-
-
-
-
-    #     # --- Пользователи ---
+        #     # --- Пользователи ---
         "auth": "fa-solid fa-users",
         "auth.Group": "fa-solid fa-users-gear",
         "auth.User": "fa-solid fa-user",
-
-    #     # --- Служебные ---
-    #     "services": "fa-solid fa-gear",
-    #     "services.Migrations": "fa-solid fa-code-branch",
-
-    #     # --- Общие ---
+        #     # --- Служебные ---
+        #     "services": "fa-solid fa-gear",
+        #     "services.Migrations": "fa-solid fa-code-branch",
+        #     # --- Общие ---
         "admin": "fa-solid fa-gauge",
     },
     "default_icon_parents": "fa-solid fa-folder-tree",
     "default_icon_children": "fa-solid fa-file-lines",
-
-
-
     # "order_with_respect_to": ["rr.Properties", "rr.Premisses", "rr.PremissesTypes", "rr.Floors", "rr.PremissesStatus", "rr.PremissesUsage", "rr.SupportDocuments"],
-
     "order_with_respect_to": [
-        "macro",           # Макропоказатели
-        "corporate",       # Собственники/банки
-        "properties",      # Объекты недвижимости
+        "macro",  # Макропоказатели
+        "corporate",  # Собственники/банки
+        "properties",  # Объекты недвижимости
         "counterparties",  # Контрагенты
-        "contracts",       # Договоры 
-        'cards',           # УПД и приходы 
-        'sales',           # Продажи 
-        'treasury',        # Казначейство 
-        'budget',          # Бюджет 
-        'grossbook',       # Главная книга
-        'accounting_analysis' # Анализ файло бухгалтерии
-,        
-        "auth",            # Пользователи и группы
-
+        "contracts",  # Договоры
+        "cards",  # УПД и приходы
+        "sales",  # Продажи
+        "treasury",  # Казначейство
+        "budget",  # Бюджет
+        "grossbook",  # Главная книга
+        "accounting_analysis",  # Анализ файло бухгалтерии
+        "auth",  # Пользователи и группы
         "botconfig",
-
-        "services",        # Служебные — всегда в конце
+        "services",  # Служебные — всегда в конце
     ],
-
-    "changeform_format_overrides": {"auth.user": "vertical_tabs",},
-
+    "changeform_format_overrides": {
+        "auth.user": "vertical_tabs",
+    },
 }
-
 
 
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": True,
     "footer_small_text": True,
-
     # текст в контенте лучше обычный размер,
     # так легче читать списки и таблицы
     "body_small_text": False,
-
     # логотип можно оставить мелким
     "brand_small_text": True,
     "brand_colour": "navbar-secondary",
     "accent": "accent-info",
     "navbar": "navbar-secondary navbar-dark",
     "no_navbar_border": False,
-
     # удобно, когда верхнее меню фиксировано
     "navbar_fixed": True,
-
     "layout_boxed": False,
     "footer_fixed": False,
-
     # фиксируем сайдбар, чтобы меню не уезжало
     "sidebar_fixed": True,
     "sidebar": "sidebar-dark-primary",
-
     # меню слева чуть крупнее
     "sidebar_nav_small_text": False,
-
     "sidebar_disable_expand": False,
     "sidebar_nav_child_indent": True,
-
     "sidebar_nav_compact_style": True,
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": True,
-
-    "theme": "yeti", 
+    "theme": "yeti",
     "dark_mode_theme": None,
-
     "button_classes": {
         "primary": "btn-outline-primary",
         "secondary": "btn-outline-secondary",
@@ -509,7 +466,7 @@ JAZZMIN_UI_TWEAKS = {
 
 
 # TEMPLATES[0]['DIRS'] = [BASE_DIR / "templates"]
-LOGIN_URL = "/"                 # у тебя лендинг = экран входа
+LOGIN_URL = "/"  # у тебя лендинг = экран входа
 LOGIN_REDIRECT_URL = "/admin/"
 LOGOUT_REDIRECT_URL = "/"
 
@@ -572,7 +529,6 @@ ANALYTICS_DB_PATH = BASE_DIR / "analytics" / "analytics.duckdb"
 # # Увеличиваем максимальный размер тела запроса (например, до 20 МБ)
 # DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 MB
 # DATA_UPLOAD_MAX_NUMBER_FIELDS = None
-
 
 
 # REDIS_CLIENT = redis.Redis(
