@@ -22,11 +22,14 @@ class ArticlesAnalysisForm(forms.Form):
         excel_file = self.cleaned_data['excel_file']
         
         try:
-            df = pd.read_excel(excel_file)
+            df = pd.read_excel(
+                excel_file,
+                dtype=str,
+                keep_default_na=False
+            )
         except Exception as e:
             raise ValidationError(f'Не удалось прочитать файл: {e}')
         
-        # Проверяем наличие колонки с артиклями
         article_col = None
         for col in ['Article', 'Артикул', 'article', 'артикул']:
             if col in df.columns:
@@ -36,13 +39,19 @@ class ArticlesAnalysisForm(forms.Form):
         if not article_col:
             raise ValidationError('Файл должен содержать колонку "Article" или "Артикул"')
         
-        # Убираем пустые значения
-        articles = df[article_col].dropna().unique().tolist()
+        articles = (
+            df[article_col]
+            .astype(str)
+            .str.strip()
+            .str.replace(r'\.0$', '', regex=True)
+        )
+        
+        articles = articles[articles != ''].unique().tolist()
         
         if not articles:
             raise ValidationError('В файле нет ни одного артикля')
         
-        self.cleaned_articles = [str(a).strip() for a in articles if str(a).strip()]
+        self.cleaned_articles = articles
         
         return excel_file
     
