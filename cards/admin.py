@@ -11,7 +11,7 @@ from .models import (
 from django.urls import path
 from django.shortcuts import render
 from django.http import HttpResponse
-from .forms import UpdReconciliationForm
+from .forms import UpdReconciliationForm, ArticlesAnalysisForm
 from .reconciliation import run_reconciliation
 from .models import WODashboard
 
@@ -236,8 +236,38 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path('reconcile/', self.admin_site.admin_view(self.reconcile_view), name='cards_upddocument_reconcile'),
+            path('analyze-articles/', self.admin_site.admin_view(self.analyze_articles_view), name='cards_upddocument_analyze_articles'), 
         ]
         return custom_urls + urls
+    
+    def analyze_articles_view(self, request):
+        """Вьюха для анализа по артиклям из Excel"""
+        from .forms import ArticlesAnalysisForm
+        from .services.article_analyzer import ArticleAnalyzer
+        
+        if request.method == 'POST':
+            form = ArticlesAnalysisForm(request.POST, request.FILES)
+            if form.is_valid():
+                try:
+                    excel_file = request.FILES['excel_file']
+                    articles = form.get_articles()
+                    
+                    analyzer = ArticleAnalyzer(articles)
+                    output = analyzer.to_excel()
+                    
+                    response = HttpResponse(
+                        output.getvalue(),
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+                    response['Content-Disposition'] = 'attachment; filename=article_analysis_report.xlsx'
+                    return response
+                except Exception as e:
+                    from django.contrib import messages
+                    messages.error(request, f'Ошибка: {str(e)}')
+        else:
+            form = ArticlesAnalysisForm()
+        
+        return render(request, 'admin/cards/upddocument/analyze_articles.html', {'form': form})
 
     
     
