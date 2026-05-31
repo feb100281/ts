@@ -18,15 +18,15 @@ locale.setlocale(
 
 df = get_data_by_date(date(2024,1,1),date.today())
 
-df['sales_date'] = pd.to_datetime(df['sales_date'])
-df['year'] = df['sales_date'].dt.year.astype(str)
-df['qrt'] = df['sales_date'].dt.quarter
+df['date_from'] = pd.to_datetime(df['date_from'])
+df['year'] = df['date_from'].dt.year.astype(str)
+df['qrt'] = df['date_from'].dt.quarter
 df['qrt'] = "Q" + df['qrt'].astype(str)
 
 pvt = df.pivot_table(
     index='year',
     columns='qrt',
-    values='dt',
+    values='cogs',
     aggfunc='sum'
 )/1_000_000
 
