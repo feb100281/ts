@@ -214,30 +214,43 @@ WITH params AS (
 -- флэтч запасов из последней даты
 stocks_to_date AS (
     SELECT
-        COALESCE(u.usk, t.nm_id) AS usk,
-        SUM(t.quantity + t.in_way_from_client + t.in_way_to_client) AS stock_qty
+        COALESCE(
+            u.usk::BIGINT,
+            t.nm_id::BIGINT
+        ) AS usk,
+        SUM(
+            t.quantity
+            + t.in_way_from_client
+            + t.in_way_to_client
+        ) AS stock_qty
     FROM stocks.unpacked_stocks t
     CROSS JOIN params p
     LEFT JOIN inventories.usk u
         ON u.card_id = t.nm_id
     WHERE t.date_from = p.stock_date
-    GROUP BY COALESCE(u.usk, t.nm_id)
+    GROUP BY COALESCE(
+        u.usk::BIGINT,
+        t.nm_id::BIGINT
+    )
 ),
 
 upd_stocks AS (
     SELECT
-        t.usk,
+        t.usk::BIGINT AS usk,
         COUNT(t.dt) AS upd_qty
     FROM inventories.inv_gl t
     CROSS JOIN params p
     WHERE t.date_from <= p.stock_date
       AND t.dt <> 0
-    GROUP BY usk
+    GROUP BY t.usk::BIGINT
 ),
 
 sales_wo AS (
     SELECT
-        COALESCE(u.usk, t.nm_id) AS usk,
+        COALESCE(
+            u.usk::BIGINT,
+            t.nm_id::BIGINT
+        ) AS usk,
         COUNT(t.cr) AS wo_qty
     FROM inventories.sales_gl t
     CROSS JOIN params p
@@ -245,12 +258,18 @@ sales_wo AS (
         ON u.card_id = t.nm_id
     WHERE t.cr <> 0
       AND t.date_from <= p.stock_date
-    GROUP BY COALESCE(u.usk, t.nm_id)
+    GROUP BY COALESCE(
+        u.usk::BIGINT,
+        t.nm_id::BIGINT
+    )
 ),
 
 sl_inv AS (
     SELECT
-        COALESCE(i.usk, s.usk) AS usk,
+        COALESCE(
+            i.usk::BIGINT,
+            s.usk::BIGINT
+        ) AS usk,
         i.upd_qty,
         COALESCE(s.wo_qty, 0) AS wo_qty
     FROM sales_wo s
@@ -260,10 +279,14 @@ sl_inv AS (
 
 stocks_calc AS (
     SELECT
-        COALESCE(i.usk, s.usk) AS usk,
+        COALESCE(
+            i.usk::BIGINT,
+            s.usk::BIGINT
+        ) AS usk,
         COALESCE(i.upd_qty, 0) AS dt_qty,
         COALESCE(i.wo_qty, 0) AS cr_qty,
-        COALESCE(i.upd_qty, 0) - COALESCE(i.wo_qty, 0) AS upd_residual,
+        COALESCE(i.upd_qty, 0)
+            - COALESCE(i.wo_qty, 0) AS upd_residual,
         COALESCE(s.stock_qty, 0) AS stock_qty,
         COALESCE(i.upd_qty, 0)
             - COALESCE(i.wo_qty, 0)
@@ -275,32 +298,32 @@ stocks_calc AS (
 
 all_dt AS (
     SELECT
-        usk,
+        usk::BIGINT AS usk,
         list(dt ORDER BY date_from) AS dt_list,
         list(id ORDER BY date_from) AS id_list
     FROM inventories.inv_gl
     WHERE dt <> 0
-    GROUP BY usk
+    GROUP BY usk::BIGINT
 ),
 
-all_sales as (
-    select
-    usk,
-    list(date_from ORDER BY date_from, rrd_id) AS sales_dates,
-    list(cr ORDER BY date_from, rrd_id) AS sales_cr,
-    list(rrd_id ORDER BY date_from, rrd_id) AS rrd_ids,
-    list(vat_rate ORDER BY date_from, rrd_id) as vat_rates
+all_sales AS (
+    SELECT
+        usk::BIGINT AS usk,
+        list(date_from ORDER BY date_from, rrd_id) AS sales_dates,
+        list(cr ORDER BY date_from, rrd_id) AS sales_cr,
+        list(rrd_id ORDER BY date_from, rrd_id) AS rrd_ids,
+        list(vat_rate ORDER BY date_from, rrd_id) AS vat_rates
     FROM inventories.sales_gl
-    GROUP BY usk
+    GROUP BY usk::BIGINT
 )
 
 SELECT
     t.usk,
-    t.dt_qty,
-    t.cr_qty,
-    t.upd_residual,
-    t.stock_qty,
-    t.diff,
+    t.dt_qty::bigint as dt_qty,
+    t.cr_qty::bigint as cr_qty,
+    t.upd_residual::bigint as upd_residual,
+    t.stock_qty::bigint as stock_qty,
+    t.diff::bigint as diff,
 
     i.dt_list,
     i.id_list,
@@ -311,7 +334,7 @@ SELECT
         THEN list_slice(
             i.dt_list,
             1,
-            t.diff::bigint
+            t.diff::BIGINT
         )
         ELSE []
     END AS pre_wo,
@@ -321,7 +344,7 @@ SELECT
         THEN list_slice(
             i.id_list,
             1,
-            t.diff::bigint
+            t.diff::BIGINT
         )
         ELSE []
     END AS pre_wo_id,
@@ -331,7 +354,7 @@ SELECT
         WHEN t.diff > 0
         THEN list_slice(
             i.dt_list,
-            t.diff::bigint + 1,
+            t.diff::BIGINT + 1,
             array_length(i.dt_list)
         )
         ELSE i.dt_list
@@ -341,11 +364,12 @@ SELECT
         WHEN t.diff > 0
         THEN list_slice(
             i.id_list,
-            t.diff::bigint + 1,
+            t.diff::BIGINT + 1,
             array_length(i.id_list)
         )
         ELSE i.id_list
     END AS adjust_wo_id,
+
     s.sales_dates,
     s.sales_cr,
     s.rrd_ids,
@@ -354,7 +378,9 @@ SELECT
 FROM stocks_calc t
 LEFT JOIN all_dt i
     ON i.usk = t.usk
-left join all_sales s on s.usk = t.usk;
+LEFT JOIN all_sales s
+    ON s.usk = t.usk;
+
 """
 
 
@@ -412,42 +438,61 @@ FULL OUTER JOIN sales s
 MAKE_FINAL_GL = """ 
 CREATE OR REPLACE TABLE inventories.inv_gl_final AS
 with a as (
-    select 
-    x.usk,
-    case when dt_qty > cr_qty then cr_qty else cr_qty end as cut_qty
-    from(    
-    SELECT
-    usk,
-    len(adjust_wo) as dt_qty,
-    len(sales_cr) as cr_qty
-    from inventories.pre_wo
+    select
+        x.usk,
+
+        case
+            when x.dt_qty > x.cr_qty
+            then list_slice(x.adjust_wo_id, 1, x.cr_qty)
+            else x.adjust_wo_id
+        end as inv_ids,
+
+        case
+            when x.dt_qty > x.cr_qty
+            then list_slice(x.adjust_wo, 1, x.cr_qty)
+            else x.adjust_wo
+        end as inv_dt
+
+    from (
+        select
+            usk,
+            len(adjust_wo) as dt_qty,
+            len(sales_cr) as cr_qty,
+            adjust_wo,
+            adjust_wo_id
+        from inventories.pre_wo
     ) x
 ),
+
 cut as (
-SELECT
-    t.usk,
-    list_slice(t.adjust_wo_id, 1, a.cut_qty) AS inv_ids,
-    list_slice(t.adjust_wo, 1, a.cut_qty) AS inv_dt,
-    list_slice(t.sales_dates, 1, a.cut_qty) AS sales_dates,
-    list_slice(t.sales_cr, 1, a.cut_qty) AS sales_cr,
-    list_slice(t.rrd_ids, 1, a.cut_qty) AS rrd_ids,
-    list_slice(t.vat_rates, 1, a.cut_qty) AS vat_rates,
-FROM inventories.pre_wo t
-left join a on a.usk = t.usk
+    select
+        t.usk,
+        a.inv_ids,
+        a.inv_dt,
+
+        t.sales_dates,
+        t.sales_cr,
+        t.rrd_ids,
+        t.vat_rates
+
+    from inventories.pre_wo t
+    left join a
+        on a.usk = t.usk
 ),
+
 fifo as (
-SELECT
-    usk,
-    unnest(inv_ids) as id,
-    unnest(sales_dates) AS date_from,    
-    0::BIGINT AS dt,
-    unnest(inv_dt) AS cr,
-    0::BIGINT AS dt_man,
-    0::BIGINT AS cr_man,
-    unnest(sales_cr) AS cr_rev,
-    unnest(vat_rates) AS vat_rate,
-    unnest(rrd_ids) AS rrd_id
-FROM cut
+    select
+        usk,
+        unnest(inv_ids) as id,
+        unnest(sales_dates) as date_from,
+        0::BIGINT as dt,
+        unnest(inv_dt) as cr,
+        0::BIGINT as dt_man,
+        0::BIGINT as cr_man,
+        unnest(sales_cr) as cr_rev,
+        unnest(vat_rates) as vat_rate,
+        unnest(rrd_ids) as rrd_id
+    from cut
 ),
 pre_sales_wo as (
 select
@@ -483,7 +528,7 @@ t.id as item_id,
 t.date_from,
 u.upd_document_id,
 0 as dt,
-t.cr,
+COALESCE(t.cr,0) as cr,
 0 as dt_man,
 0 as cr_man,
 0 as cr_rev,
@@ -502,7 +547,7 @@ t.id as item_id,
 t.date_from,
 u.upd_document_id,
 0 as dt,
-t.cr,
+COALESCE(t.cr,0) as cr,
 0 as dt_man,
 0 as cr_man,
 t.cr_rev,
@@ -510,6 +555,7 @@ t.vat_rate,
 t.rrd_id
 from fifo t
 left join inventories.inv_gl u on u.id = t.id;
+
 """
 
 
