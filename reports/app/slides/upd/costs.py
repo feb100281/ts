@@ -56,7 +56,7 @@ costs_card = paper_card(
 )
 
 
-inv_chart_df = get_inventorie(date(2023,10,31))
+inv_chart_df = get_inventorie(date(2023,1,1))
 inv_chart_df = inv_chart_df[inv_chart_df['year'] > 2023].copy()
 chart_df = inv_chart_df[['period','inventories']]
 
