@@ -121,6 +121,7 @@ with a as (
         val
     from sales.sales_long
     where field = 'retail_price'
+    and sop_name not like '%оррекция%'
 ),
 
 dt_rows as (
