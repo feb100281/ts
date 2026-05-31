@@ -204,6 +204,160 @@ UNNEST(range(CAST(t.upd_qty AS BIGINT))) x(i)
 WHERE t.nm_id IS NOT NULL;
 """
 
+MAKE_PRE_WO = """ 
+create or replace table inventories.pre_wo as
+WITH params AS (
+    SELECT max(date_from)::date AS stock_date
+    FROM stocks.unpacked_stocks
+),
+
+-- флэтч запасов из последней даты
+stocks_to_date AS (
+    SELECT
+        COALESCE(u.usk, t.nm_id) AS usk,
+        SUM(t.quantity + t.in_way_from_client + t.in_way_to_client) AS stock_qty
+    FROM stocks.unpacked_stocks t
+    CROSS JOIN params p
+    LEFT JOIN inventories.usk u
+        ON u.card_id = t.nm_id
+    WHERE t.date_from = p.stock_date
+    GROUP BY COALESCE(u.usk, t.nm_id)
+),
+
+upd_stocks AS (
+    SELECT
+        t.usk,
+        COUNT(t.dt) AS upd_qty
+    FROM inventories.inv_gl t
+    CROSS JOIN params p
+    WHERE t.date_from <= p.stock_date
+      AND t.dt <> 0
+    GROUP BY usk
+),
+
+sales_wo AS (
+    SELECT
+        COALESCE(u.usk, t.nm_id) AS usk,
+        COUNT(t.cr) AS wo_qty
+    FROM inventories.sales_gl t
+    CROSS JOIN params p
+    LEFT JOIN inventories.usk u
+        ON u.card_id = t.nm_id
+    WHERE t.cr <> 0
+      AND t.date_from <= p.stock_date
+    GROUP BY COALESCE(u.usk, t.nm_id)
+),
+
+sl_inv AS (
+    SELECT
+        COALESCE(i.usk, s.usk) AS usk,
+        i.upd_qty,
+        COALESCE(s.wo_qty, 0) AS wo_qty
+    FROM sales_wo s
+    FULL OUTER JOIN upd_stocks i
+        ON i.usk = s.usk
+),
+
+stocks_calc AS (
+    SELECT
+        COALESCE(i.usk, s.usk) AS usk,
+        COALESCE(i.upd_qty, 0) AS dt_qty,
+        COALESCE(i.wo_qty, 0) AS cr_qty,
+        COALESCE(i.upd_qty, 0) - COALESCE(i.wo_qty, 0) AS upd_residual,
+        COALESCE(s.stock_qty, 0) AS stock_qty,
+        COALESCE(i.upd_qty, 0)
+            - COALESCE(i.wo_qty, 0)
+            - COALESCE(s.stock_qty, 0) AS diff
+    FROM sl_inv i
+    FULL OUTER JOIN stocks_to_date s
+        ON s.usk = i.usk
+),
+
+all_dt AS (
+    SELECT
+        usk,
+        list(dt ORDER BY date_from) AS dt_list,
+        list(id ORDER BY date_from) AS id_list
+    FROM inventories.inv_gl
+    WHERE dt <> 0
+    GROUP BY usk
+),
+
+all_sales as (
+    select
+    usk,
+    list(date_from ORDER BY date_from, rrd_id) AS sales_dates,
+    list(cr ORDER BY date_from, rrd_id) AS sales_cr,
+    list(rrd_id ORDER BY date_from, rrd_id) AS rrd_ids,
+    list(vat_rate ORDER BY date_from, rrd_id) as vat_rates
+    FROM inventories.sales_gl
+    GROUP BY usk
+)
+
+SELECT
+    t.usk,
+    t.dt_qty,
+    t.cr_qty,
+    t.upd_residual,
+    t.stock_qty,
+    t.diff,
+
+    i.dt_list,
+    i.id_list,
+
+    -- до списания
+    CASE
+        WHEN t.diff > 0
+        THEN list_slice(
+            i.dt_list,
+            1,
+            t.diff::bigint
+        )
+        ELSE []
+    END AS pre_wo,
+
+    CASE
+        WHEN t.diff > 0
+        THEN list_slice(
+            i.id_list,
+            1,
+            t.diff::bigint
+        )
+        ELSE []
+    END AS pre_wo_id,
+
+    -- после списания
+    CASE
+        WHEN t.diff > 0
+        THEN list_slice(
+            i.dt_list,
+            t.diff::bigint + 1,
+            array_length(i.dt_list)
+        )
+        ELSE i.dt_list
+    END AS adjust_wo,
+
+    CASE
+        WHEN t.diff > 0
+        THEN list_slice(
+            i.id_list,
+            t.diff::bigint + 1,
+            array_length(i.id_list)
+        )
+        ELSE i.id_list
+    END AS adjust_wo_id,
+    s.sales_dates,
+    s.sales_cr,
+    s.rrd_ids,
+    s.vat_rates
+
+FROM stocks_calc t
+LEFT JOIN all_dt i
+    ON i.usk = t.usk
+left join all_sales s on s.usk = t.usk;
+"""
+
+
 MAKE_WRITE_OFF = """ 
 create or replace table inventories.write_off as
 WITH sales AS (
@@ -257,63 +411,59 @@ FULL OUTER JOIN sales s
 
 MAKE_FINAL_GL = """ 
 CREATE OR REPLACE TABLE inventories.inv_gl_final AS
-WITH x AS (
+with a as (
+    select 
+    x.usk,
+    case when dt_qty > cr_qty then cr_qty else cr_qty end as cut_qty
+    from(    
     SELECT
-        usk,
-        case
-            when inv_qty > sales_qty
-                then sales_qty
-            else inv_qty
-        end as cut_qty,
-        inv_ids,
-        inv_dt,
-        sales_dates,
-        sales_cr,
-        rrd_ids
-    FROM inventories.write_off
-    WHERE sales_qty > 0
-      AND inv_qty > 0
+    usk,
+    len(adjust_wo) as dt_qty,
+    len(sales_cr) as cr_qty
+    from inventories.pre_wo
+    ) x
 ),
-
-cut AS (
-    SELECT
-        usk,
-        list_slice(inv_ids, 1, cut_qty) AS inv_ids,
-        list_slice(inv_dt, 1, cut_qty) AS inv_dt,
-        list_slice(sales_dates, 1, cut_qty) AS sales_dates,
-        list_slice(sales_cr, 1, cut_qty) AS sales_cr,
-        list_slice(rrd_ids, 1, cut_qty) AS rrd_ids
-    FROM x
+cut as (
+SELECT
+    t.usk,
+    list_slice(t.adjust_wo_id, 1, a.cut_qty) AS inv_ids,
+    list_slice(t.adjust_wo, 1, a.cut_qty) AS inv_dt,
+    list_slice(t.sales_dates, 1, a.cut_qty) AS sales_dates,
+    list_slice(t.sales_cr, 1, a.cut_qty) AS sales_cr,
+    list_slice(t.rrd_ids, 1, a.cut_qty) AS rrd_ids,
+    list_slice(t.vat_rates, 1, a.cut_qty) AS vat_rates,
+FROM inventories.pre_wo t
+left join a on a.usk = t.usk
 ),
-
-fifo_cr AS (
-    SELECT
-        -- NULL::BIGINT AS id,
-        unnest(inv_ids) as id,
-        unnest(sales_dates) AS date_from,        
-        cut.usk,
-        NULL AS brand,
-        NULL::BIGINT AS chrt_id,
-
-        0::BIGINT AS dt,
-        unnest(inv_dt) AS cr,
-
-        0::BIGINT AS dt_man,
-        0::BIGINT AS cr_man,
-
-        unnest(sales_cr) AS cr_rev,
-        unnest(rrd_ids) AS rrd_id
-    FROM cut
-   
+fifo as (
+SELECT
+    usk,
+    unnest(inv_ids) as id,
+    unnest(sales_dates) AS date_from,    
+    0::BIGINT AS dt,
+    unnest(inv_dt) AS cr,
+    0::BIGINT AS dt_man,
+    0::BIGINT AS cr_man,
+    unnest(sales_cr) AS cr_rev,
+    unnest(rrd_ids) AS rrd_id
+FROM cut
+),
+pre_sales_wo as (
+select
+    usk,
+    '2023-12-31'::date as date_from,
+    UNNEST(pre_wo_id) as id,
+    UNNEST(pre_wo) as cr
+from inventories.pre_wo
 )
 
+-- собираем финальную gl
 SELECT
-    id,
+    usk, 
+    'Приход' as oper,
+    id as item_id,
     date_from,
     upd_document_id,
-    usk,
-    brand,
-    chrt_id,
     dt,
     cr,
     dt_man,
@@ -322,23 +472,40 @@ SELECT
     rrd_id
 FROM inventories.inv_gl
 
+-- добавляем пре сэйлс
 UNION ALL
-
 SELECT
-    t.id,
-    t.date_from,
-    i.upd_document_id as upd_document_id,
-    t.usk,
-    t.brand,
-    t.chrt_id,
-    t.dt,
-    t.cr,
-    t.dt_man,
-    t.cr_man,
-    t.cr_rev,
-    t.rrd_id
-FROM fifo_cr t
-left join inventories.inv_gl i on i.id = t.id;
+t.usk,
+'Списание на 2023 год' as oper,
+t.id as item_id,
+t.date_from,
+u.upd_document_id,
+0 as dt,
+t.cr,
+0 as dt_man,
+0 as cr_man,
+0 as cr_rev,
+null as rrd_id
+from pre_sales_wo t
+left join inventories.inv_gl u on u.id = t.id
+
+
+-- добавляем фифо
+UNION ALL
+SELECT
+t.usk,
+'Списание' as oper,
+t.id as item_id,
+t.date_from,
+u.upd_document_id,
+0 as dt,
+t.cr,
+0 as dt_man,
+0 as cr_man,
+t.cr_rev,
+t.rrd_id
+from fifo t
+left join inventories.inv_gl u on u.id = t.id;
 """
 
 
@@ -591,8 +758,9 @@ class Command(BaseCommand):
                 )
                 con.execute(MAKE_SALES_GL)
                 con.execute(MAKE_INV_GL)
-                con.execute(MAKE_WRITE_OFF)                
-                con.execute(MAKE_GL_MAIN)
+                con.execute(MAKE_PRE_WO)
+                # con.execute(MAKE_WRITE_OFF)                
+                # con.execute(MAKE_GL_MAIN)
                 con.execute(MAKE_FINAL_GL)
                 
                 con.execute("""

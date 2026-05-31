@@ -107,11 +107,63 @@ def get_data_by_item(start, end):
             min(NULLIF(t.cr, 0)) AS cost_low,
             MEDIAN(NULLIF(t.cr, 0)) AS costs_median,
             avg(NULLIF(t.cr, 0)) AS cost_mean
-            from inventories.gl_main t
-            where sales_date between ? and ?
+            from inventories.inv_gl_final t
+            where date_from between ? and ?
             group by t.usk
             ) x
             left join a on a.usk = x.usk;
         """, parameters=[start,end]
         ).df()
     return df
+
+def get_inventories_by_date(date_to):
+    df = get_data_by_item(date(2023,1,1),date_to)
+    with get_duckdb_conn() as con:
+        con.register("items",df)
+        rel = con.sql(
+            """ 
+            WITH wb_stocks AS (
+                SELECT
+                    COALESCE(u.usk, t.nm_id) AS usk,
+                    SUM(
+                        t.quantity +
+                        t.in_way_from_client +
+                        t.in_way_from_client
+                    ) AS residual
+                FROM stocks.unpacked_stocks t
+                LEFT JOIN inventories.usk u
+                    ON u.card_id = t.nm_id
+                WHERE date_from = ?
+                GROUP BY COALESCE(u.usk, t.nm_id)
+            ),
+
+            gl_stocks AS (
+                SELECT
+                    t.usk,
+                    COUNT(t.dt) FILTER (WHERE t.dt <> 0) AS dt_qty,
+                    COUNT(t.cr) FILTER (WHERE t.cr <> 0) AS cr_qty,
+                    COUNT(t.dt) FILTER (WHERE t.dt <> 0)
+                    - COUNT(t.cr) FILTER (WHERE t.cr <> 0) AS residual
+                FROM inventories.inv_gl_final t
+                WHERE date_from <= ?
+                GROUP BY t.usk
+            )
+
+            SELECT
+                COALESCE(g.usk, w.usk) AS usk,
+                COALESCE(g.residual,0) AS gl_residual,
+                COALESCE(w.residual,0) AS stock_residual,
+                COALESCE(g.residual, 0) - COALESCE(w.residual, 0) AS diff
+            FROM gl_stocks g
+            FULL OUTER JOIN wb_stocks w
+                ON w.usk = g.usk
+            ORDER BY usk;            
+            """,
+            params=[date_to,date_to]
+        )
+        con.register("stocks",rel)
+        
+        
+        
+    
+    
