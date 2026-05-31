@@ -7,6 +7,9 @@
 
 {% block object-tools %}
 <div class="upd-object-tools">
+    <a href="{% url 'admin:cards_upddocument_analyze_articles' %}" class="upd-analyze-button" target="_blank">
+        📊 Анализ по артиклям
+    </a>
     <a href="{% url 'admin:cards_upddocument_reconcile' %}" class="upd-reconcile-button" target="_blank">
         🔄 Сверка с 1С
     </a>
@@ -434,6 +437,27 @@
       color: #94a3b8;
       margin-left: 6px;
     }
+
+    .upd-analyze-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 14px;
+    background: #8b5cf6;
+    color: #ffffff !important;
+    border: 1px solid #7c3aed;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none !important;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.upd-analyze-button:hover {
+    background: #7c3aed;
+    transform: translateY(-1px);
+}
 
     .upd-card:not(.upd-card-danger) .upd-card-amount {
       border-top-color: #e2e8f0;
