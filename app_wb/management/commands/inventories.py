@@ -438,77 +438,82 @@ FULL OUTER JOIN sales s
 
 MAKE_FINAL_GL = """ 
 CREATE OR REPLACE TABLE inventories.inv_gl_final AS
-with a as (
-    select
+WITH a AS (
+    SELECT
         x.usk,
 
-        case
-            when x.dt_qty > x.cr_qty
-            then list_slice(x.adjust_wo_id, 1, x.cr_qty)
-            else x.adjust_wo_id
-        end as inv_ids,
+        list_resize(
+            CASE
+                WHEN x.dt_qty > x.cr_qty
+                THEN list_slice(x.adjust_wo_id, 1, x.cr_qty)
+                ELSE x.adjust_wo_id
+            END,
+            x.cr_qty
+        ) AS inv_ids,
 
-        case
-            when x.dt_qty > x.cr_qty
-            then list_slice(x.adjust_wo, 1, x.cr_qty)
-            else x.adjust_wo
-        end as inv_dt
+        list_resize(
+            CASE
+                WHEN x.dt_qty > x.cr_qty
+                THEN list_slice(x.adjust_wo, 1, x.cr_qty)
+                ELSE x.adjust_wo
+            END,
+            x.cr_qty,
+            0
+        ) AS inv_dt
 
-    from (
-        select
+    FROM (
+        SELECT
             usk,
-            len(adjust_wo) as dt_qty,
-            len(sales_cr) as cr_qty,
+            len(adjust_wo) AS dt_qty,
+            coalesce(len(sales_cr), 0) AS cr_qty,
             adjust_wo,
             adjust_wo_id
-        from inventories.pre_wo
+        FROM inventories.pre_wo
     ) x
 ),
 
-cut as (
-    select
+cut AS (
+    SELECT
         t.usk,
         a.inv_ids,
         a.inv_dt,
-
         t.sales_dates,
         t.sales_cr,
         t.rrd_ids,
         t.vat_rates
-
-    from inventories.pre_wo t
-    left join a
-        on a.usk = t.usk
+    FROM inventories.pre_wo t
+    LEFT JOIN a
+        ON a.usk = t.usk
 ),
 
-fifo as (
-    select
+fifo AS (
+    SELECT
         usk,
-        unnest(inv_ids) as id,
-        unnest(sales_dates) as date_from,
-        0::BIGINT as dt,
-        unnest(inv_dt) as cr,
-        0::BIGINT as dt_man,
-        0::BIGINT as cr_man,
-        unnest(sales_cr) as cr_rev,
-        unnest(vat_rates) as vat_rate,
-        unnest(rrd_ids) as rrd_id
-    from cut
+        unnest(inv_ids) AS id,
+        unnest(sales_dates) AS date_from,
+        0::BIGINT AS dt,
+        unnest(inv_dt) AS cr,
+        0::BIGINT AS dt_man,
+        0::BIGINT AS cr_man,
+        unnest(sales_cr) AS cr_rev,
+        unnest(vat_rates) AS vat_rate,
+        unnest(rrd_ids) AS rrd_id
+    FROM cut
 ),
-pre_sales_wo as (
-select
-    usk,
-    '2023-12-31'::date as date_from,
-    UNNEST(pre_wo_id) as id,
-    UNNEST(pre_wo) as cr
-from inventories.pre_wo
+
+pre_sales_wo AS (
+    SELECT
+        usk,
+        '2023-12-31'::DATE AS date_from,
+        unnest(pre_wo_id) AS id,
+        unnest(pre_wo) AS cr
+    FROM inventories.pre_wo
 )
 
--- собираем финальную gl
 SELECT
-    usk, 
-    'Приход' as oper,
-    id as item_id,
+    usk,
+    'Приход' AS oper,
+    id AS item_id,
     date_from,
     upd_document_id,
     dt,
@@ -516,46 +521,48 @@ SELECT
     dt_man,
     cr_man,
     cr_rev,
-    0 as vat_rate,
+    0 AS vat_rate,
     rrd_id
 FROM inventories.inv_gl
 
--- добавляем пре сэйлс
 UNION ALL
+
 SELECT
-t.usk,
-'Списание на 2023 год' as oper,
-t.id as item_id,
-t.date_from,
-u.upd_document_id,
-0 as dt,
-COALESCE(t.cr,0) as cr,
-0 as dt_man,
-0 as cr_man,
-0 as cr_rev,
-0 as vat_rate,
-null as rrd_id
-from pre_sales_wo t
-left join inventories.inv_gl u on u.id = t.id
+    t.usk,
+    'Списание на 2023 год' AS oper,
+    t.id AS item_id,
+    t.date_from,
+    u.upd_document_id,
+    0 AS dt,
+    coalesce(t.cr, 0) AS cr,
+    0 AS dt_man,
+    0 AS cr_man,
+    0 AS cr_rev,
+    0 AS vat_rate,
+    NULL AS rrd_id
+FROM pre_sales_wo t
+LEFT JOIN inventories.inv_gl u
+    ON u.id = t.id
 
-
--- добавляем фифо
 UNION ALL
+
 SELECT
-t.usk,
-'Списание' as oper,
-t.id as item_id,
-t.date_from,
-u.upd_document_id,
-0 as dt,
-COALESCE(t.cr,0) as cr,
-0 as dt_man,
-0 as cr_man,
-t.cr_rev,
-t.vat_rate,
-t.rrd_id
-from fifo t
-left join inventories.inv_gl u on u.id = t.id;
+    t.usk,
+    'Списание' AS oper,
+    t.id AS item_id,
+    t.date_from,
+    u.upd_document_id,
+    0 AS dt,
+    coalesce(t.cr, 0) AS cr,
+    0 AS dt_man,
+    0 AS cr_man,
+    t.cr_rev,
+    coalesce(t.vat_rate, 0) AS vat_rate,
+    t.rrd_id
+FROM fifo t
+LEFT JOIN inventories.inv_gl u
+    ON u.id = t.id;
+
 
 """
 
