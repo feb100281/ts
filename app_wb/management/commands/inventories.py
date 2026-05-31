@@ -445,6 +445,7 @@ SELECT
     0::BIGINT AS dt_man,
     0::BIGINT AS cr_man,
     unnest(sales_cr) AS cr_rev,
+    unnest(vat_rates) AS vat_rate,
     unnest(rrd_ids) AS rrd_id
 FROM cut
 ),
@@ -469,6 +470,7 @@ SELECT
     dt_man,
     cr_man,
     cr_rev,
+    0 as vat_rate,
     rrd_id
 FROM inventories.inv_gl
 
@@ -485,6 +487,7 @@ t.cr,
 0 as dt_man,
 0 as cr_man,
 0 as cr_rev,
+0 as vat_rate,
 null as rrd_id
 from pre_sales_wo t
 left join inventories.inv_gl u on u.id = t.id
@@ -503,6 +506,7 @@ t.cr,
 0 as dt_man,
 0 as cr_man,
 t.cr_rev,
+t.vat_rate,
 t.rrd_id
 from fifo t
 left join inventories.inv_gl u on u.id = t.id;
