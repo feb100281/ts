@@ -9,38 +9,55 @@ def get_data_by_date(start=None, end=None):
     end_date = end if end else date.today()
         
     with get_duckdb_conn() as con:
-            df = con.execute(
-                """ 
-                select
-                x.sales_date,
-                round(x.amount/100.00,2) as amount,
-                round(x.vat_amount/100.00,2) as vat_amount,
-                round(x.amount_vatless/100,2) as amount_vatless,
-                round(x.dt/100,2) as dt,
-                x.total_net_sales,
-                x.no_cost
-                from(
-                select  
-                sales_date::date as sales_date,
-                sum(cr_rev) as amount,
-                sum(cr_rev) -
-                sum(cr_rev / (100+vat_rate) * 100) as vat_amount,
-                sum(cr_rev / (100+vat_rate) * 100) as amount_vatless,
-                sum(cr) as dt,
-                count(cr_rev) as total_net_sales,
-                sum(case when cr = 0 then 1 else 0 end) as no_cost
-                from inventories.gl_main                                 
-                group by sales_date) x
-                where x.sales_date between ? and ?
-                order by x.sales_date desc
-                """,
-                parameters=[start_date,end_date]              
-            ).df()
-            df["sales_date"] = (
-            df["sales_date"]
+        df = con.execute(
+            """ 
+            select
+            x.date_from,
+            round(x.amount/100.00,2) as amount,
+            round(x.vat_amount/100.00,2) as vat_amount,
+            round(x.amount_vatless/100,2) as amount_vatless,
+            round(x.cogs/100,2) as cogs,
+            x.total_net_sales,
+            x.no_cost,
+            round(coalesce(x.comparison_rev,0)/100.0,2) as comparison_rev,
+            round(
+                case
+                    when coalesce(x.comparison_rev,0) = 0
+                    then 0
+                    else x.cogs / x.comparison_rev * 100
+                end,
+                2
+            ) as margin
+            from(
+            select  
+            date_from,
+            sum(cr_rev) as amount,
+            sum(cr_rev) -
+            sum(cr_rev / (100+vat_rate) * 100) as vat_amount,
+            sum(cr_rev / (100+vat_rate) * 100) as amount_vatless,
+            sum(cr) as cogs,    
+            count(cr_rev) as total_net_sales,
+            count(cr_rev) filter (where cr =0) as no_cost,
+            coalesce(
+                sum(cr_rev) filter (where cr <> 0),
+                0
+            ) as comparison_rev
+            from inventories.inv_gl_final    
+            where cr_rev <> 0                       
+            group by date_from
+            ) x
+            where x.date_from between ? and ?
+            order by x.date_from desc
+            """,
+            parameters=[start_date, end_date]
+        ).df()
+
+        df["date_from"] = (
+            df["date_from"]
             .dt.date
-            )
-            return df
+        )
+
+    return df
 
 # def get_data_by_item(start, end):
     
@@ -120,7 +137,7 @@ def get_data_by_date(start=None, end=None):
 
 
 def get_data_by_item(start, end):
-    
+
     with get_duckdb_conn() as con:
         # Сначала получаем базовые данные с тайтлами
         df = con.execute(""" 

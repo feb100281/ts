@@ -23,7 +23,7 @@ def grid_date(start=None, end=None):
 
         columnDefs=[
             {
-                "field": "sales_date",
+                "field": "date_from",
                 "headerName": "Дата",
                 "width": 130,
                 "pinned": "left",
@@ -73,7 +73,7 @@ def grid_date(start=None, end=None):
             },
 
             {
-                "field": "dt",
+                "field": "cogs",
                 "headerName": "Себестоимость",
                 "width": 150,
                 "type": "numericColumn",
@@ -98,6 +98,33 @@ def grid_date(start=None, end=None):
                 "headerName": "Без себест.",
                 "width": 130,
                 "type": "numericColumn",
+            },
+            {
+                "field": "comparison_rev",
+                "headerName": "Сравн. выручка",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+                
+            },
+            {
+                "field": "margin",
+                "headerName": "Маржа (%)",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
             },
         ],
 
