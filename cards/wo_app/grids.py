@@ -191,12 +191,7 @@ def grid_item(start=None, end=None):
                 "type": "numericColumn",
             },
             
-            {
-            "field": "families_detected",
-            "headerName": "Семейства",
-            "width": 200,
-            "tooltipField": "families_detected",  # показывать весь список при наведении
-        },
+            
             
 
             {
