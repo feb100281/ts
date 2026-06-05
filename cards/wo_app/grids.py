@@ -1,4 +1,3 @@
-# cards/wo_app/grids.py
 import dash_mantine_components as dmc
 import dash_ag_grid as dag
 from .data import get_data_by_date,get_data_by_item
@@ -23,7 +22,7 @@ def grid_date(start=None, end=None):
 
         columnDefs=[
             {
-                "field": "sales_date",
+                "field": "date_from",
                 "headerName": "Дата",
                 "width": 130,
                 "pinned": "left",
@@ -73,7 +72,7 @@ def grid_date(start=None, end=None):
             },
 
             {
-                "field": "dt",
+                "field": "cogs",
                 "headerName": "Себестоимость",
                 "width": 150,
                 "type": "numericColumn",
@@ -98,6 +97,33 @@ def grid_date(start=None, end=None):
                 "headerName": "Без себест.",
                 "width": 130,
                 "type": "numericColumn",
+            },
+            {
+                "field": "comparison_rev",
+                "headerName": "Сравн. выручка",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+                
+            },
+            {
+                "field": "margin",
+                "headerName": "Маржа (%)",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
             },
         ],
 
@@ -190,9 +216,6 @@ def grid_item(start=None, end=None):
                 "width": 90,
                 "type": "numericColumn",
             },
-            
-            
-            
 
             {
                 "field": "amount",
