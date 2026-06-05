@@ -1,3 +1,4 @@
+# cards/wo_app/grids.py
 import dash_mantine_components as dmc
 import dash_ag_grid as dag
 from .data import get_data_by_date,get_data_by_item
@@ -189,6 +190,14 @@ def grid_item(start=None, end=None):
                 "width": 90,
                 "type": "numericColumn",
             },
+            
+            {
+            "field": "families_detected",
+            "headerName": "Семейства",
+            "width": 200,
+            "tooltipField": "families_detected",  # показывать весь список при наведении
+        },
+            
 
             {
                 "field": "amount",
