@@ -84,17 +84,30 @@ def grid_date(start=None, end=None):
                     """
                 },
             },
-
             {
-                "field": "total_net_sales",
-                "headerName": "Продаж",
-                "width": 110,
+                "field": "margin_gross",
+                "headerName": "Бух маржа",
+                "width": 150,
                 "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
             },
 
             {
+                "field": "total_net_sales",
+                "headerName": "Q продаж",
+                "width": 110,
+                "type": "numericColumn",
+            },
+            
+            {
                 "field": "no_cost",
-                "headerName": "Без себест.",
+                "headerName": "Q без себест.",
                 "width": 130,
                 "type": "numericColumn",
             },
@@ -113,6 +126,21 @@ def grid_date(start=None, end=None):
                 
             },
             {
+                "field": "man_margin",
+                "headerName": "Сравн. маржа",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+                
+            },
+            
+            {
                 "field": "margin",
                 "headerName": "Маржа (%)",
                 "width": 130,
@@ -125,6 +153,73 @@ def grid_date(start=None, end=None):
                     """
                 },
             },
+            {
+                "field": "net_comission",
+                "headerName": "Комиссия WB",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+            },
+            {
+                "field": "wb_comission",
+                "headerName": "Комиссия WB (%)",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+            },
+            {
+                "field": "acc_margin",
+                "headerName": "Бух валовая маржа",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+            },
+            {
+                "field": "wb_costs",
+                "headerName": "Расходы WB",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+            },
+            {
+                "field": "day_result",
+                "headerName": "Дневной результат",
+                "width": 130,
+                "type": "numericColumn",
+                "valueFormatter": {
+                    "function": """
+                    params.value == null
+                        ? ''
+                        : d3.format(',.2f')(params.value)
+                    """
+                },
+            },
+            
+            
         ],
 
         defaultColDef={
@@ -276,6 +371,12 @@ def grid_item(start=None, end=None):
                     """
                 },
             },
+            {
+                "field": "dt_qty",
+                "headerName": "Q приходы",
+                "width": 100,
+                "type": "numericColumn",
+            },            
 
             {
                 "field": "total_net_sales_qty",
@@ -283,7 +384,20 @@ def grid_item(start=None, end=None):
                 "width": 100,
                 "type": "numericColumn",
             },
-
+            {
+                "field": "cr_qty_2023",
+                "headerName": "Списано в 2023",
+                "width": 100,
+                "type": "numericColumn",
+            },
+            
+            {
+                "field": "stocks_qty",
+                "headerName": "Остаток",
+                "width": 100,
+                "type": "numericColumn",
+            },                 
+            
             {
                 "field": "no_cost_qty",
                 "headerName": "Q без себест.",
