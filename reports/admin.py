@@ -1,7 +1,15 @@
+# reports/admin.py
 from django.contrib import admin
 from django.db import models
 from django.utils.html import format_html
 from jsoneditor.forms import JSONEditor
+
+from django.shortcuts import render
+from django.urls import path
+from django.http import JsonResponse
+import importlib
+import json
+
 
 from .models import (
     Report,
@@ -35,7 +43,9 @@ class ReportConstructorInline(admin.TabularInline):
     # formfield_overrides = {
     #     models.JSONField: {"widget": JSONEditor},
     # }
-   
+    
+
+
 
 
 # ==========================================================
@@ -127,6 +137,13 @@ class ReportAdmin(admin.ModelAdmin):
             "widget": JSONEditor
         }
     }
+    
+    class Media:
+        css = {
+            "all": (
+                "css/admin_overrides.css",  
+            )
+        }
 
     @admin.display(description="Report")
     def dash_link(self, obj):
@@ -173,6 +190,7 @@ class SlideRegisteredAdmin(admin.ModelAdmin):
         "title",
         "python_path",
         "is_active",
+        "preview_btn", 
         "updated_at",
     )
 
@@ -185,6 +203,44 @@ class SlideRegisteredAdmin(admin.ModelAdmin):
         "python_path",
         "description",
     )
+    
+    def preview_btn(self, obj):
+        # Просто ссылка на Dash приложение с ID слайда
+        url = f"/apps/app/rpt_app/?slide_id={obj.id}"
+        return format_html('<a href="{}" target="_blank">👁️ Preview</a>', url)
+    preview_btn.short_description = "Preview"
+    
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'preview/<int:slide_id>/',
+                self.admin_site.admin_view(self.slide_preview_page),
+                name='slide_preview',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def slide_preview_page(self, request, slide_id):
+        """Страница превью слайда - в iframe с Dash"""
+        from .models import SlideRegistered
+        slide = SlideRegistered.objects.get(id=slide_id)
+        
+        # Создаем URL для Dash приложения с этим слайдом
+        dash_preview_url = f"/apps/app/rpt_app/?slide_id={slide_id}&preview=true"
+        
+        return render(request, 'admin/slide_preview.html', {
+            'slide': slide,
+            'dash_url': dash_preview_url,
+        })
+        
+    class Media:
+        css = {
+            "all": (
+                "css/admin_overrides.css",  
+            )
+        }
 
 
 # ==========================================================
@@ -197,6 +253,12 @@ class SectionAdmin(admin.ModelAdmin):
     search_fields = (
         "title", 
     )
+    class Media:
+        css = {
+            "all": (
+                "css/admin_overrides.css",  
+            )
+        }
 
 
 # # ==========================================================

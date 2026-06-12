@@ -1,3 +1,4 @@
+# app_wb/management/commands/inventories.py
 import os
 import duckdb
 from duckdb import DuckDBPyConnection
