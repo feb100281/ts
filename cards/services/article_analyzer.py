@@ -5,6 +5,8 @@ from ..models import UPDData
 from ..reporting.article_analyzer.report_builder import ArticleAnalysisReportBuilder
 
 
+
+
 class ArticleAnalyzer:
     """Анализатор данных по артиклям"""
     
