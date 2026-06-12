@@ -1,3 +1,70 @@
+# # reports/app/app.py
+# from django_plotly_dash import DjangoDash
+# from dash import html, dcc, Input, Output
+# import dash_mantine_components as dmc
+# import urllib.parse
+
+# from .builder import ReportBuilder
+
+
+# scripts = [
+#     "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.8/dayjs.min.js",
+#     "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.8/locale/ru.min.js",
+#     "/static/js/dmc.js",
+# ]
+
+
+# app = DjangoDash(
+#     "rpt_app",
+#     external_scripts=scripts,
+#     suppress_callback_exceptions=True,
+# )
+
+
+# app.layout = dmc.MantineProvider(
+#     withCssVariables=True,
+#     withGlobalClasses=True,
+#     children=[
+
+#         dcc.Location(
+#             id="url",
+#             refresh=False,
+#         ),
+
+#         html.Div(
+#             id="page"
+#         ),
+#     ],
+# )
+
+# @app.callback(
+#     Output("page", "children"),
+#     Input("url", "search"),
+# )
+# def update_from_url(search):
+
+#     if not search:
+#         return "NOT FOUND"
+
+#     params = urllib.parse.parse_qs(
+#         search.lstrip("?")
+#     )
+
+#     object_id = params.get(
+#         "object_id",
+#         [None]
+#     )[0]
+
+#     if not object_id:
+#         return "NOT FOUND"
+
+#     ctx = ReportBuilder(object_id)
+
+#     return ctx.layout()
+
+
+
+# reports/app/app.py
 from django_plotly_dash import DjangoDash
 from dash import html, dcc, Input, Output
 import dash_mantine_components as dmc
@@ -24,15 +91,11 @@ app.layout = dmc.MantineProvider(
     withCssVariables=True,
     withGlobalClasses=True,
     children=[
-
         dcc.Location(
             id="url",
             refresh=False,
         ),
-
-        html.Div(
-            id="page"
-        ),
+        html.Div(id="page")
     ],
 )
 
@@ -41,22 +104,27 @@ app.layout = dmc.MantineProvider(
     Input("url", "search"),
 )
 def update_from_url(search):
-
     if not search:
         return "NOT FOUND"
-
-    params = urllib.parse.parse_qs(
-        search.lstrip("?")
-    )
-
-    object_id = params.get(
-        "object_id",
-        [None]
-    )[0]
-
-    if not object_id:
-        return "NOT FOUND"
-
-    ctx = ReportBuilder(object_id)
-
-    return ctx.layout()
+    
+    params = urllib.parse.parse_qs(search.lstrip("?"))
+    
+    # Для превью слайда
+    slide_id = params.get("slide_id", [None])[0]
+    if slide_id:
+        from reports.models import SlideRegistered
+        import importlib
+        
+        slide = SlideRegistered.objects.get(id=slide_id)
+        # Убираем .layout если есть
+        path = slide.python_path.replace('.layout', '')
+        module = importlib.import_module(path)
+        return module.layout(report=None, filters={})
+    
+    # Для обычного отчета
+    object_id = params.get("object_id", [None])[0]
+    if object_id:
+        ctx = ReportBuilder(object_id)
+        return ctx.layout()
+    
+    return "NOT FOUND"
