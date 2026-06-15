@@ -23,8 +23,8 @@ end_date = date.today()- timedelta(days=1)
 df = get_data_by_date(start_date, end_date)
 df = df.sort_values('date_from')
 
-last_day = df.iloc[0]
-prev_day = df.iloc[1] if len(df) > 1 else last_day
+# last_day = df.iloc[0]
+# prev_day = df.iloc[1] if len(df) > 1 else last_day
 
 def get_trend_color(current, previous):
     if previous == 0:

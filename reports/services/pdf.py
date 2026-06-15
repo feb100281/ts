@@ -48,10 +48,10 @@ def export_report_pdf(request, report_id):
 
         page.goto(
             url,
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
         )
 
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(3000)
 
         page.pdf(
             path=str(output_file),
