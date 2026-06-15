@@ -5,6 +5,7 @@ import duckdb
 from duckdb import DuckDBPyConnection
 import json
 from django.core.management.base import BaseCommand, CommandError
+
 from django.core.management import call_command
 from dotenv import load_dotenv
 
@@ -593,6 +594,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS("Готово")
                 )
+                call_command("update_sales_qty")
 
 
                 # =========================
