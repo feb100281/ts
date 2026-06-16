@@ -51,11 +51,7 @@ def export_report_pdf(request, report_id):
             timeout=120_000,
         )
 
-        # Ждём, когда Dash реально вставит контент
-        page.wait_for_selector(
-            ".report-page, .dash-graph, .mantine-Container-root",
-            timeout=120_000,
-        )
+        
 
         # Небольшой добор на графики/шрифты
         page.wait_for_timeout(5_000)
