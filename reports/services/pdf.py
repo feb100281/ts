@@ -14,7 +14,7 @@ def export_report_pdf(request, report_id):
     relative_url = f"/apps/app/rpt_app/?{query}"
 
     # Локально, без DNS/HTTPS
-    url = f"http://127.0.0.1:8000{relative_url}"
+    url = f"http://127.0.0.1{relative_url}"
 
     output_dir = Path(settings.MEDIA_ROOT) / "reports"
     output_dir.mkdir(parents=True, exist_ok=True)
