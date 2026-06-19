@@ -555,6 +555,7 @@ from reporting.excel.styles.style_helpers import (
     draw_toc_button,
     draw_sheet_header,
     draw_table_header,
+    draw_nav_link_row, 
 )
 
 
@@ -1009,7 +1010,24 @@ def _style_data_row(ws, row_num, row_name, header_map, last_col, sep_cols):
             _apply_positive_font(cell, bold=is_subtotal)
 
 
-def _draw_blank_row(ws, row_num, last_col, sep_cols):
+# def _draw_blank_row(ws, row_num, last_col, sep_cols):
+#     ws.row_dimensions[row_num].height = 8
+
+#     for col in range(1, last_col + 1):
+#         cell = ws.cell(row=row_num, column=col)
+#         cell.value = None
+
+#         if col in sep_cols:
+#             cell.fill = SEP_FILL
+#             cell.border = NO_BORDER
+#         else:
+#             cell.fill = FILLS["none"]
+#             cell.border = BORDERS["none"]
+
+#         cell.alignment = ALIGNMENTS["left"]
+
+
+def _draw_blank_row(ws, row_num, last_col, sep_cols, has_button=False):
     ws.row_dimensions[row_num].height = 8
 
     for col in range(1, last_col + 1):
@@ -1024,9 +1042,31 @@ def _draw_blank_row(ws, row_num, last_col, sep_cols):
             cell.border = BORDERS["none"]
 
         cell.alignment = ALIGNMENTS["left"]
+    
+    # Если это строка для кнопки, проставляем высоту побольше
+    if has_button:
+        ws.row_dimensions[row_num].height = 12
 
 
-def _draw_footer_note(ws, row, last_col, sep_cols):
+# def _draw_footer_note(ws, row, last_col, sep_cols):
+#     for col in range(1, last_col + 1):
+#         cell = ws.cell(row=row, column=col)
+#         cell.value = None
+
+#         if col in sep_cols:
+#             cell.fill = SEP_FILL
+#             cell.border = NO_BORDER
+#         else:
+#             cell.fill = FILLS["none"]
+#             cell.border = BORDERS["none"]
+
+#     ws.cell(row=row, column=1, value="Note — ссылки на листы с расшифровками.")
+#     ws.cell(row=row, column=1).font = FONTS["subtitle"]
+#     ws.cell(row=row, column=1).alignment = ALIGNMENTS["left"]
+
+
+
+def _draw_footer_note(ws, row, last_col, sep_cols, has_button=False):
     for col in range(1, last_col + 1):
         cell = ws.cell(row=row, column=col)
         cell.value = None
@@ -1041,6 +1081,17 @@ def _draw_footer_note(ws, row, last_col, sep_cols):
     ws.cell(row=row, column=1, value="Note — ссылки на листы с расшифровками.")
     ws.cell(row=row, column=1).font = FONTS["subtitle"]
     ws.cell(row=row, column=1).alignment = ALIGNMENTS["left"]
+    
+    # Добавляем кнопку перехода к детализации
+    if has_button:
+        button_row = row + 2
+        draw_nav_link_row(
+            ws,
+            row=button_row,
+            text="Перейти к детализации →",
+            target_sheet="pl_drill_down",
+            target_cell="A1",
+        )
 
 
 def _apply_pl_column_outline(ws, headers):
@@ -1189,4 +1240,5 @@ def style_pl_sheet(ws, pl_df, date_to=None):
 
     _apply_pl_column_outline(ws, headers)
 
-    _draw_footer_note(ws, end_row + 2, last_col, sep_cols)
+
+    _draw_footer_note(ws, end_row + 2, last_col, sep_cols, has_button=True)
