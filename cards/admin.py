@@ -14,6 +14,8 @@ from django.http import HttpResponse
 from .forms import UpdReconciliationForm, ArticlesAnalysisForm
 from .reconciliation import run_reconciliation
 from .models import WODashboard
+from .reporting.registry_exporter import generate_registry_response
+from .reporting.registry_pdf import generate_registry_pdf
 
 class LotFileInline(admin.TabularInline):
     model = LotFile
@@ -96,7 +98,7 @@ class UpdProblemFilter(admin.SimpleListFilter):
 class UpdDocumentAdmin(admin.ModelAdmin):
     change_list_template = "admin/cards/upddocument/change_list.html"
     date_hierarchy = "date"
-    actions = ['export_complete_package' ]
+    actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf' ]
 
     list_display = (
         'counterparty_short',
@@ -239,6 +241,24 @@ class UpdDocumentAdmin(admin.ModelAdmin):
             path('analyze-articles/', self.admin_site.admin_view(self.analyze_articles_view), name='cards_upddocument_analyze_articles'), 
         ]
         return custom_urls + urls
+    
+
+
+    @admin.action(description='📊 Выгрузить реестр документов (Excel)')
+    def export_registry_excel(self, request, queryset):
+        """
+        Экшен для выгрузки реестра документов в Excel
+        """
+        upd_ids = list(queryset.values_list('id', flat=True))
+        return generate_registry_response(upd_ids, format_type='excel')
+    
+    @admin.action(description='📄 Выгрузить реестр документов (PDF)')
+    def export_registry_pdf(self, request, queryset):
+        """
+        Экшен для выгрузки реестра документов в PDF
+        """
+        upd_ids = list(queryset.values_list('id', flat=True))
+        return generate_registry_response(upd_ids, format_type='pdf')
     
     def analyze_articles_view(self, request):
         """Вьюха для анализа по артиклям из Excel"""
