@@ -337,6 +337,8 @@ def build_manpack(date_to=None, output_path=None):
     )
     
     
+    
+    
     # Открывать книгу с листа TOC
     if "TOC" in wb.sheetnames:
         ws_toc = wb["TOC"]
