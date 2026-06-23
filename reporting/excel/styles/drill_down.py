@@ -3,7 +3,7 @@ from reporting.excel.styles.style_helpers import draw_sheet_header
 
 def style_drilldown_sheet(ws, title, subtitle, date_to=None):
     # убрать сетку
-    ws.sheet_view.showGridLines = False
+    # ws.sheet_view.showGridLines = False
 
     # заголовок
     currency = "Российский рубль (RUB)"
@@ -15,7 +15,7 @@ def style_drilldown_sheet(ws, title, subtitle, date_to=None):
     )
 
     # freeze
-    ws.freeze_panes = "A4"
+    # ws.freeze_panes = "A4"
 
     # ширины
     ws.column_dimensions["A"].width = 40
