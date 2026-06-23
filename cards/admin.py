@@ -16,6 +16,7 @@ from .reconciliation import run_reconciliation
 from .models import WODashboard
 from .reporting.registry_exporter import generate_registry_response
 from .reporting.registry_pdf import generate_registry_pdf
+from .exports.single_upd_exporter import SingleUpdExporter
 
 class LotFileInline(admin.TabularInline):
     model = LotFile
@@ -98,7 +99,7 @@ class UpdProblemFilter(admin.SimpleListFilter):
 class UpdDocumentAdmin(admin.ModelAdmin):
     change_list_template = "admin/cards/upddocument/change_list.html"
     date_hierarchy = "date"
-    actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf' ]
+    actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf', 'export_upd_separate_files']
 
     list_display = (
         'counterparty_short',
@@ -259,6 +260,17 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         """
         upd_ids = list(queryset.values_list('id', flat=True))
         return generate_registry_response(upd_ids, format_type='pdf')
+    
+    
+    @admin.action(description='📁 Выгрузить УПД отдельными файлами (Excel)')
+    def export_upd_separate_files(self, request, queryset):
+        """
+        Экшен для выгрузки каждой УПД отдельным Excel-файлом
+        """
+        if queryset.count() == 1:
+            return SingleUpdExporter.generate_response(queryset.first())
+        else:
+            return SingleUpdExporter.generate_zip_response(queryset)
     
     def analyze_articles_view(self, request):
         """Вьюха для анализа по артиклям из Excel"""
