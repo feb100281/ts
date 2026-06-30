@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     "inventories",
     "reports",    
     "app_deliveries",
+    "gear",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
     "django.contrib.admin",

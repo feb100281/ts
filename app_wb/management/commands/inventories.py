@@ -302,6 +302,7 @@ all_dt AS (
     SELECT
         usk::BIGINT AS usk,
         list(dt ORDER BY date_from) AS dt_list,
+        list(dt_man ORDER BY date_from) AS dt_man_list,
         list(id ORDER BY date_from) AS id_list
     FROM inventories.inv_gl
     WHERE dt <> 0
@@ -340,6 +341,16 @@ SELECT
         )
         ELSE []
     END AS pre_wo,
+    
+    CASE
+        WHEN t.diff > 0
+        THEN list_slice(
+            i.dt_man_list,
+            1,
+            t.diff::BIGINT
+        )
+        ELSE []
+    END AS pre_man_wo,
 
     CASE
         WHEN t.diff > 0
@@ -361,6 +372,16 @@ SELECT
         )
         ELSE i.dt_list
     END AS adjust_wo,
+    
+    CASE
+        WHEN t.diff > 0
+        THEN list_slice(
+            i.dt_man_list,
+            t.diff::BIGINT + 1,
+            array_length(i.dt_man_list)
+        )
+        ELSE i.dt_man_list
+    END AS adjust_man_wo,
 
     CASE
         WHEN t.diff > 0
@@ -460,7 +481,17 @@ WITH a AS (
             END,
             x.cr_qty,
             0
-        ) AS inv_dt
+        ) AS inv_dt,
+        
+        list_resize(
+            CASE
+                WHEN x.dt_qty > x.cr_qty
+                THEN list_slice(x.adjust_man_wo, 1, x.cr_qty)
+                ELSE x.adjust_man_wo
+            END,
+            x.cr_qty,
+            0
+        ) AS inv_man_dt
 
     FROM (
         SELECT
@@ -468,6 +499,7 @@ WITH a AS (
             len(adjust_wo) AS dt_qty,
             coalesce(len(sales_cr), 0) AS cr_qty,
             adjust_wo,
+            adjust_man_wo,
             adjust_wo_id
         FROM inventories.pre_wo
     ) x
@@ -478,6 +510,7 @@ cut AS (
         t.usk,
         a.inv_ids,
         a.inv_dt,
+        a.inv_man_dt,
         t.sales_dates,
         t.sales_cr,
         t.rrd_ids,
@@ -495,7 +528,7 @@ fifo AS (
         0::BIGINT AS dt,
         unnest(inv_dt) AS cr,
         0::BIGINT AS dt_man,
-        0::BIGINT AS cr_man,
+        unnest(inv_man_dt) AS cr_man,
         unnest(sales_cr) AS cr_rev,
         unnest(vat_rates) AS vat_rate,
         unnest(rrd_ids) AS rrd_id
@@ -507,7 +540,8 @@ pre_sales_wo AS (
         usk,
         '2023-12-31'::DATE AS date_from,
         unnest(pre_wo_id) AS id,
-        unnest(pre_wo) AS cr
+        unnest(pre_wo) AS cr,
+        unnest(pre_man_wo) AS cr_man,
     FROM inventories.pre_wo
 )
 
@@ -537,7 +571,7 @@ SELECT
     0 AS dt,
     coalesce(t.cr, 0) AS cr,
     0 AS dt_man,
-    0 AS cr_man,
+    coalesce(t.cr_man, 0) AS cr_man,
     0 AS cr_rev,
     0 AS vat_rate,
     NULL AS rrd_id
@@ -556,7 +590,7 @@ SELECT
     0 AS dt,
     coalesce(t.cr, 0) AS cr,
     0 AS dt_man,
-    0 AS cr_man,
+    coalesce(t.cr_man, 0) AS cr_man,
     t.cr_rev,
     coalesce(t.vat_rate, 0) AS vat_rate,
     t.rrd_id
