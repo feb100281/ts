@@ -2,7 +2,7 @@
 
 import os
 from django.contrib import admin
-from django.db.models import Count, Q, F, Sum
+from django.db.models import Count, Q, F, Sum, ExpressionWrapper, DecimalField
 from django.utils.html import format_html
 from .reporting.builder import MissingFieldsReportGenerator
 from .models import (
@@ -104,14 +104,19 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     list_display = (
         'counterparty_short',
         'upd_link',
+        'dash_link',
         'lot',
         'total_amount_vatadd_display',
+        'total_amount_vatless_display',
+        'total_man_cost_display',
+        'cost_diff_display',
+        'cost_diff_percent_display',
         'total_qty_display',
         'lines_count_display',
         'nm_missing_count',
         'chrt_missing_count',
         'vat_mismatch_count',
-        'dash_link',
+       
     )
     
     list_display_links = ('counterparty_short', 'upd_link')
@@ -128,9 +133,19 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     autocomplete_fields = ('lot', 'counterparty', 'contract')
     inlines = [UpdDocumentFileInline]
 
+
+    
+    
     def get_queryset(self, request):
-        return super().get_queryset(request).annotate(
+        man_cost_expr = ExpressionWrapper(
+            F('income_lines__man_cost_per_unit') * F('income_lines__upd_qty'),
+            output_field=DecimalField(max_digits=18, decimal_places=2)
+        )
+
+        qs = super().get_queryset(request).annotate(
             total_amount_vatadd=Sum('income_lines__upd_amount_vatadd'),
+            total_amount_vatless=Sum('income_lines__upd_amount_vatless'),
+            total_man_cost=Sum(man_cost_expr),
             total_qty=Sum('income_lines__upd_qty'),
             lines_count=Count('income_lines'),
             nm_missing=Count('income_lines', filter=Q(income_lines__nm__isnull=True)),
@@ -145,18 +160,36 @@ class UpdDocumentAdmin(admin.ModelAdmin):
             ),
         )
 
+        return qs.annotate(
+            total_cost_diff=ExpressionWrapper(
+                F('total_man_cost') - F('total_amount_vatless'),
+                output_field=DecimalField(max_digits=18, decimal_places=2)
+            ),
+            total_cost_diff_percent=ExpressionWrapper(
+                (F('total_man_cost') - F('total_amount_vatless')) * 100 / F('total_amount_vatless'),
+                output_field=DecimalField(max_digits=18, decimal_places=2)
+            ),
+        )
+    
     def changelist_view(self, request, extra_context=None):
         cl = self.get_changelist_instance(request)
         full_queryset = cl.get_queryset(request)
 
         # Получаем ID всех УПД в текущей выборке
         upd_ids = list(full_queryset.values_list('id', flat=True))
+        
+        man_cost_expr = ExpressionWrapper(
+            F('income_lines__man_cost_per_unit') * F('income_lines__upd_qty'),
+            output_field=DecimalField(max_digits=18, decimal_places=2)
+        )
 
         # Общая статистика
         total_stats = full_queryset.aggregate(
             total_amount_vatadd=Sum('income_lines__upd_amount_vatadd'),
             total_qty=Sum('income_lines__upd_qty'),
             total_lines_count=Count('income_lines'),
+            total_amount_vatless=Sum('income_lines__upd_amount_vatless'),
+            total_man_cost=Sum(man_cost_expr),
             
             total_nm_missing=Count(
                 'income_lines',
@@ -204,6 +237,9 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         )
 
         total_amount = total_stats['total_amount_vatadd'] or 0
+        total_amount_vatless = total_stats['total_amount_vatless'] or 0
+        total_man_cost = total_stats['total_man_cost'] or 0
+        cost_diff = total_man_cost - total_amount_vatless
         
         extra_context = extra_context or {}
         extra_context['total_stats'] = {
@@ -229,6 +265,11 @@ class UpdDocumentAdmin(admin.ModelAdmin):
             'vat_mismatch': total_stats['total_vat_mismatch'] or 0,
             'vat_mismatch_amount': total_stats['total_vat_mismatch_amount'] or 0,
             'vat_mismatch_percent': self._calc_percent(total_stats['total_vat_mismatch_amount'], total_amount),
+            
+            'amount_vatless': total_amount_vatless,
+            'man_cost': total_man_cost,
+            'cost_diff': cost_diff,
+            'cost_diff_percent': self._calc_percent(cost_diff, total_amount_vatless),
         }
 
         return super().changelist_view(request, extra_context=extra_context)
@@ -350,24 +391,33 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         value = value or 0
         return f'{value:,.2f}'.replace(',', ' ') + ' ₽'
     
+    @staticmethod
+    def format_money_nowrap(value):
+        value = value or 0
+        text = f'{value:,.2f}'.replace(',', ' ') + ' ₽'
+        return format_html(
+            '<span style="white-space:nowrap;">{}</span>',
+            text
+        )
+    
+
+    
     @admin.display(description='УПД', ordering='number')
     def upd_link(self, obj):
         return format_html(
             '''
-            <div style="line-height:1.15;">
-                <div style="font-size:14px; font-weight:700; color:#0f172a;">
-                    № {} 
-                    <span style="color:#6b7280; font-weight:600; font-size:12px;">
-                        (id: {})
-                    </span>
-                </div>
-                <div style="margin-top:3px; font-size:11px; color:#64748b; font-weight:500;">
-                    от {}
-                </div>
+            <div class="upd-number-cell">
+                <div class="upd-number-main">№ {}</div>
+                <div class="upd-number-meta">id: {}</div>
+                <div class="upd-number-date">от {}</div>
             </div>
             ''',
-            obj.number, obj.id, obj.date.strftime("%d.%m.%Y")
+            obj.number,
+            obj.id,
+            obj.date.strftime("%d.%m.%Y")
         )
+        
+    
     
     @admin.action(description='📦 Выгрузить полный пакет (оба отчета + PDF)')
     def export_complete_package(self, request, queryset):
@@ -389,7 +439,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
 
     @admin.display(description='Сумма с НДС', ordering='total_amount_vatadd')
     def total_amount_vatadd_display(self, obj):
-        return self.format_money(obj.total_amount_vatadd)
+        return self.format_money_nowrap(obj.total_amount_vatadd)
 
     @admin.display(description='Кол-во товаров', ordering='total_qty')
     def total_qty_display(self, obj):
@@ -417,6 +467,41 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         return format_html(
             '<a class="button" href="{}" target="_blank">Открыть</a>',
             url
+        )
+    
+    
+    @admin.display(description='Сумма без НДС', ordering='total_amount_vatless')
+    def total_amount_vatless_display(self, obj):
+        return self.format_money_nowrap(obj.total_amount_vatless)
+
+
+    @admin.display(description='Упр. с/сть', ordering='total_man_cost')
+    def total_man_cost_display(self, obj):
+        return self.format_money_nowrap(obj.total_man_cost)
+
+
+    @admin.display(description='Разница ₽', ordering='total_cost_diff')
+    def cost_diff_display(self, obj):
+        diff = obj.total_cost_diff or 0
+        color = '#dc2626' if diff > 0 else '#16a34a'
+        text = f'{diff:,.2f}'.replace(',', ' ') + ' ₽'
+
+        return format_html(
+            '<span style="font-weight:700; color:{}; white-space:nowrap;">{}</span>',
+            color,
+            text
+        )
+
+
+    @admin.display(description='Разница %', ordering='total_cost_diff_percent')
+    def cost_diff_percent_display(self, obj):
+        percent = obj.total_cost_diff_percent or 0
+        color = '#dc2626' if percent > 0 else '#16a34a'
+
+        return format_html(
+            '<span style="font-weight:700; color:{}; white-space:nowrap;">{}%</span>',
+            color,
+            f'{percent:.1f}'
         )
 
     class Media:
