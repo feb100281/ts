@@ -16,8 +16,8 @@ scripts = [
 
 styles = [
     "/static/css/dash/aggrid_compact.css",
+     "/static/css/dash/compact_tree.css",
 ]
-
 app = DjangoDash(
     "segments_sales_app",
     external_scripts=scripts,
@@ -26,6 +26,8 @@ app = DjangoDash(
 )
 
 MW = MainWindow()
+
+MW.register_callbacks(app)
 
 
 app.layout = dmc.MantineProvider(
