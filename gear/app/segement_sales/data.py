@@ -48,7 +48,7 @@ def get_tree_data(
                 from inventories.wb_product i
                 left join inventories.usk u on i.sa_name = u.sa_name
                 left join sales s on s.nm_id = i.card_id
-                left join inventories.wb_product p on p.card_id = u.usk
+                left join inventories.wb_product p on p.card_id = i.card_id
                 WHERE (i.subject_id = ? OR ? IS NULL)
                   AND (UPPER(i.brand) = UPPER(?) OR ? IS NULL)
                   AND (s.date_from BETWEEN ? AND ? OR s.date_from IS NULL)
