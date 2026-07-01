@@ -10,7 +10,7 @@ def get_data_by_date(start=None, end=None):
     with get_duckdb_conn() as con:
         df = con.execute(
             """ 
-            with a as (
+    with a as (
         select 
         rrd_id,
         COALESCE(sum(val) filter (where field = 'comission' and oper = 'dt'),0) -

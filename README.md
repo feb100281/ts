@@ -226,3 +226,23 @@ http://62.109.2.166:8090
 
 
 rsync -avP daria@82.202.197.94:/home/daria/ts/data/realization ~/Downloads/
+
+
+🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
+🛠️  ПЕРЕНОС duckdb для локальной разработки
+🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
+
+1) brew install zstd -- устанавливаем архиватор пропускаем далее
+2) открываем новый терминал в проекте
+3) cd data
+4) rsync -avP daria@82.202.197.94:~/ts/data/analytics.duckdb.zst .  --скачиваем архив с сервера
+5) zstd -d -k analytics.duckdb.zst   -- разархивируем (y нажимае)
+
+-- если нужно создать архив 
+6) заходим на сервер
+7) cd ts
+8) cd data
+9) zstd -T0 -19 -k analytics.duckdb 
+10) повторяем шаги 2-5  
+
+
