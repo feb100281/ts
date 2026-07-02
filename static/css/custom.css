@@ -286,6 +286,7 @@
     --color-treasury:        #1f9c95;
     --color-sales:           #60A5FA;
     --color-finance:         #4F46E5;  /* бухгалтерия / проводки */
+    --color-analytics: #0D9488;        /*дэшборды */
 
 
     /* Фон для active / hover */
@@ -460,6 +461,20 @@
 }
 
 
+/*  дэшборды */
+.fa-chart-simple,
+.fa-layer-group,
+.fa-calendar-days,
+.fa-chart-area,
+.fa-display,
+.fa-screwdriver-wrench,
+.fa-scroll
+
+ {
+    color: var(--color-analytics) !important;
+}
+
+
 
 
 /* 6. Системные разделы / пользователи / служебные */
@@ -469,8 +484,8 @@
 .fa-gear,
 .fa-code-branch,
 .fa-gauge,
-.fa-folder-tree,
-.fa-file-lines {
+.fa-folder-tree
+ {
     color: var(--color-system) !important;
 }
 
