@@ -389,7 +389,19 @@ JAZZMIN_SETTINGS = {
         "cards.UpdDocumentFile": "fa-solid fa-file-circle-check",
 
         "cards.UPDData": "fa-solid fa-table-list",
-    
+        
+         # --- ДЭШБОРДЫ ---
+        "gear": "fa-solid fa-chart-simple",
+        "gear.SegmentsSales": "fa-solid fa-layer-group",
+        "gear.DailySales": "fa-solid fa-calendar-days",
+        
+        # --- ОТЧЕТЫ / ПРЕЗЕНТАЦИИ ---
+        "reports": "fa-solid fa-chart-area",
+        "reports.Report": "fa-solid fa-scroll",
+        "reports.SlideRegistered": "fa-solid fa-display",
+        "reports.Section": "fa-solid fa-layer-group",
+        "reports.ReportConstructor": "fa-solid fa-screwdriver-wrench",
+            
 
 
 
@@ -414,6 +426,8 @@ JAZZMIN_SETTINGS = {
     # "order_with_respect_to": ["rr.Properties", "rr.Premisses", "rr.PremissesTypes", "rr.Floors", "rr.PremissesStatus", "rr.PremissesUsage", "rr.SupportDocuments"],
 
     "order_with_respect_to": [
+        'gear',            # Дэшборды
+        'reports',         # Reports
         "macro",           # Макропоказатели
         "corporate",       # Собственники/банки
         "properties",      # Объекты недвижимости
