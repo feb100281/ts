@@ -21,7 +21,7 @@ def cat_filter():
     """
     with get_duckdb_conn_with_opt() as con:
         rows = con.execute(
-            "SELECT DISTINCT subject_id, subject_name FROM inventories.wb_product"
+            "SELECT DISTINCT subject_id, subject_name FROM inventories.wb_product order by 2"
         ).fetchall()
         data = [{"value": str(row[0]), "label": row[1]} for row in rows]
     return data
@@ -32,7 +32,7 @@ def brand_filter():
     """
     with get_duckdb_conn_with_opt() as con:
         rows = con.execute(
-            "select DISTINCT UPPER(brand) as brand_is, UPPER(brand) as brand_name from inventories.wb_product;"
+            "select DISTINCT UPPER(brand) as brand_is, UPPER(brand) as brand_name from inventories.wb_product order by 1;"
         ).fetchall()
         data = [{"value": row[0], "label": row[1]} for row in rows]
     return data
@@ -43,9 +43,12 @@ def gender_filter():
     """
     with get_duckdb_conn_with_opt() as con:
         rows = con.execute(
-            "select DISTINCT COALESCE(gender,'Не указан') as brand_is, COALESCE(gender,'Не указан') as brand_name from inventories.wb_product;"
+            "select DISTINCT COALESCE(gender,'Не указан') as brand_is, COALESCE(gender,'Не указан') as brand_name from inventories.wb_product ;"
         ).fetchall()
         data = [{"value": row[0], "label": row[1]} for row in rows]
     return data
 
-      
+### ------------
+#.  Данные по датам
+### ------------
+
