@@ -1,6 +1,6 @@
 import duckdb
 from conns import get_duckdb_conn_with_opt
-from .queries import BASE_QUERY, DAILY_SALES_AGG
+from .queries import BASE_QUERY, DAILY_SALES_AGG,DETAILS_DAY
 from datetime import date
 
 
@@ -53,7 +53,11 @@ class DashboardData:
         sql = DAILY_SALES_AGG.format(filters = self.make_filter(cats_list,gender_list,brand_list))
         
         return self.con.execute(sql,parameters=[start,end]).df()
-
+    
+    def get_day_details(self,date,cat_list=[],brand_list = None,gender_list = None):
+        sql = DETAILS_DAY.format(filters = self.make_filter(cat_list,gender_list,brand_list))
+        return self.con.execute(sql,parameters=[date,]).df()
+        
 
         
    

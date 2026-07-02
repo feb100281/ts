@@ -39,6 +39,7 @@ COALESCE(a.last_man_cr, case when t.cr_man=0 then 620 else t.cr_man end) as adju
 UPPER(w.brand) as brand,
 w.subject_id,
 w.subject_name,
+w.title,
 COALESCE(w.gender, 'Не указан') as gender,
 case 
 when t.cr = 0 and a.last_cr <> 0 and t.oper = 'Списание' then 'Нет на складе'
@@ -112,5 +113,77 @@ and date_from BETWEEN ? and ?
 group by t.date_from
 ) x
 order by x.date_from DESC
+;
+"""
+
+DETAILS_DAY = """ 
+with a as (
+select 
+rrd_id,
+COALESCE(sum(val) filter (where field = 'comission' and oper = 'dt'),0) -
+COALESCE(sum(val) filter (where field = 'comission' and oper = 'cr')) as gross_comission,
+COALESCE(sum(val / (100+vat_rate)*100) filter (where field = 'comission' and oper = 'dt'),0) -
+COALESCE(sum(val/ (100+vat_rate)*100) filter (where field = 'comission' and oper = 'cr')) as net_comission
+from sales.sales_long
+group by rrd_id
+)
+select
+x.usk,
+brand,
+subject_name,
+title,
+round(amount/100.00,2) as amount,
+round(retail_amount/100.00,2) as retail_amount,
+round((amount-retail_amount)/amount*100,2) as wb_discount,
+round(vat_amount/100.00,2) as vat_amount,
+round(amount_vatless/100.00,2) as amount_vatless,
+round(cogs/100.00,2) as cogs,
+round(cogs_man/100.00,2) as cogs_man,
+round(cogs_man/100.00,2) as net_comission,
+round(
+    (amount_vatless-cogs+net_comission)/100.00,2
+) as margin,
+round(
+    (amount_vatless-cogs_man+net_comission)/100.00,2
+) as margin_man,
+total_net_sales,
+no_cost,
+no_stocks,
+no_income,
+round(cogs_man / amount_vatless * 100,2) as cogs_man_share,
+round(-net_comission / amount_vatless * 100,2) as commision_percent,
+round((amount_vatless-cogs_man+net_comission) / amount_vatless * 100,2) as margin_percent
+
+from(
+
+select  
+usk,
+brand,
+subject_name,
+title,
+sum(cr_rev) as amount,
+sum(retail_amount) as retail_amount,
+sum(cr_rev) -
+sum(cr_rev / (100+vat_rate) * 100) as vat_amount,
+sum(cr_rev / (100+vat_rate) * 100) as amount_vatless,
+sum(adjusted_cogs) as cogs,    
+sum(adjusted_cogs_man) as cogs_man,
+count(cr_rev) as total_net_sales,
+count(cr_rev) filter (where cr =0) as no_cost,
+count(cr_rev) filter (where storage_flag ='Нет на складе') as no_stocks,
+count(cr_rev) filter (where storage_flag ='Нет приходов') as no_income,
+sum(a.net_comission) as net_comission,
+
+from base t    
+left join a on a.rrd_id = t.rrd_id
+where cr_rev <> 0     
+and date_from = ?  
+{filters}                
+group by usk,
+brand,
+subject_name,
+title
+) x
+ORDER BY x.amount DESC
 ;
 """
