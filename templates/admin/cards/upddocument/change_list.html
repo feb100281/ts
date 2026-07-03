@@ -62,13 +62,23 @@
       <div class="upd-card-note">man_cost_per_unit × количество</div>
     </div>
 
+
+
     <div class="upd-card">
-      <div class="upd-card-label">Разница с/сти</div>
-      <div class="upd-card-value">{{ total_stats.cost_diff|default:"0"|floatformat:0|intcomma }} ₽</div>
-      <div class="upd-card-note">
-        {{ total_stats.cost_diff_percent|default:"0" }}% к сумме без НДС
-      </div>
+        <div class="upd-card-label">Разница с/сти</div>
+
+        <div class="upd-card-value"
+            style="color:{% if total_stats.cost_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};">
+            {{ total_stats.cost_diff_abs|floatformat:0|intcomma }} ₽
+        </div>
+
+        <div class="upd-card-note"
+            style="color:{% if total_stats.cost_diff > 0 %}#dc2626{% else %}#16a34a{% endif %}; font-weight:600;">
+            {{ total_stats.cost_diff_percent_abs }}% к сумме без НДС
+        </div>
     </div>
+
+    
 
     <div class="upd-card">
       <div class="upd-card-label">Количество товаров</div>

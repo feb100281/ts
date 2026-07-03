@@ -270,6 +270,10 @@ class UpdDocumentAdmin(admin.ModelAdmin):
             'man_cost': total_man_cost,
             'cost_diff': cost_diff,
             'cost_diff_percent': self._calc_percent(cost_diff, total_amount_vatless),
+            
+            'cost_diff_abs': abs(cost_diff),
+            'cost_diff_percent': self._calc_percent(cost_diff, total_amount_vatless),
+            'cost_diff_percent_abs': abs(self._calc_percent(cost_diff, total_amount_vatless)),
         }
 
         return super().changelist_view(request, extra_context=extra_context)
@@ -484,7 +488,8 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     def cost_diff_display(self, obj):
         diff = obj.total_cost_diff or 0
         color = '#dc2626' if diff > 0 else '#16a34a'
-        text = f'{diff:,.2f}'.replace(',', ' ') + ' ₽'
+
+        text = f'{abs(diff):,.2f}'.replace(',', ' ') + ' ₽'
 
         return format_html(
             '<span style="font-weight:700; color:{}; white-space:nowrap;">{}</span>',
@@ -501,7 +506,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         return format_html(
             '<span style="font-weight:700; color:{}; white-space:nowrap;">{}%</span>',
             color,
-            f'{percent:.1f}'
+            f'{abs(percent):.1f}'
         )
 
     class Media:
