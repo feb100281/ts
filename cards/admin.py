@@ -1,6 +1,7 @@
 # cards/admin.py
 
 import os
+from django.db.models.functions import Cast
 from django.contrib import admin
 from django.db.models import Count, Q, F, Sum, ExpressionWrapper, DecimalField
 from django.utils.html import format_html
@@ -156,8 +157,13 @@ class UpdDocumentAdmin(admin.ModelAdmin):
                     Q(income_lines__upd_vat_rate__isnull=False)
                     & Q(income_lines__upd_vat_rate__gt=0)
                     & (
-                        ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
-                    )
+                        ~Q(
+                                income_lines__upd_vat_rate=Cast(
+                                    F('income_lines__card_vat_rate'),
+                                    DecimalField(max_digits=10, decimal_places=2)
+                                )
+                            )
+                                                )
                     & ~(
                         Q(income_lines__upd_vat_rate__in=[20, 22])
                         & Q(income_lines__card_vat_rate__isnull=True)
