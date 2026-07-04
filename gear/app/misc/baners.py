@@ -1,118 +1,103 @@
+# gear/app/misc/baners.py
+
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
+
+
+BANNER_STYLE = {
+    "maxWidth": "540px",
+    "margin": "40px auto",
+    "textAlign": "center",
+}
+
+
+def _banner(
+    *,
+    icon: str,
+    icon_color: str,
+    title: str,
+    description: str,
+    accent_text: str,
+    accent_color: str,
+    footer_text: str,
+    max_width: str = "540px",
+):
+    return dmc.Paper(
+        withBorder=True,
+        shadow="md",
+        radius="md",
+        p="xl",
+        style={
+            **BANNER_STYLE,
+            "maxWidth": max_width,
+        },
+        children=dmc.Stack(
+            align="center",
+            gap="sm",
+            children=[
+                DashIconify(
+                    icon=icon,
+                    width=64,
+                    height=64,
+                    color=icon_color,
+                ),
+                dmc.Title(
+                    title,
+                    order=2,
+                    ta="center",
+                ),
+                dmc.Text(
+                    description,
+                    ta="center",
+                    c="dimmed",
+                    style={"whiteSpace": "pre-line"},
+                ),
+                dmc.Divider(w="100%"),
+                dmc.Text(
+                    accent_text,
+                    ta="center",
+                    fw=700,
+                    c=accent_color,
+                ),
+                dmc.Text(
+                    footer_text,
+                    ta="center",
+                    size="sm",
+                    c="gray",
+                    style={"whiteSpace": "pre-line"},
+                ),
+            ],
+        ),
+    )
 
 
 def empty_df_banner():
-    return dmc.Paper(
-        children=[
-            dmc.Stack(
-                [
-                    DashIconify(
-                        icon="mdi:database-off",
-                        width=64,
-                        color="#ff6b6b",
-                    ),
-
-                    dmc.Title(
-                        "Данных нет",
-                        order=2,
-                        ta="center",
-                    ),
-
-                    dmc.Text(
-                        "Запрос вернул пустой DataFrame.\n"
-                        "Либо фильтры слишком умные, либо данных реально нет.",
-                        ta="center",
-                        c="dimmed",
-                    ),
-
-                    dmc.Divider(),
-
-                    dmc.Text(
-                        "Shit in → shit out.",
-                        ta="center",
-                        c="red",
-                        fw=700,
-                    ),
-
-                    dmc.Text(
-                        "Попробуй ослабить фильтры или проверь источник данных.",
-                        ta="center",
-                        size="sm",
-                        c="gray",
-                    ),
-                ],
-                align="center",
-                gap="sm",
-            )
-        ],
-        shadow="md",
-        radius="md",
-        p="xl",
-        withBorder=True,
-        style={
-            "maxWidth": "520px",
-            "margin": "40px auto",
-            "textAlign": "center",
-        },
+    return _banner(
+        icon="mdi:database-off",
+        icon_color="#ff6b6b",
+        title="Данных нет",
+        description=(
+            "Запрос вернул пустой DataFrame.\n"
+            "Возможно, фильтры слишком строгие или данных действительно нет."
+        ),
+        accent_text="Проверьте параметры отчёта",
+        accent_color="red",
+        footer_text="Попробуйте ослабить фильтры или проверить источник данных.",
+        max_width="520px",
     )
-
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 
 
 def in_construction_banner():
-    return dmc.Paper(
-        children=[
-            dmc.Stack(
-                [
-                    DashIconify(
-                        icon="mdi:tools",
-                        width=64,
-                        color="#ffa94d",
-                    ),
-
-                    dmc.Title(
-                        "Идёт работа",
-                        order=2,
-                        ta="center",
-                    ),
-
-                    dmc.Text(
-                        "Я сейчас чиню/строю эту часть дашборда.\n"
-                        "Данные и логика в процессе сборки.",
-                        ta="center",
-                        c="dimmed",
-                    ),
-
-                    dmc.Divider(),
-
-                    dmc.Text(
-                        "Без дедлайнов, пожалуйста.",
-                        ta="center",
-                        fw=700,
-                        c="orange",
-                    ),
-
-                    dmc.Text(
-                        "Я не ленюсь — я рефакторю реальность.\n"
-                        "Приходите позже, будет красиво.",
-                        ta="center",
-                        size="sm",
-                        c="gray",
-                    ),
-                ],
-                align="center",
-                gap="sm",
-            )
-        ],
-        shadow="md",
-        radius="md",
-        p="xl",
-        withBorder=True,
-        style={
-            "maxWidth": "540px",
-            "margin": "40px auto",
-            "textAlign": "center",
-        },
+    return _banner(
+        icon="mdi:tools",
+        icon_color="#ffa94d",
+        title="Раздел в работе",
+        description=(
+            "Эта часть дашборда сейчас находится в разработке."
+         
+        ),
+        accent_text="Скоро будет доступно",
+        accent_color="orange",
+        footer_text="Раздел будет обновлён после завершения настройки логики.",
+        max_width="540px",
     )

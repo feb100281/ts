@@ -1,3 +1,4 @@
+# gear/models.py
 from django.db import models
 
 # Заглушка для сегментного анализа.

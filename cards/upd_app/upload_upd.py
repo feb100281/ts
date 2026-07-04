@@ -125,6 +125,12 @@ def upload_data(
                 upd_amount_vatadd=r.get(
                     "upd_amount_vatadd"
                 ),
+                
+                man_cost_per_unit=r.get(
+                    "man_cost_per_unit"
+                ),
+                
+       
 
                 currency_code="RUB",
             )
