@@ -155,7 +155,13 @@ class UpdDocumentAdmin(admin.ModelAdmin):
                 filter=(
                     Q(income_lines__upd_vat_rate__isnull=False)
                     & Q(income_lines__upd_vat_rate__gt=0)
-                    & ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
+                    & (
+                        ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
+                    )
+                    & ~(
+                        Q(income_lines__upd_vat_rate__in=[20, 22])
+                        & Q(income_lines__card_vat_rate__isnull=True)
+                    )
                 )
             ),
         )
@@ -224,6 +230,10 @@ class UpdDocumentAdmin(admin.ModelAdmin):
                     Q(income_lines__upd_vat_rate__isnull=False)
                     & Q(income_lines__upd_vat_rate__gt=0)
                     & ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
+                    & ~(
+                        Q(income_lines__upd_vat_rate__in=[20, 22])
+                        & Q(income_lines__card_vat_rate__isnull=True)
+                    )
                 )
             ),
             total_vat_mismatch_amount=Sum(
@@ -232,6 +242,10 @@ class UpdDocumentAdmin(admin.ModelAdmin):
                     Q(income_lines__upd_vat_rate__isnull=False)
                     & Q(income_lines__upd_vat_rate__gt=0)
                     & ~Q(income_lines__upd_vat_rate=F('income_lines__card_vat_rate'))
+                    & ~(
+                        Q(income_lines__upd_vat_rate__in=[20, 22])
+                        & Q(income_lines__card_vat_rate__isnull=True)
+                    )
                 )
             ),
         )
