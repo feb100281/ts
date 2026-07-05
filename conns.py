@@ -92,7 +92,7 @@ def get_duckdb_conn_with_pg() -> duckdb.DuckDBPyConnection:
     return con
 
 
-def get_duckdb_conn_with_opt(with_pg: bool = True) -> duckdb.DuckDBPyConnection:
+def get_duckdb_conn_with_opt(with_pg: bool = True, ro=False) -> duckdb.DuckDBPyConnection:
 
     db_path = os.getenv("DUCKDB_PATH")
 
@@ -100,7 +100,7 @@ def get_duckdb_conn_with_opt(with_pg: bool = True) -> duckdb.DuckDBPyConnection:
 
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-    con = duckdb.connect(db_path)
+    con = duckdb.connect(db_path,read_only=ro)
 
     if with_pg:
 
