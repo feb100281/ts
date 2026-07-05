@@ -7,7 +7,7 @@ def get_tree_data(
     start=date(2023,1,1),
     end=date.today(),
 ):
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         df = con.execute(
             """
             with sales as (

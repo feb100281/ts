@@ -101,3 +101,18 @@ def in_construction_banner():
         footer_text="Раздел будет обновлён после завершения настройки логики.",
         max_width="540px",
     )
+    
+def in_construction_widjet():
+    return _banner(
+        icon="streamline:widget",
+        icon_color="#ff4df0",
+        title="Виджет в работе",
+        description=(
+            "Этот виджет сейчас находится в разработке."
+         
+        ),
+        accent_text="Скоро будет доступно",
+        accent_color="orange",
+        footer_text="Виджет будет обновлён после завершения настройки логики.",
+        max_width="540px",
+    )

@@ -785,6 +785,33 @@ def _daily_columns(include_checkbox=False):
                     "fontWeight": "700",
                 },
             ),
+            _money_col(
+                "cost_per_sold",
+                "WB расходы руб / ед",
+                145,
+                {
+                    "backgroundColor": "#e5eedd",
+                    "fontWeight": "700",
+                },
+            ),
+            _money_col(
+                "wb_costs",
+                "WB расходы руб",
+                145,
+                {
+                    "backgroundColor": "#f8fdec",
+                    "fontWeight": "700",
+                },
+            ),
+            _money_col(
+                "wb_result",
+                "Фин результат WB",
+                145,
+                {
+                    "backgroundColor": "#E1F4F3",
+                    "fontWeight": "700",
+                },
+            ),
         ]
     )
 

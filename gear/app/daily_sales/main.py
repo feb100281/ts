@@ -13,6 +13,7 @@ from .grids import grid_date, day_details
 from .ui import export_buttons_main, export_buttons_details
 from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
+from .stat import StatWindow
 
 
 try:
@@ -46,6 +47,7 @@ class MainWindow:
         self.ag_container_id = "ag_container_id"
         self.selected_dates_chips_id = "selected_dates_chips_id"
         self.details_container_id = "details_container_id"
+        
 
         self.tabs_bar = dmc.Box(
             mb="md",
@@ -106,6 +108,9 @@ class MainWindow:
             ),
             type="graph",
         )
+        
+        
+        
 
     def layout(self):
         return dmc.Container(
@@ -163,7 +168,8 @@ class MainWindow:
                 end = date.today()
 
             if tab_value == "1":
-                return in_construction_banner()
+                stat_container = StatWindow(date_range,cat_list,brand_list,gender_list)
+                return stat_container.layout()
 
             return [
                 get_sales_summary(start, end, cat_list, brand_list, gender_list),
