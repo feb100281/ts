@@ -132,7 +132,7 @@ def methodology_modal():
                                 " за изделие, ",
                                 html.Strong("для бухгалтерского учёта"),
                                 " — ",
-                                html.Strong("920 ₽"),
+                                html.Strong("950 ₽"),
                                 " за изделие.",
                             ],
                             size="sm",
