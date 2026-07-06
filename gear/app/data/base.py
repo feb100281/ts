@@ -22,9 +22,9 @@ class DashboardData:
         self.con.execute(BASE_WB_COSTS)
     
     def make_filter(self, cat_id=None, gender=None, brand=None):
-        cat_filter = ''
-        gender_filter = ''
-        brand_filter = ''
+        cat_id = cat_id or []
+        gender = gender or []
+        brand = brand or []
 
         if cat_id:
             if isinstance(cat_id, list):

@@ -114,6 +114,7 @@ class WbFilters:
         return dmc.MultiSelect(
             id=component_id,
             label=label,
+            value=[], 
             placeholder=placeholder,
             data=data,
             w="100%",
