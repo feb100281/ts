@@ -1,6 +1,6 @@
 import duckdb
 from conns import get_duckdb_conn_with_opt
-from .queries import BASE_QUERY, DAILY_SALES_AGG,DETAILS_DAY
+from .queries import BASE_QUERY, DAILY_SALES_AGG,DETAILS_DAY, BASE_WB_COSTS
 from datetime import date
 
 
@@ -9,6 +9,7 @@ class DashboardData:
     def __enter__(self):
         self.con = get_duckdb_conn_with_opt()    
         self._init_base()
+        self._init_wb_costs()
         return self
     
     def __exit__(self, exc_type, exc, tb):
@@ -16,6 +17,9 @@ class DashboardData:
     
     def _init_base(self):
         self.con.execute(BASE_QUERY)
+    
+    def _init_wb_costs(self):
+        self.con.execute(BASE_WB_COSTS)
     
     def make_filter(self, cat_id=None, gender=None, brand=None):
         cat_filter = ''

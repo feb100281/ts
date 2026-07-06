@@ -30,6 +30,7 @@ where field = 'retail_amount'
 )
 
 select 
+yearweek(t.date_from::date) as yw,
 t.*,
 wb.val as retail_amount,
 a.last_cr,
@@ -63,6 +64,30 @@ COALESCE(sum(val / (100+vat_rate)*100) filter (where field = 'comission' and ope
 COALESCE(sum(val/ (100+vat_rate)*100) filter (where field = 'comission' and oper = 'cr')) as net_comission
 from sales.sales_long
 group by rrd_id
+),
+d as (
+SELECT
+yw,
+count(cr_rev) as rev_count
+from base
+where cr_rev <> 0
+group by yw
+),
+f as (
+select
+yw,
+sum(dt / (100+vat_rate)*100) -
+sum(cr / (100+vat_rate)*100)
+as costs
+from wb_costs
+group by yw
+),
+g as (
+select
+d.yw,
+abs(f.costs) / d.rev_count as cost_per_sold
+from d 
+left join f on f.yw = d.yw
 )
 select
 x.date_from,
@@ -86,7 +111,14 @@ no_stocks,
 no_income,
 round(cogs_man / amount_vatless * 100,2) as cogs_man_share,
 round(-net_comission / amount_vatless * 100,2) as commision_percent,
-round((amount_vatless-cogs_man+net_comission) / amount_vatless * 100,2) as margin_percent
+round((amount_vatless-cogs_man+net_comission) / amount_vatless * 100,2) as margin_percent,
+round(g.cost_per_sold/100.0,2) as cost_per_sold,
+ROUND(total_net_sales*g.cost_per_sold/100.0,2) as wb_costs,
+ROUND(
+    ((amount_vatless-cogs_man+net_comission)-
+    (total_net_sales*g.cost_per_sold)) / 100.0,2
+) as wb_result
+
 
 from(
 
@@ -112,6 +144,7 @@ and date_from BETWEEN ? and ?
 {filters}                  
 group by t.date_from
 ) x
+left join g on g.yw = yearweek(x.date_from::date)
 order by x.date_from DESC
 ;
 """
@@ -186,4 +219,100 @@ title
 ) x
 ORDER BY x.amount DESC
 ;
+"""
+
+BASE_WB_COSTS = """ 
+CREATE OR REPLACE TEMP TABLE wb_costs as
+with wb_costs as (
+select
+date_from,
+rrd_id,
+'Other income / loss' as account,
+sop_name as cost_item,
+COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
+COALESCE(sum(val) filter (where oper='cr' ),0) as cr
+from sales.sales_long
+where field = 'retail_price' and sop_name like '%оррекция%'
+GROUP BY date_from, rrd_id, sop_name
+UNION ALL
+select
+date_from,
+rrd_id,
+'WB Logistic' as account,
+COALESCE(btn,sop_name) as cost_item,
+COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
+COALESCE(sum(val) filter (where oper='cr' ),0) as cr
+from sales.sales_long
+where field = 'delivery_rub' -- and sop_name like '%оррекция%'
+GROUP BY date_from, rrd_id, COALESCE(btn,sop_name)
+UNION ALL
+select
+date_from,
+rrd_id,
+'WB Storage' as account,
+sop_name as cost_item,
+COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
+COALESCE(sum(val) filter (where oper='cr' ),0) as cr
+from sales.sales_long
+where field = 'storage_fee' -- and sop_name like '%оррекция%'
+GROUP BY date_from, rrd_id, sop_name
+UNION ALL
+select
+date_from,
+rrd_id,
+'WB Acceptance' as account,
+sop_name as cost_item,
+COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
+COALESCE(sum(val) filter (where oper='cr' ),0) as cr
+from sales.sales_long
+where field = 'acceptance' -- and sop_name like '%оррекция%'
+GROUP BY date_from, rrd_id, sop_name
+UNION ALL
+select
+date_from,
+rrd_id,
+'WB Penalties' as account,
+btn as cost_item,
+COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
+COALESCE(sum(val) filter (where oper='cr' ),0) as cr
+from sales.sales_long
+where field = 'penalty' -- and sop_name like '%оррекция%'
+GROUP BY date_from, rrd_id, btn
+UNION ALL
+select
+date_from,
+rrd_id,
+'WB Deduction' as account,
+case 
+when STARTS_WITH(btn, 'Списание за отзыв')  then 'Отзывы'
+when STARTS_WITH(btn, 'Оказание услуг') 
+or STARTS_WITH(btn,'Предоставление услуг') 
+or STARTS_WITH(btn,'Витрина Магазина') then 'Услуги WB'
+else 'Прочее' end as cost_item,
+COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
+COALESCE(sum(val) filter (where oper='cr' ),0) as cr
+from sales.sales_long
+where field = 'deduction' 
+and (not STARTS_WITH(btn,'Платеж') or not STARTS_WITH(btn, 'Перевод'))
+and btn is not null
+-- and sop_name like '%оррекция%'
+GROUP BY date_from, rrd_id, cost_item
+UNION ALL
+select
+date_from,
+rrd_id,
+'WB Loyality' as account,
+btn as cost_item,
+COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
+COALESCE(sum(val) filter (where oper='cr' ),0) as cr
+from sales.sales_long
+where field in('cashback_commission_change','cashback_amount') -- and sop_name like '%оррекция%'
+GROUP BY date_from, rrd_id, btn
+)
+select 
+yearweek(t.date_from::date) as yw,
+t.*,
+s.vat_rate
+from wb_costs t
+left join sales.sales_long s on s.rrd_id = t.rrd_id;
 """
