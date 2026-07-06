@@ -25,6 +25,10 @@ class DashboardData:
         cat_id = cat_id or []
         gender = gender or []
         brand = brand or []
+        
+        cat_filter = ''   # <-- обязательно инициализировать
+        gender_filter = ''
+        brand_filter = ''
 
         if cat_id:
             if isinstance(cat_id, list):
