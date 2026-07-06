@@ -6,6 +6,7 @@ import locale
 import pandas as pd
 import dash_mantine_components as dmc
 from dash import dcc, Input, Output, State, ALL
+from .methodology import methodology_modal, register_methodology_callbacks
 
 from .data import get_last_update
 from .filters import WbFilters
@@ -47,6 +48,7 @@ class MainWindow:
         self.ag_container_id = "ag_container_id"
         self.selected_dates_chips_id = "selected_dates_chips_id"
         self.details_container_id = "details_container_id"
+
         
 
         self.tabs_bar = dmc.Box(
@@ -140,6 +142,8 @@ class MainWindow:
                     ),
                     labelPosition="center",
                 ),
+                
+                methodology_modal(),
 
                 FILTERS.get_filters_panel(),
 
@@ -227,6 +231,9 @@ class MainWindow:
         )
         def export_main_csv(n_clicks):
             return bool(n_clicks)
+        
+        
+        register_methodology_callbacks(app)
 
 
 
