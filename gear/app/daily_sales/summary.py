@@ -148,6 +148,7 @@ def get_sales_summary(start, end, cat_list=None, brand_list=None, gender_list=No
 
     commission = df["net_comission"].sum()
     wb_costs = df["wb_costs"].sum() if "wb_costs" in df.columns else 0
+    wb_total_costs = commission + (-wb_costs)
 
     # Финрезультат после WB-расходов
     fin_result_buh = margin - wb_costs
@@ -179,6 +180,7 @@ def get_sales_summary(start, end, cat_list=None, brand_list=None, gender_list=No
     fin_result_man_percent = _safe_div(fin_result_man, amount_vatless) * 100
 
     commission_percent = _safe_div(commission, amount_vatless) * 100
+    wb_total_costs_percent = _safe_div(wb_total_costs, amount_vatless) * 100
 
     no_cost_share = _safe_div(no_cost, qty) * 100
     no_stocks_share = _safe_div(no_stocks, qty) * 100
@@ -395,9 +397,9 @@ def get_sales_summary(start, end, cat_list=None, brand_list=None, gender_list=No
                 children=[
                     dmc.GridCol(
                         _mini_progress(
-                            "Комиссия WB",
-                            commission_percent,
-                            f"{_pct(commission_percent)} / {_money(commission)}",
+                            "Расходы WB итого",
+                            wb_total_costs_percent,
+                            f"{_pct(wb_total_costs_percent)} / {_money(wb_total_costs)}",
                             "orange",
                         ),
                         span={"base": 12, "md": 3},
