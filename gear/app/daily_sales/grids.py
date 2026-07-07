@@ -981,6 +981,8 @@ def _details_columns():
                 "fontWeight": "700",
             },
         ),
+        
+       
     ]
 
 

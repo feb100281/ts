@@ -1,3 +1,4 @@
+# gear/app/data/base.py
 import duckdb
 from conns import get_duckdb_conn_with_opt
 from .queries import BASE_QUERY, DAILY_SALES_AGG,DETAILS_DAY, BASE_WB_COSTS

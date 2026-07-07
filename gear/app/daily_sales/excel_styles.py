@@ -1,3 +1,4 @@
+# gear/app/daily_sales/excel_styles.py
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 
 
@@ -6,13 +7,18 @@ COLORS = {
     "light_gray": "F7F7F7",
     "border_gray": "D9D9D9",
     "white": "FFFFFF",
-    "text": "0D0D0D",
+    "text": "050505",
+    "warning": "FDECEC",
+    "success": "EDF7F3",
+    "discount": "A33A3A",
 }
 
 FILLS = {
     "header": PatternFill("solid", fgColor=COLORS["dark_green"]),
     "alt": PatternFill("solid", fgColor=COLORS["light_gray"]),
     "none": PatternFill(fill_type=None),
+    "warning": PatternFill("solid", fgColor=COLORS["warning"]),
+    "success": PatternFill("solid", fgColor=COLORS["success"]),
 }
 
 FONTS = {
@@ -26,6 +32,18 @@ FONTS = {
         name="Roboto Light",
         size=10,
         color=COLORS["text"],
+    ),
+    "bold": Font(
+    name="Roboto Light",
+    size=10,
+    bold=True,
+    color=COLORS["text"],
+    ),
+
+    "discount": Font(
+        name="Roboto Light",
+        size=10,
+        color=COLORS["discount"],
     ),
 }
 
@@ -71,10 +89,40 @@ def apply_excel_style(
 
         for col_idx in range(1, max_col + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
+            header = ws.cell(row=1, column=col_idx).value
 
-            cell.font = FONTS["normal"]
             cell.border = BORDERS["thin"]
-            cell.fill = FILLS["alt"] if is_alt else FILLS["none"]
+
+            if header in {
+                "Выручка",
+                "WB реализовал",
+                "Наименование",
+                "Фин результат WB",
+  
+            }:
+                cell.fill = FILLS["success"]
+
+            elif header in {
+                "Q без себест.",
+                "Нет на складе",
+                "Нет прихода",
+            }:
+                cell.fill = FILLS["warning"]
+
+            else:
+                cell.fill = FILLS["alt"] if is_alt else FILLS["none"]
+
+            if header in {
+                "USK",
+                "Дата",
+            }:
+                cell.font = FONTS["bold"]
+
+            elif header == "WB дисконт":
+                cell.font = FONTS["discount"]
+
+            else:
+                cell.font = FONTS["normal"]
 
             if col_idx in numeric_columns:
                 cell.number_format = FORMATS["decimal"]
