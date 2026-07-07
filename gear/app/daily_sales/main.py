@@ -8,13 +8,15 @@ import dash_mantine_components as dmc
 from dash import dcc, Input, Output, State, ALL
 from .methodology import methodology_modal, register_methodology_callbacks
 
-from .data import get_last_update
+from .data import get_last_update, filters_by_brand
 from .filters import WbFilters
 from .grids import grid_date, day_details
 from .ui import export_buttons_main, export_buttons_details
 from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
 from .stat import StatWindow
+from .excel_export import register_excel_export_callbacks
+
 
 
 try:
@@ -176,10 +178,10 @@ class MainWindow:
                 return stat_container.layout()
 
             return [
-                get_sales_summary(start, end, cat_list, brand_list, gender_list),
-                export_buttons_main(),
-                grid_date(start, end, cat_list, brand_list, gender_list),
-            ]
+                    get_sales_summary(start, end, cat_list, brand_list, gender_list),
+                    export_buttons_main(),
+                    grid_date(start, end, cat_list, brand_list, gender_list),
+                ]
 
         @app.callback(
             Output(self.selected_dates_chips_id, "children"),
@@ -208,13 +210,13 @@ class MainWindow:
                 return {"display": "block"}, {"display": "none"}, ""
 
             return (
-                {"display": "none"},
-                {"display": "block"},
-                [
-                    export_buttons_details(date_value),
-                    day_details(date_value, cat, brand, gender),
-                ],
-            )
+                    {"display": "none"},
+                    {"display": "block"},
+                    [
+                        export_buttons_details(date_value),
+                        day_details(date_value, cat, brand, gender),
+                    ],
+                )
 
         @app.callback(
             Output({"type": "dates_grid", "index": "2"}, "exportDataAsCsv"),
@@ -232,7 +234,40 @@ class MainWindow:
         def export_main_csv(n_clicks):
             return bool(n_clicks)
         
+        ###---Для умного фильтра---###
+        @app.callback(
+            Output(FILTERS.cat_multy_id, "data"),
+            Output(FILTERS.gender_multy_id, "data"),
+            Output(FILTERS.cat_multy_id, "value"),
+            Output(FILTERS.gender_multy_id, "value"),
+            Input(FILTERS.brand_multy_id, "value"),
+            State(FILTERS.cat_multy_id, "value"),
+            State(FILTERS.gender_multy_id, "value"),
+            prevent_initial_call=True,
+        )
+        def update_filters_by_brand(brand_list, cat_value, gender_value):
+            opts = filters_by_brand(brand_list)
+
+            cats = opts["cats"]
+            genders = opts["genders"]
+
+            valid_cat_values = {x["value"] for x in cats}
+            valid_gender_values = {x["value"] for x in genders}
+
+            cat_value = [
+                x for x in (cat_value or [])
+                if x in valid_cat_values
+            ]
+
+            gender_value = [
+                x for x in (gender_value or [])
+                if x in valid_gender_values
+            ]
+
+            return cats, genders, cat_value, gender_value
+        ###-------------------###
         
+        register_excel_export_callbacks(app,self.selected_dates_chips_id,)
         register_methodology_callbacks(app)
 
 

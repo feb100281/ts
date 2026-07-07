@@ -981,6 +981,8 @@ def _details_columns():
                 "fontWeight": "700",
             },
         ),
+        
+       
     ]
 
 
@@ -1014,7 +1016,7 @@ def grid_date(
         row_data=row_data,
         column_defs=_daily_columns(include_checkbox=True),
         grid_id={"type": "dates_grid", "index": "1"},
-        file_name="grid_export.csv",
+        file_name="daily_sales.csv",
     )
 
     grid.dashGridOptions.update(
@@ -1043,5 +1045,6 @@ def day_details(date, cat, brand, gender):
         row_data=row_data,
         column_defs=_details_columns(),
         grid_id={"type": "dates_grid", "index": "2"},
-        file_name="daily_details.csv",
+        file_name=f"daily_details_{date}.csv",
+    
     )
