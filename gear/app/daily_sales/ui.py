@@ -1,5 +1,7 @@
+# gear/app/daily_sales/ui.py
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
+from dash import dcc
 
 
 def export_button(label, icon, button_id, color):
@@ -47,8 +49,10 @@ def export_buttons_main():
                 {"type": "main-dnl", "index": "csv"},
                 "blue",
             ),
+            dcc.Download(id="daily-sales-main-excel-download"),
         ],
     )
+    
 
 
 def export_buttons_details(date_value):
@@ -69,5 +73,6 @@ def export_buttons_details(date_value):
                 {"type": "csv-dnl", "index": date_value},
                 "blue",
             ),
+            dcc.Download(id="daily-sales-details-excel-download"),
         ],
     )

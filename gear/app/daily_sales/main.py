@@ -15,6 +15,7 @@ from .ui import export_buttons_main, export_buttons_details
 from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
 from .stat import StatWindow
+from .excel_export import register_excel_export_callbacks
 
 
 try:
@@ -176,10 +177,10 @@ class MainWindow:
                 return stat_container.layout()
 
             return [
-                get_sales_summary(start, end, cat_list, brand_list, gender_list),
-                export_buttons_main(),
-                grid_date(start, end, cat_list, brand_list, gender_list),
-            ]
+                    get_sales_summary(start, end, cat_list, brand_list, gender_list),
+                    export_buttons_main(),
+                    grid_date(start, end, cat_list, brand_list, gender_list),
+                ]
 
         @app.callback(
             Output(self.selected_dates_chips_id, "children"),
@@ -208,13 +209,13 @@ class MainWindow:
                 return {"display": "block"}, {"display": "none"}, ""
 
             return (
-                {"display": "none"},
-                {"display": "block"},
-                [
-                    export_buttons_details(date_value),
-                    day_details(date_value, cat, brand, gender),
-                ],
-            )
+                    {"display": "none"},
+                    {"display": "block"},
+                    [
+                        export_buttons_details(date_value),
+                        day_details(date_value, cat, brand, gender),
+                    ],
+                )
 
         @app.callback(
             Output({"type": "dates_grid", "index": "2"}, "exportDataAsCsv"),
@@ -232,7 +233,7 @@ class MainWindow:
         def export_main_csv(n_clicks):
             return bool(n_clicks)
         
-        
+        register_excel_export_callbacks(app,self.selected_dates_chips_id,)
         register_methodology_callbacks(app)
 
 
