@@ -1,3 +1,4 @@
+# gear/app/daily_sales/stat.py
 from datetime import date
 import locale
 
@@ -9,7 +10,6 @@ from dash import dcc, Input, Output, State, ALL
 from .data import get_last_update
 from .filters import WbFilters
 from .grids import grid_date, day_details
-from .ui import export_buttons_main, export_buttons_details
 from ..misc.baners import in_construction_widjet
 from .summary import get_sales_summary
 from ..data.base import DashboardData
