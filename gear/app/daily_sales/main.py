@@ -11,11 +11,12 @@ from .methodology import methodology_modal, register_methodology_callbacks
 from .data import get_last_update, filters_by_brand
 from .filters import WbFilters
 from .grids import grid_date, day_details
-from .ui import export_buttons_main, export_buttons_details
+from .ui import export_panel_main, export_panel_details
 from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
 from .stat import StatWindow
 from .excel_export import register_excel_export_callbacks
+from .stocks.export import register_stock_export_callbacks
 
 
 
@@ -179,7 +180,7 @@ class MainWindow:
 
             return [
                     get_sales_summary(start, end, cat_list, brand_list, gender_list),
-                    export_buttons_main(),
+                    export_panel_main(),
                     grid_date(start, end, cat_list, brand_list, gender_list),
                 ]
 
@@ -213,7 +214,7 @@ class MainWindow:
                     {"display": "none"},
                     {"display": "block"},
                     [
-                        export_buttons_details(date_value),
+                        export_panel_details(date_value),
                         day_details(date_value, cat, brand, gender),
                     ],
                 )
@@ -268,6 +269,7 @@ class MainWindow:
         ###-------------------###
         
         register_excel_export_callbacks(app,self.selected_dates_chips_id,)
+        register_stock_export_callbacks(app)
         register_methodology_callbacks(app)
 
 

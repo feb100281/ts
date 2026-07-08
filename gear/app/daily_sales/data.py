@@ -91,6 +91,96 @@ def filters_by_brand(brand_list=None):
     }
 
 ### ------------
-#.  Данные по датам
+#.  Остатки товаров с с/стью
 ### ------------
+
+from datetime import date, timedelta
+import pandas as pd
+from conns import get_duckdb_conn_with_opt
+
+
+def get_default_stocks_date():
+    return date.today() - timedelta(days=1)
+
+
+def get_stocks_export_data(report_date):
+    """
+    Остатки товаров на выбранную дату.
+    По умолчанию дату передаем из DatePicker, обычно вчера.
+    """
+    with get_duckdb_conn_with_opt() as con:
+        df = con.execute(
+            """
+            WITH stocks AS (
+                SELECT 
+                    t.date_from::DATE AS date_from,
+                    u.usk,
+                    t.nm_id,
+                    p.title,
+                    t.chrt_id,
+                    s.tech_size,
+
+                    SUM(COALESCE(t.quantity, 0)) AS quantity,
+                    SUM(COALESCE(t.in_way_from_client, 0)) AS in_way_from_client,
+                    SUM(COALESCE(t.in_way_to_client, 0)) AS in_way_to_client,
+
+                    SUM(
+                        COALESCE(t.quantity, 0)
+                        + COALESCE(t.in_way_from_client, 0)
+                        + COALESCE(t.in_way_to_client, 0)
+                    ) AS total_quantity,
+
+                    MAX(w.adjust_wo[-1]) AS last_costs,
+                    MAX(w.adjust_man_wo[-1]) AS last_man_costs
+
+                FROM stocks.unpacked_stocks t
+                LEFT JOIN inventories.usk u 
+                    ON u.card_id = t.nm_id
+                LEFT JOIN cards.sizes s 
+                    ON s.chrt_id = t.chrt_id
+                LEFT JOIN inventories.pre_wo w 
+                    ON w.usk = u.usk
+                LEFT JOIN inventories.wb_product p 
+                    ON p.card_id = t.nm_id
+
+                WHERE t.date_from::DATE = $report_date::DATE
+
+                GROUP BY
+                    t.date_from::DATE,
+                    u.usk,
+                    t.nm_id,
+                    p.title,
+                    t.chrt_id,
+                    s.tech_size
+            )
+
+            SELECT
+                date_from AS "Дата",
+                usk AS "USK",
+                nm_id AS "NM ID",
+                title AS "Наименование",
+                chrt_id AS "Chrt ID",
+                tech_size AS "Размер",
+
+                quantity AS "Остаток на складе",
+                in_way_from_client AS "В пути от клиента",
+                in_way_to_client AS "В пути к клиенту",
+                total_quantity AS "Итого количество",
+
+                last_costs AS "Бух. с/с за ед.",
+                last_man_costs AS "Упр. с/с за ед.",
+
+                ROUND(total_quantity * COALESCE(last_costs, 0), 2) AS "Бух. с/с всего",
+                ROUND(total_quantity * COALESCE(last_man_costs, 0), 2) AS "Упр. с/с всего"
+
+            FROM stocks
+            ORDER BY
+                "Итого количество" DESC,
+                "Наименование",
+                "Размер"
+            """,
+            {"report_date": report_date},
+        ).df()
+
+    return df
 
