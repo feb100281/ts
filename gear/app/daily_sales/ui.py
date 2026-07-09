@@ -3,6 +3,8 @@ import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 from dash import dcc, html
 from datetime import date, timedelta
+# from .wb_plan_monitor import wb_plan_button, wb_plan_modal
+from .wb_plan_monitor import wb_plan_button, wb_plan_modal
 
 
 
@@ -139,6 +141,9 @@ def export_panel_main():
                                 "Таблица на экране",
                                 "#228be6",
                             ),
+                            
+                            wb_plan_button(),
+                            
                             export_button(
                                 "Excel",
                                 "catppuccin:ms-excel",
@@ -158,6 +163,7 @@ def export_panel_main():
 
             dcc.Download(id="daily-sales-main-excel-download"),
             dcc.Download(id=STOCKS_EXPORT_DOWNLOAD_ID),
+            wb_plan_modal(),
         ],
     )
 

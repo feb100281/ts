@@ -57,7 +57,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-07-05 2026-07-07 --overwrite
+1) python manage.py fin_report_range 2026-07-07 2026-07-08 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 
