@@ -18,6 +18,7 @@ from .stat import StatWindow
 from .excel_export import register_excel_export_callbacks
 from .stocks.export import register_stock_export_callbacks
 from .wb_plan_monitor import register_wb_plan_callbacks
+from .ai_analysis import register_ai_analysis_callbacks
 
 
 
@@ -274,6 +275,7 @@ class MainWindow:
         register_stock_export_callbacks(app)
         register_methodology_callbacks(app)
         register_wb_plan_callbacks(app)
+        register_ai_analysis_callbacks(app)
 
 
 

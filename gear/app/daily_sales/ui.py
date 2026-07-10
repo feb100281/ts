@@ -225,6 +225,7 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 from .wb_plan_monitor import wb_plan_button, wb_plan_modal
+from .ai_analysis import ai_analysis_button, ai_analysis_modal
 
 
 STOCKS_DATE_PICKER_ID = "daily-sales-stocks-date-picker"
@@ -396,6 +397,22 @@ def export_panel_main():
                                     wb_plan_button(),
                                 ],
                             ),
+                            
+                            vertical_divider(),
+
+                                dmc.Group(
+                                    gap="sm",
+                                    align="center",
+                                    wrap="nowrap",
+                                    children=[
+                                        export_section_title(
+                                            "solar:magic-stick-3-linear",
+                                            "Умный анализ",
+                                            "#7950f2",
+                                        ),
+                                        ai_analysis_button(),
+                                    ],
+                                ),
                         ],
                     ),
 
@@ -449,6 +466,7 @@ def export_panel_main():
             dcc.Download(id="daily-sales-main-excel-download"),
             dcc.Download(id=STOCKS_EXPORT_DOWNLOAD_ID),
             wb_plan_modal(),
+            ai_analysis_modal(),
         ],
     )
 
