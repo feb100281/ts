@@ -42,14 +42,19 @@ def wb_plan_button():
     )
 
 
+
+
 def wb_plan_modal():
     return dmc.Modal(
         id=WB_PLAN_MODAL_ID,
         opened=False,
         size="95%",
         centered=True,
+        padding="md",
         title=dmc.Group(
             gap=8,
+            align="center",
+            wrap="nowrap",
             children=[
                 DashIconify(
                     icon="solar:chart-square-linear",
@@ -67,7 +72,12 @@ def wb_plan_modal():
         children=[
             dcc.Loading(
                 type="cube",
-                children=dmc.Box(id=WB_PLAN_CONTENT_ID),
+                children=dmc.Box(
+                    id=WB_PLAN_CONTENT_ID,
+                    style={
+                        "minHeight": "650px",
+                    },
+                ),
             ),
         ],
         styles={
@@ -75,11 +85,25 @@ def wb_plan_modal():
                 "width": "100%",
             },
             "content": {
+                "height": "92vh",
+                "maxHeight": "92vh",
                 "borderRadius": "6px",
+                "display": "flex",
+                "flexDirection": "column",
+            },
+            "header": {
+                "flex": "0 0 auto",
+                "borderBottom": "1px solid #e9ecef",
+            },
+            "body": {
+                "flex": "1 1 auto",
+                "minHeight": "0",
+                "overflowY": "auto",
+                "overflowX": "hidden",
             },
         },
     )
-
+    
 
 def build_modal_content(data):
     current_semi = data["current_semi"]
