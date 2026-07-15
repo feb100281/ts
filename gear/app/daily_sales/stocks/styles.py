@@ -1,3 +1,4 @@
+# gear/app/daily_sales/stocks/styles.py
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 

@@ -19,6 +19,7 @@ from .excel_export import register_excel_export_callbacks
 from .stocks.export import register_stock_export_callbacks
 from .wb_plan_monitor import register_wb_plan_callbacks
 from .ai_analysis import register_ai_analysis_callbacks
+from .price_analysis import register_price_analysis_export_callbacks
 
 
 
@@ -276,6 +277,7 @@ class MainWindow:
         register_methodology_callbacks(app)
         register_wb_plan_callbacks(app)
         register_ai_analysis_callbacks(app)
+        register_price_analysis_export_callbacks(app)
 
 
 
