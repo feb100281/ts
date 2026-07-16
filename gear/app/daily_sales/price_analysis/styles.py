@@ -1,3 +1,4 @@
+# gear/app/daily_sales/price_analysis/styles.py
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 COLORS = {

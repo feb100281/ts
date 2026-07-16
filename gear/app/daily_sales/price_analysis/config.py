@@ -1,3 +1,4 @@
+# gear/app/daily_sales/price_analysis/config.py
 PRICE_ANALYSIS_EXPORT_BTN_ID = "daily-sales-price-analysis-export-btn"
 PRICE_ANALYSIS_DOWNLOAD_ID = "daily-sales-price-analysis-download"
 PRICE_ANALYSIS_LOADING_ID = "daily-sales-price-analysis-loading"
