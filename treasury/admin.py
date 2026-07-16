@@ -29,7 +29,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.admin.helpers import ActionForm
 from grossbook.models import Manual
 from corporate.models import COA
-
+from django.db import transaction
 
 
 
@@ -939,7 +939,7 @@ class CfDataAdmin(admin.ModelAdmin):
     readonly_fields = ("source_dt", "source_cr")
     change_list_template = "admin/treasury/cfdata/change_list.html"
     action_form = CfDataActionForm
-    actions = ["create_storno_manual_entries"]
+    actions = ["copy_selected_rows", "create_storno_manual_entries",]
 
     list_display = (
         "date_short",
@@ -966,6 +966,40 @@ class CfDataAdmin(admin.ModelAdmin):
         "contract__number",
 
     )
+    
+    
+    def _get_copy_doc_number(self, original):
+        """
+        Формирует уникальный номер для копии.
+
+        Например:
+        12345
+        12345-копия
+        12345-копия-2
+        12345-копия-3
+        """
+
+        original_number = (original.doc_numner or "").strip()
+
+        if original_number:
+            base_number = f"{original_number}-копия"
+        else:
+            base_number = f"копия-{original.pk}"
+
+        candidate = base_number
+        counter = 2
+
+        while CfData.objects.filter(
+            bs=original.bs,
+            doc_numner=candidate,
+            date=original.date,
+            dt=original.dt,
+            cr=original.cr,
+        ).exists():
+            candidate = f"{base_number}-{counter}"
+            counter += 1
+
+        return candidate
     
     
     def get_search_results(self, request, queryset, search_term):
@@ -1510,6 +1544,103 @@ class CfDataAdmin(admin.ModelAdmin):
             )
 
         return "—"
+    
+    
+    
+    @admin.action(description="Скопировать выделенные строки")
+    def copy_selected_rows(self, request, queryset):
+        created_count = 0
+
+        # Подтягиваем сплиты заранее, чтобы не делать отдельный запрос
+        # для каждой выделенной строки.
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                "splits",
+                queryset=CfSplits.objects.select_related(
+                    "contract",
+                    "cfitem",
+                ).order_by("id"),
+            )
+        )
+
+        try:
+            with transaction.atomic():
+                for original in queryset:
+                    # -------------------------------------------------
+                    # Делаем номер документа уникальным.
+                    #
+                    # В модели есть UniqueConstraint:
+                    # bs + doc_numner + date + dt + cr
+                    #
+                    # Поэтому полностью одинаковую запись база данных
+                    # может не разрешить сохранить.
+                    # -------------------------------------------------
+                    new_doc_number = self._get_copy_doc_number(original)
+
+                    copied_row = CfData.objects.create(
+                        bs=original.bs,
+                        doc_type=original.doc_type,
+                        doc_numner=new_doc_number,
+                        doc_date=original.doc_date,
+                        date=original.date,
+
+                        dt=original.dt,
+                        cr=original.cr,
+
+                        source_dt=original.source_dt,
+                        source_cr=original.source_cr,
+
+                        tax_id=original.tax_id,
+                        temp=original.temp,
+                        cp_bs_name=original.cp_bs_name,
+                        intercompany=original.intercompany,
+                        payer_account=original.payer_account,
+                        reciver_account=original.reciver_account,
+                        vat_rate=original.vat_rate,
+
+                        cp=original.cp,
+                        cp_final=original.cp_final,
+                        owner=original.owner,
+                        contract=original.contract,
+                        cfitem=original.cfitem,
+                        ba=original.ba,
+                    )
+
+                    # Копируем сплиты, если они есть.
+                    #
+                    # Используем bulk_create, чтобы не запускать
+                    # CfSplits.save() и повторный recalc_from_splits().
+                    copied_splits = [
+                        CfSplits(
+                            transaction=copied_row,
+                            dt=split.dt,
+                            cr=split.cr,
+                            temp=split.temp,
+                            vat_rate=split.vat_rate,
+                            contract=split.contract,
+                            cfitem=split.cfitem,
+                        )
+                        for split in original.splits.all()
+                    ]
+
+                    if copied_splits:
+                        CfSplits.objects.bulk_create(copied_splits)
+
+                    created_count += 1
+
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Не удалось скопировать строки: {exc}",
+                level=messages.ERROR,
+            )
+            return
+
+        self.message_user(
+            request,
+            f"Скопировано строк: {created_count}",
+            level=messages.SUCCESS,
+        )
     
     
     
