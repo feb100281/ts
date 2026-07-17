@@ -10,7 +10,7 @@ from .methodology import methodology_modal, register_methodology_callbacks
 
 from .data import get_last_update, filters_by_brand
 from .filters import WbFilters
-from .grids import grid_date, day_details
+from .grids import grid_date, day_details, period_details
 from .ui import export_panel_main, export_panel_details
 from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
@@ -31,6 +31,7 @@ except locale.Error:
 
 
 FILTERS = WbFilters()
+PERIOD_CHIP_VALUE = "__whole_period__"
 
 
 def chip_maker(row):
@@ -45,7 +46,38 @@ def chip_maker(row):
         radius=0,
         checked=False,
     )
+    
+    
+def period_chip_maker(rows):
+    dates = sorted(
+        pd.to_datetime(row["date_from"])
+        for row in rows
+    )
 
+    start = dates[0]
+    end = dates[-1]
+
+    label = (
+        f"За весь период · "
+        f"{start.strftime('%d.%m.%Y')}–"
+        f"{end.strftime('%d.%m.%Y')}"
+    )
+
+    value = (
+        f"{PERIOD_CHIP_VALUE}|"
+        f"{start.strftime('%Y-%m-%d')}|"
+        f"{end.strftime('%Y-%m-%d')}"
+    )
+
+    return dmc.Chip(
+        label,
+        value=value,
+        variant="light",
+        color="green",
+        size="xs",
+        radius=0,
+        checked=False,
+    )
 
 class MainWindow:
     def __init__(self):
@@ -197,32 +229,120 @@ class MainWindow:
             if not rows:
                 return []
 
-            return [chip_maker(item) for item in rows]
+            chips = [
+                 period_chip_maker(rows),
+            ]
 
+            chips.extend(
+                chip_maker(item)
+                for item in rows
+            )
+
+            return chips
+        
         @app.callback(
             Output(self.ag_container_id, "style"),
             Output(self.details_container_id, "style"),
             Output(self.details_container_id, "children"),
             Input(self.selected_dates_chips_id, "value"),
+            State(FILTERS.date_picker_id, "value"),
             State(FILTERS.cat_multy_id, "value"),
             State(FILTERS.brand_multy_id, "value"),
             State(FILTERS.gender_multy_id, "value"),
             allow_duplicate=True,
             prevent_initial_call=True,
         )
-        def display_details(date_value, cat, brand, gender):
-            if not date_value:
-                return {"display": "block"}, {"display": "none"}, ""
+        def display_details(
+            date_value,
+            date_range,
+            cat,
+            brand,
+            gender,
+        ):
+            """
+            Переключает основную таблицу и детализацию.
 
-            return (
+            Обычный чип:
+                детализация за один день.
+
+            Зелёный чип:
+                детализация за период между выбранными строками.
+            """
+
+            # Чип не выбран — возвращаем основную таблицу
+            if not date_value:
+                return (
+                    {"display": "block"},
+                    {"display": "none"},
+                    [],
+                )
+
+            # Детализация за период выбранных строк
+            if (
+                isinstance(date_value, str)
+                and date_value.startswith(f"{PERIOD_CHIP_VALUE}|")
+            ):
+                value_parts = date_value.split("|", 2)
+
+                if len(value_parts) != 3:
+                    return (
+                        {"display": "block"},
+                        {"display": "none"},
+                        [],
+                    )
+
+                _, start, end = value_parts
+
+                return (
                     {"display": "none"},
                     {"display": "block"},
                     [
-                        export_panel_details(date_value),
-                        day_details(date_value, cat, brand, gender),
+                        export_panel_details(
+                            date_value=PERIOD_CHIP_VALUE,
+                            start_date=start,
+                            end_date=end,
+                        ),
+                        period_details(
+                            start=start,
+                            end=end,
+                            cat=cat,
+                            brand=brand,
+                            gender=gender,
+                        ),
                     ],
                 )
 
+            # Детализация за один выбранный день
+            selected_date = pd.to_datetime(
+                date_value,
+                errors="coerce",
+            )
+
+            if pd.isna(selected_date):
+                return (
+                    {"display": "block"},
+                    {"display": "none"},
+                    [],
+                )
+
+            selected_date = selected_date.strftime("%Y-%m-%d")
+
+            return (
+                {"display": "none"},
+                {"display": "block"},
+                [
+                    export_panel_details(
+                        date_value=selected_date,
+                    ),
+                    day_details(
+                        date=selected_date,
+                        cat=cat,
+                        brand=brand,
+                        gender=gender,
+                    ),
+                ],
+            )
+        
         @app.callback(
             Output({"type": "dates_grid", "index": "2"}, "exportDataAsCsv"),
             Input({"type": "csv-dnl", "index": ALL}, "n_clicks"),

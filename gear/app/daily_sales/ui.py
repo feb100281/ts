@@ -1,6 +1,7 @@
 # gear/app/daily_sales/ui.py
 
 from datetime import date, timedelta
+import pandas as pd
 
 import dash_mantine_components as dmc
 from dash import dcc, html
@@ -527,7 +528,24 @@ panel_block(
 # ПАНЕЛЬ ДЕТАЛИЗАЦИИ
 # ============================================================
 
-def export_panel_details(date_value):
+def export_panel_details(
+    date_value,
+    start_date=None,
+    end_date=None,
+):
+    is_period = date_value == "__whole_period__"
+
+    if is_period and start_date and end_date:
+        start_label = pd.to_datetime(start_date).strftime("%d.%m.%Y")
+        end_label = pd.to_datetime(end_date).strftime("%d.%m.%Y")
+
+        subtitle = f"За период {start_label}–{end_label}"
+        download_index = f"period|{start_date}|{end_date}"
+    else:
+        date_label = pd.to_datetime(date_value).strftime("%d.%m.%Y")
+        subtitle = f"За {date_label}"
+        download_index = date_value
+
     return dmc.Paper(
         withBorder=True,
         radius="sm",
@@ -560,7 +578,7 @@ def export_panel_details(date_value):
 
                             section_title(
                                 title="Детализация",
-                                subtitle="По выбранной дате",
+                                subtitle=subtitle,
                             ),
                         ],
                     ),
@@ -573,17 +591,23 @@ def export_panel_details(date_value):
                             excel_action_icon(
                                 button_id={
                                     "type": "xls-dnl",
-                                    "index": date_value,
+                                    "index": download_index,
                                 },
-                                tooltip="Скачать детализацию в Excel",
+                                tooltip=(
+                                    "Скачать детализацию "
+                                    "в Excel"
+                                ),
                             ),
 
                             csv_action_icon(
                                 button_id={
                                     "type": "csv-dnl",
-                                    "index": date_value,
+                                    "index": download_index,
                                 },
-                                tooltip="Скачать детализацию в CSV",
+                                tooltip=(
+                                    "Скачать детализацию "
+                                    "в CSV"
+                                ),
                             ),
                         ],
                     ),

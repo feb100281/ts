@@ -546,6 +546,13 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 ANALYTICS_DB_PATH = BASE_DIR / "analytics" / "analytics.duckdb"
 
+
+# Максимальный размер POST-запроса
+DATA_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024   # 200 МБ
+
+# Максимальный размер файла в памяти
+FILE_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024   # 200 МБ
+
 # TENANT_PORTAL_SUPPORT_EMAIL = "help@yourcompany.ru"
 # TENANT_PORTAL_SUPPORT_TELEGRAM = "Daria_Voiten"
 
