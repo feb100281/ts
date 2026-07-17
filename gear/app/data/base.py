@@ -173,255 +173,36 @@ class DashboardData:
 
     def _init_wb_costs(self) -> None:
         self.con.execute(BASE_WB_COSTS)
+    
+    def make_filter(self, cat_id=None, gender=None, brand=None):
+        cat_id = cat_id or []
+        gender = gender or []
+        brand = brand or []
+        
+        cat_filter = ''   # <-- обязательно инициализировать
+        gender_filter = ''
+        brand_filter = ''
 
-    # ------------------------------------------------------------------
-    # Вспомогательные методы
-    # ------------------------------------------------------------------
+        if cat_id:
+            if isinstance(cat_id, list):
+                cat_filter = f"AND subject_id IN ({','.join(str(int(x)) for x in cat_id)})"
+            else:
+                cat_filter = f"AND subject_id = {int(cat_id)}"
 
-    @staticmethod
-    def _normalize_list(
-        value: Any,
-    ) -> list[Any]:
-        """
-        Приводит одиночное значение или коллекцию к списку.
+        if gender:
+            if isinstance(gender, list):
+                gender_filter = f"AND gender IN ({','.join(f'\'{x}\'' for x in gender)})"
+            else:
+                gender_filter = f"AND gender = '{gender}'"
 
-        None, пустая строка и пустая коллекция превращаются
-        в пустой список.
-        """
-        if value is None:
-            return []
+        if brand:
+            if isinstance(brand, list):
+                brand_filter = f"AND brand IN ({','.join(f'\'{x}\'' for x in brand)})"
+            else:
+                brand_filter = f"AND brand = '{brand}'"
 
-        if isinstance(value, str):
-            value = value.strip()
-
-            if not value:
-                return []
-
-            return [value]
-
-        if isinstance(
-            value,
-            (
-                list,
-                tuple,
-                set,
-                pd.Series,
-            ),
-        ):
-            return [
-                item
-                for item in value
-                if item is not None
-                and str(item).strip() != ""
-            ]
-
-        return [value]
-
-    @staticmethod
-    def _placeholders(
-        values: Iterable[Any],
-    ) -> str:
-        """
-        Создаёт строку плейсхолдеров:
-
-        ?, ?, ?
-        """
-        values = list(values)
-
-        return ", ".join(
-            "?"
-            for _ in values
-        )
-
-    def _build_sales_filters(
-        self,
-        cat_list=None,
-        gender_list=None,
-        brand_list=None,
-        alias: str = "t",
-    ) -> tuple[str, list[Any]]:
-        """
-        Формирует фильтры для таблицы base.
-
-        В base доступны:
-
-        - subject_id;
-        - gender;
-        - brand.
-
-        Возвращает:
-
-        - SQL-фрагмент;
-        - список параметров.
-        """
-        clauses: list[str] = []
-        parameters: list[Any] = []
-
-        categories = self._normalize_list(
-            cat_list
-        )
-
-        genders = self._normalize_list(
-            gender_list
-        )
-
-        brands = self._normalize_list(
-            brand_list
-        )
-
-        if categories:
-            category_ids = [
-                int(value)
-                for value in categories
-            ]
-
-            clauses.append(
-                f"{alias}.subject_id IN "
-                f"({self._placeholders(category_ids)})"
-            )
-
-            parameters.extend(
-                category_ids
-            )
-
-        if genders:
-            gender_values = [
-                str(value)
-                for value in genders
-            ]
-
-            clauses.append(
-                f"{alias}.gender IN "
-                f"({self._placeholders(gender_values)})"
-            )
-
-            parameters.extend(
-                gender_values
-            )
-
-        if brands:
-            brand_values = [
-                str(value).upper()
-                for value in brands
-            ]
-
-            clauses.append(
-                f"UPPER({alias}.brand) IN "
-                f"({self._placeholders(brand_values)})"
-            )
-
-            parameters.extend(
-                brand_values
-            )
-
-        if not clauses:
-            return "", []
-
-        sql_filter = "\nAND " + "\nAND ".join(
-            clauses
-        )
-
-        return sql_filter, parameters
-
-    def _build_stock_filters(
-        self,
-        cat_list=None,
-        gender_list=None,
-        brand_list=None,
-        alias: str = "t",
-    ) -> tuple[str, list[Any]]:
-        """
-        Формирует фильтры для stocks_daily.
-
-        Фильтрация выполняется через inventories.wb_product,
-        поэтому метод работает даже в том случае, если в
-        stocks_daily нет subject_id.
-
-        Связь:
-
-            inventories.wb_product.card_id = stocks_daily.usk
-        """
-        conditions: list[str] = []
-        parameters: list[Any] = []
-
-        categories = self._normalize_list(
-            cat_list
-        )
-
-        genders = self._normalize_list(
-            gender_list
-        )
-
-        brands = self._normalize_list(
-            brand_list
-        )
-
-        if categories:
-            category_ids = [
-                int(value)
-                for value in categories
-            ]
-
-            conditions.append(
-                "wp.subject_id IN "
-                f"({self._placeholders(category_ids)})"
-            )
-
-            parameters.extend(
-                category_ids
-            )
-
-        if genders:
-            gender_values = [
-                str(value)
-                for value in genders
-            ]
-
-            conditions.append(
-                "COALESCE("
-                "wp.gender, "
-                "'Не указан'"
-                ") IN "
-                f"({self._placeholders(gender_values)})"
-            )
-
-            parameters.extend(
-                gender_values
-            )
-
-        if brands:
-            brand_values = [
-                str(value).upper()
-                for value in brands
-            ]
-
-            conditions.append(
-                "UPPER(wp.brand) IN "
-                f"({self._placeholders(brand_values)})"
-            )
-
-            parameters.extend(
-                brand_values
-            )
-
-        if not conditions:
-            return "", []
-
-        exists_filter = f"""
-AND EXISTS (
-    SELECT 1
-    FROM inventories.wb_product wp
-    WHERE wp.card_id = {alias}.usk
-      AND {" AND ".join(conditions)}
-)
-"""
-
-        return exists_filter, parameters
-
-    # ------------------------------------------------------------------
-    # Основная таблица по дням
-    # ------------------------------------------------------------------
-
+        return f"{cat_filter} {gender_filter} {brand_filter}"
+        
     def get_dayly_sales_grid_data(
         self,
         start: date = date(2024, 1, 1),
