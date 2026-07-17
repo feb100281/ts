@@ -152,8 +152,13 @@ def _clean_number_series(
     """
     Приводит колонку к числовому типу.
 
-    Поддерживает значения с пробелами,
-    запятыми и символом рубля.
+    Поддерживает:
+
+    - пробелы;
+    - неразрывные пробелы;
+    - запятые;
+    - знак рубля;
+    - знак процента.
     """
 
     if series.empty:
@@ -165,11 +170,31 @@ def _clean_number_series(
     text = (
         series
         .astype(str)
-        .str.replace("\u00A0", "", regex=False)
-        .str.replace(" ", "", regex=False)
-        .str.replace("₽", "", regex=False)
-        .str.replace("%", "", regex=False)
-        .str.replace(",", ".", regex=False)
+        .str.replace(
+            "\u00A0",
+            "",
+            regex=False,
+        )
+        .str.replace(
+            " ",
+            "",
+            regex=False,
+        )
+        .str.replace(
+            "₽",
+            "",
+            regex=False,
+        )
+        .str.replace(
+            "%",
+            "",
+            regex=False,
+        )
+        .str.replace(
+            ",",
+            ".",
+            regex=False,
+        )
         .str.strip()
     )
 
@@ -183,8 +208,9 @@ def get_zero_price_product_ids(
     history_df: pd.DataFrame,
 ) -> set[str]:
     """
-    Возвращает NM ID товаров, у которых хотя бы
-    в одной строке УПД нулевая цена.
+    Возвращает NM ID товаров, у которых
+    хотя бы в одной строке УПД указана
+    нулевая цена.
 
     Проверяются:
 
@@ -214,13 +240,20 @@ def get_zero_price_product_ids(
         "Цена, бух",
         "Цена, упр",
     ):
-        if price_column not in history_df.columns:
+        if (
+            price_column
+            not in history_df.columns
+        ):
             continue
 
         found_price_column = True
 
-        numeric_price = _clean_number_series(
-            history_df[price_column]
+        numeric_price = (
+            _clean_number_series(
+                history_df[
+                    price_column
+                ]
+            )
         )
 
         zero_mask |= numeric_price.eq(0)
@@ -249,9 +282,9 @@ def filter_products_with_zero_price(
     history_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Оставляет в основной таблице только товары,
-    у которых хотя бы в одном УПД указана
-    нулевая цена.
+    Оставляет только товары,
+    у которых в истории выбранного периода
+    есть хотя бы одна нулевая цена.
     """
 
     if products_df.empty:
@@ -264,14 +297,22 @@ def filter_products_with_zero_price(
     )
 
     if not zero_price_nm_ids:
-        return products_df.iloc[0:0].copy()
+        return (
+            products_df
+            .iloc[0:0]
+            .copy()
+        )
 
     nm_column = _find_nm_id_column(
         products_df
     )
 
     if not nm_column:
-        return products_df.iloc[0:0].copy()
+        return (
+            products_df
+            .iloc[0:0]
+            .copy()
+        )
 
     product_nm_ids = (
         products_df[nm_column]
@@ -295,19 +336,22 @@ def _get_product_history(
     filter_store: dict | None,
 ) -> tuple[str, pd.DataFrame]:
     """
-    Получает историю выбранного товара на сервере.
+    Получает историю выбранного товара.
 
-    Возвращает:
+    Учитывает:
 
-    - нормализованный NM ID;
-    - DataFrame истории.
+    - NM ID;
+    - выбранных поставщиков;
+    - выбранный период УПД.
     """
 
     if not selected_product:
         return "", pd.DataFrame()
 
     nm_id = normalise_nm_id(
-        selected_product.get("nm_id")
+        selected_product.get(
+            "nm_id"
+        )
     )
 
     if not nm_id:
@@ -333,17 +377,25 @@ def _get_product_history(
         nm_ids=[nm_id],
         suppliers=(
             (filter_store or {}).get(
-                "suppliers"
+                "suppliers",
+                [],
             )
         ),
-        date_range=None,
+        date_range=(
+            (filter_store or {}).get(
+                "date_range"
+            )
+        ),
     )
 
-    return nm_id, product_history
+    return (
+        nm_id,
+        product_history,
+    )
 
 
 # ---------------------------------------------------------------------
-# Серверная обработка встроенных фильтров AG Grid
+# Серверная обработка фильтров AG Grid
 # ---------------------------------------------------------------------
 
 
@@ -352,7 +404,7 @@ def _apply_text_condition(
     condition: dict,
 ) -> pd.Series:
     """
-    Применяет один текстовый фильтр AG Grid.
+    Применяет текстовый фильтр AG Grid.
     """
 
     filter_type = condition.get(
@@ -394,34 +446,54 @@ def _apply_text_condition(
         )
 
     if filter_type == "startsWith":
-        return normalized_series.str.startswith(
-            normalized_filter,
-            na=False,
+        return (
+            normalized_series
+            .str.startswith(
+                normalized_filter,
+                na=False,
+            )
         )
 
     if filter_type == "endsWith":
-        return normalized_series.str.endswith(
-            normalized_filter,
-            na=False,
+        return (
+            normalized_series
+            .str.endswith(
+                normalized_filter,
+                na=False,
+            )
         )
 
     if filter_type == "notContains":
-        return ~normalized_series.str.contains(
+        return (
+            ~normalized_series
+            .str.contains(
+                normalized_filter,
+                regex=False,
+                na=False,
+            )
+        )
+
+    if filter_type == "blank":
+        return (
+            text_series
+            .str.strip()
+            .eq("")
+        )
+
+    if filter_type == "notBlank":
+        return (
+            text_series
+            .str.strip()
+            .ne("")
+        )
+
+    return (
+        normalized_series
+        .str.contains(
             normalized_filter,
             regex=False,
             na=False,
         )
-
-    if filter_type == "blank":
-        return text_series.str.strip().eq("")
-
-    if filter_type == "notBlank":
-        return text_series.str.strip().ne("")
-
-    return normalized_series.str.contains(
-        normalized_filter,
-        regex=False,
-        na=False,
     )
 
 
@@ -430,7 +502,7 @@ def _apply_number_condition(
     condition: dict,
 ) -> pd.Series:
     """
-    Применяет один числовой фильтр AG Grid.
+    Применяет числовой фильтр AG Grid.
     """
 
     filter_type = condition.get(
@@ -438,17 +510,23 @@ def _apply_number_condition(
         "equals",
     )
 
-    numeric_series = _clean_number_series(
-        series
+    numeric_series = (
+        _clean_number_series(
+            series
+        )
     )
 
     filter_value = pd.to_numeric(
-        condition.get("filter"),
+        condition.get(
+            "filter"
+        ),
         errors="coerce",
     )
 
     filter_to = pd.to_numeric(
-        condition.get("filterTo"),
+        condition.get(
+            "filterTo"
+        ),
         errors="coerce",
     )
 
@@ -484,7 +562,10 @@ def _apply_number_condition(
             filter_value
         )
 
-    if filter_type == "greaterThanOrEqual":
+    if (
+        filter_type
+        == "greaterThanOrEqual"
+    ):
         return numeric_series.ge(
             filter_value
         )
@@ -494,8 +575,12 @@ def _apply_number_condition(
         and pd.notna(filter_to)
     ):
         return (
-            numeric_series.ge(filter_value)
-            & numeric_series.le(filter_to)
+            numeric_series.ge(
+                filter_value
+            )
+            & numeric_series.le(
+                filter_to
+            )
         )
 
     return numeric_series.eq(
@@ -508,7 +593,7 @@ def _apply_date_condition(
     condition: dict,
 ) -> pd.Series:
     """
-    Применяет один фильтр даты AG Grid.
+    Применяет фильтр даты AG Grid.
     """
 
     filter_type = condition.get(
@@ -516,18 +601,25 @@ def _apply_date_condition(
         "equals",
     )
 
-    date_series = pd.to_datetime(
-        series,
-        errors="coerce",
-    ).dt.normalize()
+    date_series = (
+        pd.to_datetime(
+            series,
+            errors="coerce",
+        )
+        .dt.normalize()
+    )
 
     filter_date = pd.to_datetime(
-        condition.get("dateFrom"),
+        condition.get(
+            "dateFrom"
+        ),
         errors="coerce",
     )
 
     filter_to = pd.to_datetime(
-        condition.get("dateTo"),
+        condition.get(
+            "dateTo"
+        ),
         errors="coerce",
     )
 
@@ -543,7 +635,9 @@ def _apply_date_condition(
             index=series.index,
         )
 
-    filter_date = filter_date.normalize()
+    filter_date = (
+        filter_date.normalize()
+    )
 
     if filter_type == "notEqual":
         return date_series.ne(
@@ -564,11 +658,17 @@ def _apply_date_condition(
         filter_type == "inRange"
         and pd.notna(filter_to)
     ):
-        filter_to = filter_to.normalize()
+        filter_to = (
+            filter_to.normalize()
+        )
 
         return (
-            date_series.ge(filter_date)
-            & date_series.le(filter_to)
+            date_series.ge(
+                filter_date
+            )
+            & date_series.le(
+                filter_to
+            )
         )
 
     return date_series.eq(
@@ -581,7 +681,8 @@ def _apply_single_filter_condition(
     condition: dict,
 ) -> pd.Series:
     """
-    Определяет тип фильтра и применяет условие.
+    Определяет тип фильтра
+    и применяет условие.
     """
 
     filter_type = condition.get(
@@ -677,10 +778,18 @@ def _apply_column_filter(
             )
         )
 
-        if model.get("operator") == "OR":
-            return first_mask | second_mask
+        if model.get(
+            "operator"
+        ) == "OR":
+            return (
+                first_mask
+                | second_mask
+            )
 
-        return first_mask & second_mask
+        return (
+            first_mask
+            & second_mask
+        )
 
     return _apply_single_filter_condition(
         series,
@@ -695,9 +804,6 @@ def apply_ag_grid_filter_model(
     """
     Применяет встроенные фильтры AG Grid
     повторно на сервере.
-
-    В запрос передаётся только маленький filterModel,
-    а не вся таблица.
     """
 
     if (
@@ -714,22 +820,34 @@ def apply_ag_grid_filter_model(
         dtype=bool,
     )
 
-    for column, model in filter_model.items():
+    for (
+        column,
+        model,
+    ) in filter_model.items():
         if column not in result.columns:
             continue
 
-        if not isinstance(model, dict):
+        if not isinstance(
+            model,
+            dict,
+        ):
             continue
 
-        column_mask = _apply_column_filter(
-            result[column],
-            model,
+        column_mask = (
+            _apply_column_filter(
+                result[column],
+                model,
+            )
         )
 
-        total_mask &= column_mask.fillna(False)
+        total_mask &= (
+            column_mask.fillna(False)
+        )
 
     return (
-        result.loc[total_mask]
+        result.loc[
+            total_mask
+        ]
         .copy()
         .reset_index(drop=True)
     )
@@ -740,7 +858,7 @@ def apply_ag_grid_sort_model(
     sort_model: list | None,
 ) -> pd.DataFrame:
     """
-    Применяет текущую сортировку AG Grid
+    Применяет сортировку AG Grid
     повторно на сервере.
     """
 
@@ -754,10 +872,15 @@ def apply_ag_grid_sort_model(
     ascending: list[bool] = []
 
     for item in sort_model:
-        if not isinstance(item, dict):
+        if not isinstance(
+            item,
+            dict,
+        ):
             continue
 
-        column = item.get("colId")
+        column = item.get(
+            "colId"
+        )
 
         if (
             not column
@@ -765,10 +888,14 @@ def apply_ag_grid_sort_model(
         ):
             continue
 
-        columns.append(column)
+        columns.append(
+            column
+        )
 
         ascending.append(
-            item.get("sort") != "desc"
+            item.get(
+                "sort"
+            ) != "desc"
         )
 
     if not columns:
@@ -784,12 +911,15 @@ def apply_ag_grid_sort_model(
             )
             .reset_index(drop=True)
         )
+
     except (
         TypeError,
         ValueError,
     ):
-        return df.reset_index(
-            drop=True
+        return (
+            df.reset_index(
+                drop=True
+            )
         )
 
 
@@ -806,7 +936,8 @@ def get_main_grid_dataframe(
     sort_model: list | None = None,
 ) -> pd.DataFrame:
     """
-    Полностью формирует основную таблицу на сервере.
+    Полностью формирует основную
+    таблицу товаров на сервере.
     """
 
     if not filter_store:
@@ -827,6 +958,13 @@ def get_main_grid_dataframe(
             .copy()
         )
 
+        history_df = filter_history_data(
+            history_df,
+            date_range=filter_store.get(
+                "date_range"
+            ),
+        )
+
         products_df = (
             filter_products_with_zero_price(
                 products_df,
@@ -834,18 +972,23 @@ def get_main_grid_dataframe(
             )
         )
 
-    products_df = apply_ag_grid_filter_model(
-        products_df,
-        filter_model,
+    products_df = (
+        apply_ag_grid_filter_model(
+            products_df,
+            filter_model,
+        )
     )
 
-    products_df = apply_ag_grid_sort_model(
-        products_df,
-        sort_model,
+    products_df = (
+        apply_ag_grid_sort_model(
+            products_df,
+            sort_model,
+        )
     )
 
-    return products_df.reset_index(
-        drop=True
+    return (
+        products_df
+        .reset_index(drop=True)
     )
 
 
@@ -863,7 +1006,9 @@ def _rank_cell_style():
                     "'4. 75% и выше'"
                 ),
                 "style": {
-                    "backgroundColor": "#FDECEC",
+                    "backgroundColor": (
+                        "#FDECEC"
+                    ),
                     "color": "#A33A3A",
                     "fontWeight": "600",
                 },
@@ -874,7 +1019,9 @@ def _rank_cell_style():
                     "'3. От 50% до 75%'"
                 ),
                 "style": {
-                    "backgroundColor": "#FFF6D8",
+                    "backgroundColor": (
+                        "#FFF6D8"
+                    ),
                     "color": "#9A6700",
                     "fontWeight": "600",
                 },
@@ -885,7 +1032,9 @@ def _rank_cell_style():
                     "'0. Одна цена'"
                 ),
                 "style": {
-                    "backgroundColor": "#F6F7F8",
+                    "backgroundColor": (
+                        "#F6F7F8"
+                    ),
                     "color": "#6B7280",
                 },
             },
@@ -897,17 +1046,25 @@ def _percent_delta_style():
     return {
         "styleConditions": [
             {
-                "condition": "params.value >= 10",
+                "condition": (
+                    "params.value >= 10"
+                ),
                 "style": {
-                    "backgroundColor": "#FDECEC",
+                    "backgroundColor": (
+                        "#FDECEC"
+                    ),
                     "color": "#A33A3A",
                     "fontWeight": "600",
                 },
             },
             {
-                "condition": "params.value <= -10",
+                "condition": (
+                    "params.value <= -10"
+                ),
                 "style": {
-                    "backgroundColor": "#EDF4FA",
+                    "backgroundColor": (
+                        "#EDF4FA"
+                    ),
                     "color": "#3B6B8F",
                     "fontWeight": "600",
                 },
@@ -918,7 +1075,8 @@ def _percent_delta_style():
 
 def _zero_price_cell_style():
     """
-    Подсвечивает нулевую цену в истории УПД.
+    Подсвечивает нулевую цену
+    в истории УПД.
     """
 
     return {
@@ -930,7 +1088,9 @@ def _zero_price_cell_style():
                     "&& Number(params.value) === 0"
                 ),
                 "style": {
-                    "backgroundColor": "#FDECEC",
+                    "backgroundColor": (
+                        "#FDECEC"
+                    ),
                     "color": "#A33A3A",
                     "fontWeight": "700",
                 },
@@ -952,17 +1112,27 @@ MAIN_COLUMN_DEFS = [
                 "headerName": "NM ID",
                 "field": "nm_id",
                 "pinned": "left",
-                "width": 80,
-                # "filter": "agTextColumnFilter",
+                "width": 100,
+                "minWidth": 100,
+                "cellStyle": {
+                "backgroundColor": COLORS["very_light_green"],
+                "fontWeight": 600,},
             },
             {
-                    "headerName": "Наименование",
-                    "field": "Наименование",
-                    "pinned": "left",
-                    "width": 380,
-                    "minWidth": 360,
-                    "tooltipField": "Наименование",
-                },
+                "headerName": (
+                    "Наименование"
+                ),
+                "field": "Наименование",
+                "pinned": "left",
+                "width": 380,
+                "minWidth": 360,
+                "tooltipField": (
+                    "Наименование"
+                ),
+                "cellStyle": {
+                "backgroundColor": COLORS["very_light_green"],
+                "fontWeight": 600,},
+            },
             {
                 "headerName": "Бренд",
                 "field": "Бренд",
@@ -974,10 +1144,14 @@ MAIN_COLUMN_DEFS = [
                 "width": 190,
             },
             {
-                "headerName": "Поставщики",
+                "headerName": (
+                    "Поставщики"
+                ),
                 "field": "Поставщики",
                 "width": 260,
-                "tooltipField": "Поставщики",
+                "tooltipField": (
+                    "Поставщики"
+                ),
             },
         ],
     },
@@ -985,209 +1159,349 @@ MAIN_COLUMN_DEFS = [
         "headerName": "Поступления",
         "children": [
             {
-                "headerName": "Первая дата",
-                "field": "Первая дата УПД",
+                "headerName": (
+                    "Первая дата"
+                ),
+                "field": (
+                    "Первая дата УПД"
+                ),
                 "width": 140,
-                "valueFormatter": DATE_FORMATTER,
-                "filter": "agDateColumnFilter",
+                "valueFormatter": (
+                    DATE_FORMATTER
+                ),
+                "filter": (
+                    "agDateColumnFilter"
+                ),
             },
             {
-                "headerName": "Последняя дата",
-                "field": "Последняя дата УПД",
+                "headerName": (
+                    "Последняя дата"
+                ),
+                "field": (
+                    "Последняя дата УПД"
+                ),
                 "width": 140,
-                "valueFormatter": DATE_FORMATTER,
-                "filter": "agDateColumnFilter",
+                "valueFormatter": (
+                    DATE_FORMATTER
+                ),
+                "filter": (
+                    "agDateColumnFilter"
+                ),
             },
             {
                 "headerName": "УПД",
                 "field": "Кол-во УПД",
                 "width": 105,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": INTEGER_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    INTEGER_FORMATTER
+                ),
             },
             {
-                "headerName": "Количество",
+                "headerName": (
+                    "Количество"
+                ),
                 "field": "Кол-во, шт",
                 "width": 125,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": INTEGER_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    INTEGER_FORMATTER
+                ),
             },
         ],
     },
     {
-        "headerName": "Бухгалтерская себестоимость",
+        "headerName": (
+            "Бухгалтерская себестоимость"
+        ),
         "children": [
             {
                 "headerName": "Ранг CV",
                 "field": "Ранг CV, бух",
                 "width": 170,
-                "cellStyle": _rank_cell_style(),
+                "cellStyle": (
+                    _rank_cell_style()
+                ),
             },
             {
                 "headerName": "CV",
                 "field": (
-                    "Коэффициент вариации, %, бух"
+                    "Коэффициент "
+                    "вариации, %, бух"
                 ),
                 "width": 120,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": PERCENT_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    PERCENT_FORMATTER
+                ),
             },
             {
                 "headerName": "Медиана",
-                "field": "Медиана цены, бух",
+                "field": (
+                    "Медиана цены, бух"
+                ),
                 "width": 130,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
                 "headerName": "Средняя",
-                "field": "Средняя цена, бух",
+                "field": (
+                    "Средняя цена, бух"
+                ),
                 "width": 130,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
                 "headerName": "Мин.",
-                "field": "Мин. цена, бух",
+                "field": (
+                    'min_acc_price'
+                ),
                 "width": 120,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
                 "headerName": "Макс.",
-                "field": "Макс. цена, бух",
+                "field": (
+                    'max_acc_price'
+                ),
                 "width": 120,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
-                "headerName": "Диапазон",
-                "field": "Диапазон цены, бух",
+                "headerName": (
+                    "Диапазон"
+                ),
+                "field": (
+                    "Диапазон цены, бух"
+                ),
                 "width": 130,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
-            },
-            {
-                "headerName": "Макс. отклонение",
-                "field": (
-                    "Макс. отклонение "
-                    "от медианы, %, бух"
+                "filter": (
+                    "agNumberColumnFilter"
                 ),
-                "width": 165,
-                "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": PERCENT_FORMATTER,
-                "cellStyle": _percent_delta_style(),
-            },
-            {
-                "headerName": "Мин. отклонение",
-                "field": (
-                    "Мин. отклонение "
-                    "от медианы, %, бух"
+                "valueFormatter": (
+                    RUBLE_FORMATTER
                 ),
-                "width": 165,
-                "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": PERCENT_FORMATTER,
-                "cellStyle": _percent_delta_style(),
             },
+            # {
+            #     "headerName": (
+            #         "Макс. отклонение"
+            #     ),
+            #     "field": (
+            #         "Макс. отклонение "
+            #         "от медианы, %, бух"
+            #     ),
+            #     "width": 165,
+            #     "type": "numericColumn",
+            #     "filter": (
+            #         "agNumberColumnFilter"
+            #     ),
+            #     "valueFormatter": (
+            #         PERCENT_FORMATTER
+            #     ),
+            #     "cellStyle": (
+            #         _percent_delta_style()
+            #     ),
+            # },
+            # {
+            #     "headerName": (
+            #         "Мин. отклонение"
+            #     ),
+            #     "field": (
+            #         "Мин. отклонение "
+            #         "от медианы, %, бух"
+            #     ),
+            #     "width": 165,
+            #     "type": "numericColumn",
+            #     "filter": (
+            #         "agNumberColumnFilter"
+            #     ),
+            #     "valueFormatter": (
+            #         PERCENT_FORMATTER
+            #     ),
+            #     "cellStyle": (
+            #         _percent_delta_style()
+            #     ),
+            # },
         ],
     },
     {
-        "headerName": "Управленческая себестоимость",
+        "headerName": (
+            "Управленческая себестоимость"
+        ),
         "children": [
             {
                 "headerName": "Ранг CV",
                 "field": "Ранг CV, упр",
                 "width": 170,
-                "cellStyle": _rank_cell_style(),
+                "cellStyle": (
+                    _rank_cell_style()
+                ),
             },
             {
                 "headerName": "CV",
                 "field": (
-                    "Коэффициент вариации, %, упр"
+                    "Коэффициент "
+                    "вариации, %, упр"
                 ),
                 "width": 120,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": PERCENT_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    PERCENT_FORMATTER
+                ),
             },
             {
                 "headerName": "Медиана",
-                "field": "Медиана цены, упр",
+                "field": (
+                    "Медиана цены, упр"
+                ),
                 "width": 130,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
                 "headerName": "Средняя",
-                "field": "Средняя цена, упр",
+                "field": (
+                    "Средняя цена, упр"
+                ),
                 "width": 130,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
                 "headerName": "Мин.",
-                "field": "Мин. цена, упр",
+                "field": (
+                    'min_man_price'
+                ),
                 "width": 120,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
                 "headerName": "Макс.",
-                "field": "Макс. цена, упр",
+                "field": (
+                    'max_man_price'
+                ),
                 "width": 120,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
             {
-                "headerName": "Диапазон",
-                "field": "Диапазон цены, упр",
+                "headerName": (
+                    "Диапазон"
+                ),
+                "field": (
+                    "Диапазон цены, упр"
+                ),
                 "width": 130,
                 "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
+                "filter": (
+                    "agNumberColumnFilter"
+                ),
+                "valueFormatter": (
+                    RUBLE_FORMATTER
+                ),
             },
         ],
     },
-    {
-        "headerName": "Сравнение",
-        "children": [
-            {
-                "headerName": "Δ медианы, ₽",
-                "field": (
-                    "Δ медианы упр-бух, руб."
-                ),
-                "width": 150,
-                "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": RUBLE_FORMATTER,
-            },
-            {
-                "headerName": "Δ медианы, %",
-                "field": (
-                    "Δ медианы упр-бух, %"
-                ),
-                "width": 150,
-                "type": "numericColumn",
-                "filter": "agNumberColumnFilter",
-                "valueFormatter": PERCENT_FORMATTER,
-                "cellStyle": _percent_delta_style(),
-            },
-        ],
-    },
+    # {
+    #     "headerName": "Сравнение",
+    #     "children": [
+    #         {
+    #             "headerName": (
+    #                 "Δ медианы, ₽"
+    #             ),
+    #             "field": (
+    #                 "Δ медианы "
+    #                 "упр-бух, руб."
+    #             ),
+    #             "width": 150,
+    #             "type": "numericColumn",
+    #             "filter": (
+    #                 "agNumberColumnFilter"
+    #             ),
+    #             "valueFormatter": (
+    #                 RUBLE_FORMATTER
+    #             ),
+    #         },
+    #         {
+    #             "headerName": (
+    #                 "Δ медианы, %"
+    #             ),
+    #             "field": (
+    #                 "Δ медианы "
+    #                 "упр-бух, %"
+    #             ),
+    #             "width": 150,
+    #             "type": "numericColumn",
+    #             "filter": (
+    #                 "agNumberColumnFilter"
+    #             ),
+    #             "valueFormatter": (
+    #                 PERCENT_FORMATTER
+    #             ),
+    #             "cellStyle": (
+    #                 _percent_delta_style()
+    #             ),
+    #         },
+    #     ],
+    # },
 ]
 
 
@@ -1202,6 +1516,7 @@ HISTORY_COLUMN_DEFS = [
         "field": "nm_id",
         "pinned": "left",
         "width": 130,
+       
     },
     {
         "headerName": "Наименование",
@@ -1214,7 +1529,9 @@ HISTORY_COLUMN_DEFS = [
         "headerName": "Дата УПД",
         "field": "Дата УПД",
         "width": 140,
-        "valueFormatter": DATE_FORMATTER,
+        "valueFormatter": (
+            DATE_FORMATTER
+        ),
         "filter": "agDateColumnFilter",
     },
     {
@@ -1225,7 +1542,7 @@ HISTORY_COLUMN_DEFS = [
     {
         "headerName": "Поставщик",
         "field": "Поставщик",
-        "width": 310,
+        "width": 250,
         "tooltipField": "Поставщик",
     },
     {
@@ -1234,8 +1551,12 @@ HISTORY_COLUMN_DEFS = [
         "width": 145,
         "type": "numericColumn",
         "filter": "agNumberColumnFilter",
-        "valueFormatter": RUBLE_FORMATTER,
-        "cellStyle": _zero_price_cell_style(),
+        "valueFormatter": (
+            RUBLE_FORMATTER
+        ),
+        "cellStyle": (
+            _zero_price_cell_style()
+        ),
     },
     {
         "headerName": "Цена, упр",
@@ -1243,8 +1564,12 @@ HISTORY_COLUMN_DEFS = [
         "width": 145,
         "type": "numericColumn",
         "filter": "agNumberColumnFilter",
-        "valueFormatter": RUBLE_FORMATTER,
-        "cellStyle": _zero_price_cell_style(),
+        "valueFormatter": (
+            RUBLE_FORMATTER
+        ),
+        "cellStyle": (
+            _zero_price_cell_style()
+        ),
     },
     {
         "headerName": "Количество",
@@ -1252,7 +1577,9 @@ HISTORY_COLUMN_DEFS = [
         "width": 135,
         "type": "numericColumn",
         "filter": "agNumberColumnFilter",
-        "valueFormatter": INTEGER_FORMATTER,
+        "valueFormatter": (
+            INTEGER_FORMATTER
+        ),
     },
 ]
 
@@ -1284,11 +1611,15 @@ def _toolbar_button(
                 "height": "32px",
                 "fontSize": "11px",
                 "fontWeight": 600,
-                "borderColor": COLORS.get(
-                    "border",
-                    "#D9DEE2",
+                "borderColor": (
+                    COLORS.get(
+                        "border",
+                        "#D9DEE2",
+                    )
                 ),
-                "backgroundColor": "#FFFFFF",
+                "backgroundColor": (
+                    "#FFFFFF"
+                ),
             },
         },
     )
@@ -1319,8 +1650,12 @@ def _grid_style(
             COLORS["white"]
         ),
 
-        "--ag-border-color": COLORS["border"],
-        "--ag-row-border-color": COLORS["border"],
+        "--ag-border-color": (
+            COLORS["border"]
+        ),
+        "--ag-row-border-color": (
+            COLORS["border"]
+        ),
 
         "--ag-selected-row-background-color": (
             COLORS["light_green"]
@@ -1331,10 +1666,13 @@ def _grid_style(
 
         "--ag-wrapper-border-radius": "0px",
 
-        # Поля встроенных фильтров.
         "--ag-input-text-color": "#111827",
-        "--ag-input-background-color": "#FFFFFF",
-        "--ag-input-border-color": "#CBD3D9",
+        "--ag-input-background-color": (
+            "#FFFFFF"
+        ),
+        "--ag-input-border-color": (
+            "#CBD3D9"
+        ),
         "--ag-input-focus-border-color": (
             COLORS.get(
                 "green",
@@ -1364,7 +1702,9 @@ def build_main_grid():
         defaultColDef=DEFAULT_COL_DEF,
         dashGridOptions={
             "pagination": True,
-            "paginationPageSize": PAGE_SIZE,
+            "paginationPageSize": (
+                PAGE_SIZE
+            ),
             "paginationPageSizeSelector": [
                 25,
                 50,
@@ -1372,12 +1712,11 @@ def build_main_grid():
                 250,
             ],
 
-            # Отдельная системная checkbox-колонка.
             "rowSelection": {
                 "mode": "singleRow",
                 "checkboxes": True,
                 "headerCheckbox": False,
-                "enableClickSelection": True,
+
             },
 
             "selectionColumnDef": {
@@ -1420,7 +1759,9 @@ def build_main_grid_section():
                 mb=8,
                 children=[
                     dmc.Checkbox(
-                        id=ZERO_PRICE_PRODUCTS_FILTER_ID,
+                        id=(
+                            ZERO_PRICE_PRODUCTS_FILTER_ID
+                        ),
                         label=(
                             "Только товары "
                             "с нулевой ценой в УПД"
@@ -1441,15 +1782,6 @@ def build_main_grid_section():
                     dmc.Group(
                         gap="xs",
                         children=[
-                            # _toolbar_button(
-                            #     component_id=(
-                            #         MAIN_GRID_DOWNLOAD_CSV_BTN_ID
-                            #     ),
-                            #     label="Скачать CSV",
-                            #     icon=(
-                            #         "solar:file-text-linear"
-                            #     ),
-                            # ),
                             _toolbar_button(
                                 component_id=(
                                     MAIN_GRID_DOWNLOAD_EXCEL_BTN_ID
@@ -1485,7 +1817,6 @@ def build_history_grid():
         rowData=[],
         columnDefs=HISTORY_COLUMN_DEFS,
         defaultColDef=DEFAULT_COL_DEF,
-        columnSize="responsiveSizeToFit",
         dashGridOptions={
             "pagination": True,
             "paginationPageSize": 50,
@@ -1526,7 +1857,9 @@ def build_history_grid_section():
                         component_id=(
                             HISTORY_GRID_DOWNLOAD_EXCEL_BTN_ID
                         ),
-                        label="Скачать историю",
+                        label=(
+                            "Скачать историю"
+                        ),
                         icon=(
                             "solar:"
                             "document-add-linear"
@@ -1538,7 +1871,9 @@ def build_history_grid_section():
             build_history_grid(),
 
             dcc.Download(
-                id=HISTORY_GRID_DOWNLOAD_ID
+                id=(
+                    HISTORY_GRID_DOWNLOAD_ID
+                )
             ),
         ],
     )
@@ -1581,7 +1916,9 @@ def _prepare_export_dataframe(
 # ---------------------------------------------------------------------
 
 
-def register_grid_callbacks(app):
+def register_grid_callbacks(
+    app,
+):
     """
     Регистрирует callbacks таблиц.
     """
@@ -1609,17 +1946,17 @@ def register_grid_callbacks(app):
         only_zero_price_products,
     ):
         """
-        Формирует список товаров на сервере.
-
-        В callback не передаются rowData
-        и virtualRowData.
+        Формирует список товаров
+        на сервере.
         """
 
-        products_df = get_main_grid_dataframe(
-            filter_store,
-            only_zero_price_products=bool(
-                only_zero_price_products
-            ),
+        products_df = (
+            get_main_grid_dataframe(
+                filter_store,
+                only_zero_price_products=bool(
+                    only_zero_price_products
+                ),
+            )
         )
 
         if products_df.empty:
@@ -1644,7 +1981,9 @@ def register_grid_callbacks(app):
         ),
         prevent_initial_call=True,
     )
-    def select_product(selected_rows):
+    def select_product(
+        selected_rows,
+    ):
         """
         Сохраняет выбранный товар.
         """
@@ -1652,11 +1991,15 @@ def register_grid_callbacks(app):
         if not selected_rows:
             return None
 
-        selected_row = selected_rows[0]
+        selected_row = (
+            selected_rows[0]
+        )
 
         return {
             "nm_id": normalise_nm_id(
-                selected_row.get("nm_id")
+                selected_row.get(
+                    "nm_id"
+                )
             ),
             "name": selected_row.get(
                 "Наименование"
@@ -1690,13 +2033,15 @@ def register_grid_callbacks(app):
         filter_store,
     ):
         """
-        Загружает историю выбранного товара.
+        Загружает историю
+        выбранного товара.
         """
 
         if not selected_product:
             return (
                 empty_figure(
-                    "Выберите товар в таблице «Товары»"
+                    "Выберите товар "
+                    "в таблице «Товары»"
                 ),
                 [],
             )
@@ -1711,7 +2056,8 @@ def register_grid_callbacks(app):
         if not nm_id:
             return (
                 empty_figure(
-                    "Не удалось определить NM ID товара"
+                    "Не удалось определить "
+                    "NM ID товара"
                 ),
                 [],
             )
@@ -1719,7 +2065,8 @@ def register_grid_callbacks(app):
         if product_history.empty:
             return (
                 empty_figure(
-                    "По выбранному товару история отсутствует"
+                    "По выбранному товару "
+                    "история отсутствует"
                 ),
                 [],
             )
@@ -1776,9 +2123,9 @@ def register_grid_callbacks(app):
         Скачивает Excel с учётом:
 
         - фильтров панели;
-        - checkbox нулевой цены;
-        - встроенных фильтров грида;
-        - сортировки грида.
+        - фильтра нулевой цены;
+        - фильтров AG Grid;
+        - сортировки AG Grid.
         """
 
         if not n_clicks:
@@ -1852,7 +2199,8 @@ def register_grid_callbacks(app):
         sort_model,
     ):
         """
-        Скачивает CSV с учётом текущих фильтров.
+        Скачивает CSV
+        с учётом текущих фильтров.
         """
 
         if not n_clicks:
@@ -1926,10 +2274,8 @@ def register_grid_callbacks(app):
         sort_model,
     ):
         """
-        Скачивает историю выбранного товара.
-
-        История повторно получается на сервере,
-        поэтому браузер не отправляет rowData обратно.
+        Скачивает историю
+        выбранного товара.
         """
 
         if (

@@ -1,7 +1,7 @@
 # # gear/app/costs_control/filters.py
 # from __future__ import annotations
 
-# from datetime import datetime
+# from datetime import date, datetime, timedelta
 # from typing import Any
 
 # import dash_mantine_components as dmc
@@ -31,9 +31,9 @@
 #     DEFAULT_MEDIAN_DEVIATION_LIMIT,
 # )
 # from .data import (
-#     clear_price_analysis_cache,
 #     get_price_analysis_data,
 #     get_price_history_data,
+#     get_min_upd_date,
 # )
 # from .ids import (
 #     BRAND_FILTER_ID,
@@ -55,6 +55,165 @@
 
 
 # # ---------------------------------------------------------------------
+# # Локальные ID
+# # ---------------------------------------------------------------------
+
+
+# DATE_PRESET_ID = (
+#     "costs-control-date-preset"
+# )
+
+
+# # ---------------------------------------------------------------------
+# # Даты
+# # ---------------------------------------------------------------------
+
+
+# # def get_default_date_range() -> list[str]:
+# #     """
+# #     Возвращает период по умолчанию:
+
+# #     с начала текущего года по сегодня.
+# #     """
+
+# #     today = date.today()
+# #     year_start = date(
+# #         year=today.year,
+# #         month=1,
+# #         day=1,
+# #     )
+
+# #     return [
+# #         year_start.isoformat(),
+# #         today.isoformat(),
+# #     ]
+
+# def get_default_date_range() -> list[str]:
+#     """
+#     Возвращает период по умолчанию:
+
+#     от первой даты УПД
+#     до сегодняшнего дня.
+#     """
+
+#     today = date.today()
+
+#     return [
+#         get_min_upd_date().isoformat(),
+#         today.isoformat(),
+#     ]
+
+
+
+
+
+
+# def normalise_date_range(
+#     date_range,
+# ) -> tuple[str | None, str | None]:
+#     """
+#     Приводит значение DatePickerInput
+#     к паре строк:
+
+#     date_from, date_to
+
+#     Формат:
+
+#     YYYY-MM-DD
+#     """
+
+#     if not date_range:
+#         return None, None
+
+#     if not isinstance(
+#         date_range,
+#         (list, tuple),
+#     ):
+#         return None, None
+
+#     if len(date_range) < 2:
+#         return None, None
+
+#     date_from = date_range[0]
+#     date_to = date_range[1]
+
+#     if not date_from or not date_to:
+#         return None, None
+
+#     date_from = str(date_from)[:10]
+#     date_to = str(date_to)[:10]
+
+#     if date_from > date_to:
+#         date_from, date_to = (
+#             date_to,
+#             date_from,
+#         )
+
+#     return date_from, date_to
+
+
+# def _get_quarter_start(
+#     current_date: date,
+# ) -> date:
+#     """
+#     Возвращает первый день квартала.
+#     """
+
+#     quarter_month = (
+#         ((current_date.month - 1) // 3)
+#         * 3
+#         + 1
+#     )
+
+#     return date(
+#         year=current_date.year,
+#         month=quarter_month,
+#         day=1,
+#     )
+
+
+# def _build_preset_date_range(
+#     preset: str | None,
+# ) -> list[str]:
+#     """
+#     Формирует диапазон дат
+#     для выбранного пресета.
+#     """
+
+#     today = date.today()
+
+#     if preset == "last_30_days":
+#         date_from = (
+#             today
+#             - timedelta(days=29)
+#         )
+
+#     elif preset == "current_month":
+#         date_from = date(
+#             year=today.year,
+#             month=today.month,
+#             day=1,
+#         )
+
+#     elif preset == "current_quarter":
+#         date_from = _get_quarter_start(
+#             today
+#         )
+
+#     else:
+#         date_from = date(
+#             year=today.year,
+#             month=1,
+#             day=1,
+#         )
+
+#     return [
+#         date_from.isoformat(),
+#         today.isoformat(),
+#     ]
+
+
+# # ---------------------------------------------------------------------
 # # Нормализация
 # # ---------------------------------------------------------------------
 
@@ -63,7 +222,8 @@
 #     value: Any,
 # ) -> str:
 #     """
-#     Приводит NM ID к строке без окончания .0.
+#     Приводит NM ID к строке
+#     без окончания .0.
 #     """
 
 #     if value is None:
@@ -81,7 +241,8 @@
 #     value,
 # ) -> list:
 #     """
-#     Приводит значение MultiSelect к обычному списку.
+#     Приводит значение MultiSelect
+#     к обычному списку.
 #     """
 
 #     if value is None:
@@ -105,7 +266,9 @@
 
 #     return [
 #         str(value).strip()
-#         for value in normalise_list(values)
+#         for value in normalise_list(
+#             values
+#         )
 #         if (
 #             value is not None
 #             and str(value).strip()
@@ -114,7 +277,51 @@
 
 
 # # ---------------------------------------------------------------------
-# # Элемент одного фильтра
+# # Поиск колонок
+# # ---------------------------------------------------------------------
+
+
+# def _find_nm_id_column(
+#     df: pd.DataFrame,
+# ) -> str | None:
+#     """
+#     Находит колонку NM ID.
+#     """
+
+#     for column in (
+#         "nm_id",
+#         "NM ID",
+#         "nmId",
+#     ):
+#         if column in df.columns:
+#             return column
+
+#     return None
+
+
+# def _find_history_date_column(
+#     df: pd.DataFrame,
+# ) -> str | None:
+#     """
+#     Находит колонку даты УПД
+#     в таблице истории.
+#     """
+
+#     for column in (
+#         "Дата УПД",
+#         "date",
+#         "Дата",
+#         "upd_date",
+#         "document_date",
+#     ):
+#         if column in df.columns:
+#             return column
+
+#     return None
+
+
+# # ---------------------------------------------------------------------
+# # Визуальный контейнер фильтра
 # # ---------------------------------------------------------------------
 
 
@@ -206,6 +413,108 @@
 
 
 # # ---------------------------------------------------------------------
+# # Фильтр периода
+# # ---------------------------------------------------------------------
+
+
+# def _build_date_filter():
+#     """
+#     Строит DatePicker и быстрые пресеты.
+#     """
+
+#     return _filter_field(
+#         icon="solar:calendar-date-linear",
+#         title="Период УПД",
+#         subtitle=(
+#             "Все показатели рассчитываются "
+#             "только за выбранный период"
+#         ),
+#         component=dmc.Stack(
+#             gap=7,
+#             children=[
+#                 dmc.DatePickerInput(
+#                     id=DATE_FILTER_ID,
+#                     type="range",
+#                     value=get_default_date_range(),
+#                     valueFormat="DD.MM.YYYY",
+#                     placeholder="Весь период",
+#                     clearable=True,
+#                     allowSingleDateInRange=False,
+#                     firstDayOfWeek=1,
+#                     radius=0,
+#                     size="xs",
+#                     w="100%",
+#                     leftSection=DashIconify(
+#                         icon=(
+#                             "solar:"
+#                             "calendar-linear"
+#                         ),
+#                         width=15,
+#                         height=15,
+#                     ),
+#                     styles={
+#                         "input": {
+#                             "height": "32px",
+#                             "minHeight": "32px",
+#                             "fontSize": "11px",
+#                             "fontWeight": 500,
+#                             "borderColor": (
+#                                 COLORS.get(
+#                                     "border",
+#                                     "#D9DEE2",
+#                                 )
+#                             ),
+#                             "backgroundColor": (
+#                                 "#FFFFFF"
+#                             ),
+#                         },
+#                     },
+#                 ),
+
+#                 dmc.SegmentedControl(
+#                     id=DATE_PRESET_ID,
+#                     value="ytd",
+#                     data=[
+#                         {
+#                             "label": "30 дней",
+#                             "value": (
+#                                 "last_30_days"
+#                             ),
+#                         },
+#                         {
+#                             "label": "Месяц",
+#                             "value": (
+#                                 "current_month"
+#                             ),
+#                         },
+#                         {
+#                             "label": "Квартал",
+#                             "value": (
+#                                 "current_quarter"
+#                             ),
+#                         },
+#                         {
+#                             "label": "С начала года",
+#                             "value": "ytd",
+#                         },
+#                     ],
+#                     radius=0,
+#                     size="xs",
+#                     fullWidth=True,
+#                     styles={
+#                         "label": {
+#                             "fontSize": "9px",
+#                             "paddingLeft": "5px",
+#                             "paddingRight": "5px",
+#                         },
+#                     },
+#                 ),
+#             ],
+#         ),
+#     )
+
+
+# # ---------------------------------------------------------------------
 # # Layout панели фильтров
 # # ---------------------------------------------------------------------
 
@@ -214,14 +523,9 @@
 #     """
 #     Панель фильтров анализа.
 
-#     Здесь намеренно отсутствуют:
-#     - минимальный CV;
-#     - поиск по NM ID или наименованию;
-#     - переключатель изменения цены;
-#     - переключатель отклонений.
-
-#     Категории зависят от выбранного бренда.
-#     Поставщики зависят от бренда и категории.
+#     Период УПД применяется до агрегации.
+#     Поэтому MIN, MAX, MEDIAN, AVG и CV
+#     рассчитываются только по выбранному периоду.
 #     """
 
 #     return html.Div(
@@ -235,9 +539,9 @@
 #                     section_header(
 #                         "Фильтры анализа",
 #                         (
-#                             "Категории и поставщики "
-#                             "автоматически подстраиваются "
-#                             "под выбранные значения"
+#                             "Показатели, графики "
+#                             "и таблицы автоматически "
+#                             "пересчитываются"
 #                         ),
 #                     ),
 
@@ -256,12 +560,20 @@
 #                 style={
 #                     **FILTER_GRID_STYLE,
 #                     "gridTemplateColumns": (
-#                         "repeat(auto-fit, "
-#                         "minmax(235px, 1fr))"
+#                         "repeat("
+#                         "auto-fit, "
+#                         "minmax(235px, 1fr)"
+#                         ")"
 #                     ),
 #                     "gap": "10px",
 #                 },
 #                 children=[
+#                     # -------------------------------------------------
+#                     # Период УПД
+#                     # -------------------------------------------------
+
+#                     _build_date_filter(),
+
 #                     # -------------------------------------------------
 #                     # Тип себестоимости
 #                     # -------------------------------------------------
@@ -269,7 +581,8 @@
 #                     _filter_field(
 #                         icon=(
 #                             "solar:"
-#                             "calculator-minimalistic-linear"
+#                             "calculator-"
+#                             "minimalistic-linear"
 #                         ),
 #                         title="Тип себестоимости",
 #                         subtitle=(
@@ -278,8 +591,12 @@
 #                         ),
 #                         component=(
 #                             dmc.SegmentedControl(
-#                                 id=COST_TYPE_FILTER_ID,
-#                                 value=DEFAULT_COST_TYPE,
+#                                 id=(
+#                                     COST_TYPE_FILTER_ID
+#                                 ),
+#                                 value=(
+#                                     DEFAULT_COST_TYPE
+#                                 ),
 #                                 data=COST_TYPES,
 #                                 radius=0,
 #                                 size="xs",
@@ -331,7 +648,9 @@
 #                         ),
 #                         component=dmc.MultiSelect(
 #                             id=CATEGORY_FILTER_ID,
-#                             placeholder="Все категории",
+#                             placeholder=(
+#                                 "Все категории"
+#                             ),
 #                             data=[],
 #                             value=[],
 #                             searchable=True,
@@ -351,7 +670,8 @@
 
 #                     _filter_field(
 #                         icon=(
-#                             "solar:buildings-2-linear"
+#                             "solar:"
+#                             "buildings-2-linear"
 #                         ),
 #                         title="Поставщик",
 #                         subtitle=(
@@ -360,7 +680,9 @@
 #                         ),
 #                         component=dmc.MultiSelect(
 #                             id=SUPPLIER_FILTER_ID,
-#                             placeholder="Все поставщики",
+#                             placeholder=(
+#                                 "Все поставщики"
+#                             ),
 #                             data=[],
 #                             value=[],
 #                             searchable=True,
@@ -380,10 +702,12 @@
 
 #                     _filter_field(
 #                         icon=(
-#                             "solar:chart-square-linear"
+#                             "solar:"
+#                             "chart-square-linear"
 #                         ),
 #                         title=(
-#                             "Ранг коэффициента вариации"
+#                             "Ранг коэффициента "
+#                             "вариации"
 #                         ),
 #                         subtitle=(
 #                             "Уровень стабильности "
@@ -401,66 +725,24 @@
 #                             maxDropdownHeight=260,
 #                         ),
 #                     ),
+#                 ],
+#             ),
 
-#                     # -------------------------------------------------
-#                     # Отклонение от медианы
-#                     # -------------------------------------------------
+#             # ---------------------------------------------------------
+#             # Скрытый порог отклонения
+#             # ---------------------------------------------------------
 
-#                     _filter_field(
-#                         icon=(
-#                             "solar:sort-by-time-linear"
+#             html.Div(
+#                 style={
+#                     "display": "none",
+#                 },
+#                 children=[
+#                     dmc.NumberInput(
+#                         id=(
+#                             MEDIAN_DEVIATION_FILTER_ID
 #                         ),
-#                         title=(
-#                             "Порог отклонения от медианы"
-#                         ),
-#                         subtitle=(
-#                             "Используется для поиска "
-#                             "ценовых выбросов"
-#                         ),
-#                         component=dmc.NumberInput(
-#                             id=(
-#                                 MEDIAN_DEVIATION_FILTER_ID
-#                             ),
-#                             value=(
-#                                 DEFAULT_MEDIAN_DEVIATION_LIMIT
-#                             ),
-#                             placeholder="Например, 10",
-#                             min=0,
-#                             decimalScale=2,
-#                             allowNegative=False,
-#                             hideControls=True,
-#                             suffix=" %",
-#                             radius=0,
-#                             size="xs",
-#                         ),
-#                     ),
-
-#                     # -------------------------------------------------
-#                     # Период
-#                     # -------------------------------------------------
-
-#                     _filter_field(
-#                         icon="solar:calendar-linear",
-#                         title="Период документов УПД",
-#                         subtitle=(
-#                             "Ограничение по дате "
-#                             "поступления товара"
-#                         ),
-#                         component=dmc.DatePickerInput(
-#                             id=DATE_FILTER_ID,
-#                             type="range",
-#                             placeholder="Весь период",
-#                             value=None,
-#                             valueFormat="DD.MM.YYYY",
-#                             clearable=True,
-#                             radius=0,
-#                             size="xs",
-#                             leftSection=DashIconify(
-#                                 icon=(
-#                                     "solar:calendar-linear"
-#                                 ),
-#                                 width=15,
-#                             ),
+#                         value=(
+#                             DEFAULT_MEDIAN_DEVIATION_LIMIT
 #                         ),
 #                     ),
 #                 ],
@@ -477,9 +759,11 @@
 #                     "gap": "7px",
 #                     "marginTop": "10px",
 #                     "padding": "8px 10px",
-#                     "backgroundColor": COLORS.get(
-#                         "very_light_green",
-#                         "#F3F8F6",
+#                     "backgroundColor": (
+#                         COLORS.get(
+#                             "very_light_green",
+#                             "#F3F8F6",
+#                         )
 #                     ),
 #                     "border": (
 #                         "1px solid "
@@ -498,7 +782,8 @@
 #                 children=[
 #                     DashIconify(
 #                         icon=(
-#                             "solar:info-circle-linear"
+#                             "solar:"
+#                             "info-circle-linear"
 #                         ),
 #                         width=14,
 #                         height=14,
@@ -510,9 +795,11 @@
 
 #                     html.Span(
 #                         (
-#                             "Для поиска конкретного товара "
-#                             "используйте встроенные фильтры "
-#                             "таблицы на вкладке «Товары»."
+#                             "Для поиска конкретного "
+#                             "товара используйте "
+#                             "встроенные фильтры "
+#                             "таблицы на вкладке "
+#                             "«Товары»."
 #                         )
 #                     ),
 #                 ],
@@ -533,8 +820,8 @@
 #     categories=None,
 # ) -> pd.DataFrame:
 #     """
-#     Фильтрует агрегированный анализ только
-#     для построения зависимых справочников.
+#     Фильтрует агрегированный анализ
+#     для зависимых справочников.
 #     """
 
 #     if analysis_df.empty:
@@ -577,32 +864,14 @@
 #     )
 
 
-# def _find_nm_id_column(
-#     df: pd.DataFrame,
-# ) -> str | None:
-#     """
-#     Находит колонку NM ID.
-#     """
-
-#     for column in (
-#         "nm_id",
-#         "NM ID",
-#         "nmId",
-#     ):
-#         if column in df.columns:
-#             return column
-
-#     return None
-
-
 # def _build_smart_supplier_options(
 #     analysis_df: pd.DataFrame,
 #     history_df: pd.DataFrame,
 # ) -> list:
 #     """
 #     Возвращает поставщиков только по NM ID,
-#     которые остались после фильтра бренда
-#     и категории.
+#     которые остались после фильтра бренда,
+#     категории и периода.
 #     """
 
 #     if (
@@ -674,7 +943,7 @@
 # ) -> set[str]:
 #     """
 #     Получает множество value
-#     из options компонента Mantine.
+#     из options Mantine.
 #     """
 
 #     values: set[str] = set()
@@ -703,12 +972,14 @@
 #     options: list,
 # ) -> list[str]:
 #     """
-#     Оставляет только выбранные значения,
-#     которые присутствуют в новых options.
+#     Оставляет только значения,
+#     присутствующие в новых options.
 #     """
 
 #     available_values = (
-#         _option_values(options)
+#         _option_values(
+#             options
+#         )
 #     )
 
 #     return [
@@ -721,7 +992,7 @@
 
 
 # # ---------------------------------------------------------------------
-# # Фильтр по поставщикам
+# # Фильтрация по поставщикам
 # # ---------------------------------------------------------------------
 
 
@@ -733,9 +1004,8 @@
 #     Фильтрует агрегированную таблицу
 #     по выбранным поставщикам.
 
-#     В агрегированном анализе колонка
-#     «Поставщики» может содержать список
-#     поставщиков в одной строке.
+#     Колонка «Поставщики» может содержать
+#     несколько поставщиков в одной строке.
 #     """
 
 #     selected_suppliers = (
@@ -785,22 +1055,25 @@
 # def apply_all_analysis_filters(
 #     analysis_df: pd.DataFrame,
 #     *,
-#     cost_type,
-#     brands,
-#     categories,
-#     suppliers,
-#     cv_ranks,
-#     median_deviation_limit,
-#     date_range,
+#     cost_type=None,
+#     brands=None,
+#     categories=None,
+#     suppliers=None,
+#     cv_ranks=None,
+#     median_deviation_limit=None,
+#     date_range=None,
 # ) -> pd.DataFrame:
 #     """
-#     Применяет все активные фильтры.
+#     Применяет фильтры к уже рассчитанной
+#     агрегированной таблице.
 
-#     Используется:
-#     - dashboard;
-#     - основной таблицей;
-#     - Excel;
-#     - CSV.
+#     Важно:
+#     период здесь повторно не применяется.
+
+#     Период должен передаваться непосредственно
+#     в get_price_analysis_data(), чтобы SQL
+#     сначала отобрал УПД, а затем рассчитал
+#     MIN, MAX, MEDIAN, AVG и CV.
 #     """
 
 #     if analysis_df.empty:
@@ -819,9 +1092,7 @@
 #             categories
 #         ),
 
-#         # Поставщики обрабатываются отдельно,
-#         # потому что колонка может содержать
-#         # несколько поставщиков в одной строке.
+#         # Поставщики обрабатываются отдельно.
 #         suppliers=None,
 
 #         # Удалённые фильтры.
@@ -833,10 +1104,12 @@
 #         cv_ranks=normalise_list(
 #             cv_ranks
 #         ),
-#         date_range=date_range,
-#         median_deviation_limit=(
-#             median_deviation_limit
-#         ),
+
+#         # Дата уже применена в SQL.
+#         date_range=None,
+
+#         # Порог скрыт и данные не фильтрует.
+#         median_deviation_limit=None,
 #     )
 
 #     return filter_analysis_by_suppliers(
@@ -858,7 +1131,11 @@
 #     date_range=None,
 # ) -> pd.DataFrame:
 #     """
-#     Фильтрует историю УПД на сервере.
+#     Фильтрует историю УПД:
+
+#     - по NM ID;
+#     - по поставщикам;
+#     - по выбранному периоду.
 #     """
 
 #     if history_df.empty:
@@ -889,9 +1166,11 @@
 #             not allowed_ids
 #             or not nm_id_column
 #         ):
-#             return result.iloc[
-#                 0:0
-#             ].copy()
+#             return (
+#                 result
+#                 .iloc[0:0]
+#                 .copy()
+#             )
 
 #         history_ids = (
 #             result[nm_id_column]
@@ -927,54 +1206,49 @@
 #         ].copy()
 
 #     # -------------------------------------------------------------
-#     # Период
+#     # Период УПД
 #     # -------------------------------------------------------------
 
+#     date_from, date_to = (
+#         normalise_date_range(
+#             date_range
+#         )
+#     )
+
+#     date_column = (
+#         _find_history_date_column(
+#             result
+#         )
+#     )
+
 #     if (
-#         date_range
-#         and isinstance(
-#             date_range,
-#             (list, tuple),
+#         date_column
+#         and (
+#             date_from
+#             or date_to
 #         )
-#         and len(date_range) == 2
-#         and "Дата УПД" in result.columns
 #     ):
-#         start_date = pd.to_datetime(
-#             date_range[0],
-#             errors="coerce",
-#         )
-
-#         end_date = pd.to_datetime(
-#             date_range[1],
-#             errors="coerce",
-#         )
-
-#         history_dates = pd.to_datetime(
-#             result["Дата УПД"],
-#             errors="coerce",
-#         )
-
-#         date_mask = pd.Series(
-#             True,
-#             index=result.index,
-#         )
-
-#         if pd.notna(start_date):
-#             date_mask &= (
-#                 history_dates
-#                 >= start_date
+#         result[date_column] = (
+#             pd.to_datetime(
+#                 result[date_column],
+#                 errors="coerce",
 #             )
+#         )
 
-#         if pd.notna(end_date):
-#             date_mask &= (
-#                 history_dates
-#                 < end_date
-#                 + pd.Timedelta(days=1)
-#             )
+#         if date_from:
+#             result = result.loc[
+#                 result[date_column]
+#                 >= pd.Timestamp(date_from)
+#             ].copy()
 
-#         result = result.loc[
-#             date_mask
-#         ].copy()
+#         if date_to:
+#             result = result.loc[
+#                 result[date_column]
+#                 < (
+#                     pd.Timestamp(date_to)
+#                     + pd.Timedelta(days=1)
+#                 )
+#             ].copy()
 
 #     return result.reset_index(
 #         drop=True
@@ -988,18 +1262,32 @@
 
 # def build_filter_store(
 #     *,
-#     cost_type,
-#     brands,
-#     categories,
-#     suppliers,
-#     cv_ranks,
-#     median_deviation_limit,
-#     date_range,
+#     cost_type=None,
+#     brands=None,
+#     categories=None,
+#     suppliers=None,
+#     cv_ranks=None,
+#     median_deviation_limit=None,
+#     date_range=None,
 # ) -> dict:
 #     """
-#     Создаёт небольшой Store
-#     только с параметрами фильтров.
+#     Создаёт Store с параметрами
+#     активных фильтров.
 #     """
+
+#     date_from, date_to = (
+#         normalise_date_range(
+#             date_range
+#         )
+#     )
+
+#     normalised_range = None
+
+#     if date_from and date_to:
+#         normalised_range = [
+#             date_from,
+#             date_to,
+#         ]
 
 #     return {
 #         "cost_type": (
@@ -1023,18 +1311,9 @@
 #             cv_ranks
 #         ),
 
-#         "median_deviation_limit": (
-#             median_deviation_limit
-#         ),
+#         "median_deviation_limit": None,
 
-#         "date_range": (
-#             list(date_range)
-#             if isinstance(
-#                 date_range,
-#                 (list, tuple),
-#             )
-#             else None
-#         ),
+#         "date_range": normalised_range,
 #     }
 
 
@@ -1042,49 +1321,71 @@
 #     filter_store: dict | None,
 # ) -> pd.DataFrame:
 #     """
-#     Получает агрегированный анализ
-#     и применяет параметры из Store.
+#     Повторно получает агрегированный
+#     анализ на сервере.
 
 #     Используется при формировании
-#     Excel и CSV.
+#     таблиц, Excel и CSV.
 #     """
 
 #     if not filter_store:
-#         return pd.DataFrame()
+#         date_range = (
+#             get_default_date_range()
+#         )
+#     else:
+#         date_range = (
+#             filter_store.get(
+#                 "date_range"
+#             )
+#             or get_default_date_range()
+#         )
+
+#     date_from, date_to = (
+#         normalise_date_range(
+#             date_range
+#         )
+#     )
 
 #     analysis_df = (
-#         get_price_analysis_data()
+#         get_price_analysis_data(
+#             date_from=date_from,
+#             date_to=date_to,
+#         )
 #         .copy()
 #     )
 
 #     if analysis_df.empty:
 #         return analysis_df
 
+#     if not filter_store:
+#         return analysis_df
+
 #     return apply_all_analysis_filters(
 #         analysis_df,
 #         cost_type=filter_store.get(
-#             "cost_type"
+#             "cost_type",
+#             DEFAULT_COST_TYPE,
 #         ),
 #         brands=filter_store.get(
-#             "brands"
+#             "brands",
+#             [],
 #         ),
 #         categories=filter_store.get(
-#             "categories"
+#             "categories",
+#             [],
 #         ),
 #         suppliers=filter_store.get(
-#             "suppliers"
+#             "suppliers",
+#             [],
 #         ),
 #         cv_ranks=filter_store.get(
-#             "cv_ranks"
+#             "cv_ranks",
+#             [],
 #         ),
-#         median_deviation_limit=(
-#             filter_store.get(
-#                 "median_deviation_limit"
-#             )
-#         ),
-#         date_range=filter_store.get(
-#             "date_range"
-#         ),
+#         median_deviation_limit=None,
+
+#         # Период уже применён в SQL.
+#         date_range=None,
 #     )
 
 
@@ -1097,16 +1398,41 @@
 #     app,
 # ):
 #     """
-#     Регистрирует все callbacks,
-#     относящиеся к фильтрам:
-
-#     1. загрузку и обновление данных;
-#     2. зависимые списки;
-#     3. сброс фильтров.
+#     Регистрирует callbacks фильтров.
 #     """
 
 #     # -----------------------------------------------------------------
-#     # Загрузка данных и обновление кеша
+#     # Быстрые периоды
+#     # -----------------------------------------------------------------
+
+#     @app.callback(
+#         Output(
+#             DATE_FILTER_ID,
+#             "value",
+#         ),
+#         Input(
+#             DATE_PRESET_ID,
+#             "value",
+#         ),
+#         prevent_initial_call=True,
+#     )
+#     def apply_date_preset(
+#         preset,
+#     ):
+#         """
+#         Применяет выбранный
+#         быстрый период.
+#         """
+
+#         if not preset:
+#             return no_update
+
+#         return _build_preset_date_range(
+#             preset
+#         )
+
+#     # -----------------------------------------------------------------
+#     # Загрузка данных
 #     # -----------------------------------------------------------------
 
 #     @app.callback(
@@ -1128,15 +1454,12 @@
 #         refresh_clicks,
 #     ):
 #         """
-#         Загружает данные и передаёт
-#         сигнал для зависимых фильтров.
+#         Создаёт сигнал загрузки данных.
+
+#         Кэш здесь не очищается.
+#         Данные запрашиваются заново
+#         при выполнении callbacks.
 #         """
-
-#         if refresh_clicks:
-#             clear_price_analysis_cache()
-
-#         # Прогреваем кеш анализа.
-#         get_price_analysis_data()
 
 #         now = datetime.now()
 
@@ -1145,14 +1468,21 @@
 #                 "version": (
 #                     now.isoformat()
 #                 ),
+#                 "refresh_clicks": (
+#                     int(
+#                         refresh_clicks
+#                         or 0
+#                     )
+#                 ),
 #             },
+
 #             now.strftime(
 #                 "%d.%m.%Y %H:%M"
 #             ),
 #         )
 
 #     # -----------------------------------------------------------------
-#     # Умные категории и поставщики
+#     # Обновление зависимых options
 #     # -----------------------------------------------------------------
 
 #     @app.callback(
@@ -1165,20 +1495,16 @@
 #             "data",
 #         ),
 #         Output(
-#             CATEGORY_FILTER_ID,
-#             "value",
-#         ),
-#         Output(
 #             SUPPLIER_FILTER_ID,
 #             "data",
-#         ),
-#         Output(
-#             SUPPLIER_FILTER_ID,
-#             "value",
 #         ),
 #         Input(
 #             DATA_STORE_ID,
 #             "data",
+#         ),
+#         Input(
+#             DATE_FILTER_ID,
+#             "value",
 #         ),
 #         Input(
 #             BRAND_FILTER_ID,
@@ -1188,43 +1514,36 @@
 #             CATEGORY_FILTER_ID,
 #             "value",
 #         ),
-#         State(
-#             SUPPLIER_FILTER_ID,
-#             "value",
-#         ),
 #         prevent_initial_call=False,
 #     )
 #     def update_smart_filter_options(
 #         data_signal,
+#         date_range,
 #         selected_brands,
 #         selected_categories,
-#         selected_suppliers,
 #     ):
 #         """
-#         Обновляет зависимые справочники.
+#         Обновляет списки брендов,
+#         категорий и поставщиков.
 
-#         Бренд:
-#             показывает все бренды.
-
-#         Категория:
-#             зависит от выбранного бренда.
-
-#         Поставщик:
-#             зависит от выбранного бренда
-#             и выбранной категории.
+#         Списки учитывают выбранный
+#         период УПД.
 #         """
 
 #         if not data_signal:
-#             return (
-#                 [],
-#                 [],
-#                 [],
-#                 [],
-#                 [],
+#             return [], [], []
+
+#         date_from, date_to = (
+#             normalise_date_range(
+#                 date_range
 #             )
+#         )
 
 #         analysis_df = (
-#             get_price_analysis_data()
+#             get_price_analysis_data(
+#                 date_from=date_from,
+#                 date_to=date_to,
+#             )
 #             .copy()
 #         )
 
@@ -1233,17 +1552,16 @@
 #             .copy()
 #         )
 
+#         history_df = filter_history_data(
+#             history_df,
+#             date_range=date_range,
+#         )
+
 #         if analysis_df.empty:
-#             return (
-#                 [],
-#                 [],
-#                 [],
-#                 [],
-#                 [],
-#             )
+#             return [], [], []
 
 #         # -------------------------------------------------------------
-#         # Все бренды
+#         # Все бренды за выбранный период
 #         # -------------------------------------------------------------
 
 #         brand_options = (
@@ -1279,13 +1597,16 @@
 #         )
 
 #         # -------------------------------------------------------------
-#         # Поставщики выбранных брендов и категорий
+#         # Поставщики выбранных брендов
+#         # и категорий
 #         # -------------------------------------------------------------
 
 #         category_filtered_df = (
 #             _filter_analysis_for_options(
 #                 brand_filtered_df,
-#                 categories=clean_categories,
+#                 categories=(
+#                     clean_categories
+#                 ),
 #             )
 #         )
 
@@ -1296,20 +1617,105 @@
 #             )
 #         )
 
-#         clean_suppliers = (
+#         return (
+#             brand_options,
+#             category_options,
+#             supplier_options,
+#         )
+
+#     # -----------------------------------------------------------------
+#     # Очистка недоступных категорий
+#     # -----------------------------------------------------------------
+
+#     @app.callback(
+#         Output(
+#             CATEGORY_FILTER_ID,
+#             "value",
+#             allow_duplicate=True,
+#         ),
+#         Input(
+#             CATEGORY_FILTER_ID,
+#             "data",
+#         ),
+#         State(
+#             CATEGORY_FILTER_ID,
+#             "value",
+#         ),
+#         prevent_initial_call=True,
+#     )
+#     def clean_category_values(
+#         category_options,
+#         selected_categories,
+#     ):
+#         """
+#         Удаляет категории,
+#         которых больше нет в options.
+#         """
+
+#         current_values = (
+#             _clean_values(
+#                 selected_categories
+#             )
+#         )
+
+#         clean_values = (
 #             _keep_available_values(
-#                 selected_suppliers,
+#                 current_values,
+#                 category_options,
+#             )
+#         )
+
+#         if clean_values == current_values:
+#             return no_update
+
+#         return clean_values
+
+#     # -----------------------------------------------------------------
+#     # Очистка недоступных поставщиков
+#     # -----------------------------------------------------------------
+
+#     @app.callback(
+#         Output(
+#             SUPPLIER_FILTER_ID,
+#             "value",
+#             allow_duplicate=True,
+#         ),
+#         Input(
+#             SUPPLIER_FILTER_ID,
+#             "data",
+#         ),
+#         State(
+#             SUPPLIER_FILTER_ID,
+#             "value",
+#         ),
+#         prevent_initial_call=True,
+#     )
+#     def clean_supplier_values(
+#         supplier_options,
+#         selected_suppliers,
+#     ):
+#         """
+#         Удаляет поставщиков,
+#         которых больше нет в options.
+#         """
+
+#         current_values = (
+#             _clean_values(
+#                 selected_suppliers
+#             )
+#         )
+
+#         clean_values = (
+#             _keep_available_values(
+#                 current_values,
 #                 supplier_options,
 #             )
 #         )
 
-#         return (
-#             brand_options,
-#             category_options,
-#             clean_categories,
-#             supplier_options,
-#             clean_suppliers,
-#         )
+#         if clean_values == current_values:
+#             return no_update
+
+#         return clean_values
 
 #     # -----------------------------------------------------------------
 #     # Сброс фильтров
@@ -1323,7 +1729,6 @@
 #         Output(
 #             BRAND_FILTER_ID,
 #             "value",
-#             allow_duplicate=True,
 #         ),
 #         Output(
 #             CATEGORY_FILTER_ID,
@@ -1340,11 +1745,12 @@
 #             "value",
 #         ),
 #         Output(
-#             MEDIAN_DEVIATION_FILTER_ID,
+#             DATE_FILTER_ID,
 #             "value",
+#             allow_duplicate=True,
 #         ),
 #         Output(
-#             DATE_FILTER_ID,
+#             DATE_PRESET_ID,
 #             "value",
 #         ),
 #         Input(
@@ -1357,8 +1763,10 @@
 #         n_clicks,
 #     ):
 #         """
-#         Возвращает фильтры
-#         к исходным значениям.
+#         Сбрасывает все фильтры.
+
+#         Период возвращается к значению:
+#         с начала года по сегодня.
 #         """
 
 #         if not n_clicks:
@@ -1378,13 +1786,16 @@
 #             [],
 #             [],
 #             [],
-#             DEFAULT_MEDIAN_DEVIATION_LIMIT,
-#             None,
+#             get_default_date_range(),
+#             "ytd",
 #         )
+
+
+
 # gear/app/costs_control/filters.py
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import dash_mantine_components as dmc
@@ -1393,7 +1804,6 @@ from dash import (
     Input,
     Output,
     State,
-    ctx,
     html,
     no_update,
 )
@@ -1415,9 +1825,9 @@ from .config import (
     DEFAULT_MEDIAN_DEVIATION_LIMIT,
 )
 from .data import (
-    clear_price_analysis_cache,
     get_price_analysis_data,
     get_price_history_data,
+    get_min_upd_date,
 )
 from .ids import (
     BRAND_FILTER_ID,
@@ -1439,13 +1849,181 @@ from .styles import (
 
 
 # ---------------------------------------------------------------------
+# Локальные ID
+# ---------------------------------------------------------------------
+
+
+DATE_PRESET_ID = (
+    "costs-control-date-preset"
+)
+
+
+# ---------------------------------------------------------------------
+# Даты
+# ---------------------------------------------------------------------
+
+
+# def get_default_date_range() -> list[str]:
+#     """
+#     Возвращает период по умолчанию:
+
+#     с начала текущего года по сегодня.
+#     """
+
+#     today = date.today()
+#     year_start = date(
+#         year=today.year,
+#         month=1,
+#         day=1,
+#     )
+
+#     return [
+#         year_start.isoformat(),
+#         today.isoformat(),
+#     ]
+
+def get_default_date_range() -> list[str]:
+    """
+    Возвращает период по умолчанию:
+
+    от первой даты УПД
+    до сегодняшнего дня.
+    """
+
+    today = date.today()
+
+    return [
+        get_min_upd_date().isoformat(),
+        today.isoformat(),
+    ]
+
+
+
+
+
+
+def normalise_date_range(
+    date_range,
+) -> tuple[str | None, str | None]:
+    """
+    Приводит значение DatePickerInput
+    к паре строк:
+
+    date_from, date_to
+
+    Формат:
+
+    YYYY-MM-DD
+    """
+
+    if not date_range:
+        return None, None
+
+    if not isinstance(
+        date_range,
+        (list, tuple),
+    ):
+        return None, None
+
+    if len(date_range) < 2:
+        return None, None
+
+    date_from = date_range[0]
+    date_to = date_range[1]
+
+    if not date_from or not date_to:
+        return None, None
+
+    date_from = str(date_from)[:10]
+    date_to = str(date_to)[:10]
+
+    if date_from > date_to:
+        date_from, date_to = (
+            date_to,
+            date_from,
+        )
+
+    return date_from, date_to
+
+
+def _get_quarter_start(
+    current_date: date,
+) -> date:
+    """
+    Возвращает первый день квартала.
+    """
+
+    quarter_month = (
+        ((current_date.month - 1) // 3)
+        * 3
+        + 1
+    )
+
+    return date(
+        year=current_date.year,
+        month=quarter_month,
+        day=1,
+    )
+
+
+def _build_preset_date_range(
+    preset: str | None,
+) -> list[str]:
+    """
+    Формирует диапазон дат
+    для выбранного пресета.
+    """
+
+    today = date.today()
+
+    if preset == "all":
+        return get_default_date_range()
+
+    if preset == "last_30_days":
+        date_from = (
+            today
+            - timedelta(days=29)
+        )
+
+    elif preset == "current_month":
+        date_from = date(
+            year=today.year,
+            month=today.month,
+            day=1,
+        )
+
+    elif preset == "current_quarter":
+        date_from = _get_quarter_start(
+            today
+        )
+
+    elif preset == "ytd":
+        date_from = date(
+            year=today.year,
+            month=1,
+            day=1,
+        )
+
+    else:
+        return get_default_date_range()
+
+    return [
+        date_from.isoformat(),
+        today.isoformat(),
+    ]
+
+
+# ---------------------------------------------------------------------
 # Нормализация
 # ---------------------------------------------------------------------
 
 
-def normalise_nm_id(value: Any) -> str:
+def normalise_nm_id(
+    value: Any,
+) -> str:
     """
-    Приводит NM ID к строке без окончания .0.
+    Приводит NM ID к строке
+    без окончания .0.
     """
 
     if value is None:
@@ -1459,31 +2037,87 @@ def normalise_nm_id(value: Any) -> str:
     return text
 
 
-def normalise_list(value) -> list:
+def normalise_list(
+    value,
+) -> list:
     """
-    Приводит значение MultiSelect к обычному списку.
+    Приводит значение MultiSelect
+    к обычному списку.
     """
 
     if value is None:
         return []
 
-    if isinstance(value, (str, int, float)):
+    if isinstance(
+        value,
+        (str, int, float),
+    ):
         return [value]
 
     return list(value)
 
 
-def _clean_values(values) -> list[str]:
+def _clean_values(
+    values,
+) -> list[str]:
     """
     Очищает список выбранных значений.
     """
 
     return [
         str(value).strip()
-        for value in normalise_list(values)
-        if value is not None
-        and str(value).strip()
+        for value in normalise_list(
+            values
+        )
+        if (
+            value is not None
+            and str(value).strip()
+        )
     ]
+
+
+# ---------------------------------------------------------------------
+# Поиск колонок
+# ---------------------------------------------------------------------
+
+
+def _find_nm_id_column(
+    df: pd.DataFrame,
+) -> str | None:
+    """
+    Находит колонку NM ID.
+    """
+
+    for column in (
+        "nm_id",
+        "NM ID",
+        "nmId",
+    ):
+        if column in df.columns:
+            return column
+
+    return None
+
+
+def _find_history_date_column(
+    df: pd.DataFrame,
+) -> str | None:
+    """
+    Находит колонку даты УПД
+    в таблице истории.
+    """
+
+    for column in (
+        "Дата УПД",
+        "date",
+        "Дата",
+        "upd_date",
+        "document_date",
+    ):
+        if column in df.columns:
+            return column
+
+    return None
 
 
 # ---------------------------------------------------------------------
@@ -1497,15 +2131,17 @@ def _filter_field(
     title: str,
     subtitle: str,
     component,
+    style: dict | None = None,
 ):
     """
-    Единый визуальный контейнер фильтра.
+    Единый компактный контейнер фильтра.
     """
 
     return html.Div(
         style={
             "minWidth": 0,
-            "padding": "11px 12px 12px",
+            "height": "100%",
+            "padding": "10px 11px",
             "backgroundColor": "#FFFFFF",
             "border": (
                 "1px solid "
@@ -1514,14 +2150,15 @@ def _filter_field(
                     "#D9DEE2",
                 )
             ),
+            **(style or {}),
         },
         children=[
             html.Div(
                 style={
                     "display": "flex",
                     "alignItems": "flex-start",
-                    "gap": "8px",
-                    "marginBottom": "9px",
+                    "gap": "7px",
+                    "marginBottom": "8px",
                 },
                 children=[
                     DashIconify(
@@ -1537,6 +2174,7 @@ def _filter_field(
                             "flex": "0 0 auto",
                         },
                     ),
+
                     html.Div(
                         style={
                             "minWidth": 0,
@@ -1544,6 +2182,7 @@ def _filter_field(
                         children=[
                             html.Div(
                                 title,
+                                title=title,
                                 style={
                                     "fontSize": "12px",
                                     "fontWeight": 700,
@@ -1552,26 +2191,140 @@ def _filter_field(
                                         "text",
                                         "#111827",
                                     ),
+                                    "whiteSpace": "nowrap",
+                                    "overflow": "hidden",
+                                    "textOverflow": "ellipsis",
                                 },
                             ),
+
                             html.Div(
                                 subtitle,
+                                title=subtitle,
                                 style={
                                     "marginTop": "1px",
-                                    "fontSize": "10px",
-                                    "lineHeight": "14px",
+                                    "fontSize": "9px",
+                                    "lineHeight": "13px",
                                     "color": COLORS.get(
                                         "muted",
                                         "#6B7280",
                                     ),
+                                    "whiteSpace": "nowrap",
+                                    "overflow": "hidden",
+                                    "textOverflow": "ellipsis",
                                 },
                             ),
                         ],
                     ),
                 ],
             ),
+
             component,
         ],
+    )
+
+
+# ---------------------------------------------------------------------
+# Фильтр периода
+# ---------------------------------------------------------------------
+
+
+def _build_date_filter():
+    """
+    Строит DatePicker и быстрые пресеты.
+    """
+
+    return _filter_field(
+        icon="solar:calendar-date-linear",
+        title="Период УПД",
+        subtitle=(
+            "Показатели рассчитываются "
+            "за выбранный период"
+        ),
+        style={
+            "flex": "1.65 1 350px",
+        },
+        component=dmc.Stack(
+            gap=6,
+            children=[
+                dmc.DatePickerInput(
+                    id=DATE_FILTER_ID,
+                    type="range",
+                    value=get_default_date_range(),
+                    valueFormat="DD.MM.YYYY",
+                    placeholder="Весь период",
+                    clearable=False,
+                    allowSingleDateInRange=False,
+                    firstDayOfWeek=1,
+                    radius=0,
+                    size="xs",
+                    w="100%",
+                    leftSection=DashIconify(
+                        icon=(
+                            "solar:"
+                            "calendar-linear"
+                        ),
+                        width=15,
+                        height=15,
+                    ),
+                    styles={
+                        "input": {
+                            "height": "32px",
+                            "minHeight": "32px",
+                            "fontSize": "11px",
+                            "fontWeight": 500,
+                            "borderColor": (
+                                COLORS.get(
+                                    "border",
+                                    "#D9DEE2",
+                                )
+                            ),
+                            "backgroundColor": "#FFFFFF",
+                        },
+                    },
+                ),
+
+                dmc.SegmentedControl(
+                    id=DATE_PRESET_ID,
+                    value="all",
+                    data=[
+                        {
+                            "label": "Весь",
+                            "value": "all",
+                        },
+                        {
+                            "label": "30 дней",
+                            "value": "last_30_days",
+                        },
+                        {
+                            "label": "Месяц",
+                            "value": "current_month",
+                        },
+                        {
+                            "label": "Квартал",
+                            "value": "current_quarter",
+                        },
+                        {
+                            "label": "С начала года",
+                            "value": "ytd",
+                        },
+                    ],
+                    radius=0,
+                    size="xs",
+                    fullWidth=True,
+                    styles={
+                        "root": {
+                            "minHeight": "30px",
+                        },
+                        "label": {
+                            "fontSize": "8.5px",
+                            "paddingLeft": "4px",
+                            "paddingRight": "4px",
+                            "whiteSpace": "nowrap",
+                        },
+                    },
+                ),
+            ],
+        ),
     )
 
 
@@ -1584,19 +2337,24 @@ def build_filter_panel():
     """
     Панель фильтров анализа.
 
-    В интерфейсе показываются:
-
-    - тип себестоимости;
-    - бренд;
-    - категория;
-    - поставщик;
-    - ранг CV.
-
-    Фильтры периода УПД и порога отклонения
-    от медианы скрыты, но компоненты оставлены
-    в layout для совместимости с callbacks.py
-    и export.py.
+    На широком экране фильтры располагаются
+    в одну строку. При недостатке ширины
+    они аккуратно переносятся ниже.
     """
+
+    common_multiselect_styles = {
+        "input": {
+            "minHeight": "32px",
+            "fontSize": "11px",
+        },
+        "pill": {
+            "fontSize": "9px",
+        },
+    }
+
+    regular_filter_style = {
+        "flex": "1 1 185px",
+    }
 
     return html.Div(
         style=PANEL_STYLE,
@@ -1604,18 +2362,21 @@ def build_filter_panel():
             dmc.Group(
                 justify="space-between",
                 align="center",
-                mb=14,
+                mb=12,
                 children=[
                     section_header(
                         "Фильтры анализа",
                         (
-                            "Категории и поставщики "
-                            "автоматически подстраиваются "
-                            "под выбранные значения"
+                            "Показатели, графики "
+                            "и таблицы автоматически "
+                            "пересчитываются"
                         ),
                     ),
+
                     action_button(
-                        component_id=RESET_FILTERS_BTN_ID,
+                        component_id=(
+                            RESET_FILTERS_BTN_ID
+                        ),
                         label="Сбросить",
                         icon="solar:restart-linear",
                         color="gray",
@@ -1625,27 +2386,29 @@ def build_filter_panel():
 
             html.Div(
                 style={
-                    **FILTER_GRID_STYLE,
-                    "gridTemplateColumns": (
-                        "repeat(auto-fit, minmax(235px, 1fr))"
-                    ),
+                    "display": "flex",
+                    "flexWrap": "wrap",
+                    "alignItems": "stretch",
                     "gap": "10px",
+                    "width": "100%",
                 },
                 children=[
-                    # -------------------------------------------------
-                    # Тип себестоимости
-                    # -------------------------------------------------
+                    _build_date_filter(),
 
                     _filter_field(
                         icon=(
                             "solar:"
-                            "calculator-minimalistic-linear"
+                            "calculator-"
+                            "minimalistic-linear"
                         ),
                         title="Тип себестоимости",
                         subtitle=(
-                            "Показатели и графики "
-                            "будут пересчитаны"
+                            "Бухгалтерская или "
+                            "управленческая"
                         ),
+                        style={
+                            "flex": "1.2 1 255px",
+                        },
                         component=dmc.SegmentedControl(
                             id=COST_TYPE_FILTER_ID,
                             value=DEFAULT_COST_TYPE,
@@ -1653,20 +2416,23 @@ def build_filter_panel():
                             radius=0,
                             size="xs",
                             fullWidth=True,
+                            styles={
+                                "root": {
+                                    "minHeight": "32px",
+                                },
+                                "label": {
+                                    "fontSize": "10px",
+                                    "whiteSpace": "nowrap",
+                                },
+                            },
                         ),
                     ),
-
-                    # -------------------------------------------------
-                    # Бренд
-                    # -------------------------------------------------
 
                     _filter_field(
                         icon="solar:tag-linear",
                         title="Бренд",
-                        subtitle=(
-                            "Можно выбрать "
-                            "несколько брендов"
-                        ),
+                        subtitle="Можно выбрать несколько",
+                        style=regular_filter_style,
                         component=dmc.MultiSelect(
                             id=BRAND_FILTER_ID,
                             placeholder="Все бренды",
@@ -1680,12 +2446,9 @@ def build_filter_panel():
                             radius=0,
                             size="xs",
                             maxDropdownHeight=300,
+                            styles=common_multiselect_styles,
                         ),
                     ),
-
-                    # -------------------------------------------------
-                    # Категория
-                    # -------------------------------------------------
 
                     _filter_field(
                         icon=(
@@ -1693,10 +2456,8 @@ def build_filter_panel():
                             "folder-with-files-linear"
                         ),
                         title="Категория",
-                        subtitle=(
-                            "Список зависит "
-                            "от выбранного бренда"
-                        ),
+                        subtitle="Зависит от бренда",
+                        style=regular_filter_style,
                         component=dmc.MultiSelect(
                             id=CATEGORY_FILTER_ID,
                             placeholder="Все категории",
@@ -1710,20 +2471,18 @@ def build_filter_panel():
                             radius=0,
                             size="xs",
                             maxDropdownHeight=300,
+                            styles=common_multiselect_styles,
                         ),
                     ),
 
-                    # -------------------------------------------------
-                    # Поставщик
-                    # -------------------------------------------------
-
                     _filter_field(
-                        icon="solar:buildings-2-linear",
-                        title="Поставщик",
-                        subtitle=(
-                            "Список зависит от "
-                            "бренда и категории"
+                        icon=(
+                            "solar:"
+                            "buildings-2-linear"
                         ),
+                        title="Поставщик",
+                        subtitle="Зависит от фильтров",
+                        style=regular_filter_style,
                         component=dmc.MultiSelect(
                             id=SUPPLIER_FILTER_ID,
                             placeholder="Все поставщики",
@@ -1737,22 +2496,18 @@ def build_filter_panel():
                             radius=0,
                             size="xs",
                             maxDropdownHeight=300,
+                            styles=common_multiselect_styles,
                         ),
                     ),
 
-                    # -------------------------------------------------
-                    # Ранг CV
-                    # -------------------------------------------------
-
                     _filter_field(
-                        icon="solar:chart-square-linear",
-                        title=(
-                            "Ранг коэффициента вариации"
+                        icon=(
+                            "solar:"
+                            "chart-square-linear"
                         ),
-                        subtitle=(
-                            "Уровень стабильности "
-                            "закупочной цены"
-                        ),
+                        title="Ранг CV",
+                        subtitle="Стабильность цены",
+                        style=regular_filter_style,
                         component=dmc.MultiSelect(
                             id=CV_RANK_FILTER_ID,
                             placeholder="Все ранги",
@@ -1763,21 +2518,11 @@ def build_filter_panel():
                             radius=0,
                             size="xs",
                             maxDropdownHeight=260,
+                            styles=common_multiselect_styles,
                         ),
                     ),
                 ],
             ),
-
-            # ---------------------------------------------------------
-            # Скрытые компоненты
-            # ---------------------------------------------------------
-            #
-            # Они не отображаются пользователю.
-            #
-            # Но их нельзя полностью удалять, пока callbacks.py
-            # и export.py используют эти ID в Input или State.
-            # Иначе Dash не сможет запустить основной callback.
-            # ---------------------------------------------------------
 
             html.Div(
                 style={
@@ -1785,20 +2530,15 @@ def build_filter_panel():
                 },
                 children=[
                     dmc.NumberInput(
-                        id=MEDIAN_DEVIATION_FILTER_ID,
-                        value=DEFAULT_MEDIAN_DEVIATION_LIMIT,
-                    ),
-                    dmc.DatePickerInput(
-                        id=DATE_FILTER_ID,
-                        type="range",
-                        value=None,
+                        id=(
+                            MEDIAN_DEVIATION_FILTER_ID
+                        ),
+                        value=(
+                            DEFAULT_MEDIAN_DEVIATION_LIMIT
+                        ),
                     ),
                 ],
             ),
-
-            # ---------------------------------------------------------
-            # Подсказка
-            # ---------------------------------------------------------
 
             html.Div(
                 style={
@@ -1806,10 +2546,12 @@ def build_filter_panel():
                     "alignItems": "center",
                     "gap": "7px",
                     "marginTop": "10px",
-                    "padding": "8px 10px",
-                    "backgroundColor": COLORS.get(
-                        "very_light_green",
-                        "#F3F8F6",
+                    "padding": "7px 10px",
+                    "backgroundColor": (
+                        COLORS.get(
+                            "very_light_green",
+                            "#F3F8F6",
+                        )
                     ),
                     "border": (
                         "1px solid "
@@ -1827,7 +2569,10 @@ def build_filter_panel():
                 },
                 children=[
                     DashIconify(
-                        icon="solar:info-circle-linear",
+                        icon=(
+                            "solar:"
+                            "info-circle-linear"
+                        ),
                         width=14,
                         height=14,
                         color=COLORS.get(
@@ -1835,11 +2580,14 @@ def build_filter_panel():
                             "#2F6656",
                         ),
                     ),
+
                     html.Span(
                         (
-                            "Для поиска конкретного товара "
-                            "используйте встроенные фильтры "
-                            "таблицы на вкладке «Товары»."
+                            "Для поиска конкретного "
+                            "товара используйте "
+                            "встроенные фильтры "
+                            "таблицы на вкладке "
+                            "«Товары»."
                         )
                     ),
                 ],
@@ -1860,8 +2608,8 @@ def _filter_analysis_for_options(
     categories=None,
 ) -> pd.DataFrame:
     """
-    Фильтрует агрегированный анализ только
-    для построения зависимых справочников.
+    Фильтрует агрегированный анализ
+    для зависимых справочников.
     """
 
     if analysis_df.empty:
@@ -1869,8 +2617,13 @@ def _filter_analysis_for_options(
 
     result = analysis_df.copy()
 
-    selected_brands = _clean_values(brands)
-    selected_categories = _clean_values(categories)
+    selected_brands = _clean_values(
+        brands
+    )
+
+    selected_categories = _clean_values(
+        categories
+    )
 
     if (
         selected_brands
@@ -1894,25 +2647,9 @@ def _filter_analysis_for_options(
             .isin(selected_categories)
         ].copy()
 
-    return result.reset_index(drop=True)
-
-
-def _find_nm_id_column(
-    df: pd.DataFrame,
-) -> str | None:
-    """
-    Находит колонку NM ID.
-    """
-
-    for column in (
-        "nm_id",
-        "NM ID",
-        "nmId",
-    ):
-        if column in df.columns:
-            return column
-
-    return None
+    return result.reset_index(
+        drop=True
+    )
 
 
 def _build_smart_supplier_options(
@@ -1921,8 +2658,8 @@ def _build_smart_supplier_options(
 ) -> list:
     """
     Возвращает поставщиков только по NM ID,
-    которые остались после фильтра бренда
-    и категории.
+    которые остались после фильтра бренда,
+    категории и периода.
     """
 
     if (
@@ -1931,12 +2668,16 @@ def _build_smart_supplier_options(
     ):
         return []
 
-    analysis_nm_column = _find_nm_id_column(
-        analysis_df
+    analysis_nm_column = (
+        _find_nm_id_column(
+            analysis_df
+        )
     )
 
-    history_nm_column = _find_nm_id_column(
-        history_df
+    history_nm_column = (
+        _find_nm_id_column(
+            history_df
+        )
     )
 
     if (
@@ -1951,7 +2692,9 @@ def _build_smart_supplier_options(
     allowed_ids = {
         normalise_nm_id(value)
         for value in (
-            analysis_df[analysis_nm_column]
+            analysis_df[
+                analysis_nm_column
+            ]
             .dropna()
             .tolist()
         )
@@ -1969,7 +2712,9 @@ def _build_smart_supplier_options(
 
     filtered_history = (
         history_df.loc[
-            history_ids.isin(allowed_ids)
+            history_ids.isin(
+                allowed_ids
+            )
         ]
         .copy()
         .reset_index(drop=True)
@@ -1985,19 +2730,27 @@ def _option_values(
     options: list,
 ) -> set[str]:
     """
-    Получает множество value из options Mantine.
+    Получает множество value
+    из options Mantine.
     """
 
     values: set[str] = set()
 
     for option in options or []:
-        if isinstance(option, dict):
-            value = option.get("value")
+        if isinstance(
+            option,
+            dict,
+        ):
+            value = option.get(
+                "value"
+            )
         else:
             value = option
 
         if value is not None:
-            values.add(str(value))
+            values.add(
+                str(value)
+            )
 
     return values
 
@@ -2007,12 +2760,14 @@ def _keep_available_values(
     options: list,
 ) -> list[str]:
     """
-    Оставляет только выбранные значения,
+    Оставляет только значения,
     присутствующие в новых options.
     """
 
-    available_values = _option_values(
-        options
+    available_values = (
+        _option_values(
+            options
+        )
     )
 
     return [
@@ -2037,13 +2792,14 @@ def filter_analysis_by_suppliers(
     Фильтрует агрегированную таблицу
     по выбранным поставщикам.
 
-    В агрегированном анализе колонка
-    «Поставщики» может содержать несколько
-    поставщиков в одной строке.
+    Колонка «Поставщики» может содержать
+    несколько поставщиков в одной строке.
     """
 
-    selected_suppliers = _clean_values(
-        suppliers
+    selected_suppliers = (
+        _clean_values(
+            suppliers
+        )
     )
 
     if (
@@ -2096,11 +2852,16 @@ def apply_all_analysis_filters(
     date_range=None,
 ) -> pd.DataFrame:
     """
-    Применяет активные фильтры.
+    Применяет фильтры к уже рассчитанной
+    агрегированной таблице.
 
-    median_deviation_limit и date_range оставлены
-    в сигнатуре для совместимости с остальными файлами,
-    но пользователь не управляет ими через интерфейс.
+    Важно:
+    период здесь повторно не применяется.
+
+    Период должен передаваться непосредственно
+    в get_price_analysis_data(), чтобы SQL
+    сначала отобрал УПД, а затем рассчитал
+    MIN, MAX, MEDIAN, AVG и CV.
     """
 
     if analysis_df.empty:
@@ -2119,7 +2880,7 @@ def apply_all_analysis_filters(
             categories
         ),
 
-        # Поставщики фильтруются отдельно.
+        # Поставщики обрабатываются отдельно.
         suppliers=None,
 
         # Удалённые фильтры.
@@ -2132,11 +2893,10 @@ def apply_all_analysis_filters(
             cv_ranks
         ),
 
-        # Период в интерфейсе отключён.
+        # Дата уже применена в SQL.
         date_range=None,
 
-        # Порог отклонения в интерфейсе отключён.
-        # Оставляем None, чтобы он не фильтровал данные.
+        # Порог скрыт и данные не фильтрует.
         median_deviation_limit=None,
     )
 
@@ -2159,10 +2919,11 @@ def filter_history_data(
     date_range=None,
 ) -> pd.DataFrame:
     """
-    Фильтрует историю УПД на сервере.
+    Фильтрует историю УПД:
 
-    Фильтр периода в интерфейсе отключён,
-    но параметр оставлен для совместимости.
+    - по NM ID;
+    - по поставщикам;
+    - по выбранному периоду.
     """
 
     if history_df.empty:
@@ -2183,15 +2944,21 @@ def filter_history_data(
             if normalise_nm_id(value)
         }
 
-        nm_id_column = _find_nm_id_column(
-            result
+        nm_id_column = (
+            _find_nm_id_column(
+                result
+            )
         )
 
         if (
             not allowed_ids
             or not nm_id_column
         ):
-            return result.iloc[0:0].copy()
+            return (
+                result
+                .iloc[0:0]
+                .copy()
+            )
 
         history_ids = (
             result[nm_id_column]
@@ -2200,15 +2967,19 @@ def filter_history_data(
         )
 
         result = result.loc[
-            history_ids.isin(allowed_ids)
+            history_ids.isin(
+                allowed_ids
+            )
         ].copy()
 
     # -------------------------------------------------------------
     # Поставщики
     # -------------------------------------------------------------
 
-    selected_suppliers = _clean_values(
-        suppliers
+    selected_suppliers = (
+        _clean_values(
+            suppliers
+        )
     )
 
     if (
@@ -2222,9 +2993,54 @@ def filter_history_data(
             .isin(selected_suppliers)
         ].copy()
 
-    # Период УПД намеренно не применяется.
+    # -------------------------------------------------------------
+    # Период УПД
+    # -------------------------------------------------------------
 
-    return result.reset_index(drop=True)
+    date_from, date_to = (
+        normalise_date_range(
+            date_range
+        )
+    )
+
+    date_column = (
+        _find_history_date_column(
+            result
+        )
+    )
+
+    if (
+        date_column
+        and (
+            date_from
+            or date_to
+        )
+    ):
+        result[date_column] = (
+            pd.to_datetime(
+                result[date_column],
+                errors="coerce",
+            )
+        )
+
+        if date_from:
+            result = result.loc[
+                result[date_column]
+                >= pd.Timestamp(date_from)
+            ].copy()
+
+        if date_to:
+            result = result.loc[
+                result[date_column]
+                < (
+                    pd.Timestamp(date_to)
+                    + pd.Timedelta(days=1)
+                )
+            ].copy()
+
+    return result.reset_index(
+        drop=True
+    )
 
 
 # ---------------------------------------------------------------------
@@ -2243,33 +3059,49 @@ def build_filter_store(
     date_range=None,
 ) -> dict:
     """
-    Создаёт Store с параметрами активных фильтров.
-
-    Скрытые фильтры записываются как None,
-    чтобы они не влияли на результат.
+    Создаёт Store с параметрами
+    активных фильтров.
     """
+
+    date_from, date_to = (
+        normalise_date_range(
+            date_range
+        )
+    )
+
+    normalised_range = None
+
+    if date_from and date_to:
+        normalised_range = [
+            date_from,
+            date_to,
+        ]
 
     return {
         "cost_type": (
             cost_type
             or DEFAULT_COST_TYPE
         ),
+
         "brands": normalise_list(
             brands
         ),
+
         "categories": normalise_list(
             categories
         ),
+
         "suppliers": normalise_list(
             suppliers
         ),
+
         "cv_ranks": normalise_list(
             cv_ranks
         ),
 
-        # Отключённые фильтры.
         "median_deviation_limit": None,
-        "date_range": None,
+
+        "date_range": normalised_range,
     }
 
 
@@ -2277,14 +3109,36 @@ def get_filtered_analysis_from_store(
     filter_store: dict | None,
 ) -> pd.DataFrame:
     """
-    Получает агрегированный анализ
-    и применяет параметры из Store.
+    Повторно получает агрегированный
+    анализ на сервере.
 
-    Используется при формировании Excel и CSV.
+    Используется при формировании
+    таблиц, Excel и CSV.
     """
 
+    if not filter_store:
+        date_range = (
+            get_default_date_range()
+        )
+    else:
+        date_range = (
+            filter_store.get(
+                "date_range"
+            )
+            or get_default_date_range()
+        )
+
+    date_from, date_to = (
+        normalise_date_range(
+            date_range
+        )
+    )
+
     analysis_df = (
-        get_price_analysis_data()
+        get_price_analysis_data(
+            date_from=date_from,
+            date_to=date_to,
+        )
         .copy()
     )
 
@@ -2317,6 +3171,8 @@ def get_filtered_analysis_from_store(
             [],
         ),
         median_deviation_limit=None,
+
+        # Период уже применён в SQL.
         date_range=None,
     )
 
@@ -2326,23 +3182,45 @@ def get_filtered_analysis_from_store(
 # ---------------------------------------------------------------------
 
 
-def register_filter_callbacks(app):
+def register_filter_callbacks(
+    app,
+):
     """
     Регистрирует callbacks фильтров.
-
-    Важно:
-
-    - DATA_STORE_ID меняется один раз при загрузке;
-    - options зависимых фильтров обновляются отдельно;
-    - value фильтров меняется только тогда,
-      когда выбранное значение действительно стало недоступно;
-    - одинаковые значения не возвращаются повторно;
-    - поэтому таблицы не должны перерисовываться
-      несколько раз без необходимости.
     """
 
     # -----------------------------------------------------------------
-    # Загрузка данных и обновление кеша
+    # Быстрые периоды
+    # -----------------------------------------------------------------
+
+    @app.callback(
+        Output(
+            DATE_FILTER_ID,
+            "value",
+        ),
+        Input(
+            DATE_PRESET_ID,
+            "value",
+        ),
+        prevent_initial_call=True,
+    )
+    def apply_date_preset(
+        preset,
+    ):
+        """
+        Применяет выбранный
+        быстрый период.
+        """
+
+        if not preset:
+            return no_update
+
+        return _build_preset_date_range(
+            preset
+        )
+
+    # -----------------------------------------------------------------
+    # Загрузка данных
     # -----------------------------------------------------------------
 
     @app.callback(
@@ -2360,29 +3238,35 @@ def register_filter_callbacks(app):
         ),
         prevent_initial_call=False,
     )
-    def load_filter_data(refresh_clicks):
+    def load_filter_data(
+        refresh_clicks,
+    ):
         """
-        Загружает данные один раз.
+        Создаёт сигнал загрузки данных.
 
-        При нажатии на кнопку обновления:
-        - очищает кеш;
-        - заново получает данные;
-        - обновляет сигнал DATA_STORE_ID.
+        Кэш здесь не очищается.
+        Данные запрашиваются заново
+        при выполнении callbacks.
         """
-
-        if refresh_clicks:
-            clear_price_analysis_cache()
-
-        analysis_df = get_price_analysis_data()
 
         now = datetime.now()
 
         return (
             {
-                "version": now.isoformat(),
-                "rows": int(len(analysis_df)),
+                "version": (
+                    now.isoformat()
+                ),
+                "refresh_clicks": (
+                    int(
+                        refresh_clicks
+                        or 0
+                    )
+                ),
             },
-            now.strftime("%d.%m.%Y %H:%M"),
+
+            now.strftime(
+                "%d.%m.%Y %H:%M"
+            ),
         )
 
     # -----------------------------------------------------------------
@@ -2407,6 +3291,10 @@ def register_filter_callbacks(app):
             "data",
         ),
         Input(
+            DATE_FILTER_ID,
+            "value",
+        ),
+        Input(
             BRAND_FILTER_ID,
             "value",
         ),
@@ -2418,22 +3306,32 @@ def register_filter_callbacks(app):
     )
     def update_smart_filter_options(
         data_signal,
+        date_range,
         selected_brands,
         selected_categories,
     ):
         """
-        Обновляет только списки options.
+        Обновляет списки брендов,
+        категорий и поставщиков.
 
-        Этот callback не меняет value фильтров,
-        поэтому сам по себе не вызывает повторную
-        перерисовку таблиц.
+        Списки учитывают выбранный
+        период УПД.
         """
 
         if not data_signal:
             return [], [], []
 
+        date_from, date_to = (
+            normalise_date_range(
+                date_range
+            )
+        )
+
         analysis_df = (
-            get_price_analysis_data()
+            get_price_analysis_data(
+                date_from=date_from,
+                date_to=date_to,
+            )
             .copy()
         )
 
@@ -2442,16 +3340,23 @@ def register_filter_callbacks(app):
             .copy()
         )
 
+        history_df = filter_history_data(
+            history_df,
+            date_range=date_range,
+        )
+
         if analysis_df.empty:
             return [], [], []
 
         # -------------------------------------------------------------
-        # Все бренды
+        # Все бренды за выбранный период
         # -------------------------------------------------------------
 
-        brand_options = build_filter_options(
-            analysis_df,
-            "Бренд",
+        brand_options = (
+            build_filter_options(
+                analysis_df,
+                "Бренд",
+            )
         )
 
         # -------------------------------------------------------------
@@ -2465,9 +3370,11 @@ def register_filter_callbacks(app):
             )
         )
 
-        category_options = build_filter_options(
-            brand_filtered_df,
-            "Категория",
+        category_options = (
+            build_filter_options(
+                brand_filtered_df,
+                "Категория",
+            )
         )
 
         clean_categories = (
@@ -2478,13 +3385,16 @@ def register_filter_callbacks(app):
         )
 
         # -------------------------------------------------------------
-        # Поставщики выбранных брендов и категорий
+        # Поставщики выбранных брендов
+        # и категорий
         # -------------------------------------------------------------
 
         category_filtered_df = (
             _filter_analysis_for_options(
                 brand_filtered_df,
-                categories=clean_categories,
+                categories=(
+                    clean_categories
+                ),
             )
         )
 
@@ -2526,19 +3436,21 @@ def register_filter_callbacks(app):
         selected_categories,
     ):
         """
-        Удаляет только те выбранные категории,
+        Удаляет категории,
         которых больше нет в options.
-
-        Если список не изменился, возвращает no_update.
         """
 
-        current_values = _clean_values(
-            selected_categories
+        current_values = (
+            _clean_values(
+                selected_categories
+            )
         )
 
-        clean_values = _keep_available_values(
-            current_values,
-            category_options,
+        clean_values = (
+            _keep_available_values(
+                current_values,
+                category_options,
+            )
         )
 
         if clean_values == current_values:
@@ -2571,19 +3483,21 @@ def register_filter_callbacks(app):
         selected_suppliers,
     ):
         """
-        Удаляет только тех поставщиков,
+        Удаляет поставщиков,
         которых больше нет в options.
-
-        Если список не изменился, возвращает no_update.
         """
 
-        current_values = _clean_values(
-            selected_suppliers
+        current_values = (
+            _clean_values(
+                selected_suppliers
+            )
         )
 
-        clean_values = _keep_available_values(
-            current_values,
-            supplier_options,
+        clean_values = (
+            _keep_available_values(
+                current_values,
+                supplier_options,
+            )
         )
 
         if clean_values == current_values:
@@ -2592,7 +3506,7 @@ def register_filter_callbacks(app):
         return clean_values
 
     # -----------------------------------------------------------------
-    # Сброс видимых фильтров
+    # Сброс фильтров
     # -----------------------------------------------------------------
 
     @app.callback(
@@ -2618,19 +3532,35 @@ def register_filter_callbacks(app):
             CV_RANK_FILTER_ID,
             "value",
         ),
+        Output(
+            DATE_FILTER_ID,
+            "value",
+            allow_duplicate=True,
+        ),
+        Output(
+            DATE_PRESET_ID,
+            "value",
+        ),
         Input(
             RESET_FILTERS_BTN_ID,
             "n_clicks",
         ),
         prevent_initial_call=True,
     )
-    def reset_filters(n_clicks):
+    def reset_filters(
+        n_clicks,
+    ):
         """
-        Полностью сбрасывает все видимые фильтры.
+        Сбрасывает все фильтры.
+
+        Период возвращается ко всему
+        доступному периоду УПД.
         """
 
         if not n_clicks:
             return (
+                no_update,
+                no_update,
                 no_update,
                 no_update,
                 no_update,
@@ -2644,4 +3574,6 @@ def register_filter_callbacks(app):
             [],
             [],
             [],
+            get_default_date_range(),
+            "all",
         )

@@ -1387,134 +1387,2086 @@ def build_brand_summary_chart(
     return fig
 
 
+# def build_price_history_chart(
+#     history_df: pd.DataFrame,
+#     nm_id: str | None,
+# ) -> go.Figure:
+#     if history_df.empty or not nm_id:
+#         return empty_figure(
+#             "Выберите товар в таблице, чтобы увидеть историю цен",
+#             height=430,
+#         )
+
+#     work = history_df[
+#         history_df["nm_id"].astype(str)
+#         == str(nm_id)
+#     ].copy()
+
+#     if work.empty:
+#         return empty_figure(
+#             "Для выбранного товара история цен не найдена",
+#             height=430,
+#         )
+
+#     work["Дата УПД"] = pd.to_datetime(
+#         work["Дата УПД"],
+#         errors="coerce",
+#     )
+
+#     work = work.sort_values(
+#         [
+#             "Дата УПД",
+#             "ID УПД",
+#         ]
+#     )
+
+#     fig = go.Figure()
+
+#     fig.add_trace(
+#         go.Scatter(
+#             x=work["Дата УПД"],
+#             y=work["Цена, бух"],
+#             name="Бухгалтерская",
+#             mode="lines+markers",
+#             line={
+#                 "color": COLORS["blue"],
+#                 "width": 2,
+#             },
+#             marker={
+#                 "size": 7,
+#             },
+#             customdata=np.column_stack(
+#                 [
+#                     work["Номер УПД"].astype(str),
+#                     work["Поставщик"].astype(str),
+#                     work["Количество, шт"],
+#                 ]
+#             ),
+#             hovertemplate=(
+#                 "<b>%{x|%d.%m.%Y}</b>"
+#                 "<br>Цена, бух: %{y:,.2f} ₽"
+#                 "<br>УПД: %{customdata[0]}"
+#                 "<br>Поставщик: %{customdata[1]}"
+#                 "<br>Количество: %{customdata[2]:,.0f}"
+#                 "<extra></extra>"
+#             ),
+#         )
+#     )
+
+#     fig.add_trace(
+#         go.Scatter(
+#             x=work["Дата УПД"],
+#             y=work["Цена, упр"],
+#             name="Управленческая",
+#             mode="lines+markers",
+#             line={
+#                 "color": COLORS["dark_green"],
+#                 "width": 2,
+#             },
+#             marker={
+#                 "size": 7,
+#             },
+#             customdata=np.column_stack(
+#                 [
+#                     work["Номер УПД"].astype(str),
+#                     work["Поставщик"].astype(str),
+#                     work["Количество, шт"],
+#                 ]
+#             ),
+#             hovertemplate=(
+#                 "<b>%{x|%d.%m.%Y}</b>"
+#                 "<br>Цена, упр: %{y:,.2f} ₽"
+#                 "<br>УПД: %{customdata[0]}"
+#                 "<br>Поставщик: %{customdata[1]}"
+#                 "<br>Количество: %{customdata[2]:,.0f}"
+#                 "<extra></extra>"
+#             ),
+#         )
+#     )
+
+#     fig.update_layout(
+#         **base_layout(
+#             height=430,
+#             margin={
+#                 "l": 65,
+#                 "r": 30,
+#                 "t": 35,
+#                 "b": 55,
+#             },
+#         ),
+#         hovermode="x unified",
+#         legend={
+#             "orientation": "h",
+#             "x": 0,
+#             "y": 1.06,
+#         },
+#     )
+
+#     fig.update_xaxes(
+#         title=None,
+#         showgrid=False,
+#         linecolor=COLORS["border"],
+#     )
+
+#     fig.update_yaxes(
+#         title="Цена за единицу, ₽",
+#         tickformat=",.2f",
+#         showgrid=True,
+#         gridcolor="#E5E7EB",
+#         griddash="dot",
+#         zeroline=False,
+#     )
+
+#     return fig
+
+
+
+# def build_price_history_chart(
+#     history_df: pd.DataFrame,
+#     nm_id: str | None,
+# ) -> go.Figure:
+#     """
+#     Строит историю закупочной цены выбранного товара.
+
+#     На графике отображаются:
+#     - бухгалтерская закупочная цена;
+#     - управленческая закупочная цена;
+#     - название товара;
+#     - NM ID;
+#     - номер УПД;
+#     - поставщик;
+#     - количество товара.
+
+#     Если на одну дату приходится несколько УПД,
+#     точки немного раздвигаются по времени, чтобы
+#     они не накладывались друг на друга.
+#     """
+
+#     chart_height = 500
+
+#     if history_df.empty or not nm_id:
+#         return empty_figure(
+#             "Выберите товар в таблице, чтобы увидеть историю закупочной цены",
+#             height=chart_height,
+#         )
+
+#     required_columns = [
+#         "nm_id",
+#         "Дата УПД",
+#         "Цена, бух",
+#         "Цена, упр",
+#     ]
+
+#     missing_columns = [
+#         column
+#         for column in required_columns
+#         if column not in history_df.columns
+#     ]
+
+#     if missing_columns:
+#         return empty_figure(
+#             "Недостаточно данных для построения истории цены",
+#             height=chart_height,
+#         )
+
+#     work = history_df.loc[
+#         history_df["nm_id"].astype(str)
+#         == str(nm_id)
+#     ].copy()
+
+#     if work.empty:
+#         return empty_figure(
+#             "Для выбранного товара история закупочной цены не найдена",
+#             height=chart_height,
+#         )
+
+#     # ---------------------------------------------------------
+#     # Подготовка основных полей
+#     # ---------------------------------------------------------
+
+#     work["Дата УПД"] = pd.to_datetime(
+#         work["Дата УПД"],
+#         errors="coerce",
+#     )
+
+#     work["Цена, бух"] = pd.to_numeric(
+#         work["Цена, бух"],
+#         errors="coerce",
+#     )
+
+#     work["Цена, упр"] = pd.to_numeric(
+#         work["Цена, упр"],
+#         errors="coerce",
+#     )
+
+#     work = work.loc[
+#         work["Дата УПД"].notna()
+#     ].copy()
+
+#     if work.empty:
+#         return empty_figure(
+#             "Для выбранного товара не найдены корректные даты УПД",
+#             height=chart_height,
+#         )
+
+#     # ---------------------------------------------------------
+#     # Безопасно подготавливаем дополнительные поля
+#     # ---------------------------------------------------------
+
+#     if "ID УПД" not in work.columns:
+#         work["ID УПД"] = np.arange(
+#             len(work)
+#         )
+
+#     if "Номер УПД" not in work.columns:
+#         work["Номер УПД"] = "Не указан"
+
+#     if "Поставщик" not in work.columns:
+#         work["Поставщик"] = "Не указан"
+
+#     if "Количество, шт" not in work.columns:
+#         work["Количество, шт"] = np.nan
+
+#     work["Номер УПД"] = (
+#         work["Номер УПД"]
+#         .fillna("Не указан")
+#         .astype(str)
+#         .str.strip()
+#         .replace(
+#             "",
+#             "Не указан",
+#         )
+#     )
+
+#     work["Поставщик"] = (
+#         work["Поставщик"]
+#         .fillna("Не указан")
+#         .astype(str)
+#         .str.strip()
+#         .replace(
+#             "",
+#             "Не указан",
+#         )
+#     )
+
+#     work["Количество, шт"] = pd.to_numeric(
+#         work["Количество, шт"],
+#         errors="coerce",
+#     )
+
+#     # ---------------------------------------------------------
+#     # Получаем название товара
+#     # ---------------------------------------------------------
+
+#     product_name = "Без наименования"
+
+#     name_columns = [
+#         "Наименование",
+#         "Название",
+#         "Товар",
+#     ]
+
+#     for name_column in name_columns:
+#         if name_column not in work.columns:
+#             continue
+
+#         names = (
+#             work[name_column]
+#             .dropna()
+#             .astype(str)
+#             .str.strip()
+#         )
+
+#         names = names.loc[
+#             names.ne("")
+#         ]
+
+#         if not names.empty:
+#             product_name = names.iloc[0]
+#             break
+
+#     nm_id_text = (
+#         str(nm_id)
+#         .replace(".0", "")
+#         .strip()
+#     )
+
+#     # Название для заголовка.
+#     # Полное название остаётся в hover.
+#     max_title_length = 95
+
+#     if len(product_name) > max_title_length:
+#         product_title = (
+#             product_name[
+#                 :max_title_length - 1
+#             ]
+#             + "…"
+#         )
+#     else:
+#         product_title = product_name
+
+#     # ---------------------------------------------------------
+#     # Сортировка
+#     # ---------------------------------------------------------
+
+#     work = (
+#         work.sort_values(
+#             [
+#                 "Дата УПД",
+#                 "ID УПД",
+#             ],
+#             kind="stable",
+#         )
+#         .reset_index(drop=True)
+#     )
+
+#     # ---------------------------------------------------------
+#     # Раздвигаем несколько УПД внутри одной даты
+#     # ---------------------------------------------------------
+
+#     work["_row_in_date"] = (
+#         work.groupby(
+#             "Дата УПД"
+#         )
+#         .cumcount()
+#     )
+
+#     work["_rows_in_date"] = (
+#         work.groupby(
+#             "Дата УПД"
+#         )["Дата УПД"]
+#         .transform("size")
+#     )
+
+#     # Центрируем точки относительно самой даты.
+#     # Например, для трёх УПД получатся смещения:
+#     # -4 часа, 0 часов, +4 часа.
+#     work["_hour_offset"] = (
+#         work["_row_in_date"]
+#         - (
+#             work["_rows_in_date"] - 1
+#         ) / 2
+#     ) * 4
+
+#     work["Дата для графика"] = (
+#         work["Дата УПД"]
+#         + pd.to_timedelta(
+#             work["_hour_offset"],
+#             unit="h",
+#         )
+#     )
+
+#     # ---------------------------------------------------------
+#     # Рассчитываем изменения относительно предыдущей цены
+#     # ---------------------------------------------------------
+
+#     work["Изменение бух, ₽"] = (
+#         work["Цена, бух"]
+#         .diff()
+#     )
+
+#     work["Изменение упр, ₽"] = (
+#         work["Цена, упр"]
+#         .diff()
+#     )
+
+#     work["Изменение бух, %"] = (
+#         work["Цена, бух"]
+#         .pct_change(
+#             fill_method=None
+#         )
+#         * 100
+#     )
+
+#     work["Изменение упр, %"] = (
+#         work["Цена, упр"]
+#         .pct_change(
+#             fill_method=None
+#         )
+#         * 100
+#     )
+
+#     # ---------------------------------------------------------
+#     # Подписи значений
+#     # ---------------------------------------------------------
+
+#     # При большом количестве документов подписи всех точек
+#     # перегружают график. Поэтому показываем:
+#     # - все значения, если точек не больше 14;
+#     # - только первую, последнюю и изменившиеся цены,
+#     #   если документов больше.
+#     show_all_labels = len(
+#         work
+#     ) <= 14
+
+#     accounting_changed = (
+#         work["Цена, бух"]
+#         .ne(
+#             work["Цена, бух"].shift()
+#         )
+#     )
+
+#     management_changed = (
+#         work["Цена, упр"]
+#         .ne(
+#             work["Цена, упр"].shift()
+#         )
+#     )
+
+#     accounting_labels = []
+
+#     management_labels = []
+
+#     for index, row in work.iterrows():
+#         is_edge_point = (
+#             index == 0
+#             or index == len(work) - 1
+#         )
+
+#         accounting_price = row[
+#             "Цена, бух"
+#         ]
+
+#         management_price = row[
+#             "Цена, упр"
+#         ]
+
+#         if (
+#             pd.notna(accounting_price)
+#             and (
+#                 show_all_labels
+#                 or is_edge_point
+#                 or accounting_changed.iloc[index]
+#             )
+#         ):
+#             accounting_labels.append(
+#                 f"{accounting_price:,.2f} ₽"
+#                 .replace(",", " ")
+#             )
+#         else:
+#             accounting_labels.append("")
+
+#         if (
+#             pd.notna(management_price)
+#             and (
+#                 show_all_labels
+#                 or is_edge_point
+#                 or management_changed.iloc[index]
+#             )
+#         ):
+#             management_labels.append(
+#                 f"{management_price:,.2f} ₽"
+#                 .replace(",", " ")
+#             )
+#         else:
+#             management_labels.append("")
+
+#     # ---------------------------------------------------------
+#     # Общие данные для hover
+#     # ---------------------------------------------------------
+
+#     customdata = np.column_stack(
+#         [
+#             np.repeat(
+#                 product_name,
+#                 len(work),
+#             ),
+#             np.repeat(
+#                 nm_id_text,
+#                 len(work),
+#             ),
+#             work["Дата УПД"].dt.strftime(
+#                 "%d.%m.%Y"
+#             ),
+#             work["Номер УПД"],
+#             work["Поставщик"],
+#             work["Количество, шт"],
+#             work["Изменение бух, ₽"],
+#             work["Изменение бух, %"],
+#             work["Изменение упр, ₽"],
+#             work["Изменение упр, %"],
+#         ]
+#     )
+
+#     fig = go.Figure()
+
+#     # ---------------------------------------------------------
+#     # Бухгалтерская цена
+#     # ---------------------------------------------------------
+
+#     fig.add_trace(
+#         go.Scatter(
+#             x=work["Дата для графика"],
+#             y=work["Цена, бух"],
+
+#             name="Бухгалтерская цена",
+
+#             mode="lines+markers+text",
+
+#             line={
+#                 "color": COLORS["blue"],
+#                 "width": 2.4,
+#                 "shape": "linear",
+#             },
+
+#             marker={
+#                 "size": 8,
+#                 "color": COLORS["blue"],
+#                 "line": {
+#                     "color": COLORS["white"],
+#                     "width": 1.5,
+#                 },
+#             },
+
+#             fill="tozeroy",
+#             fillcolor="rgba(59, 130, 246, 0.055)",
+
+#             text=accounting_labels,
+#             textposition="top center",
+
+#             textfont={
+#                 "family": (
+#                     "Inter, Arial, sans-serif"
+#                 ),
+#                 "size": 10,
+#                 "color": COLORS["blue"],
+#             },
+
+#             cliponaxis=False,
+
+#             customdata=customdata,
+
+#             hovertemplate=(
+#                 "<b>%{customdata[0]}</b>"
+#                 "<br>"
+#                 "NM ID: "
+#                 "<b>%{customdata[1]}</b>"
+#                 "<br><br>"
+#                 "<span style='color:"
+#                 + COLORS["blue"]
+#                 + "'>"
+#                 "● Бухгалтерская цена"
+#                 "</span>"
+#                 "<br>"
+#                 "Цена: "
+#                 "<b>%{y:,.2f} ₽</b>"
+#                 "<br>"
+#                 "Изменение: "
+#                 "%{customdata[6]:+,.2f} ₽"
+#                 " · "
+#                 "%{customdata[7]:+.2f}%"
+#                 "<br><br>"
+#                 "Дата УПД: "
+#                 "<b>%{customdata[2]}</b>"
+#                 "<br>"
+#                 "Номер УПД: "
+#                 "%{customdata[3]}"
+#                 "<br>"
+#                 "Поставщик: "
+#                 "%{customdata[4]}"
+#                 "<br>"
+#                 "Количество: "
+#                 "%{customdata[5]:,.0f} шт."
+#                 "<extra></extra>"
+#             ),
+
+#             connectgaps=False,
+#         )
+#     )
+
+#     # ---------------------------------------------------------
+#     # Управленческая цена
+#     # ---------------------------------------------------------
+
+#     fig.add_trace(
+#         go.Scatter(
+#             x=work["Дата для графика"],
+#             y=work["Цена, упр"],
+
+#             name="Управленческая цена",
+
+#             mode="lines+markers+text",
+
+#             line={
+#                 "color": COLORS["dark_green"],
+#                 "width": 2.4,
+#                 "shape": "linear",
+#                 "dash": "solid",
+#             },
+
+#             marker={
+#                 "size": 8,
+#                 "color": COLORS["dark_green"],
+#                 "symbol": "diamond",
+#                 "line": {
+#                     "color": COLORS["white"],
+#                     "width": 1.5,
+#                 },
+#             },
+
+#             text=management_labels,
+#             textposition="bottom center",
+
+#             textfont={
+#                 "family": (
+#                     "Inter, Arial, sans-serif"
+#                 ),
+#                 "size": 10,
+#                 "color": COLORS["dark_green"],
+#             },
+
+#             cliponaxis=False,
+
+#             customdata=customdata,
+
+#             hovertemplate=(
+#                 "<b>%{customdata[0]}</b>"
+#                 "<br>"
+#                 "NM ID: "
+#                 "<b>%{customdata[1]}</b>"
+#                 "<br><br>"
+#                 "<span style='color:"
+#                 + COLORS["dark_green"]
+#                 + "'>"
+#                 "◆ Управленческая цена"
+#                 "</span>"
+#                 "<br>"
+#                 "Цена: "
+#                 "<b>%{y:,.2f} ₽</b>"
+#                 "<br>"
+#                 "Изменение: "
+#                 "%{customdata[8]:+,.2f} ₽"
+#                 " · "
+#                 "%{customdata[9]:+.2f}%"
+#                 "<br><br>"
+#                 "Дата УПД: "
+#                 "<b>%{customdata[2]}</b>"
+#                 "<br>"
+#                 "Номер УПД: "
+#                 "%{customdata[3]}"
+#                 "<br>"
+#                 "Поставщик: "
+#                 "%{customdata[4]}"
+#                 "<br>"
+#                 "Количество: "
+#                 "%{customdata[5]:,.0f} шт."
+#                 "<extra></extra>"
+#             ),
+
+#             connectgaps=False,
+#         )
+#     )
+
+#     # ---------------------------------------------------------
+#     # Диапазон оси Y
+#     # ---------------------------------------------------------
+
+#     all_prices = pd.concat(
+#         [
+#             work["Цена, бух"],
+#             work["Цена, упр"],
+#         ],
+#         ignore_index=True,
+#     ).dropna()
+
+#     if all_prices.empty:
+#         return empty_figure(
+#             "Для выбранного товара не найдены значения закупочной цены",
+#             height=chart_height,
+#         )
+
+#     price_min = float(
+#         all_prices.min()
+#     )
+
+#     price_max = float(
+#         all_prices.max()
+#     )
+
+#     price_range = (
+#         price_max - price_min
+#     )
+
+#     if price_range > 0:
+#         y_padding = price_range * 0.18
+#     else:
+#         y_padding = max(
+#             price_max * 0.08,
+#             1,
+#         )
+
+#     y_min = max(
+#         0,
+#         price_min - y_padding,
+#     )
+
+#     y_max = (
+#         price_max + y_padding
+#     )
+
+#     # ---------------------------------------------------------
+#     # Информация для подзаголовка
+#     # ---------------------------------------------------------
+
+#     first_date = (
+#         work["Дата УПД"]
+#         .min()
+#         .strftime("%d.%m.%Y")
+#     )
+
+#     last_date = (
+#         work["Дата УПД"]
+#         .max()
+#         .strftime("%d.%m.%Y")
+#     )
+
+#     documents_count = int(
+#         work["Номер УПД"].nunique()
+#     )
+
+#     suppliers_count = int(
+#         work.loc[
+#             work["Поставщик"].ne(
+#                 "Не указан"
+#             ),
+#             "Поставщик",
+#         ].nunique()
+#     )
+
+#     subtitle = (
+#         f"NM ID: {nm_id_text}"
+#         f"  ·  период {first_date}–{last_date}"
+#         f"  ·  УПД: {documents_count:,}"
+#         f"  ·  поставщиков: {suppliers_count:,}"
+#     ).replace(",", " ")
+
+#     # ---------------------------------------------------------
+#     # Layout
+#     # ---------------------------------------------------------
+
+#     fig.update_layout(
+#         **base_layout(
+#             height=chart_height,
+#             margin={
+#                 "l": 78,
+#                 "r": 40,
+#                 "t": 112,
+#                 "b": 68,
+#             },
+#         ),
+
+#         title={
+#             "text": (
+#                 "<b>"
+#                 + product_title
+#                 + "</b>"
+#                 + "<br>"
+#                 + "<span style='font-size:12px;color:#6B7280'>"
+#                 + subtitle
+#                 + "</span>"
+#             ),
+#             "x": 0,
+#             "xanchor": "left",
+#             "y": 0.97,
+#             "yanchor": "top",
+#             "font": {
+#                 "family": (
+#                     "Inter, Arial, sans-serif"
+#                 ),
+#                 "size": 16,
+#                 "color": COLORS["text"],
+#             },
+#         },
+
+#         hovermode="closest",
+
+#         hoverdistance=80,
+#         spikedistance=-1,
+
+#         legend={
+#             "orientation": "h",
+#             "x": 0,
+#             "xanchor": "left",
+#             "y": 1.03,
+#             "yanchor": "bottom",
+#             "font": {
+#                 "family": (
+#                     "Inter, Arial, sans-serif"
+#                 ),
+#                 "size": 11,
+#                 "color": COLORS["text"],
+#             },
+#             "bgcolor": "rgba(255,255,255,0)",
+#             "borderwidth": 0,
+#             "itemclick": "toggle",
+#             "itemdoubleclick": "toggleothers",
+#         },
+
+#         showlegend=True,
+
+#         separators=", ",
+
+#         modebar={
+#             "bgcolor": "rgba(255,255,255,0)",
+#             "color": COLORS["muted"],
+#             "activecolor": COLORS["text"],
+#         },
+
+#         uirevision=f"price-history-{nm_id_text}",
+#     )
+
+#     # ---------------------------------------------------------
+#     # Ось X
+#     # ---------------------------------------------------------
+
+#     fig.update_xaxes(
+#         title=None,
+
+#         tickformat="%d.%m.%Y",
+#         hoverformat="%d.%m.%Y",
+
+#         tickfont={
+#             "family": (
+#                 "Inter, Arial, sans-serif"
+#             ),
+#             "size": 10,
+#             "color": COLORS["muted"],
+#         },
+
+#         showgrid=True,
+#         gridcolor="#EEF1F3",
+#         griddash="dot",
+#         gridwidth=1,
+
+#         showline=True,
+#         linewidth=1,
+#         linecolor=COLORS["border"],
+
+#         ticks="outside",
+#         ticklen=4,
+#         tickcolor=COLORS["border"],
+
+#         showspikes=True,
+#         spikemode="across",
+#         spikesnap="cursor",
+#         spikecolor="#9CA3AF",
+#         spikethickness=1,
+#         spikedash="dot",
+
+#         automargin=True,
+
+#         rangeslider={
+#             "visible": len(work) >= 25,
+#             "thickness": 0.07,
+#             "bgcolor": "#F8FAFC",
+#             "bordercolor": COLORS["border"],
+#             "borderwidth": 1,
+#         },
+
+#         rangeselector=(
+#             {
+#                 "buttons": [
+#                     {
+#                         "count": 1,
+#                         "label": "1 мес.",
+#                         "step": "month",
+#                         "stepmode": "backward",
+#                     },
+#                     {
+#                         "count": 3,
+#                         "label": "3 мес.",
+#                         "step": "month",
+#                         "stepmode": "backward",
+#                     },
+#                     {
+#                         "count": 6,
+#                         "label": "6 мес.",
+#                         "step": "month",
+#                         "stepmode": "backward",
+#                     },
+#                     {
+#                         "count": 1,
+#                         "label": "1 год",
+#                         "step": "year",
+#                         "stepmode": "backward",
+#                     },
+#                     {
+#                         "step": "all",
+#                         "label": "Весь период",
+#                     },
+#                 ],
+#                 "x": 1,
+#                 "xanchor": "right",
+#                 "y": 1.18,
+#                 "yanchor": "top",
+#                 "font": {
+#                     "family": (
+#                         "Inter, Arial, sans-serif"
+#                     ),
+#                     "size": 10,
+#                     "color": COLORS["text"],
+#                 },
+#                 "bgcolor": COLORS["white"],
+#                 "activecolor": "#E8F1EE",
+#                 "bordercolor": COLORS["border"],
+#                 "borderwidth": 1,
+#             }
+#             if len(work) >= 10
+#             else None
+#         ),
+#     )
+
+#     # ---------------------------------------------------------
+#     # Ось Y
+#     # ---------------------------------------------------------
+
+#     fig.update_yaxes(
+#         title={
+#             "text": "Закупочная цена за единицу, ₽",
+#             "font": {
+#                 "family": (
+#                     "Inter, Arial, sans-serif"
+#                 ),
+#                 "size": 11,
+#                 "color": COLORS["muted"],
+#             },
+#             "standoff": 12,
+#         },
+
+#         range=[
+#             y_min,
+#             y_max,
+#         ],
+
+#         tickformat=",.2f",
+#         separatethousands=True,
+
+#         tickfont={
+#             "family": (
+#                 "Inter, Arial, sans-serif"
+#             ),
+#             "size": 10,
+#             "color": COLORS["muted"],
+#         },
+
+#         showgrid=True,
+#         gridcolor="#E5EAED",
+#         griddash="dot",
+#         gridwidth=1,
+
+#         zeroline=False,
+
+#         showline=False,
+
+#         showspikes=True,
+#         spikemode="across",
+#         spikesnap="cursor",
+#         spikecolor="#9CA3AF",
+#         spikethickness=1,
+#         spikedash="dot",
+
+#         automargin=True,
+#     )
+
+#     return fig
+
+
+
 def build_price_history_chart(
     history_df: pd.DataFrame,
     nm_id: str | None,
 ) -> go.Figure:
+    """
+    Строит историю закупочной цены выбранного товара.
+
+    На графике отображаются:
+    - бухгалтерская закупочная цена;
+    - управленческая закупочная цена;
+    - название товара;
+    - NM ID;
+    - номер УПД;
+    - поставщик;
+    - количество товара;
+    - изменение цены к предыдущему поступлению.
+
+    Если на одну дату приходится несколько УПД,
+    точки немного раздвигаются по времени.
+    """
+
+    chart_height = 540
+
     if history_df.empty or not nm_id:
         return empty_figure(
-            "Выберите товар в таблице, чтобы увидеть историю цен",
-            height=430,
+            (
+                "Выберите товар в таблице, "
+                "чтобы увидеть историю закупочной цены"
+            ),
+            height=chart_height,
         )
 
-    work = history_df[
+    required_columns = [
+        "nm_id",
+        "Дата УПД",
+        "Цена, бух",
+        "Цена, упр",
+    ]
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in history_df.columns
+    ]
+
+    if missing_columns:
+        return empty_figure(
+            "Недостаточно данных для построения истории цены",
+            height=chart_height,
+        )
+
+    work = history_df.loc[
         history_df["nm_id"].astype(str)
         == str(nm_id)
     ].copy()
 
     if work.empty:
         return empty_figure(
-            "Для выбранного товара история цен не найдена",
-            height=430,
+            (
+                "Для выбранного товара "
+                "история закупочной цены не найдена"
+            ),
+            height=chart_height,
         )
+
+    # ---------------------------------------------------------
+    # Подготовка основных полей
+    # ---------------------------------------------------------
 
     work["Дата УПД"] = pd.to_datetime(
         work["Дата УПД"],
         errors="coerce",
     )
 
-    work = work.sort_values(
+    work["Цена, бух"] = pd.to_numeric(
+        work["Цена, бух"],
+        errors="coerce",
+    )
+
+    work["Цена, упр"] = pd.to_numeric(
+        work["Цена, упр"],
+        errors="coerce",
+    )
+
+    work = work.loc[
+        work["Дата УПД"].notna()
+    ].copy()
+
+    if work.empty:
+        return empty_figure(
+            (
+                "Для выбранного товара "
+                "не найдены корректные даты УПД"
+            ),
+            height=chart_height,
+        )
+
+    # ---------------------------------------------------------
+    # Дополнительные поля
+    # ---------------------------------------------------------
+
+    if "ID УПД" not in work.columns:
+        work["ID УПД"] = np.arange(
+            len(work)
+        )
+
+    if "Номер УПД" not in work.columns:
+        work["Номер УПД"] = "Не указан"
+
+    if "Поставщик" not in work.columns:
+        work["Поставщик"] = "Не указан"
+
+    if "Количество, шт" not in work.columns:
+        work["Количество, шт"] = np.nan
+
+    work["Номер УПД"] = (
+        work["Номер УПД"]
+        .fillna("Не указан")
+        .astype(str)
+        .str.strip()
+        .replace(
+            "",
+            "Не указан",
+        )
+    )
+
+    work["Поставщик"] = (
+        work["Поставщик"]
+        .fillna("Не указан")
+        .astype(str)
+        .str.strip()
+        .replace(
+            "",
+            "Не указан",
+        )
+    )
+
+    work["Количество, шт"] = pd.to_numeric(
+        work["Количество, шт"],
+        errors="coerce",
+    )
+
+    # ---------------------------------------------------------
+    # Название товара
+    # ---------------------------------------------------------
+
+    product_name = "Без наименования"
+
+    name_columns = [
+        "Наименование",
+        "Название",
+        "Товар",
+    ]
+
+    for name_column in name_columns:
+        if name_column not in work.columns:
+            continue
+
+        names = (
+            work[name_column]
+            .dropna()
+            .astype(str)
+            .str.strip()
+        )
+
+        names = names.loc[
+            names.ne("")
+        ]
+
+        if not names.empty:
+            product_name = names.iloc[0]
+            break
+
+    nm_id_text = (
+        str(nm_id)
+        .removesuffix(".0")
+        .strip()
+    )
+
+    max_title_length = 95
+
+    if len(product_name) > max_title_length:
+        product_title = (
+            product_name[
+                :max_title_length - 1
+            ]
+            + "…"
+        )
+    else:
+        product_title = product_name
+
+    # ---------------------------------------------------------
+    # Сортировка
+    # ---------------------------------------------------------
+
+    work = (
+        work.sort_values(
+            [
+                "Дата УПД",
+                "ID УПД",
+            ],
+            kind="stable",
+        )
+        .reset_index(drop=True)
+    )
+
+    # ---------------------------------------------------------
+    # Раздвигаем точки с одинаковой датой
+    # ---------------------------------------------------------
+
+    work["_row_in_date"] = (
+        work.groupby(
+            "Дата УПД"
+        )
+        .cumcount()
+    )
+
+    work["_rows_in_date"] = (
+        work.groupby(
+            "Дата УПД"
+        )["Дата УПД"]
+        .transform("size")
+    )
+
+    work["_hour_offset"] = (
+        work["_row_in_date"]
+        - (
+            work["_rows_in_date"] - 1
+        ) / 2
+    ) * 4
+
+    work["Дата для графика"] = (
+        work["Дата УПД"]
+        + pd.to_timedelta(
+            work["_hour_offset"],
+            unit="h",
+        )
+    )
+
+    # ---------------------------------------------------------
+    # Изменение цены относительно предыдущей строки
+    # ---------------------------------------------------------
+
+    work["Изменение бух, ₽"] = (
+        work["Цена, бух"]
+        .diff()
+    )
+
+    work["Изменение упр, ₽"] = (
+        work["Цена, упр"]
+        .diff()
+    )
+
+    work["Изменение бух, %"] = (
+        work["Цена, бух"]
+        .pct_change(
+            fill_method=None
+        )
+        .mul(100)
+    )
+
+    work["Изменение упр, %"] = (
+        work["Цена, упр"]
+        .pct_change(
+            fill_method=None
+        )
+        .mul(100)
+    )
+
+    # Убираем бесконечность, которая может появиться,
+    # если предыдущая цена была равна нулю.
+    change_columns = [
+        "Изменение бух, ₽",
+        "Изменение бух, %",
+        "Изменение упр, ₽",
+        "Изменение упр, %",
+    ]
+
+    work[change_columns] = (
+        work[change_columns]
+        .replace(
+            [
+                np.inf,
+                -np.inf,
+            ],
+            np.nan,
+        )
+    )
+
+    # ---------------------------------------------------------
+    # Форматирование значений для hover
+    # ---------------------------------------------------------
+
+    def format_money(
+        value,
+        *,
+        show_sign: bool = False,
+    ) -> str:
+        if pd.isna(value):
+            return "—"
+
+        if show_sign:
+            result = f"{float(value):+,.2f}"
+        else:
+            result = f"{float(value):,.2f}"
+
+        return (
+            result
+            .replace(",", " ")
+            + " ₽"
+        )
+
+    def format_percent(
+        value,
+        *,
+        show_sign: bool = False,
+    ) -> str:
+        if pd.isna(value):
+            return "—"
+
+        if show_sign:
+            result = f"{float(value):+.2f}"
+        else:
+            result = f"{float(value):.2f}"
+
+        return result + "%"
+
+    def format_quantity(
+        value,
+    ) -> str:
+        if pd.isna(value):
+            return "—"
+
+        numeric_value = float(value)
+
+        if numeric_value.is_integer():
+            return (
+                f"{int(numeric_value):,}"
+                .replace(",", " ")
+                + " шт."
+            )
+
+        return (
+            f"{numeric_value:,.2f}"
+            .replace(",", " ")
+            + " шт."
+        )
+
+    def format_change(
+        amount_value,
+        percent_value,
+    ) -> str:
+        """
+        Формирует готовую строку изменения.
+
+        Примеры:
+        ▲ +318,66 ₽ (+12,45%)
+        ▼ −318,66 ₽ (−67,39%)
+        Без изменений
+        Нет предыдущей цены
+        """
+
+        if (
+            pd.isna(amount_value)
+            or pd.isna(percent_value)
+        ):
+            return (
+                "<span style='color:#6B7280'>"
+                "Нет предыдущей цены"
+                "</span>"
+            )
+
+        amount_value = float(
+            amount_value
+        )
+
+        percent_value = float(
+            percent_value
+        )
+
+        if (
+            abs(amount_value) < 0.005
+            and abs(percent_value) < 0.005
+        ):
+            return (
+                "<span style='color:#6B7280'>"
+                "Без изменений"
+                "</span>"
+            )
+
+        amount_text = (
+            f"{abs(amount_value):,.2f}"
+            .replace(",", " ")
+        )
+
+        percent_text = (
+            f"{abs(percent_value):.2f}"
+        )
+
+        if amount_value > 0:
+            return (
+                "<span style='color:#A33A3A'>"
+                "▲ "
+                f"+{amount_text} ₽ "
+                f"(+{percent_text}%)"
+                "</span>"
+            )
+
+        return (
+            "<span style='color:#2F6656'>"
+            "▼ "
+            f"−{amount_text} ₽ "
+            f"(−{percent_text}%)"
+            "</span>"
+        )
+
+    work["Цена бух текст"] = (
+        work["Цена, бух"]
+        .apply(format_money)
+    )
+
+    work["Цена упр текст"] = (
+        work["Цена, упр"]
+        .apply(format_money)
+    )
+
+    work["Количество текст"] = (
+        work["Количество, шт"]
+        .apply(format_quantity)
+    )
+
+    work["Изменение бух текст"] = [
+        format_change(
+            amount,
+            percent,
+        )
+        for amount, percent in zip(
+            work["Изменение бух, ₽"],
+            work["Изменение бух, %"],
+        )
+    ]
+
+    work["Изменение упр текст"] = [
+        format_change(
+            amount,
+            percent,
+        )
+        for amount, percent in zip(
+            work["Изменение упр, ₽"],
+            work["Изменение упр, %"],
+        )
+    ]
+
+    # ---------------------------------------------------------
+    # Подписи возле точек
+    # ---------------------------------------------------------
+
+    show_all_labels = (
+        len(work) <= 14
+    )
+
+    accounting_changed = (
+        work["Цена, бух"]
+        .ne(
+            work["Цена, бух"].shift()
+        )
+    )
+
+    management_changed = (
+        work["Цена, упр"]
+        .ne(
+            work["Цена, упр"].shift()
+        )
+    )
+
+    accounting_labels = []
+    management_labels = []
+
+    for index, row in work.iterrows():
+        is_edge_point = (
+            index == 0
+            or index == len(work) - 1
+        )
+
+        accounting_price = row[
+            "Цена, бух"
+        ]
+
+        management_price = row[
+            "Цена, упр"
+        ]
+
+        if (
+            pd.notna(accounting_price)
+            and (
+                show_all_labels
+                or is_edge_point
+                or accounting_changed.iloc[index]
+            )
+        ):
+            accounting_labels.append(
+                format_money(
+                    accounting_price
+                )
+            )
+        else:
+            accounting_labels.append("")
+
+        if (
+            pd.notna(management_price)
+            and (
+                show_all_labels
+                or is_edge_point
+                or management_changed.iloc[index]
+            )
+        ):
+            management_labels.append(
+                format_money(
+                    management_price
+                )
+            )
+        else:
+            management_labels.append("")
+
+    # ---------------------------------------------------------
+    # Customdata
+    #
+    # Здесь намеренно передаются уже готовые строки.
+    # Plotly больше не должен форматировать числа внутри
+    # смешанного NumPy-массива.
+    # ---------------------------------------------------------
+
+    accounting_customdata = np.column_stack(
         [
-            "Дата УПД",
-            "ID УПД",
+            np.repeat(
+                product_name,
+                len(work),
+            ),
+            np.repeat(
+                nm_id_text,
+                len(work),
+            ),
+            work["Дата УПД"].dt.strftime(
+                "%d.%m.%Y"
+            ),
+            work["Номер УПД"],
+            work["Поставщик"],
+            work["Количество текст"],
+            work["Цена бух текст"],
+            work["Изменение бух текст"],
         ]
     )
 
+    management_customdata = np.column_stack(
+        [
+            np.repeat(
+                product_name,
+                len(work),
+            ),
+            np.repeat(
+                nm_id_text,
+                len(work),
+            ),
+            work["Дата УПД"].dt.strftime(
+                "%d.%m.%Y"
+            ),
+            work["Номер УПД"],
+            work["Поставщик"],
+            work["Количество текст"],
+            work["Цена упр текст"],
+            work["Изменение упр текст"],
+        ]
+    )
+
+    # ---------------------------------------------------------
+    # Построение графика
+    # ---------------------------------------------------------
+
     fig = go.Figure()
 
+    # Бухгалтерская цена
     fig.add_trace(
         go.Scatter(
-            x=work["Дата УПД"],
+            x=work["Дата для графика"],
             y=work["Цена, бух"],
-            name="Бухгалтерская",
-            mode="lines+markers",
+
+            name="Бухгалтерская цена",
+
+            mode="lines+markers+text",
+
             line={
                 "color": COLORS["blue"],
-                "width": 2,
+                "width": 2.4,
+                "shape": "linear",
             },
+
             marker={
-                "size": 7,
+                "size": 8,
+                "color": COLORS["blue"],
+                "symbol": "circle",
+                "line": {
+                    "color": COLORS["white"],
+                    "width": 1.5,
+                },
             },
-            customdata=np.column_stack(
-                [
-                    work["Номер УПД"].astype(str),
-                    work["Поставщик"].astype(str),
-                    work["Количество, шт"],
-                ]
+
+            fill="tozeroy",
+            fillcolor=(
+                "rgba(59, 130, 246, 0.055)"
             ),
+
+            text=accounting_labels,
+            textposition="top center",
+
+            textfont={
+                "family": (
+                    "Inter, Arial, sans-serif"
+                ),
+                "size": 10,
+                "color": COLORS["blue"],
+            },
+
+            cliponaxis=False,
+
+            customdata=accounting_customdata,
+
             hovertemplate=(
-                "<b>%{x|%d.%m.%Y}</b>"
-                "<br>Цена, бух: %{y:,.2f} ₽"
-                "<br>УПД: %{customdata[0]}"
-                "<br>Поставщик: %{customdata[1]}"
-                "<br>Количество: %{customdata[2]:,.0f}"
+                "<b>%{customdata[0]}</b>"
+                "<br>"
+                "NM ID: "
+                "<b>%{customdata[1]}</b>"
+                "<br><br>"
+
+                "<span style='color:"
+                + COLORS["blue"]
+                + "'>"
+                "● Бухгалтерская цена"
+                "</span>"
+
+                "<br>"
+                "Цена: "
+                "<b>%{customdata[6]}</b>"
+
+                "<br>"
+                "Изменение: "
+                "%{customdata[7]}"
+
+                "<br><br>"
+                "Дата УПД: "
+                "<b>%{customdata[2]}</b>"
+
+                "<br>"
+                "Номер УПД: "
+                "%{customdata[3]}"
+
+                "<br>"
+                "Поставщик: "
+                "%{customdata[4]}"
+
+                "<br>"
+                "Количество: "
+                "%{customdata[5]}"
+
                 "<extra></extra>"
             ),
+
+            connectgaps=False,
         )
     )
 
+    # Управленческая цена
     fig.add_trace(
         go.Scatter(
-            x=work["Дата УПД"],
+            x=work["Дата для графика"],
             y=work["Цена, упр"],
-            name="Управленческая",
-            mode="lines+markers",
+
+            name="Управленческая цена",
+
+            mode="lines+markers+text",
+
             line={
                 "color": COLORS["dark_green"],
-                "width": 2,
+                "width": 2.4,
+                "shape": "linear",
             },
+
             marker={
-                "size": 7,
+                "size": 8,
+                "color": COLORS["dark_green"],
+                "symbol": "diamond",
+                "line": {
+                    "color": COLORS["white"],
+                    "width": 1.5,
+                },
             },
-            customdata=np.column_stack(
-                [
-                    work["Номер УПД"].astype(str),
-                    work["Поставщик"].astype(str),
-                    work["Количество, шт"],
-                ]
-            ),
+
+            text=management_labels,
+            textposition="bottom center",
+
+            textfont={
+                "family": (
+                    "Inter, Arial, sans-serif"
+                ),
+                "size": 10,
+                "color": COLORS["dark_green"],
+            },
+
+            cliponaxis=False,
+
+            customdata=management_customdata,
+
             hovertemplate=(
-                "<b>%{x|%d.%m.%Y}</b>"
-                "<br>Цена, упр: %{y:,.2f} ₽"
-                "<br>УПД: %{customdata[0]}"
-                "<br>Поставщик: %{customdata[1]}"
-                "<br>Количество: %{customdata[2]:,.0f}"
+                "<b>%{customdata[0]}</b>"
+                "<br>"
+                "NM ID: "
+                "<b>%{customdata[1]}</b>"
+                "<br><br>"
+
+                "<span style='color:"
+                + COLORS["dark_green"]
+                + "'>"
+                "◆ Управленческая цена"
+                "</span>"
+
+                "<br>"
+                "Цена: "
+                "<b>%{customdata[6]}</b>"
+
+                "<br>"
+                "Изменение: "
+                "%{customdata[7]}"
+
+                "<br><br>"
+                "Дата УПД: "
+                "<b>%{customdata[2]}</b>"
+
+                "<br>"
+                "Номер УПД: "
+                "%{customdata[3]}"
+
+                "<br>"
+                "Поставщик: "
+                "%{customdata[4]}"
+
+                "<br>"
+                "Количество: "
+                "%{customdata[5]}"
+
                 "<extra></extra>"
             ),
+
+            connectgaps=False,
         )
     )
+
+    # ---------------------------------------------------------
+    # Диапазон оси Y
+    # ---------------------------------------------------------
+
+    all_prices = pd.concat(
+        [
+            work["Цена, бух"],
+            work["Цена, упр"],
+        ],
+        ignore_index=True,
+    ).dropna()
+
+    if all_prices.empty:
+        return empty_figure(
+            (
+                "Для выбранного товара "
+                "не найдены значения закупочной цены"
+            ),
+            height=chart_height,
+        )
+
+    price_min = float(
+        all_prices.min()
+    )
+
+    price_max = float(
+        all_prices.max()
+    )
+
+    price_range = (
+        price_max - price_min
+    )
+
+    if price_range > 0:
+        y_padding = (
+            price_range * 0.18
+        )
+    else:
+        y_padding = max(
+            price_max * 0.08,
+            1,
+        )
+
+    y_min = max(
+        0,
+        price_min - y_padding,
+    )
+
+    y_max = (
+        price_max + y_padding
+    )
+
+    # ---------------------------------------------------------
+    # Подзаголовок
+    # ---------------------------------------------------------
+
+    first_date = (
+        work["Дата УПД"]
+        .min()
+        .strftime("%d.%m.%Y")
+    )
+
+    last_date = (
+        work["Дата УПД"]
+        .max()
+        .strftime("%d.%m.%Y")
+    )
+
+    documents_count = int(
+        work["Номер УПД"]
+        .nunique()
+    )
+
+    suppliers_count = int(
+        work.loc[
+            work["Поставщик"].ne(
+                "Не указан"
+            ),
+            "Поставщик",
+        ]
+        .nunique()
+    )
+
+    subtitle = (
+        f"NM ID: {nm_id_text}"
+        f"  ·  период {first_date}–{last_date}"
+        f"  ·  УПД: {documents_count:,}"
+        f"  ·  поставщиков: {suppliers_count:,}"
+    ).replace(",", " ")
+
+    # ---------------------------------------------------------
+    # Layout
+    # ---------------------------------------------------------
 
     fig.update_layout(
         **base_layout(
-            height=430,
+            height=chart_height,
             margin={
-                "l": 65,
-                "r": 30,
-                "t": 35,
-                "b": 55,
+                "l": 78,
+                "r": 40,
+                "t": 112,
+                "b": 68,
             },
         ),
-        hovermode="x unified",
+
+        title={
+            "text": (
+                "<b>"
+                + product_title
+                + "</b>"
+                + "<br>"
+                + (
+                    "<span style='"
+                    "font-size:12px;"
+                    "color:#6B7280"
+                    "'>"
+                )
+                + subtitle
+                + "</span>"
+            ),
+            "x": 0,
+            "xanchor": "left",
+            "y": 0.97,
+            "yanchor": "top",
+            "font": {
+                "family": (
+                    "Inter, Arial, sans-serif"
+                ),
+                "size": 16,
+                "color": COLORS["text"],
+            },
+        },
+
+        hovermode="closest",
+        hoverdistance=80,
+        spikedistance=-1,
+
+        
+
         legend={
             "orientation": "h",
             "x": 0,
-            "y": 1.06,
+            "xanchor": "left",
+            "y": 1.03,
+            "yanchor": "bottom",
+            "font": {
+                "family": (
+                    "Inter, Arial, sans-serif"
+                ),
+                "size": 11,
+                "color": COLORS["text"],
+            },
+            "bgcolor": (
+                "rgba(255,255,255,0)"
+            ),
+            "borderwidth": 0,
+            "itemclick": "toggle",
+            "itemdoubleclick": (
+                "toggleothers"
+            ),
         },
+
+        showlegend=True,
+
+        separators=", ",
+
+        modebar={
+            "bgcolor": (
+                "rgba(255,255,255,0)"
+            ),
+            "color": COLORS["muted"],
+            "activecolor": COLORS["text"],
+        },
+
+        uirevision=(
+            f"price-history-{nm_id_text}"
+        ),
     )
+
+    # ---------------------------------------------------------
+    # Ось X
+    # ---------------------------------------------------------
 
     fig.update_xaxes(
         title=None,
-        showgrid=False,
+
+        tickformat="%d.%m.%Y",
+        hoverformat="%d.%m.%Y",
+
+        tickfont={
+            "family": (
+                "Inter, Arial, sans-serif"
+            ),
+            "size": 10,
+            "color": COLORS["muted"],
+        },
+
+        showgrid=True,
+        gridcolor="#EEF1F3",
+        griddash="dot",
+        gridwidth=1,
+
+        showline=True,
+        linewidth=1,
         linecolor=COLORS["border"],
+
+        ticks="outside",
+        ticklen=4,
+        tickcolor=COLORS["border"],
+
+        showspikes=True,
+        spikemode="across",
+        spikesnap="cursor",
+        spikecolor="#9CA3AF",
+        spikethickness=1,
+        spikedash="dot",
+
+        automargin=True,
+
+        rangeslider={
+            "visible": (
+                len(work) >= 25
+            ),
+            "thickness": 0.07,
+            "bgcolor": "#F8FAFC",
+            "bordercolor": (
+                COLORS["border"]
+            ),
+            "borderwidth": 1,
+        },
+
+        rangeselector=(
+            {
+                "buttons": [
+                    {
+                        "count": 1,
+                        "label": "1 мес.",
+                        "step": "month",
+                        "stepmode": "backward",
+                    },
+                    {
+                        "count": 3,
+                        "label": "3 мес.",
+                        "step": "month",
+                        "stepmode": "backward",
+                    },
+                    {
+                        "count": 6,
+                        "label": "6 мес.",
+                        "step": "month",
+                        "stepmode": "backward",
+                    },
+                    {
+                        "count": 1,
+                        "label": "1 год",
+                        "step": "year",
+                        "stepmode": "backward",
+                    },
+                    {
+                        "step": "all",
+                        "label": "Весь период",
+                    },
+                ],
+                "x": 1,
+                "xanchor": "right",
+                "y": 1.18,
+                "yanchor": "top",
+                "font": {
+                    "family": (
+                        "Inter, Arial, sans-serif"
+                    ),
+                    "size": 10,
+                    "color": COLORS["text"],
+                },
+                "bgcolor": COLORS["white"],
+                "activecolor": "#E8F1EE",
+                "bordercolor": (
+                    COLORS["border"]
+                ),
+                "borderwidth": 1,
+            }
+            if len(work) >= 10
+            else None
+        ),
     )
 
+    # ---------------------------------------------------------
+    # Ось Y
+    # ---------------------------------------------------------
+
     fig.update_yaxes(
-        title="Цена за единицу, ₽",
+        title={
+            "text": (
+                "Закупочная цена "
+                "за единицу, ₽"
+            ),
+            "font": {
+                "family": (
+                    "Inter, Arial, sans-serif"
+                ),
+                "size": 11,
+                "color": COLORS["muted"],
+            },
+            "standoff": 12,
+        },
+
+        range=[
+            y_min,
+            y_max,
+        ],
+
         tickformat=",.2f",
+        separatethousands=True,
+
+        tickfont={
+            "family": (
+                "Inter, Arial, sans-serif"
+            ),
+            "size": 10,
+            "color": COLORS["muted"],
+        },
+
         showgrid=True,
-        gridcolor="#E5E7EB",
+        gridcolor="#E5EAED",
         griddash="dot",
+        gridwidth=1,
+
         zeroline=False,
+        showline=False,
+
+        showspikes=True,
+        spikemode="across",
+        spikesnap="cursor",
+        spikecolor="#9CA3AF",
+        spikethickness=1,
+        spikedash="dot",
+
+        automargin=True,
     )
 
     return fig
+
+

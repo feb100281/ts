@@ -2,11 +2,14 @@
 # from __future__ import annotations
 
 # import pandas as pd
-# from dash import Input, Output, State, no_update
-
-# from .calculations import (
-#     calculate_kpis,
+# from dash import (
+#     Input,
+#     Output,
+#     State,
+#     no_update,
 # )
+
+# from .calculations import calculate_kpis
 # from .charts import (
 #     build_brand_summary_chart,
 #     build_cv_distribution_chart,
@@ -30,8 +33,8 @@
 #     get_filtered_analysis_from_store,
 #     normalise_nm_id,
 #     register_filter_callbacks,
-
 # )
+# from .grid import register_grid_callbacks
 # from .ids import (
 #     BRAND_FILTER_ID,
 #     BRAND_SUMMARY_CHART_ID,
@@ -55,13 +58,10 @@
 #     MEDIAN_DEVIATION_FILTER_ID,
 #     SUPPLIER_FILTER_ID,
 #     TOP_CV_CHART_ID,
-
 # )
 # from .modal import (
 #     register_chart_product_modal_callbacks,
 # )
-# from .grid import register_grid_callbacks
-
 
 
 # # ---------------------------------------------------------------------
@@ -73,7 +73,8 @@
 #     value: int | float | None,
 # ) -> str:
 #     """
-#     Форматирует целое число с пробелами между разрядами.
+#     Форматирует целое число
+#     с пробелами между разрядами.
 #     """
 
 #     if value is None:
@@ -98,7 +99,8 @@
 #     value: float | None,
 # ) -> str:
 #     """
-#     Форматирует процент с двумя знаками после запятой.
+#     Форматирует процент
+#     с двумя знаками после запятой.
 #     """
 
 #     if value is None:
@@ -126,7 +128,11 @@
 
 # def _empty_dashboard_response():
 #     """
-#     Возвращает пустые значения для dashboard callback.
+#     Возвращает пустые значения
+#     для dashboard callback.
+
+#     Количество значений должно совпадать
+#     с количеством Output основного callback.
 #     """
 
 #     empty_cv = empty_figure(
@@ -157,7 +163,6 @@
 #         empty_top,
 #         empty_deviation,
 #         empty_brand,
-
 #     )
 
 
@@ -170,12 +175,17 @@
 #     app,
 # ):
 #     """
-#     Регистрирует callbacks dashboard, истории,
-#     экспорта, фильтров и модального окна.
+#     Регистрирует:
+
+#     - основной dashboard;
+#     - общий Excel и CSV;
+#     - callbacks фильтров;
+#     - callbacks таблиц;
+#     - callbacks модального окна.
 #     """
 
 #     # -----------------------------------------------------------------
-#     # KPI, графики и основная таблица
+#     # KPI и графики
 #     # -----------------------------------------------------------------
 
 #     @app.callback(
@@ -223,7 +233,6 @@
 #             BRAND_SUMMARY_CHART_ID,
 #             "figure",
 #         ),
-       
 #         Input(
 #             DATA_STORE_ID,
 #             "data",
@@ -268,10 +277,13 @@
 #         date_range,
 #     ):
 #         """
-#         Пересчитывает dashboard на сервере.
+#         Пересчитывает KPI и графики.
 
-#         DATA_STORE_ID используется как сигнал,
-#         что исходные данные загружены или обновлены.
+#         В FILTERED_DATA_STORE_ID записывается
+#         только маленький словарь параметров фильтров.
+
+#         Полная таблица товаров здесь
+#         в браузер не передаётся.
 #         """
 
 #         if not data_signal:
@@ -305,11 +317,6 @@
 #             )
 #         )
 
-#         kpis = calculate_kpis(
-#             filtered_analysis,
-#             selected_cost_type,
-#         )
-
 #         filter_store = build_filter_store(
 #             cost_type=selected_cost_type,
 #             brands=brands,
@@ -320,6 +327,21 @@
 #                 median_deviation_limit
 #             ),
 #             date_range=date_range,
+#         )
+
+#         if filtered_analysis.empty:
+#             empty_response = (
+#                 _empty_dashboard_response()
+#             )
+
+#             return (
+#                 filter_store,
+#                 *empty_response[1:],
+#             )
+
+#         kpis = calculate_kpis(
+#             filtered_analysis,
+#             selected_cost_type,
 #         )
 
 #         return (
@@ -380,12 +402,10 @@
 #                 filtered_analysis,
 #                 selected_cost_type,
 #             ),
-
-           
 #         )
-    
+
 #     # -----------------------------------------------------------------
-#     # Excel
+#     # Общий Excel
 #     # -----------------------------------------------------------------
 
 #     @app.callback(
@@ -408,10 +428,12 @@
 #         filter_store,
 #     ):
 #         """
-#         Формирует Excel по текущим фильтрам.
+#         Формирует полный Excel:
 
-#         Анализ и история повторно
-#         фильтруются на сервере.
+#         - анализ товаров;
+#         - история УПД.
+
+#         Данные повторно формируются на сервере.
 #         """
 
 #         if (
@@ -429,7 +451,10 @@
 #         if filtered_analysis.empty:
 #             return no_update
 
-#         if "nm_id" not in filtered_analysis.columns:
+#         if (
+#             "nm_id"
+#             not in filtered_analysis.columns
+#         ):
 #             return no_update
 
 #         allowed_nm_ids = (
@@ -439,6 +464,9 @@
 #             .map(normalise_nm_id)
 #             .tolist()
 #         )
+
+#         if not allowed_nm_ids:
+#             return no_update
 
 #         history_df = (
 #             get_price_history_data()
@@ -451,9 +479,7 @@
 #             suppliers=filter_store.get(
 #                 "suppliers"
 #             ),
-#             date_range=filter_store.get(
-#                 "date_range"
-#             ),
+#             date_range=None,
 #         )
 
 #         return build_excel_download(
@@ -462,7 +488,7 @@
 #         )
 
 #     # -----------------------------------------------------------------
-#     # CSV
+#     # Общий CSV
 #     # -----------------------------------------------------------------
 
 #     @app.callback(
@@ -486,7 +512,9 @@
 #         filter_store,
 #     ):
 #         """
-#         Формирует CSV по текущим фильтрам.
+#         Формирует CSV анализа товаров.
+
+#         Данные повторно фильтруются на сервере.
 #         """
 
 #         if (
@@ -515,8 +543,6 @@
 #     register_filter_callbacks(app)
 #     register_grid_callbacks(app)
 #     register_chart_product_modal_callbacks(app)
-
-
 
 # gear/app/costs_control/callbacks.py
 from __future__ import annotations
@@ -551,6 +577,7 @@ from .filters import (
     build_filter_store,
     filter_history_data,
     get_filtered_analysis_from_store,
+    normalise_date_range,
     normalise_nm_id,
     register_filter_callbacks,
 )
@@ -649,9 +676,9 @@ def _format_percent(
 def _empty_dashboard_response():
     """
     Возвращает пустые значения
-    для dashboard callback.
+    для основного dashboard callback.
 
-    Количество значений должно совпадать
+    Количество элементов должно совпадать
     с количеством Output основного callback.
     """
 
@@ -698,7 +725,8 @@ def register_costs_control_callbacks(
     Регистрирует:
 
     - основной dashboard;
-    - общий Excel и CSV;
+    - общий Excel;
+    - общий CSV;
     - callbacks фильтров;
     - callbacks таблиц;
     - callbacks модального окна.
@@ -799,11 +827,19 @@ def register_costs_control_callbacks(
         """
         Пересчитывает KPI и графики.
 
-        В FILTERED_DATA_STORE_ID записывается
-        только маленький словарь параметров фильтров.
+        Выбранный период передаётся
+        в SQL до выполнения агрегации.
 
-        Полная таблица товаров здесь
-        в браузер не передаётся.
+        Поэтому только по выбранному периоду
+        рассчитываются:
+
+        - медиана;
+        - средняя цена;
+        - минимум и максимум;
+        - стандартное отклонение;
+        - коэффициент вариации;
+        - ранг CV;
+        - отклонение от медианы.
         """
 
         if not data_signal:
@@ -814,18 +850,88 @@ def register_costs_control_callbacks(
             or DEFAULT_COST_TYPE
         )
 
+        # -------------------------------------------------------------
+        # Нормализуем выбранный период
+        # -------------------------------------------------------------
+
+        date_from, date_to = (
+            normalise_date_range(
+                date_range
+            )
+        )
+
+        # -------------------------------------------------------------
+        # Получаем уже пересчитанный анализ
+        # только за выбранный период
+        # -------------------------------------------------------------
+
         analysis_df = (
-            get_price_analysis_data()
+            get_price_analysis_data(
+                date_from=date_from,
+                date_to=date_to,
+            )
             .copy()
         )
 
         if analysis_df.empty:
-            return _empty_dashboard_response()
+            filter_store = (
+                build_filter_store(
+                    cost_type=(
+                        selected_cost_type
+                    ),
+                    brands=brands,
+                    categories=categories,
+                    suppliers=suppliers,
+                    cv_ranks=cv_ranks,
+                    median_deviation_limit=(
+                        median_deviation_limit
+                    ),
+                    date_range=date_range,
+                )
+            )
+
+            empty_response = (
+                _empty_dashboard_response()
+            )
+
+            return (
+                filter_store,
+                *empty_response[1:],
+            )
+
+        # -------------------------------------------------------------
+        # Фильтруем агрегаты по брендам,
+        # категориям, поставщикам и рангу CV
+        # -------------------------------------------------------------
 
         filtered_analysis = (
             apply_all_analysis_filters(
                 analysis_df,
-                cost_type=selected_cost_type,
+                cost_type=(
+                    selected_cost_type
+                ),
+                brands=brands,
+                categories=categories,
+                suppliers=suppliers,
+                cv_ranks=cv_ranks,
+                median_deviation_limit=(
+                    median_deviation_limit
+                ),
+
+                # Период уже применён в SQL.
+                date_range=None,
+            )
+        )
+
+        # -------------------------------------------------------------
+        # Сохраняем маленький словарь фильтров
+        # -------------------------------------------------------------
+
+        filter_store = (
+            build_filter_store(
+                cost_type=(
+                    selected_cost_type
+                ),
                 brands=brands,
                 categories=categories,
                 suppliers=suppliers,
@@ -835,18 +941,6 @@ def register_costs_control_callbacks(
                 ),
                 date_range=date_range,
             )
-        )
-
-        filter_store = build_filter_store(
-            cost_type=selected_cost_type,
-            brands=brands,
-            categories=categories,
-            suppliers=suppliers,
-            cv_ranks=cv_ranks,
-            median_deviation_limit=(
-                median_deviation_limit
-            ),
-            date_range=date_range,
         )
 
         if filtered_analysis.empty:
@@ -859,10 +953,18 @@ def register_costs_control_callbacks(
                 *empty_response[1:],
             )
 
+        # -------------------------------------------------------------
+        # KPI
+        # -------------------------------------------------------------
+
         kpis = calculate_kpis(
             filtered_analysis,
             selected_cost_type,
         )
+
+        # -------------------------------------------------------------
+        # Результат
+        # -------------------------------------------------------------
 
         return (
             filter_store,
@@ -950,10 +1052,11 @@ def register_costs_control_callbacks(
         """
         Формирует полный Excel:
 
-        - анализ товаров;
-        - история УПД.
+        - агрегированный анализ товаров;
+        - построчная история УПД.
 
-        Данные повторно формируются на сервере.
+        В обе таблицы попадают данные
+        только за выбранный период.
         """
 
         if (
@@ -961,6 +1064,10 @@ def register_costs_control_callbacks(
             or not filter_store
         ):
             return no_update
+
+        # -------------------------------------------------------------
+        # Агрегированный анализ
+        # -------------------------------------------------------------
 
         filtered_analysis = (
             get_filtered_analysis_from_store(
@@ -977,6 +1084,10 @@ def register_costs_control_callbacks(
         ):
             return no_update
 
+        # -------------------------------------------------------------
+        # NM ID после всех фильтров
+        # -------------------------------------------------------------
+
         allowed_nm_ids = (
             filtered_analysis["nm_id"]
             .dropna()
@@ -988,18 +1099,31 @@ def register_costs_control_callbacks(
         if not allowed_nm_ids:
             return no_update
 
+        # -------------------------------------------------------------
+        # История УПД
+        # -------------------------------------------------------------
+
         history_df = (
             get_price_history_data()
             .copy()
         )
 
-        filtered_history = filter_history_data(
-            history_df,
-            nm_ids=allowed_nm_ids,
-            suppliers=filter_store.get(
-                "suppliers"
-            ),
-            date_range=None,
+        filtered_history = (
+            filter_history_data(
+                history_df,
+                nm_ids=allowed_nm_ids,
+                suppliers=(
+                    filter_store.get(
+                        "suppliers",
+                        [],
+                    )
+                ),
+                date_range=(
+                    filter_store.get(
+                        "date_range"
+                    )
+                ),
+            )
         )
 
         return build_excel_download(
@@ -1032,9 +1156,11 @@ def register_costs_control_callbacks(
         filter_store,
     ):
         """
-        Формирует CSV анализа товаров.
+        Формирует CSV агрегированного
+        анализа товаров.
 
-        Данные повторно фильтруются на сервере.
+        Период и остальные фильтры
+        берутся из FILTERED_DATA_STORE_ID.
         """
 
         if (

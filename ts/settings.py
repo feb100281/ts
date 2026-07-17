@@ -394,6 +394,7 @@ JAZZMIN_SETTINGS = {
         "gear": "fa-solid fa-chart-simple",
         "gear.SegmentsSales": "fa-solid fa-layer-group",
         "gear.DailySales": "fa-solid fa-calendar-days",
+        "gear.CostsControl": "fa-solid fa-magnifying-glass-dollar",
         
         # --- ОТЧЕТЫ / ПРЕЗЕНТАЦИИ ---
         "reports": "fa-solid fa-chart-area",

@@ -1,4 +1,4 @@
-# # gear/app/costs_contol/layout.py
+# # gear/app/costs_control/layout.py
 # from __future__ import annotations
 
 # import dash_mantine_components as dmc
@@ -16,12 +16,11 @@
 #     COLORS,
 #     PLOTLY_CONFIG,
 # )
+# from .filters import build_filter_panel
 # from .grid import (
 #     build_history_grid_section,
 #     build_main_grid_section,
 # )
-
-
 # from .ids import (
 #     BRAND_SUMMARY_CHART_ID,
 #     CV_DISTRIBUTION_CHART_ID,
@@ -30,7 +29,6 @@
 #     DOWNLOAD_EXCEL_BTN_ID,
 #     DOWNLOAD_ID,
 #     FILTERED_DATA_STORE_ID,
-#     HISTORY_GRID_ID,
 #     KPI_AVG_CV_ID,
 #     KPI_CHANGED_PRODUCTS_ID,
 #     KPI_CRITICAL_PRODUCTS_ID,
@@ -39,18 +37,16 @@
 #     KPI_TOTAL_PRODUCTS_ID,
 #     LAST_UPDATE_ID,
 #     LOADING_ID,
-#     MAIN_GRID_ID,
 #     MAIN_TABS_ID,
 #     MEDIAN_DEVIATION_CHART_ID,
 #     PRICE_HISTORY_CHART_ID,
 #     REFRESH_DATA_BTN_ID,
 #     SELECTED_PRODUCT_STORE_ID,
 #     TOP_CV_CHART_ID,
-    
-#     TOP_CV_CLICK_STORE_ID,
-#     MEDIAN_DEVIATION_CLICK_STORE_ID,
 # )
-
+# from .modal import (
+#     build_chart_product_modal_components,
+# )
 # from .styles import (
 #     CHART_GRID_STYLE,
 #     HEADER_STYLE,
@@ -59,19 +55,15 @@
 #     PANEL_STYLE,
 # )
 
-# from .modal import build_chart_product_modal_components
-# from .filters import build_filter_panel
-
-
 
 # # ---------------------------------------------------------------------
-# # Общие маленькие элементы
+# # Пустой график
 # # ---------------------------------------------------------------------
 
 
 # def _empty_figure():
 #     """
-#     Пустой график, который отображается до первой загрузки данных.
+#     Пустой график до первой загрузки данных.
 #     """
 
 #     return {
@@ -101,19 +93,24 @@
 #                     "yref": "paper",
 #                     "showarrow": False,
 #                     "font": {
-#                         "family": "Inter, Arial, sans-serif",
+#                         "family": (
+#                             "Inter, Arial, sans-serif"
+#                         ),
 #                         "size": 13,
 #                         "color": COLORS.get(
 #                             "muted",
 #                             "#6B7280",
 #                         ),
 #                     },
-#                 }
+#                 },
 #             ],
 #         },
 #     }
 
 
+# # ---------------------------------------------------------------------
+# # Заголовок вкладки
+# # ---------------------------------------------------------------------
 
 
 # def _tab_label(
@@ -155,11 +152,17 @@
 #                 style={
 #                     "display": "flex",
 #                     "alignItems": "center",
-#                     "justifyContent": "space-between",
+#                     "justifyContent": (
+#                         "space-between"
+#                     ),
 #                     "gap": "18px",
 #                     "flexWrap": "wrap",
 #                 },
 #                 children=[
+#                     # -------------------------------------------------
+#                     # Название приложения
+#                     # -------------------------------------------------
+
 #                     html.Div(
 #                         style={
 #                             "display": "flex",
@@ -174,11 +177,15 @@
 #                                     "height": "38px",
 #                                     "display": "flex",
 #                                     "alignItems": "center",
-#                                     "justifyContent": "center",
+#                                     "justifyContent": (
+#                                         "center"
+#                                     ),
 #                                     "flex": "0 0 auto",
-#                                     "backgroundColor": COLORS.get(
-#                                         "light_green",
-#                                         "#E7F1ED",
+#                                     "backgroundColor": (
+#                                         COLORS.get(
+#                                             "light_green",
+#                                             "#E7F1ED",
+#                                         )
 #                                     ),
 #                                     "border": (
 #                                         "1px solid "
@@ -190,7 +197,8 @@
 #                                 },
 #                                 children=DashIconify(
 #                                     icon=(
-#                                         "solar:chart-square-linear"
+#                                         "solar:"
+#                                         "chart-square-linear"
 #                                     ),
 #                                     width=21,
 #                                     height=21,
@@ -200,6 +208,7 @@
 #                                     ),
 #                                 ),
 #                             ),
+
 #                             html.Div(
 #                                 style={
 #                                     "minWidth": 0,
@@ -209,15 +218,22 @@
 #                                         APP_TITLE,
 #                                         style={
 #                                             "margin": 0,
-#                                             "fontSize": "21px",
+#                                             "fontSize": (
+#                                                 "21px"
+#                                             ),
 #                                             "fontWeight": 700,
-#                                             "lineHeight": "26px",
-#                                             "color": COLORS.get(
-#                                                 "text",
-#                                                 "#111827",
+#                                             "lineHeight": (
+#                                                 "26px"
+#                                             ),
+#                                             "color": (
+#                                                 COLORS.get(
+#                                                     "text",
+#                                                     "#111827",
+#                                                 )
 #                                             ),
 #                                         },
 #                                     ),
+
 #                                     html.Div(
 #                                         (
 #                                             "Контроль изменения "
@@ -226,12 +242,20 @@
 #                                             "закупочной цены"
 #                                         ),
 #                                         style={
-#                                             "marginTop": "3px",
-#                                             "fontSize": "12px",
-#                                             "lineHeight": "17px",
-#                                             "color": COLORS.get(
-#                                                 "muted",
-#                                                 "#6B7280",
+#                                             "marginTop": (
+#                                                 "3px"
+#                                             ),
+#                                             "fontSize": (
+#                                                 "12px"
+#                                             ),
+#                                             "lineHeight": (
+#                                                 "17px"
+#                                             ),
+#                                             "color": (
+#                                                 COLORS.get(
+#                                                     "muted",
+#                                                     "#6B7280",
+#                                                 )
 #                                             ),
 #                                         },
 #                                     ),
@@ -239,6 +263,10 @@
 #                             ),
 #                         ],
 #                     ),
+
+#                     # -------------------------------------------------
+#                     # Действия
+#                     # -------------------------------------------------
 
 #                     html.Div(
 #                         style={
@@ -251,11 +279,17 @@
 #                             html.Div(
 #                                 style={
 #                                     "display": "flex",
-#                                     "alignItems": "center",
+#                                     "alignItems": (
+#                                         "center"
+#                                     ),
 #                                     "gap": "6px",
 #                                     "height": "34px",
-#                                     "padding": "0 10px",
-#                                     "backgroundColor": "#FFFFFF",
+#                                     "padding": (
+#                                         "0 10px"
+#                                     ),
+#                                     "backgroundColor": (
+#                                         "#FFFFFF"
+#                                     ),
 #                                     "border": (
 #                                         "1px solid "
 #                                         + COLORS.get(
@@ -267,7 +301,8 @@
 #                                 children=[
 #                                     DashIconify(
 #                                         icon=(
-#                                             "solar:clock-circle-linear"
+#                                             "solar:"
+#                                             "clock-circle-linear"
 #                                         ),
 #                                         width=15,
 #                                         height=15,
@@ -276,25 +311,37 @@
 #                                             "#6B7280",
 #                                         ),
 #                                     ),
+
 #                                     html.Span(
 #                                         "Обновление:",
 #                                         style={
-#                                             "fontSize": "11px",
-#                                             "color": COLORS.get(
-#                                                 "muted",
-#                                                 "#6B7280",
+#                                             "fontSize": (
+#                                                 "11px"
+#                                             ),
+#                                             "color": (
+#                                                 COLORS.get(
+#                                                     "muted",
+#                                                     "#6B7280",
+#                                                 )
 #                                             ),
 #                                         },
 #                                     ),
+
 #                                     html.Span(
 #                                         id=LAST_UPDATE_ID,
 #                                         children="—",
 #                                         style={
-#                                             "fontSize": "11px",
-#                                             "fontWeight": 600,
-#                                             "color": COLORS.get(
-#                                                 "text",
-#                                                 "#111827",
+#                                             "fontSize": (
+#                                                 "11px"
+#                                             ),
+#                                             "fontWeight": (
+#                                                 600
+#                                             ),
+#                                             "color": (
+#                                                 COLORS.get(
+#                                                     "text",
+#                                                     "#111827",
+#                                                 )
 #                                             ),
 #                                         },
 #                                     ),
@@ -302,23 +349,38 @@
 #                             ),
 
 #                             action_button(
-#                                 component_id=REFRESH_DATA_BTN_ID,
+#                                 component_id=(
+#                                     REFRESH_DATA_BTN_ID
+#                                 ),
 #                                 label="Обновить",
-#                                 icon="solar:refresh-linear",
+#                                 icon=(
+#                                     "solar:"
+#                                     "refresh-linear"
+#                                 ),
 #                                 color="teal",
 #                             ),
 
 #                             action_button(
-#                                 component_id=DOWNLOAD_EXCEL_BTN_ID,
+#                                 component_id=(
+#                                     DOWNLOAD_EXCEL_BTN_ID
+#                                 ),
 #                                 label="Excel",
-#                                 icon="solar:file-download-linear",
+#                                 icon=(
+#                                     "solar:"
+#                                     "file-download-linear"
+#                                 ),
 #                                 color="green",
 #                             ),
 
 #                             action_button(
-#                                 component_id=DOWNLOAD_CSV_BTN_ID,
+#                                 component_id=(
+#                                     DOWNLOAD_CSV_BTN_ID
+#                                 ),
 #                                 label="CSV",
-#                                 icon="solar:download-linear",
+#                                 icon=(
+#                                     "solar:"
+#                                     "download-linear"
+#                                 ),
 #                                 color="gray",
 #                             ),
 #                         ],
@@ -327,8 +389,6 @@
 #             ),
 #         ],
 #     )
-
-
 
 
 # # ---------------------------------------------------------------------
@@ -342,10 +402,11 @@
 #             section_header(
 #                 "Ключевые показатели",
 #                 (
-#                     "Показатели пересчитываются после "
-#                     "применения фильтров"
+#                     "Показатели пересчитываются "
+#                     "после применения фильтров"
 #                 ),
 #             ),
+
 #             html.Div(
 #                 style={
 #                     **KPI_GRID_STYLE,
@@ -354,44 +415,90 @@
 #                 children=[
 #                     kpi_card(
 #                         title="Товаров",
-#                         value_id=KPI_TOTAL_PRODUCTS_ID,
-#                         subtitle="NM ID в выборке",
+#                         value_id=(
+#                             KPI_TOTAL_PRODUCTS_ID
+#                         ),
+#                         subtitle=(
+#                             "NM ID в выборке"
+#                         ),
 #                         icon="solar:box-linear",
 #                         accent=COLORS["green"],
 #                     ),
+
 #                     kpi_card(
 #                         title="Менялась цена",
-#                         value_id=KPI_CHANGED_PRODUCTS_ID,
-#                         subtitle="Более одной закупочной цены",
-#                         icon="solar:refresh-circle-linear",
+#                         value_id=(
+#                             KPI_CHANGED_PRODUCTS_ID
+#                         ),
+#                         subtitle=(
+#                             "Более одной "
+#                             "закупочной цены"
+#                         ),
+#                         icon=(
+#                             "solar:"
+#                             "refresh-circle-linear"
+#                         ),
 #                         accent=COLORS["blue"],
 #                     ),
+
 #                     kpi_card(
 #                         title="Критические",
-#                         value_id=KPI_CRITICAL_PRODUCTS_ID,
+#                         value_id=(
+#                             KPI_CRITICAL_PRODUCTS_ID
+#                         ),
 #                         subtitle="CV 75% и выше",
-#                         icon="solar:danger-triangle-linear",
+#                         icon=(
+#                             "solar:"
+#                             "danger-triangle-linear"
+#                         ),
 #                         accent=COLORS["red"],
 #                     ),
+
 #                     kpi_card(
 #                         title="Средний CV",
-#                         value_id=KPI_AVG_CV_ID,
-#                         subtitle="По отфильтрованным товарам",
-#                         icon="solar:chart-square-linear",
+#                         value_id=(
+#                             KPI_AVG_CV_ID
+#                         ),
+#                         subtitle=(
+#                             "По отфильтрованным "
+#                             "товарам"
+#                         ),
+#                         icon=(
+#                             "solar:"
+#                             "chart-square-linear"
+#                         ),
 #                         accent=COLORS["orange"],
 #                     ),
+
 #                     kpi_card(
 #                         title="Макс. рост",
-#                         value_id=KPI_MAX_INCREASE_ID,
-#                         subtitle="Относительно медианной цены",
-#                         icon="solar:arrow-up-linear",
+#                         value_id=(
+#                             KPI_MAX_INCREASE_ID
+#                         ),
+#                         subtitle=(
+#                             "Относительно "
+#                             "медианной цены"
+#                         ),
+#                         icon=(
+#                             "solar:"
+#                             "arrow-up-linear"
+#                         ),
 #                         accent=COLORS["red"],
 #                     ),
+
 #                     kpi_card(
 #                         title="Макс. снижение",
-#                         value_id=KPI_MAX_DECREASE_ID,
-#                         subtitle="Относительно медианной цены",
-#                         icon="solar:arrow-down-linear",
+#                         value_id=(
+#                             KPI_MAX_DECREASE_ID
+#                         ),
+#                         subtitle=(
+#                             "Относительно "
+#                             "медианной цены"
+#                         ),
+#                         icon=(
+#                             "solar:"
+#                             "arrow-down-linear"
+#                         ),
 #                         accent=COLORS["green"],
 #                     ),
 #                 ],
@@ -401,58 +508,9 @@
 
 
 # # ---------------------------------------------------------------------
-# # Графики
+# # Вкладка «Обзор»
 # # ---------------------------------------------------------------------
-# def build_nm_id_copy_panel(
-#     clipboard_id: str,
-#     text_id: str,
-# ):
-#     """
-#     Блок копирования NM ID выбранного товара.
-#     """
 
-#     return html.Div(
-#         style={
-#             "display": "flex",
-#             "alignItems": "center",
-#             "gap": "8px",
-#             "minHeight": "34px",
-#             "marginTop": "8px",
-#             "padding": "0 2px",
-#         },
-#         children=[
-#             dcc.Clipboard(
-#                 id=clipboard_id,
-#                 content="",
-#                 title="Копировать NM ID",
-#                 style={
-#                     "display": "none",
-#                     "cursor": "pointer",
-#                     "fontSize": "17px",
-#                     "color": COLORS.get(
-#                         "green",
-#                         "#2F6656",
-#                     ),
-#                 },
-#             ),
-
-#             html.Div(
-#                 id=text_id,
-#                 children=(
-#                     "Нажмите на столбец товара, "
-#                     "чтобы скопировать NM ID"
-#                 ),
-#                 style={
-#                     "fontSize": "11px",
-#                     "lineHeight": "16px",
-#                     "color": COLORS.get(
-#                         "muted",
-#                         "#6B7280",
-#                     ),
-#                 },
-#             ),
-#         ],
-#     )
 
 # def build_overview_tab():
 #     return html.Div(
@@ -461,26 +519,33 @@
 #         },
 #         children=[
 #             # ---------------------------------------------------------
-#             # Первый ряд:
-#             # распределение CV + анализ по брендам
+#             # Распределение CV и бренды
 #             # ---------------------------------------------------------
+
 #             html.Div(
 #                 style=CHART_GRID_STYLE,
 #                 children=[
 #                     chart_panel(
-#                         title="Распределение по коэффициенту вариации",
+#                         title=(
+#                             "Распределение по "
+#                             "коэффициенту вариации"
+#                         ),
 #                         subtitle=(
-#                             "Количество товаров в каждом диапазоне CV"
+#                             "Количество товаров "
+#                             "в каждом диапазоне CV"
 #                         ),
 #                         graph=dcc.Graph(
-#                             id=CV_DISTRIBUTION_CHART_ID,
+#                             id=(
+#                                 CV_DISTRIBUTION_CHART_ID
+#                             ),
 #                             figure=_empty_figure(),
 #                             config={
 #                                 **PLOTLY_CONFIG,
 #                                 "toImageButtonOptions": {
 #                                     "format": "png",
 #                                     "filename": (
-#                                         "распределение_по_cv"
+#                                         "распределение_"
+#                                         "по_cv"
 #                                     ),
 #                                     "height": 1200,
 #                                     "width": 1800,
@@ -496,18 +561,22 @@
 #                     chart_panel(
 #                         title="Анализ по брендам",
 #                         subtitle=(
-#                             "Средний CV, количество товаров "
-#                             "и критические позиции"
+#                             "Средний CV, количество "
+#                             "товаров и критические "
+#                             "позиции"
 #                         ),
 #                         graph=dcc.Graph(
-#                             id=BRAND_SUMMARY_CHART_ID,
+#                             id=(
+#                                 BRAND_SUMMARY_CHART_ID
+#                             ),
 #                             figure=_empty_figure(),
 #                             config={
 #                                 **PLOTLY_CONFIG,
 #                                 "toImageButtonOptions": {
 #                                     "format": "png",
 #                                     "filename": (
-#                                         "анализ_по_брендам"
+#                                         "анализ_"
+#                                         "по_брендам"
 #                                     ),
 #                                     "height": 1200,
 #                                     "width": 1800,
@@ -523,94 +592,97 @@
 #             ),
 
 #             # ---------------------------------------------------------
-#             # Второй ряд:
-#             # товары с максимальным CV на всю ширину
+#             # Товары с максимальным CV
 #             # ---------------------------------------------------------
+
 #             html.Div(
 #                 style={
 #                     "marginTop": "14px",
 #                 },
 #                 children=[
 #                     chart_panel(
-#     title="Товары с максимальным CV",
-#     subtitle=(
-#         "Нажмите на столбец товара, "
-#         "чтобы скопировать NM ID"
-#     ),
-#     graph=html.Div(
-#         children=[
-#             dcc.Graph(
-#                 id=TOP_CV_CHART_ID,
-#                 figure=_empty_figure(),
-#                 config={
-#                     **PLOTLY_CONFIG,
-#                     "toImageButtonOptions": {
-#                         "format": "png",
-#                         "filename": (
-#                             "товары_с_максимальным_cv"
+#                         title=(
+#                             "Товары с "
+#                             "максимальным CV"
 #                         ),
-#                         "height": 1600,
-#                         "width": 2400,
-#                         "scale": 3,
-#                     },
-#                 },
-#                 style={
-#                     "height": "720px",
-#                 },
-#             ),
-
-            
-#         ],
-#     ),
-# ),
+#                         subtitle=(
+#                             "Наведите курсор, "
+#                             "чтобы увидеть NM ID"
+#                         ),
+#                         graph=dcc.Graph(
+#                             id=TOP_CV_CHART_ID,
+#                             figure=_empty_figure(),
+#                             config={
+#                                 **PLOTLY_CONFIG,
+#                                 "toImageButtonOptions": {
+#                                     "format": "png",
+#                                     "filename": (
+#                                         "товары_с_"
+#                                         "максимальным_cv"
+#                                     ),
+#                                     "height": 1600,
+#                                     "width": 2400,
+#                                     "scale": 3,
+#                                 },
+#                             },
+#                             style={
+#                                 "height": "720px",
+#                             },
+#                         ),
+#                     ),
 #                 ],
 #             ),
 
 #             # ---------------------------------------------------------
-#             # Третий ряд:
-#             # отклонение от медианы на всю ширину
+#             # Отклонение от медианы
 #             # ---------------------------------------------------------
+
 #             html.Div(
 #                 style={
 #                     "marginTop": "14px",
 #                 },
 #                 children=[
-#                    chart_panel(
-#     title="Отклонение от медианной цены",
-#     subtitle=(
-#         "Нажмите на столбец товара, "
-#         "чтобы скопировать NM ID"
-#     ),
-#     graph=html.Div(
-#         children=[
-#             dcc.Graph(
-#                 id=MEDIAN_DEVIATION_CHART_ID,
-#                 figure=_empty_figure(),
-#                 config={
-#                     **PLOTLY_CONFIG,
-#                     "toImageButtonOptions": {
-#                         "format": "png",
-#                         "filename": (
-#                             "отклонение_от_медианы"
+#                     chart_panel(
+#                         title=(
+#                             "Отклонение от "
+#                             "медианной цены"
 #                         ),
-#                         "height": 1600,
-#                         "width": 2400,
-#                         "scale": 3,
-#                     },
-#                 },
-#                 style={
-#                     "height": "720px",
-#                 },
-#             ),
-
-           
-#         ],
-#     ),
-# ),
+#                         subtitle=(
+#                             "Наведите курсор, "
+#                             "чтобы увидеть NM ID"
+#                         ),
+#                         graph=dcc.Graph(
+#                             id=(
+#                                 MEDIAN_DEVIATION_CHART_ID
+#                             ),
+#                             figure=_empty_figure(),
+#                             config={
+#                                 **PLOTLY_CONFIG,
+#                                 "toImageButtonOptions": {
+#                                     "format": "png",
+#                                     "filename": (
+#                                         "отклонение_"
+#                                         "от_медианы"
+#                                     ),
+#                                     "height": 1600,
+#                                     "width": 2400,
+#                                     "scale": 3,
+#                                 },
+#                             },
+#                             style={
+#                                 "height": "720px",
+#                             },
+#                         ),
+#                     ),
 #                 ],
 #             ),
 #         ],
 #     )
+
+
+# # ---------------------------------------------------------------------
+# # Вкладка «Товары»
+# # ---------------------------------------------------------------------
 
 
 # def build_products_tab():
@@ -630,10 +702,12 @@
 #                             section_header(
 #                                 "Товары",
 #                                 (
-#                                     "Выберите строку, чтобы "
-#                                     "построить историю цены"
+#                                     "Выберите строку, "
+#                                     "чтобы построить "
+#                                     "историю цены"
 #                                 ),
 #                             ),
+
 #                             dmc.Badge(
 #                                 "Нажмите на товар",
 #                                 variant="light",
@@ -641,17 +715,28 @@
 #                                 radius=0,
 #                                 size="sm",
 #                                 leftSection=DashIconify(
-#                                     icon="solar:cursor-linear",
+#                                     icon=(
+#                                         "solar:"
+#                                         "cursor-linear"
+#                                     ),
 #                                     width=13,
 #                                 ),
 #                             ),
 #                         ],
 #                     ),
+
+#                     # Здесь уже находится сам AgGrid
+#                     # с уникальным MAIN_GRID_ID.
 #                     build_main_grid_section(),
 #                 ],
 #             ),
 #         ],
 #     )
+
+
+# # ---------------------------------------------------------------------
+# # Вкладка «История цен»
+# # ---------------------------------------------------------------------
 
 
 # def build_history_tab():
@@ -661,10 +746,14 @@
 #         },
 #         children=[
 #             chart_panel(
-#                 title="История закупочной цены",
+#                 title=(
+#                     "История закупочной цены"
+#                 ),
 #                 subtitle=(
-#                     "Динамика бухгалтерской и управленческой "
-#                     "себестоимости выбранного товара"
+#                     "Динамика бухгалтерской "
+#                     "и управленческой "
+#                     "себестоимости выбранного "
+#                     "товара"
 #                 ),
 #                 graph=dcc.Graph(
 #                     id=PRICE_HISTORY_CHART_ID,
@@ -685,16 +774,22 @@
 #                     section_header(
 #                         "Документы и поставщики",
 #                         (
-#                             "История цены по УПД для "
-#                             "выбранного товара"
+#                             "История цены по УПД "
+#                             "для выбранного товара"
 #                         ),
 #                     ),
+
 #                     html.Div(
-#                             style={
-#                                 "marginTop": "12px",
-#                             },
-#                             children=build_history_grid_section(),
+#                         style={
+#                             "marginTop": "12px",
+#                         },
+
+#                         # Здесь уже находится AgGrid
+#                         # с уникальным HISTORY_GRID_ID.
+#                         children=(
+#                             build_history_grid_section()
 #                         ),
+#                     ),
 #                 ],
 #             ),
 #         ],
@@ -718,21 +813,32 @@
 #                 children=[
 #                     dmc.TabsTab(
 #                         _tab_label(
-#                             icon="solar:chart-2-linear",
+#                             icon=(
+#                                 "solar:"
+#                                 "chart-2-linear"
+#                             ),
 #                             label="Обзор",
 #                         ),
 #                         value="overview",
 #                     ),
+
 #                     dmc.TabsTab(
 #                         _tab_label(
-#                             icon="solar:box-linear",
+#                             icon=(
+#                                 "solar:"
+#                                 "box-linear"
+#                             ),
 #                             label="Товары",
 #                         ),
 #                         value="products",
 #                     ),
+
 #                     dmc.TabsTab(
 #                         _tab_label(
-#                             icon="solar:history-linear",
+#                             icon=(
+#                                 "solar:"
+#                                 "history-linear"
+#                             ),
 #                             label="История цен",
 #                         ),
 #                         value="history",
@@ -759,10 +865,22 @@
 
 
 # # ---------------------------------------------------------------------
-# # Скрытые служебные компоненты
+# # Служебные компоненты
 # # ---------------------------------------------------------------------
 
+
 # def build_service_components():
+#     """
+#     Маленькие служебные Store.
+
+#     Здесь нет Store со всей таблицей.
+#     В браузере сохраняются только:
+
+#     - сигнал загрузки данных;
+#     - параметры фильтров;
+#     - выбранный товар.
+#     """
+
 #     return html.Div(
 #         children=[
 #             dcc.Store(
@@ -779,16 +897,15 @@
 #                 id=SELECTED_PRODUCT_STORE_ID,
 #                 storage_type="memory",
 #             ),
-  
 
 #             dcc.Download(
 #                 id=DOWNLOAD_ID,
 #             ),
 
-#             # Store и модальное окно товара
 #             build_chart_product_modal_components(),
 #         ],
 #     )
+
 
 # # ---------------------------------------------------------------------
 # # Общий layout
@@ -797,7 +914,8 @@
 
 # def build_layout():
 #     """
-#     Основной layout приложения контроля закупочных цен.
+#     Основной layout приложения
+#     контроля закупочных цен.
 #     """
 
 #     return dmc.MantineProvider(
@@ -862,21 +980,27 @@
 #                             style={
 #                                 "marginTop": "14px",
 #                             },
-#                             children=build_filter_panel(),
+#                             children=(
+#                                 build_filter_panel()
+#                             ),
 #                         ),
 
 #                         html.Div(
 #                             style={
 #                                 "marginTop": "18px",
 #                             },
-#                             children=build_kpi_section(),
+#                             children=(
+#                                 build_kpi_section()
+#                             ),
 #                         ),
 
 #                         html.Div(
 #                             style={
 #                                 "marginTop": "18px",
 #                             },
-#                             children=build_main_tabs(),
+#                             children=(
+#                                 build_main_tabs()
+#                             ),
 #                         ),
 
 #                         html.Div(
@@ -892,7 +1016,6 @@
 
 
 # layout = build_layout()
-
 
 
 
@@ -934,7 +1057,6 @@ from .ids import (
     KPI_MAX_INCREASE_ID,
     KPI_TOTAL_PRODUCTS_ID,
     LAST_UPDATE_ID,
-    LOADING_ID,
     MAIN_TABS_ID,
     MEDIAN_DEVIATION_CHART_ID,
     PRICE_HISTORY_CHART_ID,
@@ -1270,17 +1392,17 @@ def build_header():
                                 color="green",
                             ),
 
-                            action_button(
-                                component_id=(
-                                    DOWNLOAD_CSV_BTN_ID
-                                ),
-                                label="CSV",
-                                icon=(
-                                    "solar:"
-                                    "download-linear"
-                                ),
-                                color="gray",
-                            ),
+                            # action_button(
+                            #     component_id=(
+                            #         DOWNLOAD_CSV_BTN_ID
+                            #     ),
+                            #     label="CSV",
+                            #     icon=(
+                            #         "solar:"
+                            #         "download-linear"
+                            #     ),
+                            #     color="gray",
+                            # ),
                         ],
                     ),
                 ],
@@ -1416,10 +1538,6 @@ def build_overview_tab():
             "paddingTop": "16px",
         },
         children=[
-            # ---------------------------------------------------------
-            # Распределение CV и бренды
-            # ---------------------------------------------------------
-
             html.Div(
                 style=CHART_GRID_STYLE,
                 children=[
@@ -1489,10 +1607,6 @@ def build_overview_tab():
                 ],
             ),
 
-            # ---------------------------------------------------------
-            # Товары с максимальным CV
-            # ---------------------------------------------------------
-
             html.Div(
                 style={
                     "marginTop": "14px",
@@ -1504,8 +1618,8 @@ def build_overview_tab():
                             "максимальным CV"
                         ),
                         subtitle=(
-                            "Наведите курсор, "
-                            "чтобы увидеть NM ID"
+                            "Щёлкните по столбцу, чтобы открыть "
+                             "детализацию товара"
                         ),
                         graph=dcc.Graph(
                             id=TOP_CV_CHART_ID,
@@ -1530,10 +1644,6 @@ def build_overview_tab():
                     ),
                 ],
             ),
-
-            # ---------------------------------------------------------
-            # Отклонение от медианы
-            # ---------------------------------------------------------
 
             html.Div(
                 style={
@@ -1600,14 +1710,15 @@ def build_products_tab():
                             section_header(
                                 "Товары",
                                 (
-                                    "Выберите строку, "
+                                    "Выберите товар "
+                                    "через чекбокс, "
                                     "чтобы построить "
                                     "историю цены"
                                 ),
                             ),
 
                             dmc.Badge(
-                                "Нажмите на товар",
+                                "Выберите товар",
                                 variant="light",
                                 color="gray",
                                 radius=0,
@@ -1615,7 +1726,7 @@ def build_products_tab():
                                 leftSection=DashIconify(
                                     icon=(
                                         "solar:"
-                                        "cursor-linear"
+                                        "check-square-linear"
                                     ),
                                     width=13,
                                 ),
@@ -1623,8 +1734,6 @@ def build_products_tab():
                         ],
                     ),
 
-                    # Здесь уже находится сам AgGrid
-                    # с уникальным MAIN_GRID_ID.
                     build_main_grid_section(),
                 ],
             ),
@@ -1658,7 +1767,7 @@ def build_history_tab():
                     figure=_empty_figure(),
                     config=PLOTLY_CONFIG,
                     style={
-                        "height": "440px",
+                        "height": "540px",
                     },
                 ),
             ),
@@ -1681,9 +1790,6 @@ def build_history_tab():
                         style={
                             "marginTop": "12px",
                         },
-
-                        # Здесь уже находится AgGrid
-                        # с уникальным HISTORY_GRID_ID.
                         children=(
                             build_history_grid_section()
                         ),
@@ -1769,10 +1875,9 @@ def build_main_tabs():
 
 def build_service_components():
     """
-    Маленькие служебные Store.
+    Служебные компоненты приложения.
 
-    Здесь нет Store со всей таблицей.
-    В браузере сохраняются только:
+    В браузере сохраняются:
 
     - сигнал загрузки данных;
     - параметры фильтров;
@@ -1806,6 +1911,60 @@ def build_service_components():
 
 
 # ---------------------------------------------------------------------
+# Содержимое страницы
+# ---------------------------------------------------------------------
+
+
+def build_page_content():
+    """
+    Основное содержимое страницы.
+
+    Важно: страница больше не обёрнута
+    в глобальный dcc.Loading.
+    """
+
+    return html.Div(
+        style=PAGE_STYLE,
+        children=[
+            build_header(),
+
+            html.Div(
+                style={
+                    "marginTop": "14px",
+                },
+                children=(
+                    build_filter_panel()
+                ),
+            ),
+
+            html.Div(
+                style={
+                    "marginTop": "18px",
+                },
+                children=(
+                    build_kpi_section()
+                ),
+            ),
+
+            html.Div(
+                style={
+                    "marginTop": "18px",
+                },
+                children=(
+                    build_main_tabs()
+                ),
+            ),
+
+            html.Div(
+                style={
+                    "height": "24px",
+                },
+            ),
+        ],
+    )
+
+
+# ---------------------------------------------------------------------
 # Общий layout
 # ---------------------------------------------------------------------
 
@@ -1814,6 +1973,10 @@ def build_layout():
     """
     Основной layout приложения
     контроля закупочных цен.
+
+    Глобальный fullscreen loader удалён,
+    поэтому выбор строки или чекбокса
+    не блокирует всю страницу.
     """
 
     return dmc.MantineProvider(
@@ -1853,62 +2016,7 @@ def build_layout():
         },
         children=[
             build_service_components(),
-
-            dcc.Loading(
-                id=LOADING_ID,
-                type="cube",
-                color=COLORS.get(
-                    "green",
-                    "#2F6656",
-                ),
-                fullscreen=True,
-                overlay_style={
-                    "visibility": "visible",
-                    "filter": "blur(1px)",
-                    "backgroundColor": (
-                        "rgba(255, 255, 255, 0.76)"
-                    ),
-                },
-                children=html.Div(
-                    style=PAGE_STYLE,
-                    children=[
-                        build_header(),
-
-                        html.Div(
-                            style={
-                                "marginTop": "14px",
-                            },
-                            children=(
-                                build_filter_panel()
-                            ),
-                        ),
-
-                        html.Div(
-                            style={
-                                "marginTop": "18px",
-                            },
-                            children=(
-                                build_kpi_section()
-                            ),
-                        ),
-
-                        html.Div(
-                            style={
-                                "marginTop": "18px",
-                            },
-                            children=(
-                                build_main_tabs()
-                            ),
-                        ),
-
-                        html.Div(
-                            style={
-                                "height": "24px",
-                            },
-                        ),
-                    ],
-                ),
-            ),
+            build_page_content(),
         ],
     )
 
