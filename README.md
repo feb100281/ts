@@ -245,5 +245,6 @@ rsync -avP daria@82.202.197.94:/home/daria/ts/data/realization ~/Downloads/
 9) zstd -T0 -19 -k analytics.duckdb 
 10) повторяем шаги 2-5  
    
+test
 
 
