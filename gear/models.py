@@ -16,4 +16,8 @@ class DailySales(models.Model):
         verbose_name = "Продажи за период"
         verbose_name_plural = "Продажи за период"
 
-
+class CostsControl(models.Model):
+    class Meta:
+        managed = False
+        verbose_name = "Контроль закупочных цен"
+        verbose_name_plural = "Контроль закупочных цен"
