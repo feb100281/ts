@@ -155,7 +155,7 @@
 #         )
 
 
-
+# gear/app/daily_sales/excel_export.py
 from datetime import date, datetime
 from io import BytesIO
 
@@ -170,6 +170,20 @@ from dash import (
 )
 
 from .excel_styles import apply_excel_style
+
+from .revenue_structure.ids import (
+    REVENUE_STRUCTURE_BRAND_GRID_ID,
+    REVENUE_STRUCTURE_BRAND_EXCEL_BTN_ID,
+    REVENUE_STRUCTURE_BRAND_EXCEL_DOWNLOAD_ID,
+
+    REVENUE_STRUCTURE_CATEGORY_GRID_ID,
+    REVENUE_STRUCTURE_CATEGORY_EXCEL_BTN_ID,
+    REVENUE_STRUCTURE_CATEGORY_EXCEL_DOWNLOAD_ID,
+
+    REVENUE_STRUCTURE_GENDER_GRID_ID,
+    REVENUE_STRUCTURE_GENDER_EXCEL_BTN_ID,
+    REVENUE_STRUCTURE_GENDER_EXCEL_DOWNLOAD_ID,
+)
 
 
 MAIN_EXCEL_DOWNLOAD_ID = (
@@ -696,6 +710,46 @@ def _parse_date_value(date_value):
     return value, value, False
 
 
+
+def _make_revenue_structure_excel(
+    rows,
+    column_defs,
+    sheet_name,
+):
+    """
+    Формирует Excel для таблиц:
+    - по брендам;
+    - по категориям;
+    - по полу.
+
+    Порядок и названия колонок берутся
+    непосредственно из AG Grid.
+    """
+
+    df = _prepare_dataframe(
+        rows=rows,
+        column_defs=column_defs,
+    )
+
+    output = BytesIO()
+
+    with pd.ExcelWriter(
+        output,
+        engine="openpyxl",
+    ) as writer:
+
+        _write_dataframe(
+            writer=writer,
+            df=df,
+            sheet_name=sheet_name,
+            freeze_panes="B2",
+        )
+
+    output.seek(0)
+
+    return output.read()
+
+
 def register_excel_export_callbacks(
     app,
     selected_dates_chips_id,
@@ -830,4 +884,188 @@ def register_excel_export_callbacks(
         return dcc.send_bytes(
             content,
             filename=filename,
+        )
+        
+
+def register_revenue_structure_excel_callbacks(app):
+    """
+    Регистрирует Excel-выгрузку для таблиц
+    структуры выручки:
+
+    - бренды;
+    - категории;
+    - пол.
+    """
+
+    # =====================================================
+    # Бренды
+    # =====================================================
+
+    @app.callback(
+        Output(
+            REVENUE_STRUCTURE_BRAND_EXCEL_DOWNLOAD_ID,
+            "data",
+        ),
+        Input(
+            REVENUE_STRUCTURE_BRAND_EXCEL_BTN_ID,
+            "n_clicks",
+        ),
+        State(
+            REVENUE_STRUCTURE_BRAND_GRID_ID,
+            "virtualRowData",
+        ),
+        State(
+            REVENUE_STRUCTURE_BRAND_GRID_ID,
+            "rowData",
+        ),
+        State(
+            REVENUE_STRUCTURE_BRAND_GRID_ID,
+            "columnDefs",
+        ),
+        prevent_initial_call=True,
+    )
+    def export_revenue_structure_brand(
+        n_clicks,
+        virtual_rows,
+        row_data,
+        column_defs,
+    ):
+        if not n_clicks:
+            return no_update
+
+        # virtualRowData содержит данные после фильтрации AG Grid.
+        # Если фильтрация ещё не применялась,
+        # используем исходный rowData.
+        rows = (
+            virtual_rows
+            if virtual_rows is not None
+            else row_data
+        )
+
+        if not rows:
+            return no_update
+
+        content = _make_revenue_structure_excel(
+            rows=rows,
+            column_defs=column_defs,
+            sheet_name="По брендам",
+        )
+
+        return dcc.send_bytes(
+            content,
+            filename="revenue_structure_brands.xlsx",
+        )
+
+
+    # =====================================================
+    # Категории
+    # =====================================================
+
+    @app.callback(
+        Output(
+            REVENUE_STRUCTURE_CATEGORY_EXCEL_DOWNLOAD_ID,
+            "data",
+        ),
+        Input(
+            REVENUE_STRUCTURE_CATEGORY_EXCEL_BTN_ID,
+            "n_clicks",
+        ),
+        State(
+            REVENUE_STRUCTURE_CATEGORY_GRID_ID,
+            "virtualRowData",
+        ),
+        State(
+            REVENUE_STRUCTURE_CATEGORY_GRID_ID,
+            "rowData",
+        ),
+        State(
+            REVENUE_STRUCTURE_CATEGORY_GRID_ID,
+            "columnDefs",
+        ),
+        prevent_initial_call=True,
+    )
+    def export_revenue_structure_category(
+        n_clicks,
+        virtual_rows,
+        row_data,
+        column_defs,
+    ):
+        if not n_clicks:
+            return no_update
+
+        rows = (
+            virtual_rows
+            if virtual_rows is not None
+            else row_data
+        )
+
+        if not rows:
+            return no_update
+
+        content = _make_revenue_structure_excel(
+            rows=rows,
+            column_defs=column_defs,
+            sheet_name="По категориям",
+        )
+
+        return dcc.send_bytes(
+            content,
+            filename="revenue_structure_categories.xlsx",
+        )
+
+
+    # =====================================================
+    # Пол
+    # =====================================================
+
+    @app.callback(
+        Output(
+            REVENUE_STRUCTURE_GENDER_EXCEL_DOWNLOAD_ID,
+            "data",
+        ),
+        Input(
+            REVENUE_STRUCTURE_GENDER_EXCEL_BTN_ID,
+            "n_clicks",
+        ),
+        State(
+            REVENUE_STRUCTURE_GENDER_GRID_ID,
+            "virtualRowData",
+        ),
+        State(
+            REVENUE_STRUCTURE_GENDER_GRID_ID,
+            "rowData",
+        ),
+        State(
+            REVENUE_STRUCTURE_GENDER_GRID_ID,
+            "columnDefs",
+        ),
+        prevent_initial_call=True,
+    )
+    def export_revenue_structure_gender(
+        n_clicks,
+        virtual_rows,
+        row_data,
+        column_defs,
+    ):
+        if not n_clicks:
+            return no_update
+
+        rows = (
+            virtual_rows
+            if virtual_rows is not None
+            else row_data
+        )
+
+        if not rows:
+            return no_update
+
+        content = _make_revenue_structure_excel(
+            rows=rows,
+            column_defs=column_defs,
+            sheet_name="По полу",
+        )
+
+        return dcc.send_bytes(
+            content,
+            filename="revenue_structure_gender.xlsx",
         )

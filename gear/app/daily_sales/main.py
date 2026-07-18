@@ -15,7 +15,7 @@ from .ui import export_panel_main, export_panel_details
 from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
 from .stat import StatWindow
-from .excel_export import register_excel_export_callbacks
+from .excel_export import register_excel_export_callbacks, register_revenue_structure_excel_callbacks
 from .stocks.export import register_stock_export_callbacks
 from .wb_plan_monitor import register_wb_plan_callbacks
 from .ai_analysis import register_ai_analysis_callbacks
@@ -393,6 +393,7 @@ class MainWindow:
         ###-------------------###
         
         register_excel_export_callbacks(app,self.selected_dates_chips_id,)
+        register_revenue_structure_excel_callbacks(app)
         register_stock_export_callbacks(app)
         register_methodology_callbacks(app)
         register_wb_plan_callbacks(app)

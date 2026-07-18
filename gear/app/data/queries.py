@@ -1271,53 +1271,264 @@
 
 #### БАЗОВЫЙ ЗАПРОС НА СОЗДАНИЕ ВРЕМЕННОЙ ТАБЛИЦЫ 
 
-BASE_QUERY = """ 
-CREATE OR REPLACE TEMP TABLE base as
-with last_val as (
-select
-usk,
-adjust_wo[-1] as last_cr,
-adjust_man_wo[-1] as last_man_cr
-from inventories.pre_wo
+# BASE_QUERY = """ 
+# CREATE OR REPLACE TEMP TABLE base as
+# with last_val as (
+# select
+# usk,
+# adjust_wo[-1] as last_cr,
+# adjust_man_wo[-1] as last_man_cr
+# from inventories.pre_wo
+# ),
+# -- выбираем списания 
+# add_last as (select
+# t.*,
+# l.last_cr,
+# l.last_man_cr
+# from inventories.inv_gl_final t
+# left join last_val l on l.usk = t.usk 
+# where t.cr = 0 and t.oper = 'Списание'
+# ),
+# wb_price as (
+# select 
+# rrd_id, val
+# from sales.sales_long
+# where field = 'retail_amount'
+# )
+
+# select 
+# yearweek(t.date_from::date) as yw,
+# t.*,
+# wb.val as retail_amount,
+# a.last_cr,
+# a.last_man_cr,
+# COALESCE(a.last_cr, case when t.cr=0 then 95000 else t.cr end) as adjusted_cogs,
+# COALESCE(a.last_man_cr, case when t.cr_man=0 then 62000 else t.cr_man end) as adjusted_cogs_man,
+# UPPER(w.brand) as brand,
+# w.subject_id,
+# w.subject_name,
+# w.title,
+# COALESCE(w.gender, 'Не указан') as gender,
+# case 
+# when t.cr = 0 and a.last_cr <> 0 and t.oper = 'Списание' then 'Нет на складе'
+# when t.cr = 0 and a.last_cr is null and t.oper = 'Списание' then 'Нет приходов'
+# else null
+# end as storage_flag
+# from inventories.inv_gl_final t
+# left join add_last a on a.rrd_id = t.rrd_id
+# LEFT JOIN inventories.wb_product w on w.card_id = t.usk
+# left join wb_price as wb on wb.rrd_id = t.rrd_id
+# ;
+# """
+
+
+BASE_QUERY = """
+CREATE OR REPLACE TEMP TABLE base AS
+
+WITH last_val AS (
+    SELECT
+        usk,
+        adjust_wo[-1] AS last_cr,
+        adjust_man_wo[-1] AS last_man_cr
+    FROM inventories.pre_wo
 ),
--- выбираем списания 
-add_last as (select
-t.*,
-l.last_cr,
-l.last_man_cr
-from inventories.inv_gl_final t
-left join last_val l on l.usk = t.usk 
-where t.cr = 0 and t.oper = 'Списание'
+
+-- =========================================================
+-- Списания, для которых подставляем последнюю себестоимость
+-- =========================================================
+
+add_last AS (
+    SELECT
+        t.*,
+        l.last_cr,
+        l.last_man_cr
+
+    FROM inventories.inv_gl_final t
+
+    LEFT JOIN last_val l
+        ON l.usk = t.usk
+
+    WHERE t.cr = 0
+      AND t.oper = 'Списание'
 ),
-wb_price as (
-select 
-rrd_id, val
-from sales.sales_long
-where field = 'retail_amount'
+
+-- =========================================================
+-- Розничная стоимость WB
+-- ВАЖНО: одна строка на rrd_id
+-- =========================================================
+
+wb_price AS (
+    SELECT
+        rrd_id,
+
+        SUM(val) AS retail_amount
+
+    FROM sales.sales_long
+
+    WHERE field = 'retail_amount'
+
+    GROUP BY
+        rrd_id
+),
+
+-- =========================================================
+-- Комиссия WB
+--
+-- Повторяем ту же методологию, которая используется
+-- в DAILY_SALES_AGG:
+--
+-- dt - cr
+--
+-- Комиссия приводится к значению без НДС.
+--
+-- В результате net_comission обычно отрицательная,
+-- поэтому прибыль считается:
+--
+-- revenue_vatless
+-- - cogs
+-- + net_comission
+-- =========================================================
+
+commissions AS (
+    SELECT
+        rrd_id,
+
+        COALESCE(
+            SUM(
+                val
+                / (100 + vat_rate)
+                * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'dt'
+            ),
+            0
+        )
+        -
+        COALESCE(
+            SUM(
+                val
+                / (100 + vat_rate)
+                * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'cr'
+            ),
+            0
+        ) AS net_comission
+
+    FROM sales.sales_long
+
+    GROUP BY
+        rrd_id
 )
 
-select 
-yearweek(t.date_from::date) as yw,
-t.*,
-wb.val as retail_amount,
-a.last_cr,
-a.last_man_cr,
-COALESCE(a.last_cr, case when t.cr=0 then 95000 else t.cr end) as adjusted_cogs,
-COALESCE(a.last_man_cr, case when t.cr_man=0 then 62000 else t.cr_man end) as adjusted_cogs_man,
-UPPER(w.brand) as brand,
-w.subject_id,
-w.subject_name,
-w.title,
-COALESCE(w.gender, 'Не указан') as gender,
-case 
-when t.cr = 0 and a.last_cr <> 0 and t.oper = 'Списание' then 'Нет на складе'
-when t.cr = 0 and a.last_cr is null and t.oper = 'Списание' then 'Нет приходов'
-else null
-end as storage_flag
-from inventories.inv_gl_final t
-left join add_last a on a.rrd_id = t.rrd_id
-LEFT JOIN inventories.wb_product w on w.card_id = t.usk
-left join wb_price as wb on wb.rrd_id = t.rrd_id
+SELECT
+
+    YEARWEEK(
+        t.date_from::DATE
+    ) AS yw,
+
+    t.*,
+
+    -- =====================================================
+    -- WB
+    -- =====================================================
+
+    COALESCE(
+        wb.retail_amount,
+        0
+    ) AS retail_amount,
+
+    COALESCE(
+        c.net_comission,
+        0
+    ) AS net_comission,
+
+    -- =====================================================
+    -- Себестоимость
+    -- =====================================================
+
+    a.last_cr,
+
+    a.last_man_cr,
+
+    COALESCE(
+        a.last_cr,
+
+        CASE
+            WHEN t.cr = 0
+                THEN 95000
+
+            ELSE t.cr
+        END
+
+    ) AS adjusted_cogs,
+
+    COALESCE(
+        a.last_man_cr,
+
+        CASE
+            WHEN t.cr_man = 0
+                THEN 62000
+
+            ELSE t.cr_man
+        END
+
+    ) AS adjusted_cogs_man,
+
+    -- =====================================================
+    -- Карточка товара
+    -- =====================================================
+
+    UPPER(
+        w.brand
+    ) AS brand,
+
+    w.subject_id,
+
+    w.subject_name,
+
+    w.title,
+
+    COALESCE(
+        w.gender,
+        'Не указан'
+    ) AS gender,
+
+    -- =====================================================
+    -- Контроль себестоимости
+    -- =====================================================
+
+    CASE
+
+        WHEN t.cr = 0
+         AND a.last_cr <> 0
+         AND t.oper = 'Списание'
+            THEN 'Нет на складе'
+
+        WHEN t.cr = 0
+         AND a.last_cr IS NULL
+         AND t.oper = 'Списание'
+            THEN 'Нет приходов'
+
+        ELSE NULL
+
+    END AS storage_flag
+
+FROM inventories.inv_gl_final t
+
+LEFT JOIN add_last a
+    ON a.rrd_id = t.rrd_id
+
+LEFT JOIN inventories.wb_product w
+    ON w.card_id = t.usk
+
+LEFT JOIN wb_price wb
+    ON wb.rrd_id = t.rrd_id
+
+LEFT JOIN commissions c
+    ON c.rrd_id = t.rrd_id
 ;
 """
 
