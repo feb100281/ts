@@ -1,3 +1,4 @@
+# gear/app/daily_sales/wb_plan_monitor/formatters.py
 def format_money(value):
     value = float(value or 0)
     return f"{value:,.0f}".replace(",", " ")
