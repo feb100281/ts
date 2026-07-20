@@ -98,6 +98,10 @@ from .ids import (
     
 )
 
+from .profit_optimizer import (
+    register_profit_optimizer_callbacks,
+)
+
 
 def _format_money(
     value,
@@ -1007,3 +1011,8 @@ def register_stats_callbacks(
                 time()
             ),
         )
+        
+        
+        
+    
+    register_profit_optimizer_callbacks(app)

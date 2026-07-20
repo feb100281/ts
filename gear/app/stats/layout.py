@@ -65,6 +65,10 @@ from .styles import (
     PANEL_STYLE,
 )
 
+from .profit_optimizer import (
+    build_profit_optimizer_tab,
+)
+
 
 def _empty_figure():
     return {
@@ -1245,6 +1249,11 @@ def build_main_tabs():
                         "Выводы",
                         value="insights",
                     ),
+                    
+                    dmc.TabsTab(
+                        "Оптимизация прибыли",
+                        value="profit_optimizer",
+                    ),
                 ],
             ),
 
@@ -1276,6 +1285,11 @@ def build_main_tabs():
             dmc.TabsPanel(
                 build_insights_tab(),
                 value="insights",
+            ),
+            
+            dmc.TabsPanel(
+                build_profit_optimizer_tab(),
+                value="profit_optimizer",
             ),
         ],
     )
