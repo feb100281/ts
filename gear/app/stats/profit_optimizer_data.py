@@ -342,7 +342,7 @@ def get_profit_optimizer_data(
     report_date = _as_date(date_to)
     history_start = report_date - timedelta(days=config.history_days - 1)
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         con.execute(BASE_QUERY)
         con.execute(WB_COSTS_QUERY)
 
