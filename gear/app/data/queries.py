@@ -2729,7 +2729,8 @@ COALESCE(sum(val) filter (where oper='dt' ),0) as dt,
 COALESCE(sum(val) filter (where oper='cr' ),0) as cr
 from sales.sales_long
 where field = 'deduction' 
-and (not STARTS_WITH(btn,'Платеж') or not STARTS_WITH(btn, 'Перевод'))
+AND NOT STARTS_WITH(btn, 'Платеж')
+AND NOT STARTS_WITH(btn, 'Перевод')
 and btn is not null
 -- and sop_name like '%оррекция%'
 GROUP BY date_from, rrd_id, cost_item

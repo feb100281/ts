@@ -12,3 +12,7 @@ class GearConfig(AppConfig):
             from .app.segement_sales import app as segments_sales_app
             from .app.daily_sales import app as dayly_sales_app
             from .app.costs_control import app as costs_control_app
+            from .app.stats import app as stats_app
+            
+            
+  
