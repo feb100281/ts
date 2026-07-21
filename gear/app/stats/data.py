@@ -4145,9 +4145,9 @@ def get_stats_min_date() -> date:
 
             FROM inventories.inv_gl_final
 
-            WHERE
+            -- WHERE
 
-                oper = 'Списание'
+                -- oper = 'Списание'
             """
         ).fetchone()
 
