@@ -2029,3 +2029,661 @@ def get_stocks_by_warehouse_extended(report_date):
         ).df()
 
     return df
+
+
+
+
+# def get_stocks_by_warehouse_products(report_date):
+#     """
+#     Детальные остатки в разрезе:
+
+#         регион
+#         -> склад
+#         -> nm_id
+#         -> chrt_id / размер
+
+#     В лист попадает только физический остаток quantity.
+
+#     Товары в пути не включаются, поскольку задача листа —
+#     показать, какая номенклатура фактически находится
+#     на конкретном складе и на какую сумму.
+
+#     Себестоимость в запросе остаётся в копейках.
+#     Перевод в рубли выполняется в excel.py.
+#     """
+
+#     with get_duckdb_conn_with_opt() as con:
+#         df = con.execute(
+#             """
+#             WITH
+
+#             /*
+#             ============================================================
+#             ОСТАТКИ ПО СКЛАДАМ И НОМЕНКЛАТУРЕ
+
+#             Одна строка:
+#                 регион
+#                 + склад
+#                 + nm_id
+#                 + chrt_id
+
+#             Суммируем строки заранее, чтобы последующие JOIN
+#             не размножали количество.
+#             ============================================================
+#             */
+#             warehouse_stocks AS (
+#                 SELECT
+#                     COALESCE(
+#                         NULLIF(
+#                             TRIM(t.region_name),
+#                             ''
+#                         ),
+#                         'Регион не указан'
+#                     ) AS region_name,
+
+#                     COALESCE(
+#                         NULLIF(
+#                             TRIM(t.warehouse_name),
+#                             ''
+#                         ),
+#                         'Склад не указан'
+#                     ) AS warehouse_name,
+
+#                     t.nm_id,
+#                     t.chrt_id,
+
+#                     SUM(
+#                         COALESCE(
+#                             t.quantity,
+#                             0
+#                         )
+#                     ) AS quantity_on_hand
+
+#                 FROM stocks.unpacked_stocks t
+
+#                 WHERE
+#                     t.date_from::DATE = $report_date::DATE
+
+#                 GROUP BY
+#                     COALESCE(
+#                         NULLIF(
+#                             TRIM(t.region_name),
+#                             ''
+#                         ),
+#                         'Регион не указан'
+#                     ),
+
+#                     COALESCE(
+#                         NULLIF(
+#                             TRIM(t.warehouse_name),
+#                             ''
+#                         ),
+#                         'Склад не указан'
+#                     ),
+
+#                     t.nm_id,
+#                     t.chrt_id
+#             ),
+
+
+#             /*
+#             ============================================================
+#             КАРТА NM_ID -> USK
+
+#             Дедуплицируем связь, чтобы не размножить остатки.
+#             ============================================================
+#             */
+#             nm_usk AS (
+#                 SELECT
+#                     card_id AS nm_id,
+#                     usk
+
+#                 FROM inventories.usk
+
+#                 WHERE
+#                     card_id IS NOT NULL
+#                     AND usk IS NOT NULL
+
+#                 GROUP BY
+#                     card_id,
+#                     usk
+#             ),
+
+
+#             /*
+#             ============================================================
+#             ПОСЛЕДНЯЯ СЕБЕСТОИМОСТЬ ПО NM_ID
+
+#             Повторяем логику основной выгрузки:
+#             берём последнюю известную бухгалтерскую
+#             и управленческую себестоимость.
+#             ============================================================
+#             */
+#             costs AS (
+#                 SELECT
+#                     nu.nm_id,
+
+#                     MAX(
+#                         w.adjust_wo[-1]
+#                     ) AS last_costs,
+
+#                     MAX(
+#                         w.adjust_man_wo[-1]
+#                     ) AS last_man_costs
+
+#                 FROM nm_usk nu
+
+#                 LEFT JOIN inventories.pre_wo w
+#                     ON w.usk = nu.usk
+
+#                 GROUP BY
+#                     nu.nm_id
+#             ),
+
+
+#             /*
+#             ============================================================
+#             БРЕНД
+
+#             Отдельно агрегируем карточки по nm_id,
+#             чтобы не размножить складские остатки.
+#             ============================================================
+#             */
+#             brands AS (
+#                 SELECT
+#                     nm_id,
+
+#                     COALESCE(
+#                         MAX(brand),
+#                         'Бренд не указан'
+#                     ) AS brand
+
+#                 FROM cards.unpacked_cards
+
+#                 GROUP BY
+#                     nm_id
+#             )
+
+
+#             SELECT
+#                 ws.region_name
+#                     AS "Регион",
+
+#                 ws.warehouse_name
+#                     AS "Склад",
+
+#                 COALESCE(
+#                     b.brand,
+#                     'Бренд не указан'
+#                 ) AS "Бренд",
+
+#                 COALESCE(
+#                     p.subject_name,
+#                     'Категория не указана'
+#                 ) AS "Категория",
+
+#                 COALESCE(
+#                     p.gender,
+#                     'Пол не указан'
+#                 ) AS "Пол",
+
+#                 COALESCE(
+#                     p.sa_name,
+#                     ''
+#                 ) AS "Артикул",
+
+#                 COALESCE(
+#                     p.title,
+#                     ''
+#                 ) AS "Наименование",
+
+#                 COALESCE(
+#                     sz.tech_size,
+#                     ''
+#                 ) AS "Размер",
+
+#                 ws.quantity_on_hand
+#                     AS "Остаток на складе",
+
+#                 c.last_costs
+#                     AS "Бух. с/с за ед.",
+
+#                 c.last_man_costs
+#                     AS "Упр. с/с за ед.",
+
+#                 ws.quantity_on_hand
+#                 * COALESCE(
+#                     c.last_costs,
+#                     0
+#                 ) AS "Бух. стоимость остатка",
+
+#                 ws.quantity_on_hand
+#                 * COALESCE(
+#                     c.last_man_costs,
+#                     0
+#                 ) AS "Упр. стоимость остатка",
+
+#                 ws.nm_id
+#                     AS "NM ID",
+
+#                 ws.chrt_id
+#                     AS "Chrt ID"
+
+#             FROM warehouse_stocks ws
+
+#             LEFT JOIN cards.product p
+#                 ON p.nm_id = ws.nm_id
+
+#             LEFT JOIN brands b
+#                 ON b.nm_id = ws.nm_id
+
+#             LEFT JOIN cards.sizes sz
+#                 ON sz.chrt_id = ws.chrt_id
+
+#             LEFT JOIN costs c
+#                 ON c.nm_id = ws.nm_id
+
+#             WHERE
+#                 ws.quantity_on_hand > 0
+
+#             ORDER BY
+#                 ws.region_name,
+#                 ws.warehouse_name,
+
+#                 COALESCE(
+#                     b.brand,
+#                     'Бренд не указан'
+#                 ),
+
+#                 COALESCE(
+#                     p.subject_name,
+#                     'Категория не указана'
+#                 ),
+
+#                 COALESCE(
+#                     p.title,
+#                     ''
+#                 ),
+
+#                 COALESCE(
+#                     sz.tech_size,
+#                     ''
+#                 )
+#             """,
+#             {
+#                 "report_date": report_date,
+#             },
+#         ).df()
+
+#     return df
+
+
+
+def get_stocks_by_warehouse_products(report_date):
+    """
+    Детальные остатки в разрезе:
+
+        регион
+        -> склад
+        -> nm_id
+        -> chrt_id / размер
+
+    В выгрузку включаются:
+
+    - физический остаток на складе;
+    - товары в пути от клиента;
+    - товары в пути к клиенту;
+    - итоговое количество.
+
+    Одна строка соответствует:
+
+        регион
+        + склад
+        + nm_id
+        + chrt_id
+
+    Себестоимость в запросе остаётся в копейках.
+    Перевод в рубли выполняется в excel.py.
+
+    Стоимость остатка рассчитывается по итоговому количеству,
+    включая товары в пути — аналогично основному листу
+    "Все товары".
+    """
+
+    with get_duckdb_conn_with_opt() as con:
+        df = con.execute(
+            """
+            WITH
+
+            /*
+            ============================================================
+            ОСТАТКИ ПО СКЛАДАМ И НОМЕНКЛАТУРЕ
+
+            Одна строка:
+                регион
+                + склад
+                + nm_id
+                + chrt_id
+
+            Суммируем данные до присоединения справочников,
+            чтобы последующие JOIN не размножали количество.
+            ============================================================
+            */
+            warehouse_stocks AS (
+                SELECT
+                    COALESCE(
+                        NULLIF(
+                            TRIM(t.region_name),
+                            ''
+                        ),
+                        'Регион не указан'
+                    ) AS region_name,
+
+                    COALESCE(
+                        NULLIF(
+                            TRIM(t.warehouse_name),
+                            ''
+                        ),
+                        'Склад не указан'
+                    ) AS warehouse_name,
+
+                    t.nm_id,
+                    t.chrt_id,
+
+                    SUM(
+                        COALESCE(
+                            t.quantity,
+                            0
+                        )
+                    ) AS quantity_on_hand,
+
+                    SUM(
+                        COALESCE(
+                            t.in_way_from_client,
+                            0
+                        )
+                    ) AS in_way_from_client,
+
+                    SUM(
+                        COALESCE(
+                            t.in_way_to_client,
+                            0
+                        )
+                    ) AS in_way_to_client,
+
+                    SUM(
+                        COALESCE(
+                            t.quantity,
+                            0
+                        )
+                        +
+                        COALESCE(
+                            t.in_way_from_client,
+                            0
+                        )
+                        +
+                        COALESCE(
+                            t.in_way_to_client,
+                            0
+                        )
+                    ) AS total_quantity
+
+                FROM stocks.unpacked_stocks t
+
+                WHERE
+                    t.date_from::DATE = $report_date::DATE
+
+                GROUP BY
+                    COALESCE(
+                        NULLIF(
+                            TRIM(t.region_name),
+                            ''
+                        ),
+                        'Регион не указан'
+                    ),
+
+                    COALESCE(
+                        NULLIF(
+                            TRIM(t.warehouse_name),
+                            ''
+                        ),
+                        'Склад не указан'
+                    ),
+
+                    t.nm_id,
+                    t.chrt_id
+            ),
+
+
+            /*
+            ============================================================
+            КАРТА NM_ID -> USK
+
+            Дедуплицируем связь, чтобы присоединение себестоимости
+            не размножало складские остатки.
+            ============================================================
+            */
+            nm_usk AS (
+                SELECT
+                    card_id AS nm_id,
+                    usk
+
+                FROM inventories.usk
+
+                WHERE
+                    card_id IS NOT NULL
+                    AND usk IS NOT NULL
+
+                GROUP BY
+                    card_id,
+                    usk
+            ),
+
+
+            /*
+            ============================================================
+            ПОСЛЕДНЯЯ СЕБЕСТОИМОСТЬ ПО NM_ID
+
+            Повторяем логику основной выгрузки:
+            берём последнюю известную бухгалтерскую
+            и управленческую себестоимость.
+            ============================================================
+            */
+            costs AS (
+                SELECT
+                    nu.nm_id,
+
+                    MAX(
+                        w.adjust_wo[-1]
+                    ) AS last_costs,
+
+                    MAX(
+                        w.adjust_man_wo[-1]
+                    ) AS last_man_costs
+
+                FROM nm_usk nu
+
+                LEFT JOIN inventories.pre_wo w
+                    ON w.usk = nu.usk
+
+                GROUP BY
+                    nu.nm_id
+            ),
+
+
+            /*
+            ============================================================
+            БРЕНД
+
+            Агрегируем карточки отдельно по nm_id,
+            чтобы не размножить складские строки.
+            ============================================================
+            */
+            brands AS (
+                SELECT
+                    nm_id,
+
+                    COALESCE(
+                        MAX(brand),
+                        'Бренд не указан'
+                    ) AS brand
+
+                FROM cards.unpacked_cards
+
+                GROUP BY
+                    nm_id
+            )
+
+
+            /*
+            ============================================================
+            ИТОГОВАЯ ВЫГРУЗКА
+            ============================================================
+            */
+            SELECT
+                ws.region_name
+                    AS "Регион",
+
+                ws.warehouse_name
+                    AS "Склад",
+
+                COALESCE(
+                    b.brand,
+                    'Бренд не указан'
+                ) AS "Бренд",
+
+                COALESCE(
+                    p.subject_name,
+                    'Категория не указана'
+                ) AS "Категория",
+
+                COALESCE(
+                    p.gender,
+                    'Пол не указан'
+                ) AS "Пол",
+
+                COALESCE(
+                    p.sa_name,
+                    ''
+                ) AS "Артикул",
+
+                COALESCE(
+                    p.title,
+                    ''
+                ) AS "Наименование",
+
+                COALESCE(
+                    sz.tech_size,
+                    ''
+                ) AS "Размер",
+
+
+                /*
+                --------------------------------------------------------
+                КОЛИЧЕСТВО
+                --------------------------------------------------------
+                */
+                ws.total_quantity
+                    AS "Итого количество",
+
+                ws.quantity_on_hand
+                    AS "Остаток на складе",
+
+                ws.in_way_from_client
+                    AS "В пути от клиента",
+
+                ws.in_way_to_client
+                    AS "В пути к клиенту",
+
+
+                /*
+                --------------------------------------------------------
+                СЕБЕСТОИМОСТЬ ЗА ЕДИНИЦУ
+                --------------------------------------------------------
+                */
+                c.last_costs
+                    AS "Бух. с/с за ед.",
+
+                c.last_man_costs
+                    AS "Упр. с/с за ед.",
+
+
+                /*
+                --------------------------------------------------------
+                ОБЩАЯ СТОИМОСТЬ
+
+                Считаем по итоговому количеству,
+                включая товары в пути.
+                --------------------------------------------------------
+                */
+                ws.total_quantity
+                * COALESCE(
+                    c.last_costs,
+                    0
+                ) AS "Бух. стоимость остатка",
+
+                ws.total_quantity
+                * COALESCE(
+                    c.last_man_costs,
+                    0
+                ) AS "Упр. стоимость остатка",
+
+
+                /*
+                --------------------------------------------------------
+                ТЕХНИЧЕСКИЕ ID
+                --------------------------------------------------------
+                */
+                ws.nm_id
+                    AS "NM ID",
+
+                ws.chrt_id
+                    AS "Chrt ID"
+
+            FROM warehouse_stocks ws
+
+            LEFT JOIN cards.product p
+                ON p.nm_id = ws.nm_id
+
+            LEFT JOIN brands b
+                ON b.nm_id = ws.nm_id
+
+            LEFT JOIN cards.sizes sz
+                ON sz.chrt_id = ws.chrt_id
+
+            LEFT JOIN costs c
+                ON c.nm_id = ws.nm_id
+
+            WHERE
+                ws.total_quantity > 0
+
+            ORDER BY
+                ws.region_name,
+                ws.warehouse_name,
+
+                COALESCE(
+                    b.brand,
+                    'Бренд не указан'
+                ),
+
+                COALESCE(
+                    p.subject_name,
+                    'Категория не указана'
+                ),
+
+                COALESCE(
+                    p.title,
+                    ''
+                ),
+
+                COALESCE(
+                    sz.tech_size,
+                    ''
+                )
+            """,
+            {
+                "report_date": report_date,
+            },
+        ).df()
+
+    return df

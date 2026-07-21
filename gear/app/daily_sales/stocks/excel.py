@@ -2108,6 +2108,166 @@ def _prepare_stocks_df(
     return df
 
 
+
+
+def _prepare_warehouse_products_df(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Подготавливает детальные складские остатки для Excel.
+
+    Входная детализация:
+        регион
+        + склад
+        + nm_id
+        + chrt_id
+
+    Денежные значения из data.py приходят в копейках,
+    поэтому переводим их в рубли здесь.
+    """
+
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    df = df.copy()
+
+    # --------------------------------------------------------------
+    # Денежные значения: копейки -> рубли
+    # --------------------------------------------------------------
+    money_cols = [
+        "Бух. с/с за ед.",
+        "Упр. с/с за ед.",
+        "Бух. стоимость остатка",
+        "Упр. стоимость остатка",
+    ]
+
+    for col in money_cols:
+        if col in df.columns:
+            df[col] = (
+                pd.to_numeric(
+                    df[col],
+                    errors="coerce",
+                )
+                .fillna(0)
+                / 100
+            )
+
+    # --------------------------------------------------------------
+    # Количество
+    # --------------------------------------------------------------
+    quantity_cols = [
+        "Итого количество",
+        "Остаток на складе",
+        "В пути от клиента",
+        "В пути к клиенту",
+    ]
+
+    for col in quantity_cols:
+        if col in df.columns:
+            df[col] = (
+                pd.to_numeric(
+                    df[col],
+                    errors="coerce",
+                )
+                .fillna(0)
+            )
+
+    # --------------------------------------------------------------
+    # Разница бухгалтерской и управленческой оценки
+    # --------------------------------------------------------------
+    if {
+        "Бух. стоимость остатка",
+        "Упр. стоимость остатка",
+    }.issubset(df.columns):
+        df["Δ стоимости"] = (
+            df["Упр. стоимость остатка"]
+            - df["Бух. стоимость остатка"]
+        )
+
+    # --------------------------------------------------------------
+    # ID сохраняем как текст
+    # --------------------------------------------------------------
+    for col in [
+        "NM ID",
+        "Chrt ID",
+    ]:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype("string")
+                .fillna("")
+            )
+
+    # --------------------------------------------------------------
+    # Порядок колонок
+    # --------------------------------------------------------------
+    preferred_order = [
+        "Регион",
+        "Склад",
+
+        "Бренд",
+        "Категория",
+        "Пол",
+        "Артикул",
+        "Наименование",
+        "Размер",
+
+        "Итого количество",
+        "Остаток на складе",
+        "В пути от клиента",
+        "В пути к клиенту",
+
+        "Бух. с/с за ед.",
+        "Упр. с/с за ед.",
+
+        "Бух. стоимость остатка",
+        "Упр. стоимость остатка",
+        "Δ стоимости",
+
+        "NM ID",
+        "Chrt ID",
+    ]
+
+    existing_order = [
+        col
+        for col in preferred_order
+        if col in df.columns
+    ]
+
+    other_cols = [
+        col
+        for col in df.columns
+        if col not in existing_order
+    ]
+
+    df = df[
+        existing_order + other_cols
+    ]
+
+    sort_cols = [
+        col
+        for col in [
+            "Регион",
+            "Склад",
+            "Бренд",
+            "Категория",
+            "Наименование",
+            "Размер",
+        ]
+        if col in df.columns
+    ]
+
+    if sort_cols:
+        df = df.sort_values(
+            sort_cols,
+            na_position="last",
+        )
+
+    return df.reset_index(
+        drop=True
+    )
+
+
 # ---------------------------------------------------------------------
 # Excel styles
 # ---------------------------------------------------------------------
@@ -2237,40 +2397,123 @@ def _add_sheet_summary_cards(
     start_row,
     last_col,
 ):
+    """
+    Добавляет верхние карточки показателей.
+
+    Поддерживает как основной лист "Все товары",
+    так и складскую детализацию "По складам",
+    где названия стоимостных колонок отличаются.
+    """
+
     total_qty = _sum_col(
         df,
         "Итого количество",
     )
+
+    # --------------------------------------------------------------
+    # Розничная стоимость
+    # На складском листе этой колонки пока может не быть.
+    # --------------------------------------------------------------
     total_retail = _sum_col(
         df,
         "Остатки в розничных ценах",
     )
-    total_buh = _sum_col(
-        df,
-        "Бух. с/с всего",
-    )
-    total_man = _sum_col(
-        df,
-        "Упр. с/с всего",
-    )
+
+    # --------------------------------------------------------------
+    # Бухгалтерская стоимость
+    #
+    # Основной лист:
+    #   "Бух. с/с всего"
+    #
+    # Лист "По складам":
+    #   "Бух. стоимость остатка"
+    # --------------------------------------------------------------
+    if "Бух. с/с всего" in df.columns:
+        total_buh = _sum_col(
+            df,
+            "Бух. с/с всего",
+        )
+    else:
+        total_buh = _sum_col(
+            df,
+            "Бух. стоимость остатка",
+        )
+
+    # --------------------------------------------------------------
+    # Управленческая стоимость
+    #
+    # Основной лист:
+    #   "Упр. с/с всего"
+    #
+    # Лист "По складам":
+    #   "Упр. стоимость остатка"
+    # --------------------------------------------------------------
+    if "Упр. с/с всего" in df.columns:
+        total_man = _sum_col(
+            df,
+            "Упр. с/с всего",
+        )
+    else:
+        total_man = _sum_col(
+            df,
+            "Упр. стоимость остатка",
+        )
 
     cards = [
-        ("Строк", len(df), "SKU"),
-        ("Количество", total_qty, "шт"),
-        ("Розничная стоимость", total_retail, "₽"),
-        ("Бух. стоимость", total_buh, "₽"),
-        ("Упр. стоимость", total_man, "₽"),
+        (
+            "Строк",
+            len(df),
+            "SKU",
+        ),
+        (
+            "Количество",
+            total_qty,
+            "шт",
+        ),
     ]
+
+    # Розничную карточку показываем только там,
+    # где действительно есть розничная стоимость.
+    if "Остатки в розничных ценах" in df.columns:
+        cards.append(
+            (
+                "Розничная стоимость",
+                total_retail,
+                "₽",
+            )
+        )
+
+    cards.extend(
+        [
+            (
+                "Бух. стоимость",
+                total_buh,
+                "₽",
+            ),
+            (
+                "Упр. стоимость",
+                total_man,
+                "₽",
+            ),
+        ]
+    )
 
     max_cards = min(
         len(cards),
-        max(1, last_col // 2),
+        max(
+            1,
+            last_col // 2,
+        ),
     )
 
     row = start_row
     col = 1
 
-    for idx, (title, value, subtitle) in enumerate(
+    for idx, (
+        title,
+        value,
+        subtitle,
+    ) in enumerate(
         cards[:max_cards]
     ):
         c1 = col + idx * 2
@@ -2352,15 +2595,20 @@ def _add_sheet_summary_cards(
         )
         sub_cell.alignment = CENTER
 
-        for rr in range(row, row + 3):
-            for cc in range(c1, c2 + 1):
+        for rr in range(
+            row,
+            row + 3,
+        ):
+            for cc in range(
+                c1,
+                c2 + 1,
+            ):
                 ws.cell(
                     rr,
                     cc,
                 ).border = THIN_BORDER
 
     return start_row + 5
-
 
 def _style_body_cell(
     cell,
@@ -2417,12 +2665,28 @@ def _style_body_cell(
         "Последняя наша розничная цена",
         "Остатки в розничных ценах",
         "Δ упр. с/с к розничной цене",
+
         "Бух. с/с за ед.",
         "Упр. с/с за ед.",
         "Бух. с/с всего",
         "Упр. с/с всего",
         "Δ с/с за ед.",
+
+        # Складская детализация
+        "Бух. стоимость остатка",
+        "Упр. стоимость остатка",
+        "Δ стоимости",
     ]:
+        cell.fill = PatternFill(
+            "solid",
+            fgColor=COLORS["money"],
+        )
+        cell.number_format = '#,##0.00 ₽'
+        cell.alignment = Alignment(
+            horizontal="right",
+            vertical="center",
+        )
+        
         cell.fill = PatternFill(
             "solid",
             fgColor=COLORS["money"],
@@ -2897,6 +3161,109 @@ def _write_dataframe_sheet(
 # ---------------------------------------------------------------------
 # Сводка
 # ---------------------------------------------------------------------
+def _build_warehouse_products_sheet(
+    wb,
+    df,
+    report_date,
+):
+    """
+    Создаёт единый лист с номенклатурными остатками
+    в разрезе региона и склада.
+
+    Фильтры Excel позволяют выбирать:
+    - регион;
+    - склад;
+    - бренд;
+    - категорию;
+    - наименование;
+    - NM ID.
+    """
+
+    if df is None or df.empty:
+        return None
+
+    df = _prepare_warehouse_products_df(
+        df
+    )
+
+    if df.empty:
+        return None
+
+    sheet_name = _write_dataframe_sheet(
+        wb=wb,
+        sheet_name="По складам",
+        df=df,
+        report_date=report_date,
+        title="Номенклатурные остатки по складам",
+        subtitle=(
+            "Фактический товар на складах: "
+            "регион, склад, номенклатура, количество "
+            "и стоимость по себестоимости"
+        ),
+    )
+
+    ws = wb[sheet_name]
+
+    # --------------------------------------------------------------
+    # Закрепляем регион и склад
+    #
+    # Первые две колонки остаются видимыми при прокрутке.
+    # --------------------------------------------------------------
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value == "Регион":
+                header_row = cell.row
+                ws.freeze_panes = (
+                    f"C{header_row + 1}"
+                )
+                break
+        else:
+            continue
+        break
+
+    # --------------------------------------------------------------
+    # Ширина колонок
+    # --------------------------------------------------------------
+    widths = {
+        "Регион": 24,
+        "Склад": 30,
+        "Бренд": 20,
+        "Категория": 24,
+        "Пол": 12,
+        "Артикул": 18,
+        "Наименование": 44,
+        "Размер": 14,
+
+        "Остаток на складе": 18,
+
+        "Бух. с/с за ед.": 17,
+        "Упр. с/с за ед.": 17,
+
+        "Бух. стоимость остатка": 23,
+        "Упр. стоимость остатка": 23,
+        "Δ стоимости": 18,
+
+        "NM ID": 16,
+        "Chrt ID": 16,
+    }
+
+    for col_name, width in widths.items():
+        if col_name not in df.columns:
+            continue
+
+        letter = get_column_letter(
+            df.columns.get_loc(
+                col_name
+            ) + 1
+        )
+
+        ws.column_dimensions[
+            letter
+        ].width = width
+
+    return sheet_name
+
+
 
 def _build_summary_sheet(
     wb,
@@ -3382,6 +3749,7 @@ def _apply_sheet_tab_colors(
 def make_stocks_excel(
     df: pd.DataFrame,
     report_date=None,
+    warehouse_products_df: pd.DataFrame | None = None,
 ) -> bytes:
     report_date = (
         report_date
@@ -3435,6 +3803,23 @@ def make_stocks_excel(
             ),
         }
     )
+    
+    warehouse_name = _build_warehouse_products_sheet(
+        wb=wb,
+        df=warehouse_products_df,
+        report_date=report_date,
+    )
+
+    if warehouse_name:
+        sheets_info.append(
+            {
+                "name": warehouse_name,
+                "description": (
+                    "Номенклатура по регионам и складам "
+                    "с количеством и стоимостью остатков"
+                ),
+            }
+        )
 
     category_name = _build_category_summary(
         wb,
