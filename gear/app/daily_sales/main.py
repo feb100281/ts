@@ -20,6 +20,13 @@ from .stocks.export import register_stock_export_callbacks
 from .wb_plan_monitor import register_wb_plan_callbacks
 from .ai_analysis import register_ai_analysis_callbacks
 from .price_analysis import register_price_analysis_export_callbacks
+from .stocks.dashboard import (
+    StocksDashboard,
+    register_stock_dashboard_callbacks,
+)
+
+
+
 
 
 
@@ -32,6 +39,8 @@ except locale.Error:
 
 FILTERS = WbFilters()
 PERIOD_CHIP_VALUE = "__whole_period__"
+STOCKS_DASHBOARD = StocksDashboard()
+
 
 
 def chip_maker(row):
@@ -101,10 +110,20 @@ class MainWindow:
                         dmc.SegmentedControl(
                             id=self.summary_tab_id,
                             value="2",
-                            data=[
-                                {"label": "Статистика", "value": "1"},
-                                {"label": "Данные", "value": "2"},
-                            ],
+                           data=[
+                                    {
+                                        "label": "Статистика",
+                                        "value": "1",
+                                    },
+                                    {
+                                        "label": "Данные",
+                                        "value": "2",
+                                    },
+                                    {
+                                        "label": "Остатки",
+                                        "value": "3",
+                                    },
+                                ],
                             radius=0,
                             size="sm",
                             color="blue",
@@ -202,7 +221,13 @@ class MainWindow:
             Input(FILTERS.brand_multy_id, "value"),
             Input(FILTERS.gender_multy_id, "value"),
         )
-        def render_tab(tab_value, date_range, cat_list, brand_list, gender_list):
+        def render_tab(
+            tab_value,
+            date_range,
+            cat_list,
+            brand_list,
+            gender_list,
+        ):
             if date_range and len(date_range) == 2:
                 start = date_range[0]
                 end = date_range[1]
@@ -211,15 +236,39 @@ class MainWindow:
                 end = date.today()
 
             if tab_value == "1":
-                stat_container = StatWindow(date_range,cat_list,brand_list,gender_list)
+                stat_container = StatWindow(
+                    date_range,
+                    cat_list,
+                    brand_list,
+                    gender_list,
+                )
                 return stat_container.layout()
 
-            return [
-                    get_sales_summary(start, end, cat_list, brand_list, gender_list),
-                    export_panel_main(),
-                    grid_date(start, end, cat_list, brand_list, gender_list),
-                ]
+            if tab_value == "3":
+                return STOCKS_DASHBOARD.layout(
+                    report_date=end,
+                    cat_list=cat_list,
+                    brand_list=brand_list,
+                    gender_list=gender_list,
+                )
 
+            return [
+                get_sales_summary(
+                    start,
+                    end,
+                    cat_list,
+                    brand_list,
+                    gender_list,
+                ),
+                export_panel_main(),
+                grid_date(
+                    start,
+                    end,
+                    cat_list,
+                    brand_list,
+                    gender_list,
+                ),
+            ]
         @app.callback(
             Output(self.selected_dates_chips_id, "children"),
             Input({"type": "dates_grid", "index": "1"}, "selectedRows"),
@@ -399,6 +448,7 @@ class MainWindow:
         register_wb_plan_callbacks(app)
         register_ai_analysis_callbacks(app)
         register_price_analysis_export_callbacks(app)
+        register_stock_dashboard_callbacks(app)
 
 
 

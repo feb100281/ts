@@ -1181,7 +1181,7 @@
 #     return columns
 
 
-
+# gear/app/daily_sales/grids.py
 from datetime import date
 
 import dash_ag_grid as dag
