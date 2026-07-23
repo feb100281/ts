@@ -1,3 +1,4 @@
+# gear/app/daily_sales/stocks/dashboard_stock/warehouse_incidents.py
 """Ручной реестр происшествий на складах.
 
 Добавлять новые события нужно только сюда.
