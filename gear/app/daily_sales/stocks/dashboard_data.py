@@ -1221,3 +1221,251 @@ def get_warehouse_products(
     return df.reset_index(
         drop=True
     )
+
+# =============================================================================
+# ИНФОРМАЦИОННАЯ МОДАЛКА СКЛАДА
+# =============================================================================
+
+def get_warehouse_modal_data(
+    report_date,
+    warehouse_name,
+    brand_list=None,
+    cat_list=None,
+    gender_list=None,
+) -> dict:
+    """Данные для информационной модалки карты."""
+    df = get_warehouse_products(
+        report_date=report_date,
+        warehouse_name=warehouse_name,
+        brand_list=brand_list,
+        cat_list=cat_list,
+        gender_list=gender_list,
+    )
+
+    if df.empty:
+        return {
+            "products": df,
+            "summary": {
+                "on_hand": 0,
+                "in_from": 0,
+                "in_to": 0,
+                "in_transit": 0,
+                "total": 0,
+                "nm_count": 0,
+                "sizes_count": 0,
+            },
+            "brands": pd.DataFrame(
+                columns=["brand", "on_hand", "total"]
+            ),
+            "categories": pd.DataFrame(
+                columns=["category", "on_hand", "total"]
+            ),
+        }
+
+    work = df.copy()
+
+    for col in [
+        "Остаток",
+        "В пути от клиента",
+        "В пути к клиенту",
+        "Итого",
+    ]:
+        work[col] = pd.to_numeric(
+            work[col],
+            errors="coerce",
+        ).fillna(0)
+
+    summary = {
+        "on_hand": float(work["Остаток"].sum()),
+        "in_from": float(work["В пути от клиента"].sum()),
+        "in_to": float(work["В пути к клиенту"].sum()),
+        "in_transit": float(
+            work["В пути от клиента"].sum()
+            + work["В пути к клиенту"].sum()
+        ),
+        "total": float(work["Итого"].sum()),
+        "nm_count": int(
+            work["NM ID"].dropna().nunique()
+            if "NM ID" in work.columns
+            else 0
+        ),
+        "sizes_count": int(len(work)),
+    }
+
+    brands = (
+        work.groupby(
+            "Бренд",
+            dropna=False,
+            as_index=False,
+        )
+        .agg(
+            on_hand=("Остаток", "sum"),
+            total=("Итого", "sum"),
+        )
+        .rename(columns={"Бренд": "brand"})
+        .sort_values("on_hand", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    categories = (
+        work.groupby(
+            "Категория",
+            dropna=False,
+            as_index=False,
+        )
+        .agg(
+            on_hand=("Остаток", "sum"),
+            total=("Итого", "sum"),
+        )
+        .rename(columns={"Категория": "category"})
+        .sort_values("on_hand", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    return {
+        "products": work,
+        "summary": summary,
+        "brands": brands,
+        "categories": categories,
+    }
+
+
+# =============================================================================
+# СНИМОК ДЛЯ ПРОИСШЕСТВИЯ
+# =============================================================================
+
+def get_warehouse_incident_snapshot(
+    warehouse_name,
+    incident_date,
+) -> dict:
+    """
+    Снимок физического остатка склада на дату происшествия.
+
+    ВАЖНО:
+    - товары в пути НЕ включаем;
+    - себестоимость в inventories.pre_wo хранится в копейках;
+    - в результат возвращаем стоимость уже в рублях;
+    - используем последнюю доступную дату остатков <= incident_date.
+    """
+    warehouse_name = _clean_warehouse_name(
+        warehouse_name
+    )
+
+    effective_date = get_effective_stock_date(
+        incident_date
+    )
+
+    if effective_date is None:
+        return {
+            "effective_date": None,
+            "on_hand": 0,
+            "nm_count": 0,
+            "accounting_cost": 0.0,
+            "management_cost": 0.0,
+        }
+
+    with get_duckdb_conn_with_opt() as con:
+        row = con.execute(
+            """
+            WITH
+            stock AS (
+                SELECT
+                    nm_id,
+                    SUM(
+                        COALESCE(quantity, 0)
+                    ) AS quantity_on_hand
+
+                FROM stocks.unpacked_stocks
+
+                WHERE
+                    date_from::DATE = $report_date::DATE
+                    AND TRIM(warehouse_name) = $warehouse_name
+
+                GROUP BY
+                    nm_id
+            ),
+
+            nm_usk AS (
+                SELECT
+                    card_id AS nm_id,
+                    usk
+
+                FROM inventories.usk
+
+                WHERE
+                    card_id IS NOT NULL
+                    AND usk IS NOT NULL
+
+                GROUP BY
+                    card_id,
+                    usk
+            ),
+
+            costs AS (
+                SELECT
+                    nu.nm_id,
+
+                    MAX(
+                        w.adjust_wo[-1]
+                    ) AS last_costs,
+
+                    MAX(
+                        w.adjust_man_wo[-1]
+                    ) AS last_man_costs
+
+                FROM nm_usk nu
+
+                LEFT JOIN inventories.pre_wo w
+                    ON w.usk = nu.usk
+
+                GROUP BY
+                    nu.nm_id
+            )
+
+            SELECT
+                SUM(
+                    COALESCE(s.quantity_on_hand, 0)
+                ) AS on_hand,
+
+                COUNT(
+                    DISTINCT
+                    CASE
+                        WHEN COALESCE(s.quantity_on_hand, 0) > 0
+                        THEN s.nm_id
+                    END
+                ) AS nm_count,
+
+                SUM(
+                    COALESCE(s.quantity_on_hand, 0)
+                    * COALESCE(c.last_costs, 0)
+                ) / 100.0 AS accounting_cost,
+
+                SUM(
+                    COALESCE(s.quantity_on_hand, 0)
+                    * COALESCE(c.last_man_costs, 0)
+                ) / 100.0 AS management_cost
+
+            FROM stock s
+
+            LEFT JOIN costs c
+                ON c.nm_id = s.nm_id
+            """,
+            {
+                "report_date": effective_date,
+                "warehouse_name": warehouse_name,
+            },
+        ).fetchone()
+
+    row = row or (0, 0, 0, 0)
+
+    return {
+        "effective_date": (
+            pd.to_datetime(
+                effective_date
+            ).strftime("%Y-%m-%d")
+        ),
+        "on_hand": int(row[0] or 0),
+        "nm_count": int(row[1] or 0),
+        "accounting_cost": float(row[2] or 0),
+        "management_cost": float(row[3] or 0),
+    }

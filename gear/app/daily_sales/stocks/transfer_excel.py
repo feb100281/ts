@@ -1,190 +1,3 @@
-# # gear/app/daily_sales/stocks/transfer_excel.py
-# from __future__ import annotations
-
-# import io
-# from datetime import datetime
-
-# import pandas as pd
-
-
-# def build_transfer_plan_excel(rows):
-#     """
-#     Excel-план перемещения.
-#     Ничего в БД не записывает.
-#     """
-#     df = pd.DataFrame(rows or [])
-
-#     if df.empty:
-#         raise ValueError("Нет строк для формирования плана.")
-
-#     if "Переместить" not in df:
-#         raise ValueError("Нет колонки 'Переместить'.")
-
-#     df["Переместить"] = pd.to_numeric(
-#         df["Переместить"],
-#         errors="coerce",
-#     ).fillna(0)
-
-#     df["Доступно"] = pd.to_numeric(
-#         df.get("Доступно"),
-#         errors="coerce",
-#     ).fillna(0)
-
-#     df = df[df["Переместить"] > 0].copy()
-
-#     if df.empty:
-#         raise ValueError("Не указано количество для перемещения.")
-
-#     if (df["Переместить"] > df["Доступно"]).any():
-#         raise ValueError(
-#             "Количество перемещения превышает доступный остаток."
-#         )
-
-#     if df["Куда"].isna().any() or (
-#         df["Куда"].astype(str).str.strip() == ""
-#     ).any():
-#         raise ValueError("Не для всех строк выбран склад назначения.")
-
-#     columns = [
-#         "Откуда",
-#         "Регион откуда",
-#         "Куда",
-#         "Бренд",
-#         "Категория",
-#         "Артикул",
-#         "Наименование",
-#         "Размер",
-#         "Доступно",
-#         "Переместить",
-#         "NM ID",
-#         "Chrt ID",
-#     ]
-#     columns = [col for col in columns if col in df.columns]
-#     df = df[columns]
-
-#     output = io.BytesIO()
-
-#     with pd.ExcelWriter(
-#         output,
-#         engine="xlsxwriter",
-#     ) as writer:
-#         df.to_excel(
-#             writer,
-#             sheet_name="План перемещения",
-#             index=False,
-#         )
-
-#         workbook = writer.book
-#         worksheet = writer.sheets["План перемещения"]
-
-#         worksheet.hide_gridlines(2)
-#         worksheet.freeze_panes(1, 0)
-#         worksheet.autofilter(
-#             0,
-#             0,
-#             len(df),
-#             len(df.columns) - 1,
-#         )
-
-#         header_format = workbook.add_format(
-#             {
-#                 "bold": True,
-#                 "font_name": "Arial",
-#                 "font_size": 10,
-#                 "bg_color": "#E3ECE8",
-#                 "font_color": "#18352F",
-#                 "border": 1,
-#                 "border_color": "#C5D2CC",
-#                 "align": "center",
-#                 "valign": "vcenter",
-#             }
-#         )
-
-#         text_format = workbook.add_format(
-#             {
-#                 "font_name": "Arial",
-#                 "font_size": 10,
-#                 "border": 1,
-#                 "border_color": "#E2E8E5",
-#             }
-#         )
-
-#         number_format = workbook.add_format(
-#             {
-#                 "font_name": "Arial",
-#                 "font_size": 10,
-#                 "border": 1,
-#                 "border_color": "#E2E8E5",
-#                 "num_format": "#,##0",
-#             }
-#         )
-
-#         for col_num, value in enumerate(df.columns):
-#             worksheet.write(
-#                 0,
-#                 col_num,
-#                 value,
-#                 header_format,
-#             )
-
-#         numeric_cols = {
-#             "Доступно",
-#             "Переместить",
-#             "NM ID",
-#             "Chrt ID",
-#         }
-
-#         for row_num in range(1, len(df) + 1):
-#             for col_num, column in enumerate(df.columns):
-#                 value = df.iloc[row_num - 1, col_num]
-#                 fmt = (
-#                     number_format
-#                     if column in numeric_cols
-#                     else text_format
-#                 )
-
-#                 if pd.isna(value):
-#                     value = ""
-
-#                 worksheet.write(
-#                     row_num,
-#                     col_num,
-#                     value,
-#                     fmt,
-#                 )
-
-#         widths = {
-#             "Откуда": 28,
-#             "Регион откуда": 28,
-#             "Куда": 28,
-#             "Бренд": 18,
-#             "Категория": 22,
-#             "Артикул": 18,
-#             "Наименование": 45,
-#             "Размер": 12,
-#             "Доступно": 14,
-#             "Переместить": 14,
-#             "NM ID": 16,
-#             "Chrt ID": 16,
-#         }
-
-#         for idx, column in enumerate(df.columns):
-#             worksheet.set_column(
-#                 idx,
-#                 idx,
-#                 widths.get(column, 16),
-#             )
-
-#     output.seek(0)
-
-#     filename = (
-#         "transfer_plan_"
-#         f"{datetime.now():%Y-%m-%d_%H-%M}.xlsx"
-#     )
-
-#     return output.getvalue(), filename
-
-
 # gear/app/daily_sales/stocks/transfer_excel.py
 
 from __future__ import annotations
@@ -207,29 +20,41 @@ def _write_dataframe(
     numeric_cols: set,
 ):
     """
-    Унифицированное оформление листа Excel.
+    Унифицированное аккуратное оформление листа Excel.
+
+    Стиль:
+    - Helvetica Light, 10 pt
+    - закреплена шапка и первая колонка
+    - лёгкая зебра
+    - тонкие светло-серые границы
+    - фильтры
+    - без стандартной сетки Excel
     """
 
-    df.to_excel(
-        writer,
-        sheet_name=sheet_name,
-        index=False,
+    workbook = writer.book
+
+    worksheet = workbook.add_worksheet(
+        sheet_name
     )
 
-    workbook = writer.book
-    worksheet = writer.sheets[
-        sheet_name
-    ]
+    writer.sheets[sheet_name] = worksheet
 
-    # -------------------------------------------------------------------------
-    # Вид
-    # -------------------------------------------------------------------------
-
+    # ================================================================
+    # Общий вид
+    # ================================================================
     worksheet.hide_gridlines(2)
 
+    # Закрепляем шапку + первую колонку
     worksheet.freeze_panes(
         1,
+        1,
+    )
+
+    worksheet.set_zoom(90)
+
+    worksheet.set_row(
         0,
+        28,
     )
 
     if len(df.columns) > 0:
@@ -240,136 +65,185 @@ def _write_dataframe(
             len(df.columns) - 1,
         )
 
-    worksheet.set_row(
-        0,
-        24,
-    )
+    # ================================================================
+    # Цвета / шрифт
+    # ================================================================
+    font_name = "Helvetica Light"
+    font_size = 10
 
-    # -------------------------------------------------------------------------
+    header_bg = "#E8EFEC"
+    header_font = "#203832"
+
+    row_bg = "#FFFFFF"
+    row_alt_bg = "#F7F9F8"
+
+    border_color = "#D9DEDC"
+
+    # ================================================================
     # Форматы
-    # -------------------------------------------------------------------------
+    # ================================================================
+    header_format = workbook.add_format(
+        {
+            "font_name": font_name,
+            "font_size": font_size,
+            "bold": False,
 
-    header_format = (
-        workbook.add_format(
-            {
-                "bold": True,
+            "bg_color": header_bg,
+            "font_color": header_font,
 
-                "font_name": "Arial",
-                "font_size": 10,
+            "border": 1,
+            "border_color": border_color,
 
-                "bg_color": "#E3ECE8",
-                "font_color": "#18352F",
+            "align": "center",
+            "valign": "vcenter",
 
-                "border": 1,
-                "border_color": "#C5D2CC",
-
-                "align": "center",
-                "valign": "vcenter",
-            }
-        )
+            "text_wrap": True,
+        }
     )
 
-    text_format = (
-        workbook.add_format(
-            {
-                "font_name": "Arial",
-                "font_size": 10,
+    text_format = workbook.add_format(
+        {
+            "font_name": font_name,
+            "font_size": font_size,
 
-                "border": 1,
-                "border_color": "#E2E8E5",
+            "bg_color": row_bg,
 
-                "valign": "vcenter",
-            }
-        )
+            "border": 1,
+            "border_color": border_color,
+
+            "align": "left",
+            "valign": "vcenter",
+        }
     )
 
-    number_format = (
-        workbook.add_format(
-            {
-                "font_name": "Arial",
-                "font_size": 10,
+    text_alt_format = workbook.add_format(
+        {
+            "font_name": font_name,
+            "font_size": font_size,
 
-                "border": 1,
-                "border_color": "#E2E8E5",
+            "bg_color": row_alt_bg,
 
-                "num_format": "#,##0",
+            "border": 1,
+            "border_color": border_color,
 
-                "valign": "vcenter",
-            }
-        )
+            "align": "left",
+            "valign": "vcenter",
+        }
     )
 
-    decimal_format = (
-        workbook.add_format(
-            {
-                "font_name": "Arial",
-                "font_size": 10,
+    number_format = workbook.add_format(
+        {
+            "font_name": font_name,
+            "font_size": font_size,
 
-                "border": 1,
-                "border_color": "#E2E8E5",
+            "bg_color": row_bg,
 
-                "num_format": "#,##0.00",
+            "border": 1,
+            "border_color": border_color,
 
-                "valign": "vcenter",
-            }
-        )
+            "align": "right",
+            "valign": "vcenter",
+
+            "num_format": "#,##0",
+        }
     )
 
-    # -------------------------------------------------------------------------
-    # Header
-    # -------------------------------------------------------------------------
+    number_alt_format = workbook.add_format(
+        {
+            "font_name": font_name,
+            "font_size": font_size,
 
-    for col_num, value in enumerate(
+            "bg_color": row_alt_bg,
+
+            "border": 1,
+            "border_color": border_color,
+
+            "align": "right",
+            "valign": "vcenter",
+
+            "num_format": "#,##0",
+        }
+    )
+
+    # ================================================================
+    # Шапка
+    # ================================================================
+    for col_num, column in enumerate(
         df.columns
     ):
         worksheet.write(
             0,
             col_num,
-            value,
+            column,
             header_format,
         )
 
-    # -------------------------------------------------------------------------
+    # ================================================================
     # Данные
-    # -------------------------------------------------------------------------
-
-    decimal_cols = set()
-
-    for row_num in range(
-        1,
-        len(df) + 1,
+    # ================================================================
+    for row_num, row in enumerate(
+        df.itertuples(
+            index=False,
+            name=None,
+        ),
+        start=1,
     ):
-        for col_num, column in enumerate(
-            df.columns
-        ):
-            value = df.iloc[
-                row_num - 1,
-                col_num,
+        is_alt = (
+            row_num % 2 == 0
+        )
+
+        worksheet.set_row(
+            row_num,
+            20,
+        )
+
+        for col_num, value in enumerate(row):
+            column = df.columns[
+                col_num
             ]
 
             if pd.isna(value):
                 value = ""
 
-            if column in decimal_cols:
-                fmt = decimal_format
+            if column in numeric_cols:
+                fmt = (
+                    number_alt_format
+                    if is_alt
+                    else number_format
+                )
 
-            elif column in numeric_cols:
-                fmt = number_format
+                if value == "":
+                    worksheet.write_blank(
+                        row_num,
+                        col_num,
+                        None,
+                        fmt,
+                    )
+                else:
+                    worksheet.write_number(
+                        row_num,
+                        col_num,
+                        float(value),
+                        fmt,
+                    )
 
             else:
-                fmt = text_format
+                fmt = (
+                    text_alt_format
+                    if is_alt
+                    else text_format
+                )
 
-            worksheet.write(
-                row_num,
-                col_num,
-                value,
-                fmt,
-            )
+                worksheet.write(
+                    row_num,
+                    col_num,
+                    value,
+                    fmt,
+                )
 
-    # -------------------------------------------------------------------------
-    # Ширины
-    # -------------------------------------------------------------------------
-
+    # ================================================================
+    # Ширина колонок
+    # ================================================================
     for idx, column in enumerate(
         df.columns
     ):
@@ -381,7 +255,6 @@ def _write_dataframe(
                 16,
             ),
         )
-
 
 # =============================================================================
 # EXCEL ПЛАНА ПЕРЕМЕЩЕНИЯ

@@ -472,12 +472,15 @@ def build_regions_chart(
     df: pd.DataFrame,
 ):
     """
-    На складе + в пути по регионам.
+    Профессиональный stacked bar по регионам.
 
-    График только информационный:
-    он не фильтрует таблицу и не реагирует на клики.
+    Показывает:
+    - физический остаток;
+    - товары в пути;
+    - общий объём;
+    - долю региона в общем объёме;
+    - число складов в hover.
     """
-
     if df.empty:
         return empty_figure(
             "Нет данных по регионам",
@@ -497,6 +500,18 @@ def build_regions_chart(
             errors="coerce",
         ).fillna(0)
 
+    grand_total = float(
+        work["total_qty"].sum()
+    )
+
+    work["share_pct"] = (
+        work["total_qty"]
+        / grand_total
+        * 100
+        if grand_total > 0
+        else 0
+    )
+
     work = work.sort_values(
         "total_qty",
         ascending=True,
@@ -507,153 +522,141 @@ def build_regions_chart(
             "region",
             "warehouses",
             "total_qty",
+            "share_pct",
         ]
     ].to_numpy()
 
     fig = go.Figure()
 
-    # =========================================================================
-    # На складе
-    # =========================================================================
-
     fig.add_trace(
         go.Bar(
-            y=work[
-                "region"
-            ],
-
-            x=work[
-                "on_hand"
-            ],
-
+            y=work["region"],
+            x=work["on_hand"],
             name="На складе",
-
             orientation="h",
-
             marker=dict(
-                color=(
-                    "rgba(0,122,94,0.80)"
-                ),
+                color="rgba(0,122,94,0.82)",
             ),
-
-            customdata=(
-                customdata
-            ),
-
+            customdata=customdata,
             hovertemplate=(
-                "<b>%{customdata[0]}</b>"
-                "<br><br>"
-
-                "На складе: "
-                "<b>%{x:,.0f} шт</b>"
-                "<br>"
-
-                "Складов: "
-                "<b>%{customdata[1]:,.0f}</b>"
-                "<br>"
-
-                "Всего: "
-                "<b>%{customdata[2]:,.0f} шт</b>"
+                "<b>%{customdata[0]}</b><br><br>"
+                "На складе: <b>%{x:,.0f} шт</b><br>"
+                "Всего: <b>%{customdata[2]:,.0f} шт</b><br>"
+                "Доля: <b>%{customdata[3]:.1f}%</b><br>"
+                "Складов: <b>%{customdata[1]:,.0f}</b>"
                 "<extra></extra>"
             ),
         )
     )
 
-    # =========================================================================
-    # В пути
-    # =========================================================================
-
     fig.add_trace(
         go.Bar(
-            y=work[
-                "region"
-            ],
-
-            x=work[
-                "in_transit"
-            ],
-
+            y=work["region"],
+            x=work["in_transit"],
             name="В пути",
-
             orientation="h",
-
             marker=dict(
-                color=(
-                    "rgba(96,116,109,0.30)"
-                ),
+                color="rgba(96,116,109,0.28)",
             ),
-
-            customdata=(
-                customdata
-            ),
-
+            customdata=customdata,
             hovertemplate=(
-                "<b>%{customdata[0]}</b>"
-                "<br><br>"
-
-                "В пути: "
-                "<b>%{x:,.0f} шт</b>"
+                "<b>%{customdata[0]}</b><br><br>"
+                "В пути: <b>%{x:,.0f} шт</b><br>"
+                "Всего: <b>%{customdata[2]:,.0f} шт</b><br>"
+                "Доля: <b>%{customdata[3]:.1f}%</b>"
                 "<extra></extra>"
             ),
+        )
+    )
+
+    # Подпись справа от суммарного столбика.
+    fig.add_trace(
+        go.Scatter(
+            x=work["total_qty"],
+            y=work["region"],
+            mode="text",
+            text=[
+                (
+                    f"{value:,.0f}".replace(",", " ")
+                    + f" · {share:.1f}%"
+                )
+                for value, share
+                in zip(
+                    work["total_qty"],
+                    work["share_pct"],
+                )
+            ],
+            textposition="middle right",
+            textfont=dict(
+                family="Arial",
+                size=11,
+                color=COLOR_TEXT,
+            ),
+            hoverinfo="skip",
+            showlegend=False,
+            cliponaxis=False,
         )
     )
 
     height = max(
-        400,
-        90
-        +
-        len(work)
-        * 48,
+        420,
+        95 + len(work) * 48,
     )
+
+    max_total = float(
+        work["total_qty"].max()
+    ) if not work.empty else 0
 
     fig.update_layout(
         height=height,
-
         barmode="stack",
-
         paper_bgcolor="white",
         plot_bgcolor="white",
-
         margin=dict(
             l=10,
-            r=25,
-            t=20,
-            b=25,
+            r=110,
+            t=25,
+            b=35,
         ),
-
         legend=dict(
             orientation="h",
             y=1.08,
             x=0,
         ),
-
         xaxis=dict(
             showgrid=True,
-
-            gridcolor=(
-                COLOR_GRID
-            ),
-
+            gridcolor=COLOR_GRID,
             zeroline=False,
-
             title=None,
+            range=[
+                0,
+                max_total * 1.16
+                if max_total > 0
+                else 1,
+            ],
+            tickformat=",.0f",
         ),
-
         yaxis=dict(
             title=None,
-
             showgrid=False,
-
             automargin=True,
         ),
-
         font=dict(
             family="Arial",
             color=COLOR_TEXT,
         ),
-
-        # Никакой логики выбора / сортировки по клику.
         clickmode="none",
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor="#D6DFDB",
+            font=dict(
+                family="Arial",
+                size=12,
+                color=COLOR_TEXT,
+            ),
+            align="left",
+        ),
     )
 
     return fig
+

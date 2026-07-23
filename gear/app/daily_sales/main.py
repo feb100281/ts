@@ -149,15 +149,39 @@ class MainWindow:
             ],
         )
 
+        # self.content_container = dcc.Loading(
+        #     dmc.Container(
+        #         id=self.ag_container_id,
+        #         fluid=True,
+        #         px=0,
+        #         style={"display": "block"},
+        #     ),
+        #     type="graph",
+        # )
+        
+        
         self.content_container = dcc.Loading(
-            dmc.Container(
-                id=self.ag_container_id,
-                fluid=True,
-                px=0,
-                style={"display": "block"},
-            ),
-            type="graph",
-        )
+    type="dot",
+
+    delay_show=150,
+    delay_hide=100,
+
+    children=dmc.Container(
+        id=self.ag_container_id,
+
+        fluid=True,
+
+        px=0,
+
+        style={
+            "display": "block",
+
+            # В момент переключения вкладки
+            # создаём нормальную область под loader.
+            "minHeight": "320px",
+        },
+    ),
+)
 
         self.details_container = dcc.Loading(
             dmc.Container(
