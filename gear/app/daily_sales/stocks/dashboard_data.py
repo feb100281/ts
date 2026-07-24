@@ -1362,6 +1362,10 @@ def get_warehouse_incident_snapshot(
             "nm_count": 0,
             "accounting_cost": 0.0,
             "management_cost": 0.0,
+            "no_accounting_cost_qty": 0,
+            "no_accounting_cost_nm_count": 0,
+            "no_management_cost_qty": 0,
+            "no_management_cost_nm_count": 0,
         }
 
     with get_duckdb_conn_with_opt() as con:
@@ -1440,12 +1444,52 @@ def get_warehouse_incident_snapshot(
                     * COALESCE(c.last_costs, 0)
                 ) / 100.0 AS accounting_cost,
 
-                SUM(
-                    COALESCE(s.quantity_on_hand, 0)
-                    * COALESCE(c.last_man_costs, 0)
-                ) / 100.0 AS management_cost
+SUM(
+    COALESCE(s.quantity_on_hand, 0)
+    * COALESCE(c.last_man_costs, 0)
+) / 100.0 AS management_cost,
 
-            FROM stock s
+SUM(
+    CASE
+        WHEN
+            COALESCE(s.quantity_on_hand, 0) > 0
+            AND COALESCE(c.last_costs, 0) = 0
+        THEN COALESCE(s.quantity_on_hand, 0)
+        ELSE 0
+    END
+) AS no_accounting_cost_qty,
+
+COUNT(
+    DISTINCT
+    CASE
+        WHEN
+            COALESCE(s.quantity_on_hand, 0) > 0
+            AND COALESCE(c.last_costs, 0) = 0
+        THEN s.nm_id
+    END
+) AS no_accounting_cost_nm_count,
+
+SUM(
+    CASE
+        WHEN
+            COALESCE(s.quantity_on_hand, 0) > 0
+            AND COALESCE(c.last_man_costs, 0) = 0
+        THEN COALESCE(s.quantity_on_hand, 0)
+        ELSE 0
+    END
+) AS no_management_cost_qty,
+
+COUNT(
+    DISTINCT
+    CASE
+        WHEN
+            COALESCE(s.quantity_on_hand, 0) > 0
+            AND COALESCE(c.last_man_costs, 0) = 0
+        THEN s.nm_id
+    END
+) AS no_management_cost_nm_count
+
+FROM stock s
 
             LEFT JOIN costs c
                 ON c.nm_id = s.nm_id
@@ -1456,16 +1500,37 @@ def get_warehouse_incident_snapshot(
             },
         ).fetchone()
 
-    row = row or (0, 0, 0, 0)
+    row = row or (
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
 
     return {
-        "effective_date": (
-            pd.to_datetime(
-                effective_date
-            ).strftime("%Y-%m-%d")
-        ),
-        "on_hand": int(row[0] or 0),
-        "nm_count": int(row[1] or 0),
-        "accounting_cost": float(row[2] or 0),
-        "management_cost": float(row[3] or 0),
-    }
+            "effective_date": (
+                pd.to_datetime(
+                    effective_date
+                ).strftime("%Y-%m-%d")
+            ),
+
+            "on_hand": int(row[0] or 0),
+
+            "nm_count": int(row[1] or 0),
+
+            "accounting_cost": float(row[2] or 0),
+
+            "management_cost": float(row[3] or 0),
+
+            "no_accounting_cost_qty": int(row[4] or 0),
+
+            "no_accounting_cost_nm_count": int(row[5] or 0),
+
+            "no_management_cost_qty": int(row[6] or 0),
+
+            "no_management_cost_nm_count": int(row[7] or 0),
+        }

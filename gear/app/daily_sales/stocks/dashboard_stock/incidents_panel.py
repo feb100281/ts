@@ -58,7 +58,9 @@ def _incident_card(
     - физический остаток;
     - количество NM ID;
     - бухгалтерская стоимость;
-    - управленческая стоимость.
+    - управленческая стоимость;
+    - количество товара без бухгалтерской себестоимости;
+    - количество товара без управленческой себестоимости.
 
     Товар в пути в оценку происшествия не включается.
     """
@@ -119,6 +121,112 @@ def _incident_card(
         if effective_date
         else "нет данных"
     )
+
+    # =========================================================================
+    # Основные показатели
+    # =========================================================================
+
+    on_hand = float(
+        snapshot.get(
+            "on_hand",
+            0,
+        )
+        or 0
+    )
+
+    has_physical_stock = (
+        on_hand > 0
+    )
+
+    # =========================================================================
+    # Товары без бухгалтерской себестоимости
+    # =========================================================================
+
+    no_accounting_cost_qty = int(
+        snapshot.get(
+            "no_accounting_cost_qty",
+            0,
+        )
+        or 0
+    )
+
+    no_accounting_cost_nm_count = int(
+        snapshot.get(
+            "no_accounting_cost_nm_count",
+            0,
+        )
+        or 0
+    )
+
+    # =========================================================================
+    # Товары без управленческой себестоимости
+    # =========================================================================
+
+    no_management_cost_qty = int(
+        snapshot.get(
+            "no_management_cost_qty",
+            0,
+        )
+        or 0
+    )
+
+    no_management_cost_nm_count = int(
+        snapshot.get(
+            "no_management_cost_nm_count",
+            0,
+        )
+        or 0
+    )
+
+    # =========================================================================
+    # Пояснение к финансовой оценке
+    # =========================================================================
+
+    if not effective_date:
+
+        footnote = (
+            "На дату, предшествующую происшествию, "
+            "данные об остатках отсутствуют. "
+            "Финансовая оценка происшествия не рассчитывается."
+        )
+
+        footnote_color = INCIDENT_ACCENT
+
+    elif not has_physical_stock:
+
+        footnote = (
+            "На конец дня, предшествующего происшествию, "
+            "физический товарный остаток на складе отсутствовал. "
+            "Финансовая оценка происшествия не рассчитывается."
+        )
+
+        footnote_color = MUTED
+
+    elif (
+        no_accounting_cost_qty > 0
+        or no_management_cost_qty > 0
+    ):
+
+        footnote = (
+            "Оценка рассчитана только по товару, физически находившемуся "
+            "на складе на конец дня, предшествующего происшествию; "
+            "позиции в пути не включены. "
+            "Товары без определённой себестоимости не включены "
+            "в соответствующую стоимостную оценку."
+        )
+
+        footnote_color = "dimmed"
+
+    else:
+
+        footnote = (
+            "Оценка рассчитана только по товару, "
+            "физически находившемуся на складе "
+            "на конец дня, предшествующего происшествию; "
+            "позиции в пути не включены."
+        )
+
+        footnote_color = "dimmed"
 
     # =========================================================================
     # Карточка
@@ -261,7 +369,8 @@ def _incident_card(
             dmc.SimpleGrid(
                 cols={
                     "base": 2,
-                    "sm": 4,
+                    "sm": 3,
+                    "lg": 6,
                 },
 
                 spacing="md",
@@ -287,7 +396,7 @@ def _incident_card(
 
                             dmc.Text(
                                 (
-                                    f"{fmt(snapshot['on_hand'])} "
+                                    f"{fmt(snapshot.get('on_hand', 0))} "
                                     "шт"
                                 ),
 
@@ -317,7 +426,7 @@ def _incident_card(
 
                             dmc.Text(
                                 (
-                                    f"{fmt(snapshot['nm_count'])} "
+                                    f"{fmt(snapshot.get('nm_count', 0))} "
                                     "NM ID"
                                 ),
 
@@ -347,9 +456,16 @@ def _incident_card(
 
                             dmc.Text(
                                 (
-                                    f"{fmt_money(
-                                        snapshot['accounting_cost']
-                                    )} ₽"
+                                    (
+                                        f"{fmt_money(
+                                            snapshot.get(
+                                                'accounting_cost',
+                                                0,
+                                            )
+                                        )} ₽"
+                                    )
+                                    if has_physical_stock
+                                    else "—"
                                 ),
 
                                 fw=700,
@@ -357,6 +473,65 @@ def _incident_card(
                                 size="lg",
 
                                 c=TEXT,
+                            ),
+                        ],
+                    ),
+
+                    # ---------------------------------------------------------
+                    # Без бухгалтерской себестоимости
+                    # ---------------------------------------------------------
+
+                    html.Div(
+                        children=[
+
+                            dmc.Text(
+                                "Без бух. с/с",
+
+                                size="xs",
+
+                                c="dimmed",
+                            ),
+
+                            dmc.Text(
+                                (
+                                    f"{fmt(no_accounting_cost_qty)} шт"
+                                    if has_physical_stock
+                                    else "—"
+                                ),
+
+                                fw=700,
+
+                                size="lg",
+
+                                c=(
+                                    INCIDENT_ACCENT
+                                    if (
+                                        has_physical_stock
+                                        and no_accounting_cost_qty > 0
+                                    )
+                                    else TEXT
+                                ),
+                            ),
+
+                            dmc.Text(
+                                (
+                                    (
+                                        f"{fmt(
+                                            no_accounting_cost_nm_count
+                                        )} NM ID"
+                                    )
+                                    if (
+                                        has_physical_stock
+                                        and no_accounting_cost_qty > 0
+                                    )
+                                    else ""
+                                ),
+
+                                size="xs",
+
+                                c="dimmed",
+
+                                mt=1,
                             ),
                         ],
                     ),
@@ -378,9 +553,16 @@ def _incident_card(
 
                             dmc.Text(
                                 (
-                                    f"{fmt_money(
-                                        snapshot['management_cost']
-                                    )} ₽"
+                                    (
+                                        f"{fmt_money(
+                                            snapshot.get(
+                                                'management_cost',
+                                                0,
+                                            )
+                                        )} ₽"
+                                    )
+                                    if has_physical_stock
+                                    else "—"
                                 ),
 
                                 fw=700,
@@ -388,6 +570,65 @@ def _incident_card(
                                 size="lg",
 
                                 c=TEXT,
+                            ),
+                        ],
+                    ),
+
+                    # ---------------------------------------------------------
+                    # Без управленческой себестоимости
+                    # ---------------------------------------------------------
+
+                    html.Div(
+                        children=[
+
+                            dmc.Text(
+                                "Без упр. с/с",
+
+                                size="xs",
+
+                                c="dimmed",
+                            ),
+
+                            dmc.Text(
+                                (
+                                    f"{fmt(no_management_cost_qty)} шт"
+                                    if has_physical_stock
+                                    else "—"
+                                ),
+
+                                fw=700,
+
+                                size="lg",
+
+                                c=(
+                                    INCIDENT_ACCENT
+                                    if (
+                                        has_physical_stock
+                                        and no_management_cost_qty > 0
+                                    )
+                                    else TEXT
+                                ),
+                            ),
+
+                            dmc.Text(
+                                (
+                                    (
+                                        f"{fmt(
+                                            no_management_cost_nm_count
+                                        )} NM ID"
+                                    )
+                                    if (
+                                        has_physical_stock
+                                        and no_management_cost_qty > 0
+                                    )
+                                    else ""
+                                ),
+
+                                size="xs",
+
+                                c="dimmed",
+
+                                mt=1,
                             ),
                         ],
                     ),
@@ -399,16 +640,11 @@ def _incident_card(
             # =================================================================
 
             dmc.Text(
-                (
-                    "Оценка рассчитана только по товару, "
-                    "физически находившемуся на складе "
-                    "на конец дня, предшествующего происшествию; "
-                    "позиции в пути не включены."
-                ),
+                footnote,
 
                 size="xs",
 
-                c="dimmed",
+                c=footnote_color,
 
                 mt="md",
             ),
