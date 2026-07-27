@@ -28,3 +28,11 @@ class Stats(models.Model):
         managed = False
         verbose_name = "Статистика и прочее"
         verbose_name_plural = "Статистика и прочее"
+        
+        
+
+class Loans(models.Model):
+    class Meta:
+        managed = False
+        verbose_name = "Займы и кредиты"
+        verbose_name_plural = "Займы и кредиты"

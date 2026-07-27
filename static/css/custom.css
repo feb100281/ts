@@ -469,7 +469,9 @@
 .fa-display,
 .fa-screwdriver-wrench,
 .fa-scroll,
-.fa-magnifying-glass-dollar
+.fa-magnifying-glass-dollar,
+.fa-hand-holding-dollar,
+.fa-square-poll-vertical
 
  {
     color: var(--color-analytics) !important;

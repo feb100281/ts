@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import SegmentsSales, DailySales, CostsControl, Stats
+from .models import SegmentsSales, DailySales, CostsControl, Stats, Loans
 
 
 @admin.register(SegmentsSales)
@@ -118,3 +118,33 @@ class StatsDashboardAdmin(admin.ModelAdmin):
         return (
             self.model.objects.none()
         )
+        
+        
+
+@admin.register(Loans)
+class LoansDashboardAdmin(admin.ModelAdmin):
+
+    change_list_template = (
+        "admin/gear/loans/loans.html"
+    )
+    def has_add_permission(
+        self,
+        request
+    ):
+        return False
+
+    def has_delete_permission(
+        self,
+        request,
+        obj=None
+    ):
+        return False
+
+    def get_queryset(
+        self,
+        request
+    ):
+        return (
+            self.model.objects.none()
+        )
+
