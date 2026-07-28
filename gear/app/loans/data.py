@@ -669,3 +669,42 @@ def get_contract_transactions(
     )
 
     return df
+
+
+
+
+def get_contract_documents(
+    contract_id: int,
+) -> list[dict]:
+    """
+    Возвращает файлы, прикреплённые к договору.
+    """
+
+    query = """
+        SELECT
+            cf.id,
+            cf.doc_type,
+            cf.doc_date::date AS doc_date,
+            cf.doc_number,
+            cf.amount,
+            cf.description,
+            cf.file
+        FROM public.contracts_contractfiles cf
+        WHERE
+            cf.contract_id = %s
+            AND cf.file IS NOT NULL
+            AND cf.file <> ''
+        ORDER BY
+            cf.doc_date NULLS LAST,
+            cf.id
+    """
+
+    with get_db_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                query,
+                (contract_id,),
+            )
+            rows = cur.fetchall()
+
+    return [dict(row) for row in rows]

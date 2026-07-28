@@ -1,3 +1,4 @@
+# gear/app/loans/layout.py
 from __future__ import annotations
 
 import dash_mantine_components as dmc

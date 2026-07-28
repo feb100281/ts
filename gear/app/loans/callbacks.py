@@ -37,6 +37,9 @@ from .data import (
     get_interest_flow,
     get_loans_snapshot,
     get_portfolio_dynamics,
+    get_contract_documents,
+    
+    
 )
 from .export import build_excel_bytes
 from .filters import (
@@ -93,6 +96,14 @@ from .insights import (
 
 from .excel import (
     build_reconciliation_excel,
+)
+
+
+from .selected_loan_panel import (
+    SELECTED_LOAN_DOCUMENTS_ID,
+    SELECTED_LOAN_DOCUMENTS_COUNT_ID,
+    document_row,
+    empty_documents_state,
 )
 
 
@@ -589,6 +600,189 @@ def register_loans_callbacks(app):
             ),
         }
     
+    # @app.callback(
+    #     Output(
+    #         SELECTED_LOAN_TITLE_ID,
+    #         "children",
+    #     ),
+    #     Output(
+    #         SELECTED_LOAN_META_ID,
+    #         "children",
+    #     ),
+    #     Output(
+    #         SELECTED_LOAN_CHART_ID,
+    #         "figure",
+    #     ),
+    #     Output(
+    #         TRANSACTIONS_GRID_ID,
+    #         "rowData",
+    #     ),
+    #     Output(
+    #         TRANSACTIONS_TITLE_ID,
+    #         "children",
+    #     ),
+
+    #     Input(
+    #         SELECTED_LOAN_STORE_ID,
+    #         "data",
+    #     ),
+    #     State(
+    #         REPORT_DATE_ID,
+    #         "value",
+    #     ),
+    # )
+    # def update_selected_loan(
+    #     selected_loan,
+    #     report_date,
+    # ):
+    #     # =============================================================
+    #     # Ничего не выбрано
+    #     # =============================================================
+
+    #     if not selected_loan:
+    #         return (
+    #             "Договор не выбран",
+
+    #             "Выберите договор в реестре выше",
+
+    #             empty_figure(
+    #                 "Выберите договор в реестре",
+    #                 height=360,
+    #             ),
+
+    #             [],
+
+    #             # TRANSACTIONS_TITLE_ID
+    #             "История операций",
+    #         )
+
+    #     # =============================================================
+    #     # Contract ID
+    #     # =============================================================
+
+    #     contract_id = selected_loan.get(
+    #         "contract_id"
+    #     )
+
+    #     if contract_id is None:
+    #         return (
+    #             "Договор не выбран",
+
+    #             "",
+
+    #             empty_figure(
+    #                 "Нет данных",
+    #                 height=360,
+    #             ),
+
+    #             [],
+
+    #             # TRANSACTIONS_TITLE_ID
+    #             "История операций",
+    #         )
+
+    #     # =============================================================
+    #     # Операции по договору
+    #     # =============================================================
+
+    #     transactions = (
+    #         get_contract_transactions(
+    #             int(contract_id),
+
+    #             str(report_date)[:10]
+    #             if report_date
+    #             else None,
+    #         )
+    #     )
+
+    #     # =============================================================
+    #     # Метаданные договора
+    #     # =============================================================
+
+    #     number = (
+    #         selected_loan.get(
+    #             "contract_number"
+    #         )
+    #         or "без номера"
+    #     )
+
+    #     counterparty = (
+    #         selected_loan.get(
+    #             "counterparty_name"
+    #         )
+    #         or "Контрагент не указан"
+    #     )
+
+    #     currency = (
+    #         selected_loan.get(
+    #             "currency"
+    #         )
+    #         or "—"
+    #     )
+
+    #     rate = selected_loan.get(
+    #         "rate"
+    #     )
+
+    #     rate_text = (
+    #         _format_percent(rate)
+    #         if rate is not None
+    #         else "—"
+    #     )
+
+    #     repayment_date = (
+    #         selected_loan.get(
+    #             "repayment_date"
+    #         )
+    #         or "—"
+    #     )
+
+    #     # =============================================================
+    #     # Верхний заголовок блока
+    #     # =============================================================
+
+    #     title = (
+    #         f"{counterparty} · "
+    #         f"договор № {number}"
+    #     )
+
+    #     meta = (
+    #         f"Валюта: {currency} · "
+    #         f"Ставка: {rate_text} · "
+    #         f"Погашение: {repayment_date}"
+    #     )
+
+    #     # =============================================================
+    #     # Заголовок истории операций
+    #     # =============================================================
+
+    #     transactions_title = (
+    #         f"История операций · "
+    #         f"{counterparty} · "
+    #         f"договор № {number}"
+    #     )
+
+    #     # =============================================================
+    #     # Return
+    #     # =============================================================
+
+    #     return (
+    #         title,
+
+    #         meta,
+
+    #         build_selected_loan_chart(
+    #             transactions
+    #         ),
+
+    #         serialize_dataframe(
+    #             transactions
+    #         ),
+
+    #         transactions_title,
+    #     )
+    
+    
     @app.callback(
         Output(
             SELECTED_LOAN_TITLE_ID,
@@ -608,6 +802,19 @@ def register_loans_callbacks(app):
         ),
         Output(
             TRANSACTIONS_TITLE_ID,
+            "children",
+        ),
+
+        # =============================================================
+        # Документы
+        # =============================================================
+
+        Output(
+            SELECTED_LOAN_DOCUMENTS_ID,
+            "children",
+        ),
+        Output(
+            SELECTED_LOAN_DOCUMENTS_COUNT_ID,
             "children",
         ),
 
@@ -631,7 +838,6 @@ def register_loans_callbacks(app):
         if not selected_loan:
             return (
                 "Договор не выбран",
-
                 "Выберите договор в реестре выше",
 
                 empty_figure(
@@ -641,8 +847,13 @@ def register_loans_callbacks(app):
 
                 [],
 
-                # TRANSACTIONS_TITLE_ID
                 "История операций",
+
+                [
+                    empty_documents_state()
+                ],
+
+                "0 файлов",
             )
 
         # =============================================================
@@ -656,7 +867,6 @@ def register_loans_callbacks(app):
         if contract_id is None:
             return (
                 "Договор не выбран",
-
                 "",
 
                 empty_figure(
@@ -666,23 +876,146 @@ def register_loans_callbacks(app):
 
                 [],
 
-                # TRANSACTIONS_TITLE_ID
                 "История операций",
+
+                [
+                    empty_documents_state()
+                ],
+
+                "0 файлов",
             )
+
+        contract_id = int(contract_id)
 
         # =============================================================
         # Операции по договору
         # =============================================================
 
-        transactions = (
-            get_contract_transactions(
-                int(contract_id),
+        transactions = get_contract_transactions(
+            contract_id,
 
-                str(report_date)[:10]
-                if report_date
-                else None,
-            )
+            str(report_date)[:10]
+            if report_date
+            else None,
         )
+
+        # =============================================================
+        # Документы договора
+        # =============================================================
+
+        documents = get_contract_documents(
+            contract_id
+        )
+
+        document_children = []
+
+        doc_type_labels = {
+            "contract": "Договор",
+            "additional": "Доп. соглашение",
+            "act": "Акт",
+            "reconciliation": "Акт сверки",
+            "invoice": "Счёт",
+            "other": "Другое",
+        }
+
+        for document in documents:
+
+            doc_type = (
+                document.get("doc_type")
+                or "other"
+            )
+
+            doc_type_label = doc_type_labels.get(
+                doc_type,
+                "Документ",
+            )
+
+            doc_number = document.get(
+                "doc_number"
+            )
+
+            doc_date = document.get(
+                "doc_date"
+            )
+
+            description = document.get(
+                "description"
+            )
+
+            file_name = document.get(
+                "file"
+            )
+
+            # ---------------------------------------------------------
+            # Название документа
+            # ---------------------------------------------------------
+
+            title_parts = [
+                doc_type_label
+            ]
+
+            if doc_number:
+                title_parts.append(
+                    f"№ {doc_number}"
+                )
+
+            if doc_date:
+                title_parts.append(
+                    f"от {doc_date.strftime('%d.%m.%Y')}"
+                )
+
+            document_title = " ".join(
+                title_parts
+            )
+
+            # ---------------------------------------------------------
+            # URL файла
+            # ---------------------------------------------------------
+
+            file_url = None
+
+            if file_name:
+                file_url = (
+                    f"/media/{str(file_name).lstrip('/')}"
+                )
+
+            # ---------------------------------------------------------
+            # Строка в панели
+            # ---------------------------------------------------------
+
+            document_children.append(
+                document_row(
+                    title=document_title,
+                    subtitle=description,
+                    url=file_url,
+                )
+            )
+
+        # =============================================================
+        # Если документов нет
+        # =============================================================
+
+        if not document_children:
+            document_children = [
+                empty_documents_state()
+            ]
+
+        # =============================================================
+        # Счётчик
+        # =============================================================
+
+        documents_count = len(documents)
+
+        if documents_count == 1:
+            documents_count_text = "1 файл"
+        elif 2 <= documents_count <= 4:
+            documents_count_text = (
+                f"{documents_count} файла"
+            )
+        else:
+            documents_count_text = (
+                f"{documents_count} файлов"
+            )
 
         # =============================================================
         # Метаданные договора
@@ -727,7 +1060,7 @@ def register_loans_callbacks(app):
         )
 
         # =============================================================
-        # Верхний заголовок блока
+        # Верхний заголовок
         # =============================================================
 
         title = (
@@ -742,7 +1075,7 @@ def register_loans_callbacks(app):
         )
 
         # =============================================================
-        # Заголовок истории операций
+        # Заголовок операций
         # =============================================================
 
         transactions_title = (
@@ -769,6 +1102,10 @@ def register_loans_callbacks(app):
             ),
 
             transactions_title,
+
+            document_children,
+
+            documents_count_text,
         )
     
     @app.callback(
