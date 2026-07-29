@@ -61,6 +61,11 @@ from .automatic_alerts import (
     build_alerts_modal,
 )
 
+from .daily_interest_indicator import (
+    build_daily_interest_indicator,
+    build_daily_interest_modal,
+)
+
 
 PAGE_STYLE = {
     "backgroundColor": "#F6F7F8",
@@ -222,6 +227,7 @@ def build_header():
                                 ],
                             ),
                             
+                            build_daily_interest_indicator(),
                             build_alerts_button(),
                             
                             action_button(
@@ -545,6 +551,7 @@ layout = dmc.MantineProvider(
         dcc.Store(id=SELECTED_LOAN_STORE_ID),
         dcc.Download(id=DOWNLOAD_ID),
         build_alerts_modal(),
+        build_daily_interest_modal(),
 
         html.Div(
             style=PAGE_STYLE,

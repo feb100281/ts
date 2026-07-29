@@ -110,6 +110,10 @@ from .automatic_alerts import (
     register_automatic_alerts_callbacks,
 )
 
+from .daily_interest_indicator import (
+    register_daily_interest_callbacks,
+)
+
 
 
 def _format_integer(value) -> str:
@@ -314,6 +318,7 @@ def _render_insights(
 def register_loans_callbacks(app):
     register_filter_callbacks(app)
     register_automatic_alerts_callbacks(app)
+    register_daily_interest_callbacks(app)
 
 
     @app.callback(
