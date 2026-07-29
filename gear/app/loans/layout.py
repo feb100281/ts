@@ -56,6 +56,11 @@ from .selected_loan_panel import (
     build_selected_loan_panel,
 )
 
+from .automatic_alerts import (
+    build_alerts_button,
+    build_alerts_modal,
+)
+
 
 PAGE_STYLE = {
     "backgroundColor": "#F6F7F8",
@@ -216,6 +221,9 @@ def build_header():
                                     ),
                                 ],
                             ),
+                            
+                            build_alerts_button(),
+                            
                             action_button(
                                 component_id=REFRESH_BTN_ID,
                                 label="Обновить",
@@ -536,6 +544,7 @@ layout = dmc.MantineProvider(
         dcc.Store(id=FILTER_STORE_ID),
         dcc.Store(id=SELECTED_LOAN_STORE_ID),
         dcc.Download(id=DOWNLOAD_ID),
+        build_alerts_modal(),
 
         html.Div(
             style=PAGE_STYLE,

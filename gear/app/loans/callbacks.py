@@ -106,6 +106,10 @@ from .selected_loan_panel import (
     empty_documents_state,
 )
 
+from .automatic_alerts import (
+    register_automatic_alerts_callbacks,
+)
+
 
 
 def _format_integer(value) -> str:
@@ -309,6 +313,8 @@ def _render_insights(
 
 def register_loans_callbacks(app):
     register_filter_callbacks(app)
+    register_automatic_alerts_callbacks(app)
+
 
     @app.callback(
         Output(DATA_SIGNAL_ID, "data"),
