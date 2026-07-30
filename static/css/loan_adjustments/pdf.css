@@ -555,8 +555,19 @@ footer {
 }
 
 .reason-cell small {
-    max-height: 34px;
-    overflow: hidden;
+    display: block;
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 6.2pt;
+    line-height: 1.35;
+     text-align: justify;
+
+    max-height: none;
+    overflow: visible;
+
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: anywhere;
 }
 
 .money-cell {

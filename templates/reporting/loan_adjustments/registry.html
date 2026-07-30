@@ -97,9 +97,7 @@
           Общая задолженность
         </th>
 
-        <th rowspan="2" class="col-status">
-          Статус
-        </th>
+ 
       </tr>
 
       <tr class="registry-head-sub">
@@ -125,9 +123,9 @@
               {{ row.document_number }}
             </strong>
 
-            <small>
-              {{ row.author }}
-            </small>
+            {% comment %} <small>
+              исп. {{ row.author }}
+            </small> {% endcomment %}
           </td>
 
           <td class="date-cell">
@@ -235,17 +233,7 @@
             {{ row.total_delta_text }}
           </td>
 
-          <td class="status-cell">
-            {% if row.is_active %}
-              <span class="status-active">
-                Учитывается
-              </span>
-            {% else %}
-              <span class="status-inactive">
-                Отключена
-              </span>
-            {% endif %}
-          </td>
+          
         </tr>
       {% empty %}
         <tr>
