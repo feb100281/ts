@@ -1,3 +1,4 @@
+# gear/app/loans/calculations.py
 from __future__ import annotations
 
 from datetime import date
@@ -76,7 +77,9 @@ def enrich_snapshot(
 
     work = df.copy()
 
-    report_ts = pd.Timestamp(report_date)
+    report_ts = pd.Timestamp(
+        report_date
+    ).normalize()
 
     for column in MONEY_COLUMNS + [
         "rate",
@@ -90,12 +93,16 @@ def enrich_snapshot(
             )
 
     work["repayment_date"] = pd.to_datetime(
-        work.get("repayment_date"),
+        work.get(
+            "repayment_date"
+        ),
         errors="coerce",
-    )
+    ).dt.normalize()
 
+    # Сначала считаем техническое количество дней.
     work["days_to_maturity"] = (
-        work["repayment_date"] - report_ts
+        work["repayment_date"]
+        - report_ts
     ).dt.days
 
     debt = (
@@ -103,10 +110,16 @@ def enrich_snapshot(
             work["total_debt"],
             errors="coerce",
         )
-        .fillna(0)
+        .fillna(0.0)
     )
 
-    days = work["days_to_maturity"]
+    days = work[
+        "days_to_maturity"
+    ]
+
+    # ================================================================
+    # СТАТУС ДОГОВОРА
+    # ================================================================
 
     status = pd.Series(
         "Активен",
@@ -114,19 +127,64 @@ def enrich_snapshot(
         dtype="object",
     )
 
-    status.loc[debt.abs() <= 0.01] = "Погашен"
-    status.loc[
-        (debt > 0.01)
+    paid_mask = (
+        debt.abs()
+        <= 0.01
+    )
+
+    overdue_mask = (
+        debt.gt(0.01)
         & days.notna()
-        & (days < 0)
+        & days.lt(0)
+    )
+
+    due_30_mask = (
+        debt.gt(0.01)
+        & days.notna()
+        & days.between(
+            0,
+            30,
+            inclusive="both",
+        )
+    )
+
+    status.loc[
+        paid_mask
+    ] = "Погашен"
+
+    status.loc[
+        overdue_mask
     ] = "Просрочен"
+
     status.loc[
-        (debt > 0.01)
-        & days.notna()
-        & days.between(0, 30)
+        due_30_mask
     ] = "Погашение ≤ 30 дней"
 
     work["status"] = status
+
+    # ================================================================
+    # ВАЖНО:
+    # У погашенного договора больше нет показателя
+    # "дней до погашения".
+    #
+    # Дата погашения договора остаётся исторической,
+    # но количество дней в таблице должно быть пустым.
+    # ================================================================
+
+    work.loc[
+        paid_mask,
+        "days_to_maturity",
+    ] = np.nan
+
+    # После очистки пересчитываем ссылку days,
+    # чтобы maturity_bucket тоже не использовал старые значения.
+    days = work[
+        "days_to_maturity"
+    ]
+
+    # ================================================================
+    # ГРУППА ПО СРОКУ ПОГАШЕНИЯ
+    # ================================================================
 
     maturity = pd.Series(
         "Без даты",
@@ -134,69 +192,105 @@ def enrich_snapshot(
         dtype="object",
     )
 
-    active = debt > 0.01
+    active = (
+        debt.gt(0.01)
+    )
 
     maturity.loc[
         active
         & days.notna()
-        & (days < 0)
+        & days.lt(0)
     ] = "Просрочено"
 
     maturity.loc[
         active
-        & days.between(0, 30)
+        & days.notna()
+        & days.between(
+            0,
+            30,
+            inclusive="both",
+        )
     ] = "До 30 дней"
 
     maturity.loc[
         active
-        & days.between(31, 90)
+        & days.notna()
+        & days.between(
+            31,
+            90,
+            inclusive="both",
+        )
     ] = "31–90 дней"
 
     maturity.loc[
         active
-        & days.between(91, 180)
+        & days.notna()
+        & days.between(
+            91,
+            180,
+            inclusive="both",
+        )
     ] = "91–180 дней"
 
     maturity.loc[
         active
-        & days.between(181, 365)
+        & days.notna()
+        & days.between(
+            181,
+            365,
+            inclusive="both",
+        )
     ] = "181–365 дней"
 
     maturity.loc[
         active
+        & days.notna()
         & days.gt(365)
     ] = "Более года"
 
     work["maturity_bucket"] = maturity
 
+    # ================================================================
+    # ПРОФИЛЬ ПОГАШЕНИЯ
+    # ================================================================
+
     work["repayment_profile"] = "Не задан"
-    work.loc[
+
+    principal_first = (
         work.get(
             "repay_principal_first",
             False,
-        ).astype(bool),
+        )
+        .astype(bool)
+    )
+
+    interest_first = (
+        work.get(
+            "repay_interest_first",
+            False,
+        )
+        .astype(bool)
+    )
+
+    work.loc[
+        principal_first,
         "repayment_profile",
     ] = "Сначала тело"
 
     work.loc[
-        work.get(
-            "repay_interest_first",
-            False,
-        ).astype(bool),
+        interest_first,
         "repayment_profile",
     ] = "Сначала проценты"
 
     both = (
-        work.get(
-            "repay_principal_first",
-            False,
-        ).astype(bool)
-        & work.get(
-            "repay_interest_first",
-            False,
-        ).astype(bool)
+        principal_first
+        & interest_first
     )
-    work.loc[both, "repayment_profile"] = "Смешанный"
+
+    work.loc[
+        both,
+        "repayment_profile",
+    ] = "Смешанный"
 
     return work
 

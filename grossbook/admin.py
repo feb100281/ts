@@ -5,6 +5,7 @@ from django.db.models import Count, OuterRef, Subquery, IntegerField
 from django.utils.html import format_html
 
 from .models import Manual
+from .models import LoanAdjustment
 
 
 class GroupedEntriesFilter(SimpleListFilter):
@@ -306,3 +307,95 @@ class ManualAdmin(admin.ModelAdmin):
         js = (
             "js/manual_admin_groups.js",
         )
+        
+        
+        
+
+
+
+@admin.register(LoanAdjustment)
+class LoanAdjustmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "adjustment_date",
+        "contract",
+        "principal_balance",
+        "interest_balance",
+        "reason",
+        "is_active",
+        "created_by",
+        "created_at",
+    )
+    list_filter = (
+        "is_active",
+        "reason",
+        "adjustment_date",
+        ("contract", RelatedOnlyFieldListFilter),
+    )
+    search_fields = (
+        "contract__number",
+        "contract__cp__name",
+        "comment",
+    )
+    autocomplete_fields = (
+        "contract",
+        "created_by",
+    )
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+    ordering = (
+        "-adjustment_date",
+        "-id",
+    )
+    list_per_page = 30
+
+    fieldsets = (
+        (
+            "Договор и дата",
+            {
+                "fields": (
+                    "contract",
+                    "adjustment_date",
+                    "is_active",
+                ),
+            },
+        ),
+        (
+            "Правильное состояние займа на конец дня",
+            {
+                "fields": (
+                    "principal_balance",
+                    "interest_balance",
+                ),
+            },
+        ),
+        (
+            "Основание",
+            {
+                "fields": (
+                    "reason",
+                    "comment",
+                ),
+            },
+        ),
+        (
+            "Аудит",
+            {
+                "fields": (
+                    "created_by",
+                    "created_at",
+                    "updated_at",
+                ),
+                "classes": (
+                    "collapse",
+                ),
+            },
+        ),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by_id:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
