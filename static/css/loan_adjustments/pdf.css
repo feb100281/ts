@@ -1,0 +1,662 @@
+/* static/css/loan_adjustments/pdf.css */
+
+@page {
+    size: A4 landscape;
+    margin: 12mm 10mm 13mm;
+}
+
+body {
+    margin: 0;
+    color: #1f2937;
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+    line-height: 1.45;
+}
+
+.document-header,
+.registry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 13px;
+    border-bottom: 2px solid #2f6656;
+}
+
+.brand-block {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.brand-mark {
+    width: 42px;
+    height: 42px;
+    background: #2f6656;
+    color: #ffffff;
+    text-align: center;
+    line-height: 42px;
+    font-size: 13pt;
+    font-weight: bold;
+}
+
+.company {
+    color: #17211e;
+    font-size: 11pt;
+    font-weight: bold;
+}
+
+.document-type,
+.number-label,
+.number-date,
+.registry-meta {
+    color: #6b7280;
+    font-size: 8.5pt;
+    margin-top: 3px;
+}
+
+.document-number {
+    text-align: right;
+}
+
+.number-value {
+    margin-top: 2px;
+    color: #17211e;
+    font-size: 15pt;
+    font-weight: bold;
+}
+
+.title-section {
+    margin-top: 25px;
+}
+
+.title-section h1,
+.registry-header h1 {
+    margin: 0;
+    color: #17211e;
+    font-size: 18pt;
+    line-height: 1.2;
+}
+
+.title-section p {
+    margin: 8px 0 0;
+    color: #64748b;
+}
+
+.status-line {
+    margin-top: 17px;
+    padding: 8px 11px;
+    font-size: 9pt;
+    font-weight: bold;
+}
+
+.status-active {
+    background: #e8f3ee;
+    color: #166534;
+    border-left: 4px solid #2f6656;
+}
+
+.status-inactive {
+    background: #f1f5f9;
+    color: #64748b;
+    border-left: 4px solid #94a3b8;
+}
+
+.section {
+    margin-top: 22px;
+}
+
+.section-title {
+    margin-bottom: 9px;
+    color: #2f6656;
+    font-size: 10pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+}
+
+.details-table,
+.registry-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.details-table th,
+.details-table td {
+    padding: 8px 9px;
+    border: 1px solid #dce3e6;
+    vertical-align: top;
+}
+
+.details-table th {
+    width: 30%;
+    background: #f7faf9;
+    color: #475569;
+    text-align: left;
+    font-weight: normal;
+}
+
+.details-table td {
+    color: #17211e;
+    font-weight: bold;
+}
+
+.amount-grid {
+    display: flex;
+    gap: 10px;
+}
+
+.amount-card {
+    width: 31.5%;
+    padding: 13px 12px;
+    background: #f7faf9;
+    border-top: 3px solid #2f6656;
+}
+
+.amount-card-interest {
+    border-top-color: #b45309;
+}
+
+.amount-card-total {
+    background: #eef5f2;
+    border-top-color: #17211e;
+}
+
+.amount-label {
+    color: #64748b;
+    font-size: 8.5pt;
+    text-transform: uppercase;
+}
+
+.amount-value {
+    margin-top: 8px;
+    color: #17211e;
+    font-size: 16pt;
+    font-weight: bold;
+}
+
+.amount-currency {
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 8.5pt;
+}
+
+.legal-note {
+    margin-top: 22px;
+    padding: 12px 13px;
+    background: #f8fafc;
+    border-left: 4px solid #94a3b8;
+    color: #475569;
+    font-size: 9pt;
+}
+
+.signatures {
+    display: flex;
+    justify-content: space-between;
+    gap: 35px;
+    margin-top: 35px;
+}
+
+.signature-block {
+    width: 47%;
+}
+
+.signature-label {
+    color: #64748b;
+    font-size: 8.5pt;
+}
+
+.signature-line {
+    height: 27px;
+    border-bottom: 1px solid #94a3b8;
+}
+
+.signature-name {
+    margin-top: 5px;
+    color: #475569;
+    font-size: 8.5pt;
+}
+
+footer {
+    position: fixed;
+    bottom: -7mm;
+    left: 0;
+    right: 0;
+    padding-top: 6px;
+    border-top: 1px solid #e2e8f0;
+    color: #94a3b8;
+    text-align: center;
+    font-size: 7.5pt;
+}
+
+.registry {
+    font-size: 8.5pt;
+}
+
+.registry-count {
+    text-align: right;
+}
+
+.registry-count strong,
+.registry-count span {
+    display: block;
+}
+
+.registry-count strong {
+    color: #2f6656;
+    font-size: 19pt;
+}
+
+.registry-count span {
+    color: #64748b;
+    font-size: 8pt;
+}
+
+.registry-table {
+    margin-top: 18px;
+}
+
+.registry-table th {
+    padding: 7px 5px;
+    background: #2f6656;
+    color: #ffffff;
+    border: 1px solid #2f6656;
+    font-size: 7.5pt;
+    text-align: center;
+}
+
+.registry-table td {
+    padding: 6px 5px;
+    border: 1px solid #dce3e6;
+    text-align: center;
+    vertical-align: top;
+}
+
+.registry-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+.registry-table tfoot td {
+    background: #eef5f2;
+    border-top: 2px solid #2f6656;
+    font-weight: bold;
+}
+
+.text-left {
+    text-align: left !important;
+}
+
+.text-right {
+    text-align: right !important;
+}
+
+
+.comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+}
+
+.comparison-table th {
+    padding: 8px 9px;
+    background: #2f6656;
+    color: #ffffff;
+    border: 1px solid #2f6656;
+    font-size: 8.5pt;
+    font-weight: bold;
+    text-align: center;
+}
+
+.comparison-table td {
+    padding: 9px;
+    border: 1px solid #dce3e6;
+    color: #1f2937;
+}
+
+.comparison-table td:first-child {
+    width: 26%;
+    background: #f7faf9;
+    font-weight: bold;
+}
+
+.comparison-table td:not(:first-child) {
+    white-space: nowrap;
+}
+
+.comparison-total td {
+    background: #eef5f2 !important;
+    border-top: 2px solid #2f6656;
+    font-weight: bold;
+}
+
+.calculation-warning {
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: #fff7ed;
+    color: #9a3412;
+    border-left: 4px solid #d97706;
+    font-size: 9pt;
+    line-height: 1.45;
+}
+
+
+/* ================================================================
+   Реестр корректировок займов
+   ================================================================ */
+
+.registry-body {
+    margin: 0;
+    color: #1f2937;
+    font-family: Arial, sans-serif;
+    font-size: 7.4pt;
+    line-height: 1.3;
+}
+
+.registry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 9px;
+    border-bottom: 2px solid #2f6656;
+}
+
+.registry-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.registry-mark {
+    width: 34px;
+    height: 34px;
+    background: #2f6656;
+    color: #ffffff;
+    text-align: center;
+    line-height: 34px;
+    font-size: 10pt;
+    font-weight: bold;
+}
+
+.registry-company {
+    color: #17211e;
+    font-size: 10pt;
+    font-weight: bold;
+}
+
+.registry-document-type {
+    margin-top: 2px;
+    color: #64748b;
+    font-size: 7.2pt;
+}
+
+.registry-header-meta {
+    text-align: right;
+}
+
+.registry-header-label {
+    color: #94a3b8;
+    font-size: 6.8pt;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+
+.registry-header-value {
+    margin-top: 3px;
+    color: #334155;
+    font-size: 8pt;
+    font-weight: bold;
+}
+
+.registry-title-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin: 14px 0 11px;
+}
+
+.registry-title-section h1 {
+    margin: 0;
+    color: #17211e;
+    font-size: 15pt;
+    line-height: 1.2;
+}
+
+.registry-title-section p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 7.5pt;
+}
+
+.registry-count {
+    min-width: 75px;
+    padding: 6px 9px;
+    background: #f7faf9;
+    border-left: 3px solid #2f6656;
+    text-align: right;
+}
+
+.registry-count strong {
+    display: block;
+    color: #2f6656;
+    font-size: 15pt;
+    line-height: 1;
+}
+
+.registry-count span {
+    display: block;
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 6.8pt;
+}
+
+.registry-warning {
+    margin-bottom: 10px;
+    padding: 7px 9px;
+    background: #fff7ed;
+    color: #9a3412;
+    border-left: 3px solid #d97706;
+    font-size: 7pt;
+}
+
+.registry-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.registry-table th,
+.registry-table td {
+    border: 1px solid #d9e1e5;
+    vertical-align: top;
+}
+
+.registry-head-main th {
+    padding: 6px 4px;
+    background: #2f6656;
+    color: #ffffff;
+    text-align: center;
+    font-size: 6.7pt;
+    font-weight: bold;
+}
+
+.registry-head-sub th {
+    padding: 4px 3px;
+    background: #e8f3ee;
+    color: #28483f;
+    text-align: center;
+    font-size: 6.3pt;
+    font-weight: bold;
+}
+
+.registry-table td {
+    padding: 5px 4px;
+    background: #ffffff;
+}
+
+.registry-table tbody tr:nth-child(even) td {
+    background: #f8fafc;
+}
+
+.col-document {
+    width: 6%;
+}
+
+.col-date {
+    width: 6%;
+}
+
+.col-contract {
+    width: 14%;
+}
+
+.col-reason {
+    width: 15%;
+}
+
+.col-status {
+    width: 6%;
+}
+
+.group-principal {
+    background: #315f52 !important;
+}
+
+.group-interest {
+    background: #9a6700 !important;
+}
+
+.group-total {
+    background: #243a34 !important;
+}
+
+.document-cell strong,
+.contract-cell strong,
+.reason-cell strong {
+    display: block;
+    color: #17211e;
+    font-size: 6.9pt;
+    line-height: 1.25;
+}
+
+.document-cell small,
+.date-cell small,
+.contract-cell small,
+.reason-cell small {
+    display: block;
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 6.2pt;
+    line-height: 1.3;
+}
+
+.date-cell {
+    color: #334155;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.reason-cell small {
+    max-height: 34px;
+    overflow: hidden;
+}
+
+.money-cell {
+    text-align: right;
+    white-space: nowrap;
+    vertical-align: middle !important;
+    font-size: 6.6pt;
+    font-variant-numeric: tabular-nums;
+}
+
+.after-cell {
+    background: #f7faf9 !important;
+    font-weight: bold;
+}
+
+.total-cell {
+    font-weight: bold;
+}
+
+.delta-cell {
+    font-weight: bold;
+}
+
+.delta-negative {
+    color: #166534;
+}
+
+.delta-positive {
+    color: #b91c1c;
+}
+
+.delta-zero {
+    color: #64748b;
+}
+
+.status-cell {
+    text-align: center;
+    vertical-align: middle !important;
+}
+
+.status-active,
+.status-inactive {
+    display: inline-block;
+    padding: 3px 5px;
+    white-space: nowrap;
+    font-size: 5.9pt;
+    font-weight: bold;
+}
+
+.status-active {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-inactive {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.registry-table tfoot td {
+    padding: 6px 4px;
+    background: #e8f3ee;
+    border-top: 2px solid #2f6656;
+    font-weight: bold;
+}
+
+.total-title {
+    color: #173b34;
+    text-align: left;
+    font-size: 7pt;
+}
+
+.empty-row {
+    padding: 16px !important;
+    color: #64748b;
+    text-align: center;
+}
+
+.registry-note {
+    margin-top: 10px;
+    padding: 7px 9px;
+    background: #f8fafc;
+    border-left: 3px solid #94a3b8;
+    color: #64748b;
+    font-size: 6.8pt;
+    line-height: 1.4;
+}
+
+.registry-note strong {
+    color: #334155;
+}
+
+.registry-footer {
+    position: fixed;
+    right: 0;
+    bottom: -7mm;
+    left: 0;
+    padding-top: 4px;
+    border-top: 1px solid #e2e8f0;
+    color: #94a3b8;
+    text-align: center;
+    font-size: 6pt;
+}
