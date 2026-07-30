@@ -371,10 +371,10 @@ class LoanAdjustmentAdmin(admin.ModelAdmin):
             "Остаток задолженности после корректировки",
             {
                 "fields": (
-                    (
+                    
                         "principal_balance",
                         "interest_balance",
-                    ),
+                    
                 ),
                 "description": (
                     "Суммы вводятся в валюте договора, "
