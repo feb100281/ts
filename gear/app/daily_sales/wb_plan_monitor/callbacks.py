@@ -69,8 +69,14 @@ from .excel import (
     get_wb_plan_excel_filename,
 )
 
+from .prophet_forecast import (
+    register_prophet_callbacks,
+)
+
 
 def register_wb_plan_callbacks(app):
+    
+    register_prophet_callbacks(app)
     # ================================================================
     # Открытие модального окна
     # ================================================================

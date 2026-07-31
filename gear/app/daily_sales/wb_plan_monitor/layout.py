@@ -25,6 +25,11 @@ from .components import (
     current_month_plan_table,
 )
 
+from .prophet_forecast import (
+    prophet_tab_header,
+    prophet_tab_panel,
+)
+
 
 def wb_plan_button():
     return dmc.Tooltip(
@@ -344,6 +349,8 @@ def build_modal_content(data):
                                     width=16,
                                 ),
                             ),
+                            
+                            prophet_tab_header(),
                         ]
                     ),
 
@@ -668,9 +675,15 @@ def build_modal_content(data):
                     daily_table(data["daily_rows"]),
                 ],
             ),
+            
+             
         ],
     ),
 ),
+                    
+                    prophet_tab_panel(
+                        report_date=data["report_date"],
+                    ),
                 ],
             ),
         ],
