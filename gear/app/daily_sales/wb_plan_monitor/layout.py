@@ -7,6 +7,8 @@ from .ids import (
     WB_PLAN_MODAL_ID,
     WB_PLAN_OPEN_BTN_ID,
     WB_PLAN_CONTENT_ID,
+    WB_PLAN_DOWNLOAD_BTN_ID,
+    WB_PLAN_DOWNLOAD_ID,
 )
 from .formatters import format_money_short, format_pct
 from .charts import (
@@ -46,6 +48,67 @@ def wb_plan_button():
 
 
 
+# def wb_plan_modal():
+#     return dmc.Modal(
+#         id=WB_PLAN_MODAL_ID,
+#         opened=False,
+#         size="95%",
+#         centered=True,
+#         padding="md",
+#         title=dmc.Group(
+#             gap=8,
+#             align="center",
+#             wrap="nowrap",
+#             children=[
+#                 DashIconify(
+#                     icon="solar:chart-square-linear",
+#                     width=20,
+#                     height=20,
+#                     color="#228be6",
+#                 ),
+#                 dmc.Text(
+#                     "Выполнение целевого оборота WB",
+#                     fw=800,
+#                     size="md",
+#                 ),
+#             ],
+#         ),
+#         children=[
+#             dcc.Loading(
+#                 type="cube",
+#                 children=dmc.Box(
+#                     id=WB_PLAN_CONTENT_ID,
+#                     style={
+#                         "minHeight": "650px",
+#                     },
+#                 ),
+#             ),
+#         ],
+#         styles={
+#             "title": {
+#                 "width": "100%",
+#             },
+#             "content": {
+#                 "height": "92vh",
+#                 "maxHeight": "92vh",
+#                 "borderRadius": "6px",
+#                 "display": "flex",
+#                 "flexDirection": "column",
+#             },
+#             "header": {
+#                 "flex": "0 0 auto",
+#                 "borderBottom": "1px solid #e9ecef",
+#             },
+#             "body": {
+#                 "flex": "1 1 auto",
+#                 "minHeight": "0",
+#                 "overflowY": "auto",
+#                 "overflowX": "hidden",
+#             },
+#         },
+#     )
+    
+    
 def wb_plan_modal():
     return dmc.Modal(
         id=WB_PLAN_MODAL_ID,
@@ -72,6 +135,10 @@ def wb_plan_modal():
             ],
         ),
         children=[
+            dcc.Download(
+                id=WB_PLAN_DOWNLOAD_ID,
+            ),
+
             dcc.Loading(
                 type="cube",
                 children=dmc.Box(
@@ -105,7 +172,6 @@ def wb_plan_modal():
             },
         },
     )
-    
 
 def build_modal_content(data):
     current_semi = data["current_semi"]
@@ -309,11 +375,45 @@ def build_modal_content(data):
                                     radius="sm",
                                     p="sm",
                                     children=[
-                                        dmc.Text(
-                                            "План / факт по месяцам",
-                                            fw=800,
-                                            size="sm",
-                                        ),
+                                        dmc.Group(
+    justify="space-between",
+    align="center",
+    mb="xs",
+    wrap="nowrap",
+    children=[
+        dmc.Text(
+            "План / факт по месяцам",
+            fw=800,
+            size="sm",
+        ),
+
+        dmc.Button(
+            "Скачать Excel",
+            id=WB_PLAN_DOWNLOAD_BTN_ID,
+            variant="outline",
+            color="gray",
+            radius=0,
+            size="xs",
+            leftSection=DashIconify(
+                icon="material-symbols:download-rounded",
+                width=17,
+                color="#15803D",
+            ),
+            styles={
+                "root": {
+                    "height": "32px",
+                    "backgroundColor": "#FFFFFF",
+                    "border": "1px solid #D1D5DB",
+                    "color": "#374151",
+                    "fontWeight": 600,
+                    "fontSize": "12px",
+                    "paddingLeft": "12px",
+                    "paddingRight": "14px",
+                },
+            },
+        ),
+    ],
+),
                                         dcc.Graph(
                                             figure=build_monthly_chart(
                                                 data["monthly_rows"]
