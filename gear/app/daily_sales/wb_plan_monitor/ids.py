@@ -5,3 +5,6 @@ WB_PLAN_CONTENT_ID = "daily-sales-wb-plan-content"
 
 WB_PLAN_DOWNLOAD_BTN_ID = "wb-plan-download-btn"
 WB_PLAN_DOWNLOAD_ID = "wb-plan-download"
+
+PDF_DOWNLOAD_BTN_ID = "wb-prophet-pdf-download-btn"
+PDF_DOWNLOAD_ID = "wb-prophet-pdf-download"

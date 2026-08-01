@@ -19,6 +19,11 @@ from .data import (
     get_monthly_plan_full_year,
 )
 
+from .prophet_note import (
+        build_prophet_note_pdf,
+        get_prophet_note_filename,
+    )
+
 
 TAB_VALUE = "prophet-forecast"
 
@@ -38,6 +43,8 @@ KPI_ID = "wb-prophet-kpi"
 STATUS_ID = "wb-prophet-status"
 STORE_ID = "wb-prophet-store"
 DOWNLOAD_ID = "wb-prophet-download"
+PDF_DOWNLOAD_BTN_ID = "wb-prophet-pdf-download-btn"
+PDF_DOWNLOAD_ID = "wb-prophet-pdf-download"
 
 
 def get_daily_sales(date_start: date, date_end: date) -> pd.DataFrame:
@@ -976,6 +983,10 @@ def prophet_tab_panel(report_date: date):
                 dcc.Download(
                     id=DOWNLOAD_ID,
                 ),
+                
+                 dcc.Download(
+                        id=PDF_DOWNLOAD_ID,
+                    ),
 
                 # ====================================================
                 # Параметры прогноза
@@ -1113,7 +1124,7 @@ def prophet_tab_panel(report_date: date):
                                             (
                                                 "Прогноз строится по дневной net-выручке: "
                                                 "продажи минус возвраты. Минимальный период "
-                                                "обучения — 60 календарных дней."
+                                                "обучения — 30 календарных дней."
                                             ),
                                             size="xs",
                                             c="dimmed",
@@ -1159,12 +1170,36 @@ def prophet_tab_panel(report_date: date):
                                                 },
                                             },
                                         ),
+                                        
+                                        dmc.Button(
+                                        "Скачать пояснительную записку",
+                                        id=PDF_DOWNLOAD_BTN_ID,
+                                        radius=0,
+                                        variant="outline",
+                                        color="gray",
+                                        disabled=True,
+                                        leftSection=DashIconify(
+                                            icon="solar:file-text-linear",
+                                            width=18,
+                                            color="#B91C1C",
+                                        ),
+                                        styles={
+                                            "root": {
+                                                "backgroundColor": "#FFFFFF",
+                                                "border": "1px solid #D1D5DB",
+                                                "color": "#374151",
+                                            },
+                                        },
+                                    ),
                                     ],
                                 ),
                             ],
                         ),
                     ],
                 ),
+                
+                
+                 
                 
                 dmc.Alert(
                     children=dmc.Stack(
@@ -1190,7 +1225,7 @@ def prophet_tab_panel(report_date: date):
                             dmc.Text(
                                 (
                                     "Для построения прогноза необходимо минимум "
-                                    "60 календарных дней истории. Чем длиннее "
+                                    "30 календарных дней истории. Чем длиннее "
                                     "и стабильнее период наблюдения, тем больше "
                                     "сезонных закономерностей может учесть модель."
                                 ),
@@ -2084,6 +2119,8 @@ def register_prophet_callbacks(app):
             DOWNLOAD_BTN_ID,
             "disabled",
         ),
+        Output(PDF_DOWNLOAD_BTN_ID, "disabled"),
+        
         Input(BUILD_ID, "n_clicks"),
         State(START_ID, "value"),
         State(END_ID, "value"),
@@ -2113,6 +2150,7 @@ def register_prophet_callbacks(app):
                 no_update,
                 no_update,
                 no_update,
+                True,
                 True,
             )
 
@@ -2182,6 +2220,7 @@ def register_prophet_callbacks(app):
                 result,
                 status,
                 False,
+                False,
             )
 
         except Exception as exc:
@@ -2215,6 +2254,7 @@ def register_prophet_callbacks(app):
                 None,
                 status,
                 True,
+                True,
             )
 
     @app.callback(
@@ -2236,6 +2276,29 @@ def register_prophet_callbacks(app):
         return dcc.send_bytes(
             build_excel(result),
             get_excel_filename(result),
+        )
+        
+    
+    @app.callback(
+        Output(PDF_DOWNLOAD_ID, "data"),
+        Input(PDF_DOWNLOAD_BTN_ID, "n_clicks"),
+        State(STORE_ID, "data"),
+        prevent_initial_call=True,
+    )
+    def _download_prophet_note(
+        n_clicks,
+        result,
+    ):
+        if not n_clicks or not result:
+            return no_update
+
+        pdf_bytes = build_prophet_note_pdf(
+            result=result,
+        )
+
+        return dcc.send_bytes(
+            pdf_bytes,
+            get_prophet_note_filename(result),
         )
 
 
