@@ -1,3 +1,4 @@
+# gear/app/daily_sales/stocks/dashboard_stock/map_modal.py
 """Компактная аналитическая карточка склада по клику на карте.
 
 ВАЖНО:

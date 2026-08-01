@@ -1,3 +1,4 @@
+# gear/app/daily_sales/stocks/dashboard_stock/components.py
 """Переиспользуемые UI-компоненты."""
 
 import dash_mantine_components as dmc

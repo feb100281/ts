@@ -1,3 +1,4 @@
+# gear/app/daily_sales/stocks/dashboard_stock/grids.py
 """AG Grid компоненты. Используется современный rowSelection API v32+."""
 
 import pandas as pd

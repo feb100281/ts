@@ -1,3 +1,4 @@
+#  gear/app/daily_sales/stocks/dashboard_stock/callbacks.py
 """Небольшие callbacks верхнего уровня dashboard."""
 
 from dash import dcc, Input, Output, State, no_update
