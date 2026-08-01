@@ -1,8 +1,8 @@
+# gear/app/daily_sales/stocks/dashboard_stock/distribution_charts.py
+
 """Plotly-графики для вкладок распределения остатков."""
 
 from __future__ import annotations
-
-import math
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -59,8 +59,12 @@ def _empty_figure(
             "t": 30,
             "b": 20,
         },
-        xaxis={"visible": False},
-        yaxis={"visible": False},
+        xaxis={
+            "visible": False,
+        },
+        yaxis={
+            "visible": False,
+        },
     )
 
     return fig
@@ -83,6 +87,59 @@ def _safe_number_series(
     ).fillna(0)
 
 
+def _prepare_stock_columns(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Нормализует числовые показатели остатков.
+
+    total_qty:
+        физический остаток
+        + в пути от клиента
+        + в пути к клиенту.
+    """
+    work = df.copy()
+
+    work["on_hand"] = _safe_number_series(
+        work,
+        "on_hand",
+    )
+
+    work["in_transit"] = _safe_number_series(
+        work,
+        "in_transit",
+    )
+
+    if "total_qty" in work.columns:
+        work["total_qty"] = _safe_number_series(
+            work,
+            "total_qty",
+        )
+    else:
+        work["total_qty"] = (
+            work["on_hand"]
+            + work["in_transit"]
+        )
+
+    if "warehouses" in work.columns:
+        work["warehouses"] = _safe_number_series(
+            work,
+            "warehouses",
+        )
+    else:
+        work["warehouses"] = 0
+
+    if "products" in work.columns:
+        work["products"] = _safe_number_series(
+            work,
+            "products",
+        )
+    else:
+        work["products"] = 0
+
+    return work
+
+
 def _base_layout(
     fig: go.Figure,
     height: int,
@@ -94,19 +151,23 @@ def _base_layout(
         plot_bgcolor=PAPER,
         margin={
             "l": left_margin,
-            "r": 65,
+            "r": 75,
             "t": 36,
             "b": 45,
         },
         font={
-            "family": "Inter, Arial, sans-serif",
+            "family": (
+                "Inter, Arial, sans-serif"
+            ),
             "color": TEXT,
         },
         hoverlabel={
             "bgcolor": "#FFFFFF",
             "bordercolor": "#D6DFDB",
             "font": {
-                "family": "Inter, Arial, sans-serif",
+                "family": (
+                    "Inter, Arial, sans-serif"
+                ),
                 "color": TEXT,
             },
         },
@@ -128,35 +189,39 @@ def build_regions_distribution_chart(
     df: pd.DataFrame,
     top_n: int = 18,
 ) -> go.Figure:
-    """Stacked bar: физический остаток + в пути, доля и transit-rate."""
+    """
+    Распределение общего количества товара по регионам.
+
+    Столбик:
+        физический остаток + товар в пути.
+
+    Доля региона рассчитывается по total_qty.
+    """
     if df is None or df.empty:
         return _empty_figure()
 
-    work = df.copy()
-
-    if "region" not in work.columns:
+    if "region" not in df.columns:
         return _empty_figure(
             title="Нет колонки region",
-            subtitle="Проверьте результат get_stock_regions().",
+            subtitle=(
+                "Проверьте результат "
+                "get_stock_regions()."
+            ),
         )
+
+    work = _prepare_stock_columns(
+        df
+    )
 
     work["region"] = (
         work["region"]
         .fillna("Не определено")
         .astype(str)
-    )
-    work["on_hand"] = _safe_number_series(
-        work,
-        "on_hand",
-    )
-    work["in_transit"] = _safe_number_series(
-        work,
-        "in_transit",
-    )
-
-    work["total_qty"] = (
-        work["on_hand"]
-        + work["in_transit"]
+        .str.strip()
+        .replace(
+            "",
+            "Не определено",
+        )
     )
 
     work = (
@@ -178,19 +243,25 @@ def build_regions_distribution_chart(
     if work.empty:
         return _empty_figure()
 
-    company_total = float(
+    displayed_total = float(
         work["total_qty"].sum()
     )
 
-    work["share_pct"] = (
-        work["total_qty"] / company_total * 100
-        if company_total > 0
-        else 0
-    )
+    if displayed_total > 0:
+        work["share_pct"] = (
+            work["total_qty"]
+            / displayed_total
+            * 100
+        )
+    else:
+        work["share_pct"] = 0.0
 
     work["transit_pct"] = (
         work["in_transit"]
-        / work["total_qty"].replace(0, pd.NA)
+        / work["total_qty"].replace(
+            0,
+            pd.NA,
+        )
         * 100
     ).fillna(0)
 
@@ -198,7 +269,10 @@ def build_regions_distribution_chart(
         lambda row: (
             f"<b>{row['total_qty']:,.0f}</b> "
             f"· {row['share_pct']:.1f}%"
-        ).replace(",", " "),
+        ).replace(
+            ",",
+            " ",
+        ),
         axis=1,
     )
 
@@ -216,6 +290,7 @@ def build_regions_distribution_chart(
             },
             customdata=work[
                 [
+                    "in_transit",
                     "total_qty",
                     "share_pct",
                     "transit_pct",
@@ -223,10 +298,16 @@ def build_regions_distribution_chart(
             ],
             hovertemplate=(
                 "<b>%{y}</b><br>"
-                "На складе: <b>%{x:,.0f} шт</b><br>"
-                "Всего: %{customdata[0]:,.0f} шт<br>"
-                "Доля компании: %{customdata[1]:.1f}%<br>"
-                "Доля в пути: %{customdata[2]:.1f}%"
+                "На складе: "
+                "<b>%{x:,.0f} шт</b><br>"
+                "В пути: "
+                "%{customdata[0]:,.0f} шт<br>"
+                "Всего товара: "
+                "<b>%{customdata[1]:,.0f} шт</b><br>"
+                "Доля показанных регионов: "
+                "%{customdata[2]:.1f}%<br>"
+                "Доля товара в пути: "
+                "%{customdata[3]:.1f}%"
                 "<extra></extra>"
             ),
         )
@@ -244,6 +325,7 @@ def build_regions_distribution_chart(
             },
             customdata=work[
                 [
+                    "on_hand",
                     "total_qty",
                     "share_pct",
                     "transit_pct",
@@ -251,10 +333,16 @@ def build_regions_distribution_chart(
             ],
             hovertemplate=(
                 "<b>%{y}</b><br>"
-                "В пути: <b>%{x:,.0f} шт</b><br>"
-                "Всего: %{customdata[0]:,.0f} шт<br>"
-                "Доля компании: %{customdata[1]:.1f}%<br>"
-                "Доля в пути: %{customdata[2]:.1f}%"
+                "На складе: "
+                "%{customdata[0]:,.0f} шт<br>"
+                "В пути: "
+                "<b>%{x:,.0f} шт</b><br>"
+                "Всего товара: "
+                "<b>%{customdata[1]:,.0f} шт</b><br>"
+                "Доля показанных регионов: "
+                "%{customdata[2]:.1f}%<br>"
+                "Доля товара в пути: "
+                "%{customdata[3]:.1f}%"
                 "<extra></extra>"
             ),
         )
@@ -291,7 +379,7 @@ def build_regions_distribution_chart(
     )
 
     fig.update_xaxes(
-        title="Количество товара, шт",
+        title="Общее количество товара, шт",
         showgrid=True,
         gridcolor=GRID,
         zeroline=False,
@@ -315,33 +403,55 @@ def build_pareto_chart(
     entity_label: str,
     top_n: int = 20,
 ) -> go.Figure:
-    """Pareto: запас по сущности + накопленная доля."""
+    """
+    Pareto-график по общему количеству товара.
+
+    Использует total_qty:
+        на складе + в пути.
+
+    Линия показывает накопленную долю
+    выбранных Top-позиций.
+    """
     if df is None or df.empty:
         return _empty_figure()
 
-    required = {
+    required_columns = {
         "name",
-        "on_hand",
+        "total_qty",
     }
 
-    if not required.issubset(df.columns):
+    if not required_columns.issubset(
+        df.columns
+    ):
         return _empty_figure(
             title="Недостаточно данных",
-            subtitle="Нужны колонки name и on_hand.",
+            subtitle=(
+                "Для графика нужны колонки "
+                "name и total_qty."
+            ),
         )
 
-    work = df.copy()
-    work["on_hand"] = _safe_number_series(
-        work,
-        "on_hand",
+    work = _prepare_stock_columns(
+        df
+    )
+
+    work["name"] = (
+        work["name"]
+        .fillna("Не указано")
+        .astype(str)
+        .str.strip()
+        .replace(
+            "",
+            "Не указано",
+        )
     )
 
     work = (
         work[
-            work["on_hand"] > 0
+            work["total_qty"] > 0
         ]
         .sort_values(
-            "on_hand",
+            "total_qty",
             ascending=False,
         )
         .head(top_n)
@@ -352,30 +462,49 @@ def build_pareto_chart(
         return _empty_figure()
 
     displayed_total = float(
-        work["on_hand"].sum()
+        work["total_qty"].sum()
     )
 
-    work["display_share_pct"] = (
-        work["on_hand"] / displayed_total * 100
-        if displayed_total > 0
-        else 0
-    )
+    if displayed_total > 0:
+        work[
+            "display_share_pct"
+        ] = (
+            work["total_qty"]
+            / displayed_total
+            * 100
+        )
+    else:
+        work[
+            "display_share_pct"
+        ] = 0.0
 
-    work["display_cumulative_pct"] = (
-        work["display_share_pct"].cumsum()
+    work[
+        "display_cumulative_pct"
+    ] = (
+        work["display_share_pct"]
+        .cumsum()
     )
 
     if "share_pct" not in work.columns:
-        work["share_pct"] = work["display_share_pct"]
-
-    if "warehouses" not in work.columns:
-        work["warehouses"] = 0
+        work["share_pct"] = (
+            work["display_share_pct"]
+        )
+    else:
+        work["share_pct"] = pd.to_numeric(
+            work["share_pct"],
+            errors="coerce",
+        ).fillna(
+            work["display_share_pct"]
+        )
 
     work["bar_label"] = work.apply(
         lambda row: (
-            f"{row['on_hand']:,.0f} · "
-            f"{float(row['share_pct']):.1f}%"
-        ).replace(",", " "),
+            f"{row['total_qty']:,.0f} · "
+            f"{row['share_pct']:.1f}%"
+        ).replace(
+            ",",
+            " ",
+        ),
         axis=1,
     )
 
@@ -383,9 +512,9 @@ def build_pareto_chart(
 
     fig.add_trace(
         go.Bar(
-            name="Физический остаток",
+            name="Всего товара",
             x=work["name"],
-            y=work["on_hand"],
+            y=work["total_qty"],
             marker={
                 "color": PRIMARY,
                 "opacity": 0.84,
@@ -399,15 +528,28 @@ def build_pareto_chart(
             cliponaxis=False,
             customdata=work[
                 [
+                    "on_hand",
+                    "in_transit",
                     "share_pct",
                     "warehouses",
+                    "products",
                 ]
             ],
             hovertemplate=(
-                f"<b>{entity_label}: %{{x}}</b><br>"
-                "На складе: <b>%{y:,.0f} шт</b><br>"
-                "Доля общего остатка: %{customdata[0]:.1f}%<br>"
-                "Складов присутствия: %{customdata[1]:,.0f}"
+                f"<b>{entity_label}: "
+                "%{x}</b><br>"
+                "Всего товара: "
+                "<b>%{y:,.0f} шт</b><br>"
+                "На складе: "
+                "%{customdata[0]:,.0f} шт<br>"
+                "В пути: "
+                "%{customdata[1]:,.0f} шт<br>"
+                "Доля общего количества: "
+                "%{customdata[2]:.1f}%<br>"
+                "Складов присутствия: "
+                "%{customdata[3]:,.0f}<br>"
+                "Уникальных NM ID: "
+                "%{customdata[4]:,.0f}"
                 "<extra></extra>"
             ),
         )
@@ -417,7 +559,9 @@ def build_pareto_chart(
         go.Scatter(
             name="Накопленная доля Top",
             x=work["name"],
-            y=work["display_cumulative_pct"],
+            y=work[
+                "display_cumulative_pct"
+            ],
             yaxis="y2",
             mode="lines+markers",
             line={
@@ -433,15 +577,16 @@ def build_pareto_chart(
                 },
             },
             hovertemplate=(
-                f"<b>{entity_label}: %{{x}}</b><br>"
-                "Накопленная доля Top: "
+                f"<b>{entity_label}: "
+                "%{x}</b><br>"
+                "Накопленная доля среди "
+                "показанных позиций: "
                 "<b>%{y:.1f}%</b>"
                 "<extra></extra>"
             ),
         )
     )
 
-    # Линия 80% помогает быстро увидеть концентрацию ABC/Pareto.
     fig.add_hline(
         y=80,
         yref="y2",
@@ -466,10 +611,15 @@ def build_pareto_chart(
 
     fig.update_layout(
         yaxis2={
-            "title": "Накопленная доля, %",
+            "title": (
+                "Накопленная доля, %"
+            ),
             "overlaying": "y",
             "side": "right",
-            "range": [0, 108],
+            "range": [
+                0,
+                108,
+            ],
             "showgrid": False,
             "ticksuffix": "%",
             "fixedrange": True,
@@ -487,7 +637,7 @@ def build_pareto_chart(
     )
 
     fig.update_yaxes(
-        title="Физический остаток, шт",
+        title="Общее количество товара, шт",
         showgrid=True,
         gridcolor=GRID,
         zeroline=False,
@@ -503,58 +653,98 @@ def build_concentration_chart(
     entity_label: str,
     top_n: int = 14,
 ) -> go.Figure:
-    """Горизонтальный рейтинг: объём, доля и число складов присутствия."""
+    """
+    Горизонтальный рейтинг по общему количеству товара.
+
+    Использует total_qty:
+        на складе + в пути.
+
+    Дополнительно показывает:
+    - долю общего количества;
+    - количество складов;
+    - количество уникальных NM ID.
+    """
     if df is None or df.empty:
         return _empty_figure()
 
-    work = df.copy()
-
-    if not {
+    required_columns = {
         "name",
-        "on_hand",
-    }.issubset(work.columns):
-        return _empty_figure()
+        "total_qty",
+    }
 
-    work["on_hand"] = _safe_number_series(
-        work,
-        "on_hand",
+    if not required_columns.issubset(
+        df.columns
+    ):
+        return _empty_figure(
+            title="Недостаточно данных",
+            subtitle=(
+                "Для графика нужны колонки "
+                "name и total_qty."
+            ),
+        )
+
+    work = _prepare_stock_columns(
+        df
+    )
+
+    work["name"] = (
+        work["name"]
+        .fillna("Не указано")
+        .astype(str)
+        .str.strip()
+        .replace(
+            "",
+            "Не указано",
+        )
     )
 
     if "share_pct" not in work.columns:
-        total = float(
-            work["on_hand"].sum()
-        )
-        work["share_pct"] = (
-            work["on_hand"] / total * 100
-            if total > 0
-            else 0
+        total_quantity = float(
+            work["total_qty"].sum()
         )
 
-    if "warehouses" not in work.columns:
-        work["warehouses"] = 0
+        if total_quantity > 0:
+            work["share_pct"] = (
+                work["total_qty"]
+                / total_quantity
+                * 100
+            )
+        else:
+            work["share_pct"] = 0.0
+    else:
+        work["share_pct"] = pd.to_numeric(
+            work["share_pct"],
+            errors="coerce",
+        ).fillna(0)
 
     work = (
         work[
-            work["on_hand"] > 0
+            work["total_qty"] > 0
         ]
         .sort_values(
-            "on_hand",
+            "total_qty",
             ascending=False,
         )
         .head(top_n)
         .sort_values(
-            "on_hand",
+            "total_qty",
             ascending=True,
         )
         .reset_index(drop=True)
     )
 
+    if work.empty:
+        return _empty_figure()
+
     work["label"] = work.apply(
         lambda row: (
-            f"<b>{row['on_hand']:,.0f}</b> "
-            f"· {float(row['share_pct']):.1f}% "
+            f"<b>{row['total_qty']:,.0f}</b> "
+            f"· {row['share_pct']:.1f}% "
             f"· {int(row['warehouses'])} скл."
-        ).replace(",", " "),
+        ).replace(
+            ",",
+            " ",
+        ),
         axis=1,
     )
 
@@ -562,7 +752,7 @@ def build_concentration_chart(
 
     fig.add_trace(
         go.Bar(
-            x=work["on_hand"],
+            x=work["total_qty"],
             y=work["name"],
             orientation="h",
             marker={
@@ -571,15 +761,28 @@ def build_concentration_chart(
             },
             customdata=work[
                 [
+                    "on_hand",
+                    "in_transit",
                     "share_pct",
                     "warehouses",
+                    "products",
                 ]
             ],
             hovertemplate=(
-                f"<b>{entity_label}: %{{y}}</b><br>"
-                "На складе: <b>%{x:,.0f} шт</b><br>"
-                "Доля общего остатка: %{customdata[0]:.1f}%<br>"
-                "Складов присутствия: %{customdata[1]:,.0f}"
+                f"<b>{entity_label}: "
+                "%{y}</b><br>"
+                "Всего товара: "
+                "<b>%{x:,.0f} шт</b><br>"
+                "На складе: "
+                "%{customdata[0]:,.0f} шт<br>"
+                "В пути: "
+                "%{customdata[1]:,.0f} шт<br>"
+                "Доля общего количества: "
+                "%{customdata[2]:.1f}%<br>"
+                "Складов присутствия: "
+                "%{customdata[3]:,.0f}<br>"
+                "Уникальных NM ID: "
+                "%{customdata[4]:,.0f}"
                 "<extra></extra>"
             ),
             showlegend=False,
@@ -588,7 +791,7 @@ def build_concentration_chart(
 
     fig.add_trace(
         go.Scatter(
-            x=work["on_hand"],
+            x=work["total_qty"],
             y=work["name"],
             mode="text",
             text=work["label"],
@@ -613,7 +816,7 @@ def build_concentration_chart(
     )
 
     fig.update_xaxes(
-        title="Физический остаток, шт",
+        title="Общее количество товара, шт",
         showgrid=True,
         gridcolor=GRID,
         zeroline=False,

@@ -140,7 +140,7 @@ def _top_share(
 
     values = pd.to_numeric(
         df.get(
-            "on_hand",
+            "total_qty",
             pd.Series(dtype=float),
         ),
         errors="coerce",
@@ -332,7 +332,7 @@ def build_stock_distribution_tabs(
                                 insight=(
                                     f"Top-5 брендов формируют "
                                     f"{top_5_brand_share:.1f}% "
-                                    f"физического остатка."
+                                    f"остатка."
                                 ),
                             ),
                             dcc.Graph(
@@ -370,7 +370,7 @@ def build_stock_distribution_tabs(
                                 insight=(
                                     f"Top-5 категорий формируют "
                                     f"{top_5_category_share:.1f}% "
-                                    f"физического остатка."
+                                    f"остатка."
                                 ),
                             ),
                             dcc.Graph(

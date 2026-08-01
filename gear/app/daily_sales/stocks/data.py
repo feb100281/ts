@@ -3373,6 +3373,393 @@ def get_stocks_by_warehouse_products(report_date):
     return df
 
 
+# def get_stock_dimension_distributions(
+#     report_date,
+#     brand_list=None,
+#     cat_list=None,
+#     gender_list=None,
+# ):
+#     """
+#     Быстрая агрегированная аналитика остатков для dashboard-вкладок.
+
+#     Возвращает два DataFrame:
+#         brands, categories
+
+#     Производительность:
+#     - stocks.unpacked_stocks читается один раз;
+#     - нет цикла по складам;
+#     - карточки товара заранее дедуплицируются по nm_id;
+#     - фильтры применяются внутри SQL;
+#     - результат сразу агрегирован до уровня бренда / категории.
+
+#     Показатели:
+#     - on_hand: физический остаток;
+#     - in_transit: в пути от клиента + к клиенту;
+#     - total_qty: физический остаток + в пути;
+#     - warehouses: количество складов присутствия;
+#     - products: количество уникальных NM ID;
+#     - share_pct: доля физического остатка;
+#     - cumulative_share_pct: накопленная доля физического остатка;
+#     - rank: место по физическому остатку.
+#     """
+
+#     def clean_filter(values):
+#         return [
+#             str(value).strip()
+#             for value in (values or [])
+#             if value is not None
+#             and str(value).strip()
+#         ]
+
+#     brand_list = clean_filter(brand_list)
+#     cat_list = clean_filter(cat_list)
+#     gender_list = clean_filter(gender_list)
+
+#     params = {
+#         "report_date": report_date,
+#     }
+#     filters = []
+
+#     def add_in_filter(column, values, prefix):
+#         if not values:
+#             return
+
+#         placeholders = []
+#         for index, value in enumerate(values):
+#             key = f"{prefix}_{index}"
+#             params[key] = value
+#             placeholders.append(f"${key}")
+
+#         filters.append(
+#             f"{column} IN ({', '.join(placeholders)})"
+#         )
+
+#     add_in_filter(
+#         "e.brand",
+#         brand_list,
+#         "brand",
+#     )
+#     add_in_filter(
+#         "e.category",
+#         cat_list,
+#         "category",
+#     )
+#     add_in_filter(
+#         "e.gender",
+#         gender_list,
+#         "gender",
+#     )
+
+#     filter_sql = (
+#         " AND " + " AND ".join(filters)
+#         if filters
+#         else ""
+#     )
+
+#     query = f"""
+#         WITH
+
+#         /*
+#         ================================================================
+#         ОСТАТКИ ДО УРОВНЯ СКЛАД + NM_ID
+
+#         Размеры предварительно суммируются, поэтому последующие JOIN
+#         не размножают складские количества.
+#         ================================================================
+#         */
+#         stock_by_warehouse_nm AS (
+#             SELECT
+#                 COALESCE(
+#                     NULLIF(TRIM(t.warehouse_name), ''),
+#                     'Склад не указан'
+#                 ) AS warehouse,
+
+#                 t.nm_id,
+
+#                 SUM(
+#                     COALESCE(t.quantity, 0)
+#                 ) AS on_hand,
+
+#                 SUM(
+#                     COALESCE(t.in_way_from_client, 0)
+#                     + COALESCE(t.in_way_to_client, 0)
+#                 ) AS in_transit
+
+#             FROM stocks.unpacked_stocks t
+
+#             WHERE
+#                 t.date_from::DATE = $report_date::DATE
+#                 AND t.nm_id IS NOT NULL
+
+#             GROUP BY
+#                 COALESCE(
+#                     NULLIF(TRIM(t.warehouse_name), ''),
+#                     'Склад не указан'
+#                 ),
+#                 t.nm_id
+#         ),
+
+#         /*
+#         ================================================================
+#         БРЕНД: строго одна строка на NM_ID
+#         ================================================================
+#         */
+#         brands AS (
+#             SELECT
+#                 nm_id,
+#                 COALESCE(
+#                     NULLIF(TRIM(MAX(brand)), ''),
+#                     'Бренд не указан'
+#                 ) AS brand
+
+#             FROM cards.unpacked_cards
+
+#             WHERE nm_id IS NOT NULL
+
+#             GROUP BY nm_id
+#         ),
+
+#         /*
+#         ================================================================
+#         КАРТОЧКА: строго одна строка на NM_ID
+
+#         MAX используется намеренно как защита от возможных дублей
+#         справочника cards.product.
+#         ================================================================
+#         */
+#         products AS (
+#             SELECT
+#                 nm_id,
+
+#                 COALESCE(
+#                     NULLIF(TRIM(MAX(subject_name)), ''),
+#                     'Категория не указана'
+#                 ) AS category,
+
+#                 COALESCE(
+#                     NULLIF(TRIM(MAX(gender)), ''),
+#                     'Пол не указан'
+#                 ) AS gender
+
+#             FROM cards.product
+
+#             WHERE nm_id IS NOT NULL
+
+#             GROUP BY nm_id
+#         ),
+
+#         /*
+#         ================================================================
+#         ОБОГАЩЁННЫЕ СКЛАДСКИЕ ОСТАТКИ
+#         ================================================================
+#         */
+#         enriched AS (
+#             SELECT
+#                 s.warehouse,
+#                 s.nm_id,
+
+#                 COALESCE(
+#                     b.brand,
+#                     'Бренд не указан'
+#                 ) AS brand,
+
+#                 COALESCE(
+#                     p.category,
+#                     'Категория не указана'
+#                 ) AS category,
+
+#                 COALESCE(
+#                     p.gender,
+#                     'Пол не указан'
+#                 ) AS gender,
+
+#                 s.on_hand,
+#                 s.in_transit,
+#                 s.on_hand + s.in_transit AS total_qty
+
+#             FROM stock_by_warehouse_nm s
+
+#             LEFT JOIN brands b
+#                 ON b.nm_id = s.nm_id
+
+#             LEFT JOIN products p
+#                 ON p.nm_id = s.nm_id
+#         ),
+
+#         /*
+#         ================================================================
+#         БРЕНДЫ
+#         ================================================================
+#         */
+#         brand_distribution AS (
+#             SELECT
+#                 'brand' AS dimension,
+#                 e.brand AS name,
+
+#                 SUM(e.on_hand) AS on_hand,
+#                 SUM(e.in_transit) AS in_transit,
+#                 SUM(e.total_qty) AS total_qty,
+
+#                 COUNT(
+#                     DISTINCT CASE
+#                         WHEN e.total_qty > 0
+#                         THEN e.warehouse
+#                     END
+#                 ) AS warehouses,
+
+#                 COUNT(
+#                     DISTINCT CASE
+#                         WHEN e.total_qty > 0
+#                         THEN e.nm_id
+#                     END
+#                 ) AS products
+
+#             FROM enriched e
+
+#             WHERE
+#                 e.total_qty > 0
+#                 {filter_sql}
+
+#             GROUP BY e.brand
+#         ),
+
+#         /*
+#         ================================================================
+#         КАТЕГОРИИ
+#         ================================================================
+#         */
+#         category_distribution AS (
+#             SELECT
+#                 'category' AS dimension,
+#                 e.category AS name,
+
+#                 SUM(e.on_hand) AS on_hand,
+#                 SUM(e.in_transit) AS in_transit,
+#                 SUM(e.total_qty) AS total_qty,
+
+#                 COUNT(
+#                     DISTINCT CASE
+#                         WHEN e.total_qty > 0
+#                         THEN e.warehouse
+#                     END
+#                 ) AS warehouses,
+
+#                 COUNT(
+#                     DISTINCT CASE
+#                         WHEN e.total_qty > 0
+#                         THEN e.nm_id
+#                     END
+#                 ) AS products
+
+#             FROM enriched e
+
+#             WHERE
+#                 e.total_qty > 0
+#                 {filter_sql}
+
+#             GROUP BY e.category
+#         )
+
+#         SELECT *
+#         FROM brand_distribution
+
+#         UNION ALL
+
+#         SELECT *
+#         FROM category_distribution
+
+#         ORDER BY
+#             dimension,
+#             on_hand DESC,
+#             name
+#     """
+
+#     with get_duckdb_conn_with_opt() as con:
+#         result = con.execute(
+#             query,
+#             params,
+#         ).df()
+
+#     empty_columns = [
+#         "name",
+#         "on_hand",
+#         "in_transit",
+#         "total_qty",
+#         "warehouses",
+#         "products",
+#         "share_pct",
+#         "cumulative_share_pct",
+#         "rank",
+#     ]
+
+#     if result.empty:
+#         import pandas as pd
+
+#         empty = pd.DataFrame(
+#             columns=empty_columns
+#         )
+#         return empty.copy(), empty.copy()
+
+#     def prepare_dimension(dimension):
+#         frame = (
+#             result[
+#                 result["dimension"] == dimension
+#             ]
+#             .drop(
+#                 columns=["dimension"]
+#             )
+#             .copy()
+#         )
+
+#         numeric_columns = [
+#             "on_hand",
+#             "in_transit",
+#             "total_qty",
+#             "warehouses",
+#             "products",
+#         ]
+
+#         for column in numeric_columns:
+#             frame[column] = frame[column].fillna(0)
+
+#         frame = (
+#             frame[
+#                 frame["total_qty"] > 0
+#             ]
+#             .sort_values(
+#                 ["on_hand", "total_qty", "name"],
+#                 ascending=[False, False, True],
+#             )
+#             .reset_index(drop=True)
+#         )
+
+#         physical_total = float(
+#             frame["on_hand"].sum()
+#         )
+
+#         frame["share_pct"] = (
+#             frame["on_hand"]
+#             / physical_total
+#             * 100
+#             if physical_total > 0
+#             else 0.0
+#         )
+
+#         frame["cumulative_share_pct"] = (
+#             frame["share_pct"].cumsum()
+#         )
+
+#         frame["rank"] = frame.index + 1
+
+#         return frame[empty_columns]
+
+#     return (
+#         prepare_dimension("brand"),
+#         prepare_dimension("category"),
+#     )
+
+
+
 def get_stock_dimension_distributions(
     report_date,
     brand_list=None,
@@ -3382,26 +3769,44 @@ def get_stock_dimension_distributions(
     """
     Быстрая агрегированная аналитика остатков для dashboard-вкладок.
 
-    Возвращает два DataFrame:
+    Возвращает:
         brands, categories
+
+    Логика показателей:
+    - on_hand:
+        физический остаток на складах;
+
+    - in_transit:
+        в пути от клиента + в пути к клиенту;
+
+    - total_qty:
+        физический остаток + весь товар в пути;
+
+    - warehouses:
+        количество складов присутствия;
+
+    - products:
+        количество уникальных NM ID;
+
+    - share_pct:
+        доля бренда / категории в общем количестве total_qty;
+
+    - cumulative_share_pct:
+        накопленная доля total_qty;
+
+    - rank:
+        место по total_qty.
 
     Производительность:
     - stocks.unpacked_stocks читается один раз;
     - нет цикла по складам;
-    - карточки товара заранее дедуплицируются по nm_id;
+    - данные сначала агрегируются до склад + nm_id;
+    - справочники дедуплицируются до одной строки на nm_id;
     - фильтры применяются внутри SQL;
-    - результат сразу агрегирован до уровня бренда / категории.
-
-    Показатели:
-    - on_hand: физический остаток;
-    - in_transit: в пути от клиента + к клиенту;
-    - total_qty: физический остаток + в пути;
-    - warehouses: количество складов присутствия;
-    - products: количество уникальных NM ID;
-    - share_pct: доля физического остатка;
-    - cumulative_share_pct: накопленная доля физического остатка;
-    - rank: место по физическому остатку.
+    - результат сразу агрегируется по брендам и категориям.
     """
+
+    import pandas as pd
 
     def clean_filter(values):
         return [
@@ -3411,43 +3816,62 @@ def get_stock_dimension_distributions(
             and str(value).strip()
         ]
 
-    brand_list = clean_filter(brand_list)
-    cat_list = clean_filter(cat_list)
-    gender_list = clean_filter(gender_list)
+    brand_list = clean_filter(
+        brand_list
+    )
+    cat_list = clean_filter(
+        cat_list
+    )
+    gender_list = clean_filter(
+        gender_list
+    )
 
     params = {
         "report_date": report_date,
     }
+
     filters = []
 
-    def add_in_filter(column, values, prefix):
+    def add_in_filter(
+        column,
+        values,
+        prefix,
+    ):
         if not values:
             return
 
         placeholders = []
+
         for index, value in enumerate(values):
             key = f"{prefix}_{index}"
+
             params[key] = value
-            placeholders.append(f"${key}")
+
+            placeholders.append(
+                f"${key}"
+            )
 
         filters.append(
-            f"{column} IN ({', '.join(placeholders)})"
+            f"{column} IN "
+            f"({', '.join(placeholders)})"
         )
 
     add_in_filter(
-        "e.brand",
-        brand_list,
-        "brand",
+        column="e.brand",
+        values=brand_list,
+        prefix="brand",
     )
+
     add_in_filter(
-        "e.category",
-        cat_list,
-        "category",
+        column="e.category",
+        values=cat_list,
+        prefix="category",
     )
+
     add_in_filter(
-        "e.gender",
-        gender_list,
-        "gender",
+        column="e.gender",
+        values=gender_list,
+        prefix="gender",
     )
 
     filter_sql = (
@@ -3461,70 +3885,119 @@ def get_stock_dimension_distributions(
 
         /*
         ================================================================
-        ОСТАТКИ ДО УРОВНЯ СКЛАД + NM_ID
+        ОСТАТКИ НА УРОВНЕ:
 
-        Размеры предварительно суммируются, поэтому последующие JOIN
-        не размножают складские количества.
+            СКЛАД + NM_ID
+
+        Все размеры одного NM ID на одном складе предварительно
+        суммируются. Поэтому последующие JOIN не размножают остатки.
         ================================================================
         */
         stock_by_warehouse_nm AS (
             SELECT
                 COALESCE(
-                    NULLIF(TRIM(t.warehouse_name), ''),
+                    NULLIF(
+                        TRIM(t.warehouse_name),
+                        ''
+                    ),
                     'Склад не указан'
                 ) AS warehouse,
 
                 t.nm_id,
 
                 SUM(
-                    COALESCE(t.quantity, 0)
+                    COALESCE(
+                        t.quantity,
+                        0
+                    )
                 ) AS on_hand,
 
                 SUM(
-                    COALESCE(t.in_way_from_client, 0)
-                    + COALESCE(t.in_way_to_client, 0)
-                ) AS in_transit
+                    COALESCE(
+                        t.in_way_from_client,
+                        0
+                    )
+                    +
+                    COALESCE(
+                        t.in_way_to_client,
+                        0
+                    )
+                ) AS in_transit,
+
+                SUM(
+                    COALESCE(
+                        t.quantity,
+                        0
+                    )
+                    +
+                    COALESCE(
+                        t.in_way_from_client,
+                        0
+                    )
+                    +
+                    COALESCE(
+                        t.in_way_to_client,
+                        0
+                    )
+                ) AS total_qty
 
             FROM stocks.unpacked_stocks t
 
             WHERE
-                t.date_from::DATE = $report_date::DATE
+                t.date_from::DATE
+                    = $report_date::DATE
+
                 AND t.nm_id IS NOT NULL
 
             GROUP BY
                 COALESCE(
-                    NULLIF(TRIM(t.warehouse_name), ''),
+                    NULLIF(
+                        TRIM(t.warehouse_name),
+                        ''
+                    ),
                     'Склад не указан'
                 ),
+
                 t.nm_id
         ),
 
+
         /*
         ================================================================
-        БРЕНД: строго одна строка на NM_ID
+        БРЕНД
+
+        Строго одна строка на NM ID.
         ================================================================
         */
         brands AS (
             SELECT
                 nm_id,
+
                 COALESCE(
-                    NULLIF(TRIM(MAX(brand)), ''),
+                    NULLIF(
+                        TRIM(
+                            MAX(brand)
+                        ),
+                        ''
+                    ),
                     'Бренд не указан'
                 ) AS brand
 
             FROM cards.unpacked_cards
 
-            WHERE nm_id IS NOT NULL
+            WHERE
+                nm_id IS NOT NULL
 
-            GROUP BY nm_id
+            GROUP BY
+                nm_id
         ),
+
 
         /*
         ================================================================
-        КАРТОЧКА: строго одна строка на NM_ID
+        КАТЕГОРИЯ И ПОЛ
 
-        MAX используется намеренно как защита от возможных дублей
-        справочника cards.product.
+        Строго одна строка на NM ID.
         ================================================================
         */
         products AS (
@@ -3532,25 +4005,38 @@ def get_stock_dimension_distributions(
                 nm_id,
 
                 COALESCE(
-                    NULLIF(TRIM(MAX(subject_name)), ''),
+                    NULLIF(
+                        TRIM(
+                            MAX(subject_name)
+                        ),
+                        ''
+                    ),
                     'Категория не указана'
                 ) AS category,
 
                 COALESCE(
-                    NULLIF(TRIM(MAX(gender)), ''),
+                    NULLIF(
+                        TRIM(
+                            MAX(gender)
+                        ),
+                        ''
+                    ),
                     'Пол не указан'
                 ) AS gender
 
             FROM cards.product
 
-            WHERE nm_id IS NOT NULL
+            WHERE
+                nm_id IS NOT NULL
 
-            GROUP BY nm_id
+            GROUP BY
+                nm_id
         ),
+
 
         /*
         ================================================================
-        ОБОГАЩЁННЫЕ СКЛАДСКИЕ ОСТАТКИ
+        ОБОГАЩЁННЫЕ ОСТАТКИ
         ================================================================
         */
         enriched AS (
@@ -3575,7 +4061,7 @@ def get_stock_dimension_distributions(
 
                 s.on_hand,
                 s.in_transit,
-                s.on_hand + s.in_transit AS total_qty
+                s.total_qty
 
             FROM stock_by_warehouse_nm s
 
@@ -3586,19 +4072,29 @@ def get_stock_dimension_distributions(
                 ON p.nm_id = s.nm_id
         ),
 
+
         /*
         ================================================================
-        БРЕНДЫ
+        РАСПРЕДЕЛЕНИЕ ПО БРЕНДАМ
         ================================================================
         */
         brand_distribution AS (
             SELECT
                 'brand' AS dimension,
+
                 e.brand AS name,
 
-                SUM(e.on_hand) AS on_hand,
-                SUM(e.in_transit) AS in_transit,
-                SUM(e.total_qty) AS total_qty,
+                SUM(
+                    e.on_hand
+                ) AS on_hand,
+
+                SUM(
+                    e.in_transit
+                ) AS in_transit,
+
+                SUM(
+                    e.total_qty
+                ) AS total_qty,
 
                 COUNT(
                     DISTINCT CASE
@@ -3620,22 +4116,33 @@ def get_stock_dimension_distributions(
                 e.total_qty > 0
                 {filter_sql}
 
-            GROUP BY e.brand
+            GROUP BY
+                e.brand
         ),
+
 
         /*
         ================================================================
-        КАТЕГОРИИ
+        РАСПРЕДЕЛЕНИЕ ПО КАТЕГОРИЯМ
         ================================================================
         */
         category_distribution AS (
             SELECT
                 'category' AS dimension,
+
                 e.category AS name,
 
-                SUM(e.on_hand) AS on_hand,
-                SUM(e.in_transit) AS in_transit,
-                SUM(e.total_qty) AS total_qty,
+                SUM(
+                    e.on_hand
+                ) AS on_hand,
+
+                SUM(
+                    e.in_transit
+                ) AS in_transit,
+
+                SUM(
+                    e.total_qty
+                ) AS total_qty,
 
                 COUNT(
                     DISTINCT CASE
@@ -3657,20 +4164,41 @@ def get_stock_dimension_distributions(
                 e.total_qty > 0
                 {filter_sql}
 
-            GROUP BY e.category
+            GROUP BY
+                e.category
         )
 
-        SELECT *
+
+        SELECT
+            dimension,
+            name,
+            on_hand,
+            in_transit,
+            total_qty,
+            warehouses,
+            products
+
         FROM brand_distribution
+
 
         UNION ALL
 
-        SELECT *
+
+        SELECT
+            dimension,
+            name,
+            on_hand,
+            in_transit,
+            total_qty,
+            warehouses,
+            products
+
         FROM category_distribution
+
 
         ORDER BY
             dimension,
-            on_hand DESC,
+            total_qty DESC,
             name
     """
 
@@ -3680,7 +4208,7 @@ def get_stock_dimension_distributions(
             params,
         ).df()
 
-    empty_columns = [
+    output_columns = [
         "name",
         "on_hand",
         "in_transit",
@@ -3693,20 +4221,26 @@ def get_stock_dimension_distributions(
     ]
 
     if result.empty:
-        import pandas as pd
-
         empty = pd.DataFrame(
-            columns=empty_columns
+            columns=output_columns
         )
-        return empty.copy(), empty.copy()
 
-    def prepare_dimension(dimension):
+        return (
+            empty.copy(),
+            empty.copy(),
+        )
+
+    def prepare_dimension(
+        dimension,
+    ):
         frame = (
             result[
                 result["dimension"] == dimension
             ]
             .drop(
-                columns=["dimension"]
+                columns=[
+                    "dimension",
+                ]
             )
             .copy()
         )
@@ -3720,41 +4254,79 @@ def get_stock_dimension_distributions(
         ]
 
         for column in numeric_columns:
-            frame[column] = frame[column].fillna(0)
+            frame[column] = pd.to_numeric(
+                frame[column],
+                errors="coerce",
+            ).fillna(0)
+
+        frame["name"] = (
+            frame["name"]
+            .fillna("Не указано")
+            .astype(str)
+            .str.strip()
+            .replace(
+                "",
+                "Не указано",
+            )
+        )
 
         frame = (
             frame[
                 frame["total_qty"] > 0
             ]
             .sort_values(
-                ["on_hand", "total_qty", "name"],
-                ascending=[False, False, True],
+                by=[
+                    "total_qty",
+                    "on_hand",
+                    "name",
+                ],
+                ascending=[
+                    False,
+                    False,
+                    True,
+                ],
             )
-            .reset_index(drop=True)
+            .reset_index(
+                drop=True
+            )
         )
 
-        physical_total = float(
-            frame["on_hand"].sum()
+        total_quantity = float(
+            frame["total_qty"].sum()
         )
 
-        frame["share_pct"] = (
-            frame["on_hand"]
-            / physical_total
-            * 100
-            if physical_total > 0
-            else 0.0
-        )
+        if total_quantity > 0:
+            frame["share_pct"] = (
+                frame["total_qty"]
+                / total_quantity
+                * 100
+            )
+        else:
+            frame["share_pct"] = 0.0
 
         frame["cumulative_share_pct"] = (
-            frame["share_pct"].cumsum()
+            frame["share_pct"]
+            .cumsum()
         )
 
-        frame["rank"] = frame.index + 1
+        frame["rank"] = (
+            frame.index + 1
+        )
 
-        return frame[empty_columns]
+        return frame[
+            output_columns
+        ]
+
+    brands = prepare_dimension(
+        "brand"
+    )
+
+    categories = prepare_dimension(
+        "category"
+    )
 
     return (
-        prepare_dimension("brand"),
-        prepare_dimension("category"),
+        brands,
+        categories,
     )
 

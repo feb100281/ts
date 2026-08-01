@@ -1293,8 +1293,9 @@ def _date_col(
     header,
     width=130,
     cell_style=None,
+    pinned=False,
 ):
-    return {
+    column = {
         "field": field,
         "headerName": header,
         "width": width,
@@ -1302,6 +1303,12 @@ def _date_col(
         "valueFormatter": DATE_FORMATTER,
         "cellStyle": cell_style or {},
     }
+
+    if pinned:
+        column["pinned"] = "left"
+        column["lockPinned"] = True
+
+    return column
 
 
 def _base_grid(
@@ -1448,6 +1455,7 @@ def _daily_columns(
                         "1px solid #e5e7eb"
                     ),
                 },
+                pinned=True,
             ),
 
             _money_col(
