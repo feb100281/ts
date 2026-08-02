@@ -25,7 +25,10 @@ from .stocks.dashboard import (
     register_stock_dashboard_callbacks,
 )
 
-
+from .daily_brief import (
+    daily_brief_controls,
+    register_daily_brief_callbacks,
+)
 
 
 
@@ -206,12 +209,19 @@ class MainWindow:
                 "backgroundColor": "#ffffff",
             },
             children=[
-                dmc.Title(
-                    "Продажи за период",
-                    order=1,
-                    fw=800,
-                    mb=6,
-                ),
+               dmc.Group(
+                        justify="space-between",
+                        align="center",
+                        mb=6,
+                        children=[
+                            dmc.Title(
+                                "Продажи за период",
+                                order=1,
+                                fw=800,
+                            ),
+                            daily_brief_controls(),
+                        ],
+                    ),
 
                 dmc.Divider(
                     size="xs",
@@ -473,6 +483,7 @@ class MainWindow:
         register_ai_analysis_callbacks(app)
         register_price_analysis_export_callbacks(app)
         register_stock_dashboard_callbacks(app)
+        register_daily_brief_callbacks(app)
 
 
 

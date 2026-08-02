@@ -1321,7 +1321,7 @@
 # ;
 # """
 
-
+# gear/app/data/queries.py
 BASE_QUERY = """
 CREATE OR REPLACE TEMP TABLE base AS
 
