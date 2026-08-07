@@ -21,7 +21,7 @@ from .plan import (
 )
 from .sales import get_sales_data
 from .stocks import get_stock_data
-
+from .financial import get_financial_data
 
 def build_daily_brief_payload(
     report_date: date | str,
@@ -50,6 +50,19 @@ def build_daily_brief_payload(
     sales = get_sales_data(
         report_date,
         plan_source,
+    )
+    
+    # =====================================================================
+    # ФИНАНСОВЫЙ РЕЗУЛЬТАТ
+    #
+    # Отдельный источник для самостоятельного финансового разворота.
+    # Здесь хранится история и структура результата; presentation-слой
+    # больше не должен собирать финансовую аналитику из sales.py вручную.
+    # =====================================================================
+
+    financial = get_financial_data(
+        report_date,
+        history_days=30,
     )
 
     plan = get_month_plan(
@@ -93,6 +106,7 @@ def build_daily_brief_payload(
             pd.Timestamp.now().isoformat()
         ),
         "sales": sales,
+        "financial": financial,
         "plan": plan,
         "half_year_wb_plan": (
             half_year_plan

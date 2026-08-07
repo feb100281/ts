@@ -3591,4 +3591,2717 @@ body {
 
 
 
+/* ==================================================================
+   FINANCIAL PAGE
+   ================================================================== */
+
+.financial-page {
+    padding-top: 7.5mm;
+}
+
+.financial-page .masthead {
+    margin-bottom: 5px;
+}
+
+.financial-page .masthead h1 {
+    font-size: 25px;
+}
+
+
+/* ==================================================================
+   KPI
+   ================================================================== */
+
+.finance-kpi-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+
+    gap: 5px;
+
+    margin-bottom: 6px;
+}
+
+.finance-kpi {
+    min-width: 0;
+    min-height: 58px;
+
+    padding: 6px 7px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #14213D;
+
+    background: #FFFDF7;
+}
+
+.finance-kpi.positive {
+    border-top-color: #16805E;
+}
+
+.finance-kpi.negative {
+    border-top-color: #C23D58;
+
+    background: #FFF7F8;
+}
+
+.finance-kpi.cost {
+    border-top-color: #8067AB;
+}
+
+.finance-kpi.returns {
+    border-top-color: #E85D75;
+}
+
+.finance-kpi-top {
+    display: flex;
+
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 4px;
+
+    color: #667085;
+
+    font-size: 5.5px;
+    line-height: 1.05;
+    font-weight: 800;
+
+    letter-spacing: .42px;
+    text-transform: uppercase;
+}
+
+.finance-kpi-icon {
+    width: 18px;
+    height: 18px;
+
+    flex: 0 0 18px;
+}
+
+.finance-kpi-value {
+    margin-top: 4px;
+
+    overflow: hidden;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 14px;
+    line-height: 1;
+    font-weight: 800;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.finance-kpi.negative
+.finance-kpi-value {
+    color: #C23D58;
+}
+
+.finance-kpi-note {
+    margin-top: 3px;
+
+    overflow: hidden;
+
+    color: #667085;
+
+    font-size: 5.6px;
+    line-height: 1.1;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+
+/* ==================================================================
+   HEADINGS
+   ================================================================== */
+
+.finance-kicker {
+    color: #E85D75;
+
+    font-size: 5.8px;
+    line-height: 1;
+    font-weight: 800;
+
+    letter-spacing: .72px;
+
+    text-transform: uppercase;
+}
+
+.finance-block-title,
+.finance-side-title {
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 12.7px;
+    line-height: 1.06;
+    font-weight: 700;
+}
+
+.finance-block-title.small {
+    font-size: 11.4px;
+}
+
+.finance-block-note,
+.finance-side-subtitle {
+    color: #667085;
+
+    font-size: 5.8px;
+    line-height: 1.15;
+}
+
+.finance-block-head {
+    display: flex;
+
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 8px;
+}
+
+
+/* ==================================================================
+   MAIN GRID
+   ================================================================== */
+
+.finance-main-grid {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 2.05fr)
+        minmax(0, .95fr);
+
+    gap: 6px;
+
+    margin-bottom: 5px;
+}
+
+.finance-main-card,
+.finance-side-card {
+    min-width: 0;
+
+    border: 1px solid #D7DCE2;
+
+    background: #FFFDF7;
+
+    break-inside: avoid;
+}
+
+.finance-main-card {
+    padding:
+        6px
+        7px
+        3px;
+
+    border-top:
+        3px solid #14213D;
+}
+
+.finance-side-card {
+    padding: 6px 7px 4px;
+
+    border-top:
+        3px solid #8067AB;
+
+    background: #F9F7FC;
+}
+
+.finance-bridge-chart {
+    width: 100%;
+    height: 158px;
+
+    margin-top: 2px;
+}
+
+.finance-bridge-chart svg,
+.finance-economics-chart svg,
+.finance-trend-chart svg,
+.finance-weeks-strip svg {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    background: transparent;
+}
+
+.finance-economics-chart {
+    width: 100%;
+    height: 153px;
+
+    margin-top: 4px;
+}
+
+
+/* ==================================================================
+   DAY COMMENT
+   ================================================================== */
+
+.finance-insight {
+    margin-bottom: 5px;
+
+    padding:
+        6px
+        9px
+        6px
+        11px;
+
+    border: 1px solid #D7DCE2;
+    border-left: 4px solid #16805E;
+
+    background: #F4F0E6;
+}
+
+.finance-insight-label {
+    margin-bottom: 3px;
+
+    color: #667085;
+
+    font-size: 5.5px;
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: .55px;
+
+    text-transform: uppercase;
+}
+
+.finance-insight-text {
+    color: #354052;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 7.7px;
+    line-height: 1.38;
+}
+
+.finance-insight-text b {
+    color: #14213D;
+}
+
+
+/* ==================================================================
+   MID GRID
+   ================================================================== */
+
+.finance-mid-grid {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1.9fr)
+        minmax(0, .90fr);
+
+    gap: 6px;
+
+    margin-bottom: 5px;
+}
+
+.finance-trend-card,
+.finance-week-card {
+    min-width: 0;
+
+    border: 1px solid #D7DCE2;
+
+    background: #FFFDF7;
+
+    break-inside: avoid;
+}
+
+.finance-trend-card {
+    padding:
+        6px
+        7px
+        2px;
+
+    border-top:
+        3px solid #14213D;
+}
+
+.finance-trend-chart {
+    width: 100%;
+    height: 132px;
+
+    margin-top: 2px;
+}
+
+
+/* ==================================================================
+   LEGEND
+   ================================================================== */
+
+.finance-legend {
+    display: flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    color: #667085;
+
+    font-size: 5.5px;
+}
+
+.finance-dot {
+    display: inline-block;
+
+    width: 5px;
+    height: 5px;
+
+    margin-left: 5px;
+
+    border-radius: 50%;
+}
+
+.finance-dot:first-child {
+    margin-left: 0;
+}
+
+.finance-dot.positive {
+    background: #16805E;
+}
+
+.finance-dot.negative {
+    background: #C23D58;
+}
+
+
+/* ==================================================================
+   CURRENT WEEK
+   ================================================================== */
+
+.finance-week-card {
+    padding: 6px 8px;
+
+    border-top:
+        3px solid #E85D75;
+
+    background: #FAF8F2;
+}
+
+.finance-week-period {
+    margin-top: 3px;
+
+    color: #667085;
+
+    font-size: 6.3px;
+}
+
+.finance-week-status {
+    display: inline-block;
+
+    margin-top: 5px;
+
+    padding:
+        2px
+        4px;
+
+    background: #F1EDE3;
+
+    color: #667085;
+
+    font-size: 5.4px;
+    font-weight: 800;
+
+    letter-spacing: .4px;
+}
+
+.finance-week-result {
+    margin-top: 5px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 20px;
+    line-height: 1;
+
+    font-weight: 800;
+}
+
+.finance-week-result.positive {
+    color: #16805E;
+}
+
+.finance-week-result.negative {
+    color: #C23D58;
+}
+
+.finance-week-result-caption {
+    margin-top: 2px;
+
+    color: #667085;
+
+    font-size: 6px;
+}
+
+.finance-week-metrics {
+    margin-top: 6px;
+
+    border-top:
+        1px solid #D7DCE2;
+
+    border-bottom:
+        1px solid #D7DCE2;
+}
+
+.finance-week-metric {
+    display: flex;
+
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 3px 0;
+
+    color: #667085;
+
+    font-size: 6.2px;
+}
+
+.finance-week-metric b {
+    color: #14213D;
+
+    font-size: 6.8px;
+}
+
+.finance-week-comparison {
+    margin-top: 5px;
+}
+
+.finance-week-comparison-label {
+    color: #667085;
+
+    font-size: 5.4px;
+
+    text-transform: uppercase;
+
+    letter-spacing: .4px;
+}
+
+.finance-week-comparison-main {
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        serif;
+
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.finance-week-comparison-base {
+    margin-top: 1px;
+
+    color: #667085;
+
+    font-size: 5.6px;
+}
+
+.finance-week-warning {
+    margin-top: 5px;
+
+    padding-top: 4px;
+
+    border-top:
+        1px dashed #D7DCE2;
+
+    color: #806F42;
+
+    font-size: 5.4px;
+    line-height: 1.25;
+}
+
+
+/* ==================================================================
+   WEEK STRIP
+   ================================================================== */
+
+.finance-weeks-strip-card {
+    margin-bottom: 5px;
+
+    padding:
+        6px
+        7px
+        3px;
+
+    border: 1px solid #D7DCE2;
+
+    border-top:
+        3px solid #16805E;
+
+    background: #FFFDF7;
+
+    break-inside: avoid;
+}
+
+.finance-weeks-strip {
+    width: 100%;
+    height: 78px;
+
+    margin-top: 3px;
+}
+
+
+/* ==================================================================
+   LOWER GRID
+   ================================================================== */
+
+.finance-lower-grid {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, .95fr)
+        minmax(0, 2.05fr);
+
+    gap: 6px;
+}
+
+
+/* ==================================================================
+   EDITORIAL
+   ================================================================== */
+
+.finance-editorial {
+    padding: 7px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #14213D;
+
+    background: #FFFDF7;
+
+    break-inside: avoid;
+}
+
+.finance-editorial.positive {
+    border-top-color: #16805E;
+}
+
+.finance-editorial.warning {
+    border-top-color: #E9B949;
+}
+
+.finance-editorial.negative {
+    border-top-color: #C23D58;
+}
+
+.finance-editorial-title {
+    margin-top: 3px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 10.5px;
+    line-height: 1.12;
+
+    font-weight: 700;
+}
+
+.finance-editorial-text {
+    margin-top: 4px;
+
+    color: #354052;
+
+    font-family:
+        Georgia,
+        serif;
+
+    font-size: 6.8px;
+    line-height: 1.35;
+}
+
+.finance-editorial-deltas {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    gap: 3px;
+
+    margin-top: 6px;
+}
+
+.finance-editorial-deltas > div {
+    padding:
+        4px
+        3px;
+
+    border: 1px solid #E0E3E7;
+
+    background: #FAF9F5;
+
+    text-align: center;
+}
+
+.finance-editorial-deltas span {
+    display: block;
+
+    color: #667085;
+
+    font-size: 4.9px;
+}
+
+.finance-editorial-deltas b {
+    display: block;
+
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-size: 6.8px;
+}
+
+
+/* ==================================================================
+   METHODOLOGY
+   ================================================================== */
+
+.finance-methodology {
+    padding: 7px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #8067AB;
+
+    background: #F8F5FB;
+
+    break-inside: avoid;
+}
+
+.finance-methodology-title {
+    color: #667085;
+
+    font-size: 5.5px;
+    font-weight: 800;
+
+    letter-spacing: .55px;
+
+    text-transform: uppercase;
+}
+
+.finance-methodology-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+
+    gap: 7px;
+
+    margin-top: 5px;
+}
+
+.finance-methodology-grid > div {
+    color: #4A5568;
+
+    font-family:
+        Georgia,
+        serif;
+
+    font-size: 6.3px;
+    line-height: 1.34;
+}
+
+.finance-methodology-grid > div + div {
+    padding-left: 7px;
+
+    border-left:
+        1px solid #D7DCE2;
+}
+
+.finance-methodology-grid b {
+    display: block;
+
+    margin-bottom: 2px;
+
+    color: #14213D;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 5.9px;
+}
+
+
+/* ==================================================================
+   EMPTY
+   ================================================================== */
+
+.finance-empty {
+    min-height: 80px;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    padding: 10px;
+
+    border:
+        1px dashed #D7DCE2;
+
+    color: #7A8492;
+
+    font-size: 6px;
+}
+
+
+/* ==================================================================
+   FOOTER
+   ================================================================== */
+
+.finance-footer-note {
+    display: flex;
+
+    justify-content: space-between;
+
+    gap: 15px;
+
+    margin-top: 4px;
+    padding-top: 3px;
+
+    border-top:
+        1px solid #D7DCE2;
+
+    color: #7A8492;
+
+    font-size: 5.2px;
+}
+
+
+/* ======================================================================
+   FINANCIAL PAGE — КОНТРОЛЬ СЕБЕСТОИМОСТИ
+   ====================================================================== */
+
+.finance-cost-control {
+    display: grid;
+    grid-template-columns: 1.35fr 2fr;
+
+    margin-top: 6px;
+
+    border: 1px solid #D7DCE2;
+    border-left: 4px solid #16805E;
+
+    background: #F7FAF8;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+
+/* ======================================================================
+   СОСТОЯНИЕ — ЕСТЬ ПРОБЛЕМНЫЕ ПРОДАЖИ
+   ====================================================================== */
+
+.finance-cost-control.warning {
+    border-left-color: #E9B949;
+    background: #FFFBF0;
+}
+
+
+/* ======================================================================
+   ЛЕВАЯ ЧАСТЬ — ТЕКУЩИЙ ДЕНЬ
+   ====================================================================== */
+
+.finance-cost-day {
+    min-width: 0;
+
+    padding: 7px 10px;
+
+    border-right: 1px solid #D7DCE2;
+}
+
+
+/* ----------------------------------------------------------------------
+   Заголовок
+   ---------------------------------------------------------------------- */
+
+.finance-cost-control .finance-kicker {
+    margin: 0 0 3px 0;
+
+    color: #EF5A70;
+
+    font-family: Arial, sans-serif;
+    font-size: 5.8px;
+    line-height: 1;
+    font-weight: 800;
+
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+
+.finance-cost-control-title {
+    margin: 0;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 9px;
+    line-height: 1.1;
+    font-weight: 700;
+}
+
+
+/* ======================================================================
+   ГЛАВНЫЙ ПОКАЗАТЕЛЬ ДНЯ
+   ====================================================================== */
+
+.finance-cost-day-main {
+    display: flex;
+    align-items: center;
+
+    gap: 9px;
+
+    margin-top: 5px;
+}
+
+
+.finance-cost-day-percent {
+    flex: 0 0 auto;
+
+    color: #16805E;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 20px;
+    line-height: 0.95;
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+
+.finance-cost-control.warning .finance-cost-day-percent {
+    color: #B7791F;
+}
+
+
+.finance-cost-day-caption {
+    color: #667085;
+
+    font-family: Arial, sans-serif;
+    font-size: 5.5px;
+    line-height: 1.25;
+}
+
+
+.finance-cost-day-caption b {
+    display: block;
+
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 7px;
+    line-height: 1;
+    font-weight: 700;
+}
+
+
+/* ======================================================================
+   ПРИЧИНЫ ОТСУТСТВИЯ СЕБЕСТОИМОСТИ
+   ====================================================================== */
+
+.finance-cost-day-details {
+    display: flex;
+
+    gap: 12px;
+
+    margin-top: 6px;
+    padding-top: 5px;
+
+    border-top: 1px solid #E2E6EA;
+}
+
+
+.finance-cost-day-details span {
+    display: block;
+
+    color: #667085;
+
+    font-family: Arial, sans-serif;
+    font-size: 5px;
+    line-height: 1.15;
+}
+
+
+.finance-cost-day-details b {
+    display: block;
+
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 7px;
+    line-height: 1;
+    font-weight: 700;
+}
+
+
+/* ======================================================================
+   ПРАВАЯ ЧАСТЬ — НЕДЕЛЯ / КВАРТАЛ / YTD
+   ====================================================================== */
+
+.finance-cost-history {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+
+    min-width: 0;
+}
+
+
+/* ======================================================================
+   ОДИН ПЕРИОД
+   ====================================================================== */
+
+.finance-cost-period {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    min-width: 0;
+
+    padding: 7px 10px;
+
+    border-right: 1px solid #D7DCE2;
+}
+
+
+.finance-cost-period:last-child {
+    border-right: 0;
+}
+
+
+/* ----------------------------------------------------------------------
+   Название периода
+   ---------------------------------------------------------------------- */
+
+.finance-cost-period-label {
+    color: #667085;
+
+    font-family: Arial, sans-serif;
+    font-size: 5.2px;
+    line-height: 1;
+    font-weight: 700;
+
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+
+/* ----------------------------------------------------------------------
+   Процент продаж без себестоимости
+   ---------------------------------------------------------------------- */
+
+.finance-cost-period-pct {
+    display: block;
+
+    margin-top: 5px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    line-height: 0.95;
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+
+/* ----------------------------------------------------------------------
+   Количество единиц
+   ---------------------------------------------------------------------- */
+
+.finance-cost-period-count {
+    display: block;
+
+    margin-top: 4px;
+
+    color: #667085;
+
+    font-family: Arial, sans-serif;
+    font-size: 5.2px;
+    line-height: 1.15;
+
+    white-space: nowrap;
+}
+
+
+/* ======================================================================
+   ВИЗУАЛЬНАЯ ИЕРАРХИЯ ПЕРИОДОВ
+   ====================================================================== */
+
+.finance-cost-period:first-child {
+    background: rgba(239, 90, 112, 0.025);
+}
+
+
+.finance-cost-period:last-child {
+    background: rgba(22, 128, 94, 0.035);
+}
+
+
+.finance-cost-period:last-child .finance-cost-period-pct {
+    color: #16805E;
+}
+
+
+/* ======================================================================
+   WARNING
+   ====================================================================== */
+
+.finance-cost-control.warning .finance-cost-day {
+    background: rgba(233, 185, 73, 0.035);
+}
+
+
+/* ======================================================================
+   OK
+   ====================================================================== */
+
+.finance-cost-control.ok {
+    border-left-color: #16805E;
+}
+
+
+.finance-cost-control.ok .finance-cost-day {
+    background: rgba(22, 128, 94, 0.025);
+}
+
+
+/* ======================================================================
+   PDF SAFETY
+   ====================================================================== */
+
+.finance-cost-control,
+.finance-cost-day,
+.finance-cost-history,
+.finance-cost-period {
+    box-sizing: border-box;
+}
+
+
+.finance-cost-control * {
+    box-sizing: border-box;
+}
+
+
+
+
+/* ======================================================================
+   DEMAND PAGE
+   ====================================================================== */
+
+.demand-page {
+    padding-top: 7.5mm;
+}
+
+
+.demand-page .masthead {
+    margin-bottom: 5px;
+}
+
+
+.demand-page .masthead h1 {
+    font-size: 25px;
+}
+
+
+/* ======================================================================
+   KPI
+   ====================================================================== */
+
+.demand-kpi-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+
+    gap: 5px;
+
+    margin-bottom: 5px;
+}
+
+
+.demand-kpi {
+    min-width: 0;
+
+    padding: 6px 7px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #14213D;
+
+    background: #FFFDF7;
+}
+
+
+.demand-kpi.demand {
+    border-top-color: #16805E;
+}
+
+
+.demand-kpi.price {
+    border-top-color: #E85D75;
+}
+
+
+.demand-kpi.revenue {
+    border-top-color: #8067AB;
+}
+
+
+.demand-kpi.today {
+    border-top-color: #E9B949;
+}
+
+
+.demand-kpi-label {
+    color: #667085;
+
+    font-family: Arial, sans-serif;
+    font-size: 5.4px;
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: .05em;
+
+    text-transform: uppercase;
+}
+
+
+.demand-kpi-value {
+    margin-top: 4px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 13.5px;
+    line-height: 1;
+
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+
+.demand-kpi-bottom {
+    display: flex;
+
+    align-items: flex-end;
+    justify-content: space-between;
+
+    gap: 4px;
+
+    margin-top: 4px;
+
+    color: #667085;
+
+    font-size: 5.2px;
+    line-height: 1.1;
+}
+
+
+.demand-kpi-change {
+    flex: 0 0 auto;
+
+    font-size: 5.7px;
+    font-weight: 800;
+}
+
+
+.demand-kpi-change.up {
+    color: #16805E;
+}
+
+
+.demand-kpi-change.down {
+    color: #C23D58;
+}
+
+
+.demand-kpi-change.neutral {
+    color: #667085;
+}
+
+
+/* ======================================================================
+   COMMON
+   ====================================================================== */
+
+.demand-kicker {
+    color: #E85D75;
+
+    font-family: Arial, sans-serif;
+
+    font-size: 5.7px;
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+
+.demand-block-title {
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 12px;
+    line-height: 1.05;
+
+    font-weight: 700;
+}
+
+
+.demand-block-title.small {
+    font-size: 10px;
+}
+
+
+.demand-block-subtitle,
+.demand-chart-caption {
+    color: #667085;
+
+    font-size: 5.5px;
+    line-height: 1.15;
+}
+
+
+.demand-block-subtitle {
+    margin-top: 2px;
+}
+
+
+.demand-block-head {
+    display: flex;
+
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 8px;
+}
+
+
+/* ======================================================================
+   TOP GRID
+   ====================================================================== */
+
+.demand-top-grid {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, .85fr)
+        minmax(0, 2.15fr);
+
+    gap: 6px;
+
+    margin-bottom: 5px;
+}
+
+
+/* ======================================================================
+   EDITORIAL
+   ====================================================================== */
+
+.demand-editorial {
+    padding: 7px 8px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #14213D;
+
+    background: #F7F4EC;
+}
+
+
+.demand-editorial.positive {
+    border-top-color: #16805E;
+}
+
+
+.demand-editorial.warning {
+    border-top-color: #E9B949;
+}
+
+
+.demand-editorial.negative {
+    border-top-color: #C23D58;
+}
+
+
+.demand-editorial-label {
+    color: #E85D75;
+
+    font-size: 5.5px;
+    font-weight: 800;
+
+    letter-spacing: .08em;
+}
+
+
+.demand-editorial-title {
+    margin-top: 3px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 12.2px;
+    line-height: 1.06;
+
+    font-weight: 700;
+}
+
+
+.demand-editorial-copy {
+    margin-top: 5px;
+
+    color: #39465A;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 6.7px;
+    line-height: 1.4;
+}
+
+
+.demand-corr-strip {
+    display: grid;
+
+    grid-template-columns:
+        1fr 1fr;
+
+    gap: 4px;
+
+    margin-top: 7px;
+    padding-top: 5px;
+
+    border-top: 1px solid #D7DCE2;
+}
+
+
+.demand-corr-strip > div {
+    min-width: 0;
+}
+
+
+.demand-corr-strip > div + div {
+    padding-left: 5px;
+
+    border-left: 1px solid #D7DCE2;
+}
+
+
+.demand-corr-strip span {
+    display: block;
+
+    color: #667085;
+
+    font-size: 5px;
+
+    text-transform: uppercase;
+}
+
+
+.demand-corr-strip b {
+    display: block;
+
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family: Georgia, serif;
+
+    font-size: 10px;
+}
+
+
+.demand-corr-strip small {
+    display: block;
+
+    margin-top: 1px;
+
+    color: #667085;
+
+    font-size: 4.8px;
+    line-height: 1.2;
+}
+
+
+/* ======================================================================
+   MONTHLY
+   ====================================================================== */
+
+.demand-monthly-card {
+    min-width: 0;
+
+    padding: 6px 7px 3px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #8067AB;
+
+    background: #FFFDF7;
+}
+
+
+.demand-monthly-chart {
+    width: 100%;
+    height: 146px;
+
+    margin-top: 3px;
+}
+
+
+.demand-monthly-chart svg {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+}
+
+
+/* ======================================================================
+   90 DAY REGIME
+   ====================================================================== */
+
+.demand-regime-card {
+    padding: 6px 7px 4px;
+
+    margin-bottom: 5px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #14213D;
+
+    background: #FFFDF7;
+}
+
+
+.demand-regime-chart {
+    width: 100%;
+    height: 145px;
+
+    margin-top: 2px;
+}
+
+
+.demand-regime-chart svg {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+}
+
+
+.demand-chart-note {
+    margin-top: 2px;
+    padding-top: 3px;
+
+    border-top: 1px solid #E7E9EC;
+
+    color: #667085;
+
+    font-family:
+        Georgia,
+        serif;
+
+    font-size: 5.4px;
+    line-height: 1.3;
+}
+
+
+/* ======================================================================
+   RANKINGS
+   ====================================================================== */
+
+.demand-ranking-grid {
+    display: grid;
+
+    grid-template-columns:
+        1fr 1fr;
+
+    gap: 6px;
+
+    margin-bottom: 5px;
+}
+
+
+.demand-ranking-card {
+    min-width: 0;
+
+    padding: 6px 7px 3px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #E85D75;
+
+    background: #FFFDF7;
+}
+
+
+.demand-ranking-card:last-child {
+    border-top-color: #16805E;
+}
+
+
+.demand-ranking-chart {
+    width: 100%;
+    height: 105px;
+
+    margin-top: 3px;
+}
+
+
+.demand-ranking-chart svg {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+}
+
+
+/* ======================================================================
+   METHODOLOGY
+   ====================================================================== */
+
+.demand-methodology {
+    padding: 6px 7px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #E9B949;
+
+    background: #F8F5ED;
+}
+
+
+.demand-methodology-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+
+    gap: 7px;
+
+    margin-top: 4px;
+}
+
+
+.demand-methodology-grid > div {
+    color: #4B5565;
+
+    font-family:
+        Georgia,
+        serif;
+
+    font-size: 5.8px;
+    line-height: 1.32;
+}
+
+
+.demand-methodology-grid > div + div {
+    padding-left: 7px;
+
+    border-left: 1px solid #D7DCE2;
+}
+
+
+.demand-methodology-grid b {
+    display: block;
+
+    margin-bottom: 2px;
+
+    color: #14213D;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 5.4px;
+}
+
+
+/* ======================================================================
+   EMPTY
+   ====================================================================== */
+
+.demand-empty {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 100px;
+
+    border: 1px dashed #D7DCE2;
+
+    color: #667085;
+
+    font-size: 6px;
+}
+
+
+.demand-empty.compact {
+    min-height: 70px;
+}
+
+
+/* ======================================================================
+   FOOTER
+   ====================================================================== */
+
+.demand-footer-note {
+    display: flex;
+
+    justify-content: space-between;
+
+    gap: 10px;
+
+    margin-top: 4px;
+    padding-top: 3px;
+
+    border-top: 1px solid #D7DCE2;
+
+    color: #7A8492;
+
+    font-size: 5.1px;
+}
+
+
+/* ======================================================================
+   PDF SAFETY
+   ====================================================================== */
+
+.demand-page *,
+.demand-kpi,
+.demand-editorial,
+.demand-monthly-card,
+.demand-regime-card,
+.demand-ranking-card,
+.demand-methodology {
+    box-sizing: border-box;
+}
+
+
+
+
+/* ======================================================================
+   ЦЕНОВОЙ ПОТЕНЦИАЛ БРЕНДОВ
+   ====================================================================== */
+
+.demand-price-potential {
+    margin-bottom: 5px;
+
+    padding: 6px 7px 4px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #16805E;
+
+    background: #FFFDF7;
+
+    break-inside: avoid;
+}
+
+
+.demand-price-potential-head {
+    display: flex;
+
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 12px;
+
+    margin-bottom: 4px;
+}
+
+
+.demand-price-rule {
+    max-width: 285px;
+
+    padding-left: 8px;
+
+    border-left: 2px solid #E9B949;
+
+    color: #667085;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 5.3px;
+    line-height: 1.28;
+}
+
+
+.demand-price-rule b {
+    display: block;
+
+    margin-bottom: 1px;
+
+    color: #14213D;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 5.4px;
+}
+
+
+.demand-price-potential-grid {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1.8fr)
+        minmax(0, 1fr);
+
+    gap: 7px;
+}
+
+
+.demand-price-matrix {
+    min-width: 0;
+
+    height: 185px;
+
+    border-right: 1px solid #E2E5E9;
+
+    padding-right: 6px;
+}
+
+
+.demand-price-matrix svg {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+}
+
+
+/* ======================================================================
+   ВОЗМОЖНОСТИ
+   ====================================================================== */
+
+.demand-price-opportunities {
+    min-width: 0;
+}
+
+
+.demand-price-opportunities-title {
+    margin-bottom: 3px;
+
+    color: #667085;
+
+    font-size: 5.2px;
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: .06em;
+
+    text-transform: uppercase;
+}
+
+
+.demand-price-opportunity {
+    padding: 4px 0;
+
+    border-bottom: 1px solid #E4E7EB;
+}
+
+
+.demand-price-opportunity:last-child {
+    border-bottom: 0;
+}
+
+
+.demand-price-opportunity-brand {
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 7px;
+    line-height: 1;
+
+    font-weight: 700;
+}
+
+
+.demand-price-opportunity-action {
+    margin-top: 2px;
+
+    color: #667085;
+
+    font-size: 5px;
+}
+
+
+.demand-price-opportunity-action b {
+    margin-left: 3px;
+
+    color: #E85D75;
+
+    font-size: 6.3px;
+}
+
+
+.demand-price-opportunity-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+
+    gap: 3px;
+
+    margin-top: 3px;
+}
+
+
+.demand-price-opportunity-grid > div {
+    padding: 3px;
+
+    background: #F7F7F3;
+}
+
+
+.demand-price-opportunity-grid span {
+    display: block;
+
+    color: #667085;
+
+    font-size: 4.5px;
+}
+
+
+.demand-price-opportunity-grid b {
+    display: block;
+
+    margin-top: 1px;
+
+    color: #14213D;
+
+    font-size: 5.8px;
+}
+
+
+.demand-price-opportunity-grid b.positive {
+    color: #16805E;
+}
+
+
+.demand-price-opportunity-meta {
+    margin-top: 2px;
+
+    color: #7A8492;
+
+    font-size: 4.7px;
+}
+
+
+.demand-price-opportunity-meta b {
+    color: #14213D;
+}
+
+
+.demand-opportunity-empty {
+    padding: 9px;
+
+    border: 1px dashed #D7DCE2;
+
+    color: #667085;
+
+    font-family:
+        Georgia,
+        serif;
+
+    font-size: 5.8px;
+    line-height: 1.35;
+}
+
+
+.demand-opportunity-empty b {
+    display: block;
+
+    margin-top: 4px;
+
+    color: #14213D;
+}
+
+
+/* ======================================================================
+   DISCLAIMER
+   ====================================================================== */
+
+.demand-price-disclaimer {
+    margin-top: 4px;
+    padding-top: 3px;
+
+    border-top: 1px solid #E7E9EC;
+
+    color: #7A8492;
+
+    font-size: 4.8px;
+    line-height: 1.25;
+}
+
+
+/* ======================================================================
+   АНОМАЛИИ
+   ====================================================================== */
+
+.demand-anomalies {
+    margin-bottom: 4px;
+
+    padding: 4px 6px;
+
+    border: 1px solid #D7DCE2;
+    border-top: 3px solid #E9B949;
+
+    background: #FAF8F2;
+
+    break-inside: avoid;
+}
+
+
+.demand-anomalies-head {
+    display: flex;
+
+    justify-content: space-between;
+    align-items: flex-start;
+
+    gap: 8px;
+
+    margin-bottom: 4px;
+}
+
+
+.demand-anomalies-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+
+    gap: 4px;
+}
+
+
+.demand-anomaly {
+    min-width: 0;
+
+    padding: 5px;
+
+    border: 1px solid #E1E4E8;
+    border-left: 3px solid #667085;
+
+    background: #FFFDF7;
+}
+
+
+.demand-anomaly.warning {
+    border-left-color: #E9B949;
+}
+
+
+.demand-anomaly.negative {
+    border-left-color: #C23D58;
+}
+
+
+.demand-anomaly.positive {
+    border-left-color: #16805E;
+}
+
+
+.demand-anomaly-brand {
+    color: #14213D;
+
+    font-size: 5.3px;
+    font-weight: 800;
+
+    text-transform: uppercase;
+}
+
+
+.demand-anomaly-title {
+    margin-top: 2px;
+
+    min-height: 22px;
+
+    color: #354052;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 5.8px;
+    line-height: 1.25;
+
+    font-weight: 700;
+}
+
+
+.demand-anomaly-numbers {
+    margin-top: 4px;
+}
+
+
+.demand-anomaly-numbers span {
+    display: flex;
+
+    justify-content: space-between;
+
+    gap: 3px;
+
+    padding-top: 2px;
+
+    color: #667085;
+
+    font-size: 4.7px;
+}
+
+
+.demand-anomaly-numbers b {
+    color: #14213D;
+}
+
+
+.demand-anomalies-clear {
+    margin-top: 4px;
+
+    padding: 8px;
+
+    color: #667085;
+
+    font-family:
+        Georgia,
+        serif;
+
+    font-size: 6px;
+
+    border: 1px dashed #D7DCE2;
+}
+
+
+
+
+/* ======================================================================
+   DEMAND — ЦЕНОВОЙ БАЛАНС
+   ====================================================================== */
+
+.demand-balance-focus {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1.75fr)
+        minmax(0, .95fr);
+
+    gap: 6px;
+
+    margin-top: 4px;
+}
+
+
+/* ======================================================================
+   ГРАФИК
+   ====================================================================== */
+
+.demand-balance-chart {
+    min-width: 0;
+
+    padding-right: 7px;
+
+    border-right: 1px solid #D7DCE2;
+}
+
+
+.demand-balance-brand {
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 10.5px;
+    line-height: 1;
+
+    font-weight: 700;
+}
+
+
+.demand-balance-chart-subtitle {
+    margin-top: 2px;
+
+    color: #667085;
+
+    font-size: 5.2px;
+}
+
+
+.demand-balance-chart svg {
+    display: block;
+
+    width: 100%;
+    height: 145px;
+
+    margin-top: 2px;
+}
+
+
+/* ======================================================================
+   SUMMARY
+   ====================================================================== */
+
+.demand-balance-summary {
+    min-width: 0;
+
+    padding: 4px 2px 2px 2px;
+}
+
+
+.demand-balance-summary-title {
+    margin-top: 3px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 9px;
+    line-height: 1.08;
+
+    font-weight: 700;
+}
+
+
+.demand-balance-summary-title.positive {
+    color: #16805E;
+}
+
+
+.demand-balance-summary-title.warning {
+    color: #B7791F;
+}
+
+
+.demand-balance-summary-copy {
+    margin-top: 3px;
+
+    color: #4B5565;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 5px;
+    line-height: 1.22;
+}
+
+
+/* ======================================================================
+   PRICE
+   ====================================================================== */
+
+.demand-balance-price {
+    display: grid;
+
+    grid-template-columns:
+        1fr auto 1fr;
+
+    align-items: center;
+
+    gap: 5px;
+
+    margin-top: 6px;
+    padding: 5px;
+
+    border: 1px solid #E0E4E8;
+
+    background: #F7F7F3;
+}
+
+
+.demand-balance-price span {
+    display: block;
+
+    color: #667085;
+
+    font-size: 4.8px;
+    text-transform: uppercase;
+}
+
+
+.demand-balance-price b {
+    display: block;
+
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 8px;
+}
+
+
+.demand-balance-price b.accent {
+    color: #16805E;
+}
+
+
+.demand-balance-price .arrow {
+    color: #667085;
+
+    font-size: 10px;
+}
+
+
+.demand-balance-delta {
+    margin-top: 3px;
+
+    color: #E85D75;
+
+    font-size: 6px;
+    font-weight: 800;
+}
+
+
+/* ======================================================================
+   RESULT METRICS
+   ====================================================================== */
+
+.demand-balance-metrics {
+    display: grid;
+
+    grid-template-columns:
+        1fr 1fr;
+
+    gap: 3px;
+
+   margin-top: 4px;
+}
+
+
+.demand-balance-metrics > div {
+     padding: 3px 4px;
+
+    border: 1px solid #E4E7EB;
+
+    background: #FFFDF7;
+}
+
+
+.demand-balance-metrics span {
+    display: block;
+
+    color: #667085;
+
+    font-size: 4.7px;
+}
+
+
+.demand-balance-metrics b {
+    display: block;
+
+    margin-top: 1px;
+
+    color: #14213D;
+
+    font-size: 6.5px;
+}
+
+
+.demand-balance-metrics b.positive {
+    color: #16805E;
+}
+
+
+/* ======================================================================
+   MAX MARGIN
+   ====================================================================== */
+
+.demand-balance-max {
+    margin-top: 5px;
+    padding-top: 4px;
+
+    border-top: 1px solid #D7DCE2;
+}
+
+
+.demand-balance-max span {
+    color: #667085;
+
+    font-size: 4.8px;
+}
+
+
+.demand-balance-max > b {
+    margin-left: 4px;
+
+    color: #E85D75;
+
+    font-size: 6px;
+}
+
+
+.demand-balance-max small {
+    display: block;
+
+    margin-top: 2px;
+
+    color: #667085;
+
+    font-size: 4.7px;
+}
+
+
+.demand-balance-model {
+    margin-top: 5px;
+
+    color: #7A8492;
+
+    font-size: 4.6px;
+    line-height: 1.3;
+}
+
+
+.demand-balance-model b {
+    color: #14213D;
+}
+
+
+/* ======================================================================
+   BRAND TABLE
+   ====================================================================== */
+
+.demand-balance-table {
+    margin-top: 6px;
+
+    border-top: 1px solid #D7DCE2;
+}
+
+
+.demand-balance-table-title {
+    padding: 5px 0 3px;
+
+    color: #667085;
+
+    font-size: 5px;
+    font-weight: 800;
+
+    letter-spacing: .06em;
+
+    text-transform: uppercase;
+}
+
+
+.demand-balance-table-row {
+    display: grid;
+
+    grid-template-columns:
+        1.35fr
+        .8fr
+        .8fr
+        .65fr
+        .65fr
+        .7fr
+        .7fr
+        .9fr;
+
+    align-items: center;
+
+    min-width: 0;
+
+    border-top: 1px solid #ECEEF0;
+}
+
+
+.demand-balance-table-row > div {
+    min-width: 0;
+
+    padding: 3px 4px;
+
+    color: #4B5565;
+
+    font-size: 5px;
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+.demand-balance-table-row.header {
+    background: #F5F3ED;
+}
+
+
+.demand-balance-table-row.header > div {
+    color: #667085;
+
+    font-size: 4.6px;
+    font-weight: 800;
+
+    text-transform: uppercase;
+}
+
+
+.demand-balance-table-row .brand {
+    color: #14213D;
+
+    font-weight: 800;
+}
+
+
+.demand-balance-table-row .positive {
+    color: #16805E;
+
+    font-weight: 700;
+}
+
+
+.demand-balance-table-row .negative {
+    color: #C23D58;
+
+    font-weight: 700;
+}
+
+
+.demand-balance-table-row .neutral {
+    color: #667085;
+
+    font-weight: 700;
+}
+
+
+/* ======================================================================
+   DEMAND — ФОКУСНЫЙ ЦЕНОВОЙ КЕЙС
+   ====================================================================== */
+
+.demand-balance-focus-label {
+    margin-bottom: 2px;
+
+    color: #E85D75;
+
+    font-size: 4.8px;
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+
+.demand-balance-focus-reason {
+    margin-top: 3px;
+
+    color: #667085;
+
+    font-size: 5px;
+    line-height: 1.2;
+}
+
+
+.demand-balance-focus-reason b {
+    color: #14213D;
+}
+
+
+/* ======================================================================
+   КРУПНЫЙ ВЕРДИКТ ПО ЦЕНЕ
+   ====================================================================== */
+
+.demand-balance-verdict {
+    display: flex;
+
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 7px;
+
+    margin-top: 5px;
+    padding: 5px 6px;
+
+    border-left: 3px solid #E85D75;
+
+    background: #F7F3F4;
+}
+
+
+.demand-balance-verdict span {
+    color: #667085;
+
+    font-size: 4.7px;
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: .05em;
+}
+
+
+.demand-balance-verdict b {
+    color: #E85D75;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 12px;
+    line-height: 1;
+
+    white-space: nowrap;
+}
+
+
+/* ======================================================================
+   MAX MARGIN EXPLANATION
+   ====================================================================== */
+
+.demand-balance-max-explain {
+    margin-top: 2px;
+
+    color: #7A8492;
+
+    font-family:
+        Georgia,
+        "Times New Roman",
+        serif;
+
+    font-size: 4.6px;
+    line-height: 1.25;
+}
+
+
+
+demand-balance-metrics b.positive,
+.demand-balance-table-row .positive { color: #16805E; font-weight: 700; }
+
+.demand-balance-metrics b.negative,
+.demand-balance-table-row .negative { color: #C23D58; font-weight: 700; }
+
+.demand-balance-metrics b.neutral,
+.demand-balance-table-row .neutral { color: #667085; font-weight: 700; }
+
+.demand-balance-max {
+    margin-top: 3px;
+    padding: 3px 4px;
+    border-left: 3px solid #8067AB;
+    background: #F5F2F8;
+}
+
+.demand-balance-max-label {
+    color: #8067AB;
+    font-size: 3.7px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.demand-balance-max-main {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-top: 1px;
+}
+
+.demand-balance-max-main b {
+    color: #14213D;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 6px;
+    line-height: 1;
+}
+
+.demand-balance-max-main span,
+.demand-balance-max-note,
+.demand-balance-max-explain {
+    color: #667085;
+    font-size: 3.8px;
+    line-height: 1.08;
+}
+
+.demand-balance-max-note { margin-top: 1px; color: #14213D; font-weight: 700; }
+.demand-balance-max-explain { margin-top: 1px; font-family: Georgia, "Times New Roman", serif; }
+
+.demand-balance-model {
+    margin-top: 3px;
+    color: #7A8492;
+    font-size: 3.8px;
+    line-height: 1.12;
+}
+
+.demand-balance-model b { color: #14213D; }
+
+.demand-balance-action {
+    display: inline-block;
+    margin-top: 3px;
+    padding: 2px 5px;
+    border: 1px solid #16805E;
+    color: #16805E;
+    background: #EDF7F2;
+    font-size: 3.8px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+
+
+
 '''

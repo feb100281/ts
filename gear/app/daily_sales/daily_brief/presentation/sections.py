@@ -14,7 +14,6 @@ from .charts import (
 
 )
 from .components import (
-    bar_chart,
     prose,
     safe,
     section,
@@ -64,33 +63,6 @@ def masthead(
 
 
 
-def quality(payload: dict) -> str:
-    returns = payload.get("sales", {}).get("return_categories", [])
-    body = prose(
-        payload.get("editorial", {}).get("quality", ""),
-        True,
-    )
-
-    if returns:
-        body += (
-            '<div class="mini-title">'
-            "Категории с наибольшей суммой возвратов"
-            "</div>"
-            + bar_chart(
-                returns,
-                "returns_amount",
-                "₽",
-                5,
-            )
-        )
-
-    return section(
-        "КАЧЕСТВО ПРОДАЖ",
-        "Маржа и возвраты",
-        body,
-        "Где результат требует дополнительной проверки",
-        "returns",
-    )
 
 
 def price_analysis(payload: dict) -> str:
