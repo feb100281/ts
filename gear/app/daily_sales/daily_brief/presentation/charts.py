@@ -321,8 +321,6 @@ def _clean_text(
 # =============================================================================
 # ТЕПЛОВОЙ КАЛЕНДАРЬ
 # =============================================================================
-
-
 def heat_calendar(rows: list[dict]) -> str:
     rows = list(rows or [])
 
@@ -344,6 +342,10 @@ def heat_calendar(rows: list[dict]) -> str:
         12: "дек",
     }
 
+    # -------------------------------------------------------------------------
+    # Подготовка данных
+    # -------------------------------------------------------------------------
+
     prepared_rows = []
 
     for row in rows:
@@ -357,16 +359,47 @@ def heat_calendar(rows: list[dict]) -> str:
 
         prepared_rows.append(
             {
-                "date": parsed_date,
-                "amount": number(row.get("amount")),
+                # Убираем время, чтобы одна дата не разбивалась
+                # на несколько разных значений.
+                "date": parsed_date.normalize(),
+                "amount": number(
+                    row.get("amount")
+                ),
             }
         )
+
+    if not prepared_rows:
+        return '<div class="empty">Нет данных</div>'
+
+    # Если на одну дату пришло несколько строк,
+    # объединяем их в одно дневное значение.
+    daily_amounts = {}
+
+    for item in prepared_rows:
+        current_date = item["date"]
+
+        daily_amounts[current_date] = (
+            daily_amounts.get(
+                current_date,
+                0,
+            )
+            + item["amount"]
+        )
+
+    prepared_rows = [
+        {
+            "date": current_date,
+            "amount": amount,
+        }
+        for current_date, amount
+        in daily_amounts.items()
+    ]
 
     prepared_rows.sort(
         key=lambda item: item["date"]
     )
 
-    # Последние 35 закрытых дней.
+    # Последние 35 закрытых дней с данными.
     prepared_rows = prepared_rows[-35:]
 
     if not prepared_rows:
@@ -379,29 +412,87 @@ def heat_calendar(rows: list[dict]) -> str:
 
     minimum = min(values)
     maximum = max(values)
-
     value_range = maximum - minimum
 
-    weeks = [
-        prepared_rows[index:index + 7]
+    amount_by_date = {
+        item["date"]: item["amount"]
+        for item in prepared_rows
+    }
+
+    first_data_date = prepared_rows[0]["date"]
+    last_data_date = prepared_rows[-1]["date"]
+
+    # -------------------------------------------------------------------------
+    # Настоящие календарные границы
+    #
+    # weekday():
+    #   понедельник = 0
+    #   вторник     = 1
+    #   среда       = 2
+    #   ...
+    #   воскресенье = 6
+    # -------------------------------------------------------------------------
+
+    calendar_start = (
+        first_data_date
+        - pd.Timedelta(
+            days=first_data_date.weekday()
+        )
+    )
+
+    calendar_end = (
+        last_data_date
+        + pd.Timedelta(
+            days=6 - last_data_date.weekday()
+        )
+    )
+
+    calendar_dates = pd.date_range(
+        start=calendar_start,
+        end=calendar_end,
+        freq="D",
+    )
+
+    calendar_weeks = [
+        list(
+            calendar_dates[index:index + 7]
+        )
         for index in range(
             0,
-            len(prepared_rows),
+            len(calendar_dates),
             7,
         )
     ]
 
+    # -------------------------------------------------------------------------
+    # Формирование HTML
+    # -------------------------------------------------------------------------
+
     grid_cells = []
     previous_week_total = None
 
-    for week in weeks:
-        for row in week:
-            value = row["amount"]
-            parsed_date = row["date"]
+    for week_dates in calendar_weeks:
+        week_values = []
 
-            # Уровень рассчитываем относительно диапазона min–max.
-            # Поэтому минимальное значение будет светлым,
-            # максимальное — самым тёмным.
+        for current_date in week_dates:
+            value = amount_by_date.get(
+                current_date
+            )
+
+            # Дата входит в календарную неделю,
+            # но отсутствует среди последних 35 дней.
+            if value is None:
+                grid_cells.append(
+                    """
+                    <div class="heat-cell heat-cell-empty"></div>
+                    """
+                )
+                continue
+
+            week_values.append(value)
+
+            # Уровень цвета относительно min–max
+            # среди отображаемых дней.
             if value_range > 0:
                 normalized = (
                     value - minimum
@@ -413,17 +504,21 @@ def heat_calendar(rows: list[dict]) -> str:
                 5,
                 max(
                     0,
-                    int(round(normalized * 5)),
+                    int(
+                        round(
+                            normalized * 5
+                        )
+                    ),
                 ),
             )
 
             month_label = month_names.get(
-                parsed_date.month,
+                current_date.month,
                 "",
             )
 
             date_label = (
-                f"{parsed_date.day} "
+                f"{current_date.day} "
                 f"{month_label}"
             )
 
@@ -441,18 +536,21 @@ def heat_calendar(rows: list[dict]) -> str:
                 """
             )
 
-        # Пустые клетки, если последняя неделя неполная.
-        for _ in range(7 - len(week)):
-            grid_cells.append(
-                """
-                <div class="heat-cell heat-cell-empty"></div>
-                """
-            )
+        # ---------------------------------------------------------------------
+        # Итог календарной недели
+        # ---------------------------------------------------------------------
 
         week_total = sum(
-            row["amount"]
-            for row in week
+            week_values
         )
+
+        if not week_values:
+            grid_cells.append(
+                """
+                <div class="heat-week-total heat-week-total-empty"></div>
+                """
+            )
+            continue
 
         if (
             previous_week_total is not None
@@ -467,9 +565,11 @@ def heat_calendar(rows: list[dict]) -> str:
             if week_change > 0:
                 change_class = "up"
                 arrow = "▲"
+
             elif week_change < 0:
                 change_class = "down"
                 arrow = "▼"
+
             else:
                 change_class = "neutral"
                 arrow = "—"
@@ -479,6 +579,7 @@ def heat_calendar(rows: list[dict]) -> str:
                     {arrow} {abs(week_change):.1f}%
                 </div>
             """
+
         else:
             change_html = """
                 <div class="heat-week-change neutral">
@@ -532,126 +633,6 @@ def heat_calendar(rows: list[dict]) -> str:
         </div>
         """
     )
-# =============================================================================
-# ПЛАН-ФАКТ SPARKLINE
-# =============================================================================
-
-
-def plan_sparkline(
-    rows: list[dict],
-) -> str:
-    rows = list(
-        rows
-        or []
-    )
-
-    if len(rows) < 2:
-        return (
-            '<div class="empty">'
-            "Недостаточно данных"
-            "</div>"
-        )
-
-    width = 520
-    height = 130
-    padding = 12
-
-    values = (
-        [
-            number(
-                row.get(
-                    "running_fact"
-                )
-            )
-            for row in rows
-        ]
-        +
-        [
-            number(
-                row.get(
-                    "running_plan"
-                )
-            )
-            for row in rows
-        ]
-    )
-
-    maximum = (
-        max(values)
-        or 1
-    )
-
-    def points(
-        key: str,
-    ) -> str:
-        result = []
-
-        for index, row in enumerate(
-            rows
-        ):
-            x = (
-                padding
-                + index
-                * (
-                    width
-                    - 2 * padding
-                )
-                / max(
-                    len(rows) - 1,
-                    1,
-                )
-            )
-
-            y = (
-                height
-                - padding
-                - number(
-                    row.get(key)
-                )
-                / maximum
-                * (
-                    height
-                    - 2 * padding
-                )
-            )
-
-            result.append(
-                f"{x:.1f},{y:.1f}"
-            )
-
-        return " ".join(
-            result
-        )
-
-    return f"""
-    <svg
-        class="spark"
-        viewBox="0 0 {width} {height}"
-        preserveAspectRatio="none"
-    >
-        <polyline
-            class="spark-plan"
-            points="{points('running_plan')}"
-        />
-
-        <polyline
-            class="spark-fact"
-            points="{points('running_fact')}"
-        />
-    </svg>
-
-    <div class="spark-legend">
-        <span>
-            <i class="fact-dot"></i>
-            Факт
-        </span>
-
-        <span>
-            <i class="plan-dot"></i>
-            План
-        </span>
-    </div>
-    """
 
 
 # =============================================================================

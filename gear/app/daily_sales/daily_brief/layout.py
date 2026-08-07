@@ -128,7 +128,7 @@ def daily_brief_controls():
                                                 [
                                                     dmc.Text(
                                                         (
-                                                            "Деловая "
+                                                            "Коммерческая "
                                                             "сводка"
                                                         ),
                                                         fw=800,

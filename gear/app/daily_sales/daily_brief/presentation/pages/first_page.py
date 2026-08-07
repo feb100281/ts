@@ -22,7 +22,7 @@ from ..components import (
 from ..icons import icon
 
 
-TITLE = "Коммерческий обзор"
+TITLE = "Коммерческий обзор · продажи"
 SUBTITLE = "Продажи · спрос · цена · план · запасы"
 
 

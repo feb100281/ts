@@ -4,17 +4,16 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from .presentation.pages import build_first_page
+from .presentation.pages import (
+    build_first_page,
+    build_plans_page,
+    build_stocks_page,
+    build_incidents_page,
+)
 from .presentation.sections import (
-    half_year,
-    incidents_section,
     masthead,
-    plan_block,
     price_analysis,
     quality,
-    recommendations,
-    stock_geography,
-    stock_summary,
 )
 from .presentation.styles import CSS
 
@@ -27,23 +26,10 @@ def build_daily_brief_html(
         {},
     )
 
-    incidents = payload.get(
-        "incidents",
-        {},
-    )
-
-    incident_html = (
-        incidents_section(payload)
-        if (
-            incidents.get("available")
-            and incidents.get("events")
-        )
-        else ""
-    )
-
     return f"""
     <!doctype html>
     <html lang="ru">
+
     <head>
         <meta charset="utf-8">
 
@@ -53,24 +39,34 @@ def build_daily_brief_html(
     </head>
 
     <body>
+
         {build_first_page(payload)}
 
+        {build_plans_page(payload)}
+        
+         {build_stocks_page(payload)}
+         
+         {build_incidents_page(payload)}
+
         <!-- =========================================================
-             СТРАНИЦА 2 — АНАЛИТИКА ЦЕНЫ И СПРОСА
+             СТРАНИЦА — АНАЛИТИКА ЦЕНЫ И СПРОСА
              ========================================================= -->
 
         <div class="page">
+
             {masthead(
                 payload,
                 "АНАЛИТИЧЕСКИЙ РАЗВОРОТ",
             )}
 
             <div class="columns analysis-top">
+
                 <div>
                     {quality(payload)}
                 </div>
 
                 <div class="editorial-aside">
+
                     <div class="aside-label">
                         КЛЮЧЕВАЯ МЫСЛЬ
                     </div>
@@ -81,12 +77,15 @@ def build_daily_brief_html(
                             "",
                         )}
                     </div>
+
                 </div>
+
             </div>
 
             {price_analysis(payload)}
 
             <div class="footer-note">
+
                 <span>
                     Корреляция не доказывает
                     причинно-следственную связь.
@@ -95,79 +94,13 @@ def build_daily_brief_html(
                 <span>
                     Горизонт: 90 дней и 12 месяцев
                 </span>
+
             </div>
+
         </div>
 
-        <!-- =========================================================
-             СТРАНИЦА 3 — ПЛАН
-             ========================================================= -->
+       
 
-        <div class="page">
-            {masthead(
-                payload,
-                "ПЛАНОВЫЙ РАЗВОРОТ",
-            )}
-
-            <div class="columns page-columns">
-                <div>
-                    {plan_block(payload)}
-                </div>
-
-                <div>
-                    {half_year(payload)}
-                    {recommendations(payload)}
-                </div>
-            </div>
-
-            <div class="big-quote">
-                {editorial.get(
-                    "closing",
-                    "",
-                )}
-            </div>
-
-            <div class="footer-note">
-                <span>
-                    План к дате учитывает распределение
-                    месячного плана.
-                </span>
-
-                <span>
-                    {payload.get(
-                        "generated_at",
-                        "",
-                    )}
-                </span>
-            </div>
-        </div>
-
-        <!-- =========================================================
-             СТРАНИЦА 4 — ОСТАТКИ
-             ========================================================= -->
-
-        <div class="page">
-            {masthead(
-                payload,
-                "ТОВАРНЫЙ РАЗВОРОТ",
-            )}
-
-            {stock_summary(payload)}
-
-            {stock_geography(payload)}
-
-            {incident_html}
-
-            <div class="footer-note">
-                <span>
-                    Названия регионов синхронизированы с
-                    inventories.reporting.map.map_config.
-                </span>
-
-                <span>
-                    Источник: dashboard остатков
-                </span>
-            </div>
-        </div>
     </body>
     </html>
     """

@@ -1279,4 +1279,2316 @@ body {
     font-size: 5px;
 }
 
+
+/* ==================================================================
+   ПЛАНОВЫЙ ГАЗЕТНЫЙ РАЗВОРОТ
+   ================================================================== */
+
+.plans-page {
+    display: block;
+}
+
+.plans-newspaper-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 9px;
+    align-items: start;
+}
+
+.plans-newspaper-left,
+.plans-newspaper-right {
+    min-width: 0;
+}
+
+.plans-column {
+    min-width: 0;
+    padding-top: 5px;
+}
+
+.plans-month-column {
+    border-top: 3px solid #14213D;
+}
+
+.plans-half-year-column {
+    border-top: 3px solid #E85D75;
+    background: #F8F5ED;
+    padding: 5px 7px 7px;
+}
+
+.plans-column-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 7px;
+    margin-bottom: 6px;
+}
+
+.plans-column-kicker,
+.plans-small-kicker {
+    color: #E85D75;
+    font-size: 6.5px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.plans-column-head h2,
+.plans-prophet-head h2 {
+    margin: 2px 0 0;
+    color: #14213D;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1;
+}
+
+.plans-column-subtitle {
+    margin-top: 3px;
+    color: #667085;
+    font-size: 6.7px;
+}
+
+.plans-column-icon {
+    width: 29px;
+    height: 29px;
+    flex: 0 0 29px;
+}
+
+
+/* KPI */
+
+.plans-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.plans-metric {
+    min-width: 0;
+    min-height: 55px;
+    padding: 5px 6px;
+    border: 1px solid #D7DCE2;
+    background: #FFFDF7;
+}
+
+.plans-metric.accent {
+    border-color: #F1B9C4;
+    background: #FFF5F7;
+}
+
+.plans-metric.positive {
+    border-top: 2px solid #12654F;
+}
+
+.plans-metric.negative {
+    border-top: 2px solid #E85D75;
+}
+
+.plans-metric-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    color: #667085;
+    font-size: 5.7px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.plans-metric-icon {
+    width: 19px;
+    height: 19px;
+    flex: 0 0 19px;
+}
+
+.plans-metric-value {
+    margin-top: 4px;
+    overflow: hidden;
+    color: #14213D;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 13.2px;
+    line-height: 1;
+    font-weight: 800;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.plans-metric-note {
+    margin-top: 3px;
+    overflow: hidden;
+    color: #667085;
+    font-size: 5.7px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+
+/* Графики */
+
+.plans-chart-card {
+    margin-bottom: 6px;
+    padding: 5px;
+    border: 1px solid #D7DCE2;
+    background: #FFFDF7;
+    break-inside: avoid;
+}
+
+.plans-chart-title {
+    margin-bottom: 3px;
+    color: #667085;
+    font-size: 6px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.plans-chart-image {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.plans-chart-image.month-chart {
+    max-height: 145px;
+    object-fit: contain;
+}
+
+.plans-chart-image.monthly-chart {
+    max-height: 145px;
+    object-fit: contain;
+}
+
+.plans-chart-image.prophet-chart {
+    max-height: 150px;
+    object-fit: contain;
+}
+
+.plans-chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 80px;
+    padding: 8px;
+    border: 1px dashed #D7DCE2;
+    background: #F8F5ED;
+    color: #667085;
+    font-size: 6.5px;
+    text-align: center;
+}
+
+
+/* Последние семь дней */
+
+.plans-seven-days {
+    margin-bottom: 6px;
+    border-top: 2px solid #14213D;
+    padding-top: 5px;
+}
+
+.plans-small-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    align-items: flex-end;
+    margin-bottom: 4px;
+}
+
+.plans-small-title {
+    margin-top: 2px;
+    color: #14213D;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 10.5px;
+    font-weight: 800;
+}
+
+.plans-seven-average {
+    text-align: right;
+}
+
+.plans-seven-average span {
+    display: block;
+    color: #667085;
+    font-size: 5.5px;
+    text-transform: uppercase;
+}
+
+.plans-seven-average b {
+    display: block;
+    margin-top: 1px;
+    color: #14213D;
+    font-family: Georgia, serif;
+    font-size: 9px;
+}
+
+.plans-seven-table,
+.plans-prophet-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+
+
+.plans-seven-table th:first-child,
+.plans-prophet-table th:first-child {
+    text-align: left;
+}
+
+
+/* ================================================================
+   ТАБЛИЦА — ПОСЛЕДНИЕ 7 ДНЕЙ
+   ================================================================ */
+
+.plans-seven-table th {
+    padding: 4px 4px;
+    background: #14213D;
+    color: #FFFFFF;
+
+    font-size: 6.2px;
+    line-height: 1.15;
+
+    text-align: right;
+}
+
+.plans-seven-table td {
+    padding: 4px 4px;
+
+    border-bottom: 1px solid #E1E4E8;
+
+    color: #354052;
+    font-size: 6.3px;
+    line-height: 1.18;
+}
+
+
+/* ================================================================
+   ТАБЛИЦА — PROPHET
+   ================================================================ */
+
+.plans-prophet-table th {
+    padding: 5px 6px;
+    background: #14213D;
+    color: #FFFFFF;
+
+    font-size: 6.4px;
+    line-height: 1.15;
+
+    text-align: right;
+}
+
+.plans-prophet-table td {
+    padding: 5px 6px;
+
+    border-bottom: 1px solid #E1E4E8;
+
+    color: #354052;
+    font-size: 6.6px;
+    line-height: 1.2;
+}
+
+
+.plans-seven-table tbody tr:nth-child(even),
+.plans-prophet-table tbody tr:nth-child(even) {
+    background: #F8F5ED;
+}
+
+.plans-seven-table tfoot td {
+    background: #FFF5F7;
+    border-top: 2px solid #E85D75;
+    color: #14213D;
+    font-weight: 800;
+}
+
+.plans-seven-table .numeric,
+.plans-prophet-table .numeric {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.plans-seven-table .muted {
+    color: #667085;
+}
+
+.plans-seven-table .positive,
+.plans-prophet-table .positive {
+    color: #12654F;
+    font-weight: 800;
+}
+
+.plans-seven-table .negative,
+.plans-prophet-table .negative {
+    color: #B53C56;
+    font-weight: 800;
+}
+
+.plans-prophet-table .forecast {
+    color: #0F766E;
+    font-weight: 700;
+}
+
+
+/* Редакционный текст */
+
+.plans-editorial-copy {
+    color: #354052;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 7.1px;
+    line-height: 1.47;
+    text-align: justify;
+    hyphens: auto;
+}
+
+.plans-editorial-copy.dropcap::first-letter {
+    color: #E85D75;
+    font-size: 17px;
+    line-height: .8;
+    font-weight: 800;
+}
+
+.half-copy {
+    margin-top: 6px;
+}
+
+
+/* Полугодие */
+
+.plans-half-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+    gap: 4px;
+    align-items: center;
+}
+
+.plans-gauge-image {
+    display: block;
+    width: 100%;
+    max-height: 119px;
+    object-fit: contain;
+}
+
+.plans-half-stats > div {
+    padding: 3px 0;
+    border-bottom: 1px solid #D7DCE2;
+}
+
+.plans-half-stats > div:last-child {
+    border-bottom: 0;
+}
+
+.plans-half-stats span {
+    display: block;
+    color: #667085;
+    font-size: 5.2px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.plans-half-stats b {
+    display: block;
+    margin-top: 1px;
+    overflow: hidden;
+    color: #14213D;
+    font-family: Georgia, serif;
+    font-size: 8.8px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.plans-progress-card {
+    margin: 4px 0 6px;
+    padding: 5px 6px;
+    border: 1px solid #D7DCE2;
+    background: transparent;
+}
+
+.plans-progress-item + .plans-progress-item {
+    margin-top: 4px;
+}
+
+.plans-progress-item > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+    color: #667085;
+    font-size: 5.6px;
+}
+
+.plans-progress-item b {
+    color: #14213D;
+}
+
+.plans-progress-track {
+    height: 6px;
+    overflow: hidden;
+    background: #EDF0F3;
+}
+
+.plans-progress-track span {
+    display: block;
+    height: 100%;
+}
+
+.plans-progress-track .execution {
+    background: #9BFF57;
+}
+
+.plans-progress-track .calendar {
+    background: #E85D75;
+}
+
+.plans-progress-result {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid #E1E4E8;
+    font-size: 5.6px;
+    font-weight: 800;
+}
+
+.plans-progress-result.positive {
+    color: #12654F;
+}
+
+.plans-progress-result.negative {
+    color: #B53C56;
+}
+
+.plans-divider-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 7px 0 4px;
+    color: #E85D75;
+    font-size: 6px;
+    font-weight: 800;
+    letter-spacing: .85px;
+}
+
+.plans-divider-title::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: #E85D75;
+    opacity: .45;
+}
+
+
+/* Prophet — нижняя газетная полоса */
+
+.plans-prophet-section {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 4px solid #14213D;
+    break-inside: avoid;
+}
+
+.plans-prophet-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.plans-prophet-badge {
+    padding: 3px 6px;
+    background: #E3F2ED;
+    border: 1px solid #A9CEC2;
+    color: #0F766E;
+    font-size: 6px;
+    font-weight: 800;
+    letter-spacing: .8px;
+}
+
+.plans-prophet-lead {
+    display: grid;
+    grid-template-columns: 27px 1fr;
+    gap: 7px;
+    margin-bottom: 5px;
+    padding: 6px 7px;
+    background: #F4F0E6;
+    border-left: 4px solid #FFD84D;
+    color: #354052;
+    font-family: Georgia, serif;
+    font-size: 7px;
+    line-height: 1.42;
+    text-align: justify;
+}
+
+.plans-prophet-symbol {
+    color: #E85D75;
+    font-family: Georgia, serif;
+    font-size: 23px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.plans-prophet-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 5px;
+}
+
+.plans-prophet-kpis > div {
+    padding: 5px;
+    border: 1px solid #D7DCE2;
+    background: #FFFDF7;
+}
+
+.plans-prophet-kpis span {
+    display: block;
+    color: #667085;
+    font-size: 5.2px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.plans-prophet-kpis b {
+    display: block;
+    margin-top: 3px;
+    overflow: hidden;
+    color: #14213D;
+    font-family: Georgia, serif;
+    font-size: 9.3px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.plans-prophet-kpis .positive b {
+    color: #12654F;
+}
+
+.plans-prophet-kpis .negative b {
+    color: #B53C56;
+}
+
+.plans-prophet-conclusion {
+    margin-bottom: 5px;
+    padding: 5px 7px;
+    font-family: Georgia, serif;
+    font-size: 7.2px;
+    line-height: 1.35;
+}
+
+.plans-prophet-conclusion.positive {
+    border-left: 4px solid #12654F;
+    background: #E8F3EE;
+    color: #12654F;
+}
+
+.plans-prophet-conclusion.negative {
+    border-left: 4px solid #E85D75;
+    background: #FFF1F4;
+    color: #B53C56;
+}
+
+.prophet-chart-card {
+    margin-bottom: 5px;
+}
+
+.plans-method-note {
+    margin-top: 6px;
+    color: #667085;
+    font-size: 6.2px;
+    line-height: 1.4;
+}
+
+.plans-footer {
+    margin-top: 5px;
+}
+
+
+
+.plans-chart-image {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.plans-chart-image.month-chart {
+    max-height: 145px;
+    object-fit: contain;
+}
+
+.plans-chart-image.monthly-chart {
+    max-height: 145px;
+    object-fit: contain;
+}
+
+.plans-chart-image.prophet-chart {
+    max-height: 150px;
+    object-fit: contain;
+}
+
+.plans-gauge-image {
+    display: block;
+    width: 100%;
+    max-height: 119px;
+    object-fit: contain;
+}
+
+
+
+/* ================================================================
+   ПОЛУГОДИЕ — ДОПОЛНИТЕЛЬНАЯ ТРАЕКТОРИЯ
+   ================================================================ */
+
+.plans-half-trajectory-card {
+    margin-top: 5px;
+    padding: 4px 6px 2px;
+
+    border: 1px solid #D7DCE2;
+    background: #FFFDF7;
+
+    break-inside: avoid;
+}
+
+.half-trajectory-chart {
+    width: 100%;
+    height: 108px;
+}
+
+.half-trajectory-chart svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+
+/* ================================================================
+   PROPHET — БОЛЬШОЙ ГРАФИК
+   ================================================================ */
+
+.prophet-chart-card {
+    margin-top: 6px;
+    margin-bottom: 6px;
+
+    padding: 6px 7px 4px;
+
+    border: 1px solid #D7DCE2;
+    background: #FFFDF7;
+}
+
+.prophet-chart {
+    width: 100%;
+    height: 205px;
+}
+
+.prophet-chart svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.plans-chart-title {
+    margin-bottom: 2px;
+
+    color: #667085;
+
+    font-size: 6.4px;
+    line-height: 1.1;
+    font-weight: 800;
+
+    letter-spacing: .35px;
+    text-transform: uppercase;
+}
+
+
+/* ================================================================
+   НЕМНОГО УПЛОТНЯЕМ ПРАВУЮ КОЛОНКУ
+   ================================================================ */
+
+.plans-half-year-column .plans-progress-card {
+    margin-bottom: 5px;
+}
+
+.plans-half-year-column .half-copy {
+    margin-top: 5px;
+}
+
+
+
+/* SVG внутри полугодового блока должен сливаться с фоном блока */
+
+.plans-gauge-wrap,
+.gauge-chart,
+.gauge-chart svg {
+    background: transparent;
+}
+
+.plans-half-trajectory-card {
+    margin-top: 5px;
+    padding: 4px 5px 2px;
+
+    border: 1px solid #D7DCE2;
+    background: transparent;
+
+    break-inside: avoid;
+}
+
+.half-trajectory-chart,
+.half-trajectory-chart svg {
+    display: block;
+    width: 100%;
+    background: transparent;
+}
+
+
+
+
+
+/* ==================================================================
+   ТОВАРНЫЙ РАЗВОРОТ — STOCKS PAGE
+   ================================================================== */
+
+.stocks-page {
+    padding-top: 8mm;
+}
+
+
+/* ==================================================================
+   ШАПКА СТРАНИЦЫ
+   ================================================================== */
+
+.stocks-page .masthead {
+    margin-bottom: 6px;
+}
+
+.stocks-page .masthead h1 {
+    font-size: 26px;
+}
+
+
+/* ==================================================================
+   KPI — ВЕРХНЯЯ ПОЛОСА
+   ================================================================== */
+
+.stocks-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+
+    margin-bottom: 6px;
+}
+
+.stocks-kpi-grid .metric {
+    position: relative;
+
+    min-width: 0;
+    min-height: 57px;
+
+    padding: 6px 7px;
+
+    border: 1px solid #DADDE3;
+    border-top: 3px solid #14213D;
+
+    background: #FFFDF7;
+}
+
+.stocks-kpi-grid .metric:nth-child(2) {
+    border-top-color: #E85D75;
+}
+
+.stocks-kpi-grid .metric:nth-child(3) {
+    border-top-color: #B7A2D8;
+}
+
+.stocks-kpi-grid .metric:nth-child(4) {
+    border-top-color: #8067AB;
+    background: #F8F5FB;
+}
+
+.stocks-kpi-grid .metric-top {
+    color: #667085;
+
+    font-size: 5.8px;
+    line-height: 1.1;
+    font-weight: 800;
+
+    letter-spacing: .45px;
+}
+
+.stocks-kpi-grid .metric-top .svg-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.stocks-kpi-grid .metric-value {
+    margin-top: 4px;
+
+    overflow: hidden;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 14px;
+    line-height: 1;
+    font-weight: 800;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.stocks-kpi-grid .metric-note {
+    margin-top: 3px;
+
+    overflow: hidden;
+
+    color: #667085;
+
+    font-size: 6.1px;
+    line-height: 1.15;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+
+/* ==================================================================
+   АВТОМАТИЧЕСКИЙ АНАЛИТИЧЕСКИЙ ВЫВОД
+   ================================================================== */
+
+.stocks-analysis {
+    position: relative;
+
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 10px;
+
+    margin-bottom: 6px;
+    padding: 7px 9px;
+
+    border-top: 1px solid #DED8CC;
+    border-bottom: 1px solid #DED8CC;
+    border-left: 4px solid #E85D75;
+
+    background: #F7F3EA;
+}
+
+.stocks-analysis-label {
+    padding-top: 1px;
+
+    color: #E85D75;
+
+    font-size: 6.2px;
+    line-height: 1.3;
+    font-weight: 900;
+
+    letter-spacing: 1px;
+}
+
+.stocks-analysis-text {
+    color: #354052;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 7.3px;
+    line-height: 1.46;
+
+    text-align: justify;
+    hyphens: auto;
+}
+
+.stocks-analysis-text b {
+    color: #14213D;
+    font-weight: 800;
+}
+
+
+/* ==================================================================
+   ОБЩИЕ ЗАГОЛОВКИ БЛОКОВ STOCKS
+   ================================================================== */
+
+.stocks-block-kicker {
+    color: #E85D75;
+
+    font-size: 5.8px;
+    line-height: 1;
+    font-weight: 900;
+
+    letter-spacing: .9px;
+}
+
+.stocks-block-kicker.lilac {
+    color: #8067AB;
+}
+
+.stocks-block-kicker.rose {
+    color: #CC687D;
+}
+
+.stocks-block-title {
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11px;
+    line-height: 1.05;
+    font-weight: 800;
+}
+
+
+/* ==================================================================
+   КАРТА
+   ================================================================== */
+
+.stocks-map-wrap {
+    margin-bottom: 6px;
+    padding-top: 5px;
+
+    border-top: 3px solid #14213D;
+}
+
+.stocks-map-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+
+    margin-bottom: 2px;
+}
+
+.stocks-map-caption {
+    color: #7A8494;
+
+    font-size: 5.7px;
+    line-height: 1;
+
+    text-align: right;
+}
+
+.stocks-map-block {
+    width: 100%;
+    height: 285px;
+
+    overflow: hidden;
+
+    background: #FFFDF7;
+}
+
+.stocks-map-image {
+    display: block;
+
+    width: 100%;
+    height: 285px;
+
+    object-fit: contain;
+    object-position: center center;
+}
+
+
+/* ==================================================================
+   РЕЙТИНГИ — ОБЩАЯ СЕТКА
+   ================================================================== */
+
+.stocks-ranking-grid {
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(0, 1fr);
+
+    gap: 9px;
+
+    margin-bottom: 6px;
+
+    align-items: start;
+}
+
+.stocks-ranking-grid-secondary {
+    margin-top: 2px;
+    padding-top: 6px;
+
+    border-top: 1px solid #D7DCE2;
+}
+
+.stocks-ranking-card {
+    min-width: 0;
+
+    padding-top: 5px;
+
+    border-top: 3px solid #14213D;
+}
+
+.stocks-ranking-card:nth-child(2) {
+    border-top-color: #B7A2D8;
+}
+
+.stocks-ranking-grid-secondary
+.stocks-ranking-card:first-child {
+    border-top-color: #EAA1B0;
+}
+
+.stocks-ranking-grid-secondary
+.stocks-ranking-card:nth-child(2) {
+    border-top-color: #A993CB;
+}
+
+.stocks-ranking-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+
+    gap: 5px;
+
+    margin-bottom: 4px;
+}
+
+.stocks-ranking-unit {
+    flex: 0 0 auto;
+
+    padding-bottom: 1px;
+
+    color: #98A2B3;
+
+    font-size: 5.2px;
+    line-height: 1;
+
+    white-space: nowrap;
+}
+
+
+/* ==================================================================
+   BAR CHART — ТОЛЬКО НА СТРАНИЦЕ ОСТАТКОВ
+   ================================================================== */
+
+.stocks-page .bar-row {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 102px)
+        minmax(0, 1fr)
+        85px;
+
+    gap: 5px;
+
+    align-items: center;
+
+    min-width: 0;
+
+    margin: 3px 0;
+}
+
+.stocks-page .bar-label {
+    min-width: 0;
+
+    overflow: hidden;
+
+    color: #26344D;
+
+    font-size: 6.7px;
+    line-height: 1.05;
+    font-weight: 700;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.stocks-page .bar-track {
+    position: relative;
+
+    width: 100%;
+    height: 9px;
+
+    overflow: hidden;
+
+    background: #E9EDF1;
+}
+
+.stocks-page .bar-fill {
+    display: block;
+
+    height: 9px;
+
+    background: #E47B90;
+
+    opacity: 1;
+}
+
+
+/* Регионы — коралл */
+
+.stocks-page .bar-tone-coral .bar-fill {
+    background: #E47B90;
+}
+
+
+/* Склады — нежно-сиреневый */
+
+.stocks-page .bar-tone-lilac .bar-fill {
+    background: #B8A2D8;
+}
+
+
+/* Категории — нежно-розовый */
+
+.stocks-page .bar-tone-rose .bar-fill {
+    background: #E9A6B3;
+}
+
+
+/* Значение справа */
+
+.stocks-page .bar-number {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+
+    gap: 4px;
+
+    min-width: 0;
+
+    color: #14213D;
+
+    font-size: 6.2px;
+    line-height: 1;
+    font-weight: 800;
+
+    text-align: right;
+
+    white-space: nowrap;
+}
+
+
+/* Процент */
+
+.stocks-page .bar-share {
+    color: #87909E;
+
+    font-size: 5.6px;
+    line-height: 1;
+
+    font-weight: 700;
+}
+
+
+/* ==================================================================
+   ВТОРОЙ РЯД — КАТЕГОРИИ / БРЕНДЫ
+   ================================================================== */
+
+.stocks-ranking-grid-secondary
+.bar-row {
+    grid-template-columns:
+        minmax(0, 112px)
+        minmax(0, 1fr)
+        80px;
+}
+
+.stocks-ranking-grid-secondary
+.bar-label {
+    font-size: 6.4px;
+}
+
+.stocks-ranking-grid-secondary
+.bar-track,
+.stocks-ranking-grid-secondary
+.bar-fill {
+    height: 8px;
+}
+
+
+/* ==================================================================
+   СТОИМОСТНАЯ ОЦЕНКА
+   ================================================================== */
+
+.stocks-cost-section {
+    margin-top: 5px;
+    padding-top: 5px;
+
+    border-top: 3px solid #14213D;
+}
+
+.stocks-cost-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+
+    gap: 8px;
+
+    margin-bottom: 4px;
+}
+
+.stocks-cost-head-note {
+    padding-bottom: 1px;
+
+    color: #7A8494;
+
+    font-size: 5.5px;
+    line-height: 1;
+}
+
+.stocks-cost-strip {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(0, 1fr)
+        minmax(0, .85fr);
+
+    gap: 5px;
+}
+
+.stocks-cost-card {
+    position: relative;
+
+    min-width: 0;
+    min-height: 51px;
+
+    padding: 6px 7px;
+
+    border: 1px solid #D9DDE3;
+
+    background: #FFFDF7;
+}
+
+.stocks-cost-card.accounting {
+    border-top: 3px solid #14213D;
+}
+
+.stocks-cost-card.management {
+    border-top: 3px solid #A993CB;
+
+    background: #FBF9FD;
+}
+
+.stocks-cost-card.difference {
+    border-top: 3px solid #8067AB;
+
+    background: #F4F0F8;
+}
+
+.stocks-cost-label {
+    color: #667085;
+
+    font-size: 5.6px;
+    line-height: 1.15;
+    font-weight: 800;
+
+    text-transform: uppercase;
+    letter-spacing: .35px;
+}
+
+.stocks-cost-value {
+    margin-top: 4px;
+
+    overflow: hidden;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 13px;
+    line-height: 1;
+    font-weight: 800;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.stocks-cost-note {
+    margin-top: 3px;
+
+    color: #7A8494;
+
+    font-size: 5.7px;
+    line-height: 1.15;
+}
+
+.stocks-cost-value.positive,
+.stocks-cost-note.positive {
+    color: #12654F;
+}
+
+.stocks-cost-value.negative,
+.stocks-cost-note.negative {
+    color: #B53C56;
+}
+
+.stocks-cost-value.neutral,
+.stocks-cost-note.neutral {
+    color: #667085;
+}
+
+
+/* ==================================================================
+   МЕТОДОЛОГИЯ
+   ================================================================== */
+
+.stocks-method-note {
+    display: flex;
+    justify-content: space-between;
+
+    gap: 14px;
+
+    margin-top: 5px;
+    padding-top: 4px;
+
+    border-top: 1px solid #D7DCE2;
+
+    color: #7A8494;
+
+    font-size: 5.3px;
+    line-height: 1.25;
+}
+
+.stocks-method-note span:first-child {
+    flex: 0 0 auto;
+
+    color: #667085;
+
+    font-weight: 700;
+}
+
+.stocks-method-note span:last-child {
+    flex: 1;
+
+    text-align: right;
+}
+
+
+/* ==================================================================
+   ПУСТОЕ СОСТОЯНИЕ
+   ================================================================== */
+
+.stocks-empty {
+    display: flex;
+    flex-direction: column;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 170mm;
+
+    text-align: center;
+}
+
+.stocks-empty-title {
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 19px;
+    font-weight: 800;
+}
+
+.stocks-empty-text {
+    max-width: 360px;
+
+    margin-top: 5px;
+
+    color: #667085;
+
+    font-size: 8px;
+    line-height: 1.45;
+}
+
+
+/* ==================================================================
+   ЗАЩИТА ОТ ПЕРЕНОСА БЛОКОВ В PDF
+   ================================================================== */
+
+.stocks-kpi-grid,
+.stocks-analysis,
+.stocks-ranking-grid,
+.stocks-cost-section,
+.stocks-cost-strip {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+
+
+
+/* ==================================================================
+   ЗДОРОВЬЕ ТОВАРНОГО ЗАПАСА
+   ================================================================== */
+
+.stocks-health {
+    margin-top: 7px;
+    padding-top: 6px;
+
+    border-top: 4px solid #14213D;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+
+/* ------------------------------------------------------------------
+   Заголовок
+   ------------------------------------------------------------------ */
+
+.stocks-health-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+
+    gap: 10px;
+
+    margin-bottom: 5px;
+}
+
+.stocks-health-kicker {
+    color: #8067AB;
+
+    font-size: 5.8px;
+    line-height: 1;
+    font-weight: 900;
+
+    letter-spacing: 1px;
+}
+
+.stocks-health-title {
+    margin-top: 2px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.stocks-health-period {
+    padding-bottom: 1px;
+
+    color: #7A8494;
+
+    font-size: 5.4px;
+    line-height: 1;
+
+    text-align: right;
+}
+
+
+/* ------------------------------------------------------------------
+   Segmented bar
+   ------------------------------------------------------------------ */
+
+.stocks-health-bar {
+    display: flex;
+
+    width: 100%;
+    height: 12px;
+
+    overflow: hidden;
+
+    background: #EDF0F3;
+
+    border: 1px solid #D9DDE3;
+}
+
+.stocks-health-segment {
+    height: 100%;
+}
+
+
+/* до 30 */
+
+.stocks-health-segment-0_30,
+.stocks-health-bucket-0_30 .stocks-health-dot {
+    background: #93C99D;
+}
+
+
+/* 30–60 */
+
+.stocks-health-segment-30_60,
+.stocks-health-bucket-30_60 .stocks-health-dot {
+    background: #C7D99A;
+}
+
+
+/* 60–90 */
+
+.stocks-health-segment-60_90,
+.stocks-health-bucket-60_90 .stocks-health-dot {
+    background: #E6CF87;
+}
+
+
+/* 90+ */
+
+.stocks-health-segment-90_plus,
+.stocks-health-bucket-90_plus .stocks-health-dot {
+    background: #E89AA9;
+}
+
+
+/* нет продаж */
+
+.stocks-health-segment-no_sales,
+.stocks-health-bucket-no_sales .stocks-health-dot {
+    background: #B94A62;
+}
+
+
+/* ------------------------------------------------------------------
+   Подписи корзин
+   ------------------------------------------------------------------ */
+
+.stocks-health-buckets {
+    display: grid;
+
+    grid-template-columns:
+        repeat(5, minmax(0, 1fr));
+
+    gap: 4px;
+
+    margin-top: 4px;
+}
+
+.stocks-health-bucket {
+    min-width: 0;
+
+    padding: 4px 5px;
+
+    border-left: 1px solid #D9DDE3;
+}
+
+.stocks-health-bucket:first-child {
+    border-left: 0;
+}
+
+.stocks-health-bucket-top {
+    display: flex;
+    align-items: center;
+
+    gap: 4px;
+
+    min-width: 0;
+}
+
+.stocks-health-dot {
+    flex: 0 0 6px;
+
+    width: 6px;
+    height: 6px;
+}
+
+.stocks-health-bucket-label {
+    overflow: hidden;
+
+    color: #667085;
+
+    font-size: 5.4px;
+    line-height: 1;
+    font-weight: 800;
+
+    text-transform: uppercase;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.stocks-health-bucket-share {
+    margin-top: 3px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.stocks-health-bucket-90_plus
+.stocks-health-bucket-share {
+    color: #C45169;
+}
+
+.stocks-health-bucket-no_sales
+.stocks-health-bucket-share {
+    color: #A6364E;
+}
+
+.stocks-health-bucket-qty {
+    margin-top: 2px;
+
+    color: #7A8494;
+
+    font-size: 5.6px;
+    line-height: 1;
+}
+
+
+/* ------------------------------------------------------------------
+   Основные KPI
+   ------------------------------------------------------------------ */
+
+.stocks-health-metrics {
+    display: grid;
+
+    grid-template-columns:
+        .95fr
+        .95fr
+        1fr
+        1fr
+        1.15fr;
+
+    gap: 4px;
+
+    margin-top: 6px;
+}
+
+.stocks-health-metric {
+    min-width: 0;
+
+    min-height: 46px;
+
+    padding: 5px 6px;
+
+    border: 1px solid #D9DDE3;
+    border-top: 2px solid #14213D;
+
+    background: #FFFDF7;
+}
+
+.stocks-health-metric-accent {
+    border-top-color: #8067AB;
+
+    background: #F8F5FB;
+}
+
+.stocks-health-metric-active {
+    border-top-color: #93C99D;
+
+    background: #F7FAF6;
+}
+
+.stocks-health-metric-risk {
+    border-top-color: #B94A62;
+
+    background: #FFF5F7;
+}
+
+.stocks-health-metric-label {
+    color: #667085;
+
+    font-size: 5.2px;
+    line-height: 1;
+    font-weight: 800;
+
+    text-transform: uppercase;
+}
+
+.stocks-health-metric-value {
+    margin-top: 4px;
+
+    overflow: hidden;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 10.5px;
+    line-height: 1;
+    font-weight: 800;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.stocks-health-metric-risk
+.stocks-health-metric-value {
+    color: #B53C56;
+}
+
+.stocks-health-metric-note {
+    margin-top: 3px;
+
+    color: #7A8494;
+
+    font-size: 5.2px;
+    line-height: 1.15;
+}
+
+.stocks-health-risk-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+
+    gap: 5px;
+}
+
+.stocks-health-risk-qty {
+    color: #B53C56;
+
+    font-size: 5.6px;
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+
+/* ------------------------------------------------------------------
+   Разбивка зоны риска
+   ------------------------------------------------------------------ */
+
+.stocks-health-risk-details {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        1px
+        1fr;
+
+    gap: 8px;
+
+    align-items: center;
+
+    margin-top: 5px;
+    padding: 5px 7px;
+
+    background: #F8F5ED;
+
+    border-left: 3px solid #E85D75;
+}
+
+.stocks-health-risk-divider {
+    width: 1px;
+    height: 28px;
+
+    background: #D7DCE2;
+}
+
+.stocks-health-risk-item {
+    min-width: 0;
+}
+
+.stocks-health-risk-item-label {
+    color: #667085;
+
+    font-size: 5px;
+    line-height: 1;
+    font-weight: 800;
+
+    text-transform: uppercase;
+}
+
+.stocks-health-risk-item-main {
+    margin-top: 3px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 8.8px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.stocks-health-risk-item-main span {
+    margin-left: 4px;
+
+    color: #B53C56;
+
+    font-family: Arial, sans-serif;
+    font-size: 5.7px;
+}
+
+.stocks-health-risk-item-note {
+    margin-top: 2px;
+
+    color: #7A8494;
+
+    font-size: 5.2px;
+}
+
+
+/* ------------------------------------------------------------------
+   Методология
+   ------------------------------------------------------------------ */
+
+.stocks-health-method {
+    margin-top: 4px;
+
+    color: #8A939F;
+
+    font-size: 4.8px;
+    line-height: 1.28;
+}
+
+
+/* ==================================================================
+   ОТДЕЛЬНАЯ СТРАНИЦА ПРОИСШЕСТВИЙ
+   ================================================================== */
+
+.incidents-page {
+    padding-top: 8mm;
+}
+
+.incidents-page .masthead {
+    margin-bottom: 7px;
+}
+
+.incidents-page .brandline {
+    color: #C23D58;
+}
+
+
+/* ==================================================================
+   СВОДКА
+   ================================================================== */
+
+.incidents-summary {
+    display: grid;
+
+    grid-template-columns:
+        .72fr
+        .72fr
+        1fr
+        1.15fr
+        1.15fr;
+
+    gap: 5px;
+
+    margin-bottom: 7px;
+}
+
+.incidents-summary-card {
+    min-width: 0;
+
+    padding: 6px 7px;
+
+    border: 1px solid #D9DDE3;
+    border-top: 3px solid #14213D;
+
+    background: #FFFDF7;
+}
+
+.incidents-summary-card.danger {
+    border-top-color: #C23D58;
+    background: #FFF5F7;
+}
+
+.incidents-summary-card.accounting {
+    border-top-color: #14213D;
+}
+
+.incidents-summary-card.management {
+    border-top-color: #A993CB;
+    background: #FAF8FC;
+}
+
+.incidents-summary-label {
+    color: #667085;
+
+    font-size: 5.3px;
+    line-height: 1.1;
+    font-weight: 800;
+
+    text-transform: uppercase;
+    letter-spacing: .35px;
+}
+
+.incidents-summary-value {
+    margin-top: 4px;
+
+    color: #14213D;
+
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+.incidents-summary-card.danger
+.incidents-summary-value {
+    color: #B53C56;
+}
+
+.incidents-summary-note {
+    margin-top: 3px;
+
+    color: #7A8494;
+
+    font-size: 5.3px;
+    line-height: 1.15;
+}
+
+
+/* ==================================================================
+   МЕТОДОЛОГИЯ
+   ================================================================== */
+
+.incidents-method {
+    display: grid;
+    grid-template-columns: 19px 1fr;
+    gap: 7px;
+
+    align-items: start;
+
+    margin-bottom: 8px;
+    padding: 7px 9px;
+
+    background: #F6F3EB;
+
+    border-top: 1px solid #D7D1C6;
+    border-bottom: 1px solid #D7D1C6;
+
+    color: #4B5563;
+
+    font-size: 7px;
+    line-height: 1.42;
+}
+
+.incidents-method-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 16px;
+    height: 16px;
+
+    border: 1.5px solid #667085;
+    border-radius: 50%;
+
+    color: #667085;
+
+    font-family: Georgia, serif;
+    font-size: 9px;
+    font-weight: 800;
+}
+
+
+/* ==================================================================
+   СПИСОК
+   ================================================================== */
+
+.incidents-page-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+
+/* ==================================================================
+   СОБЫТИЕ
+   ================================================================== */
+
+.incident-page-event {
+    position: relative;
+
+    border: 1px solid #D6DAE0;
+    border-left: 4px solid #C23D58;
+
+    background: #FFFDF7;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+
+    overflow: hidden;
+}
+
+.incident-page-event-number {
+    position: absolute;
+
+    top: 6px;
+    right: 9px;
+
+    color: #E6E8EC;
+
+    font-family: Georgia, serif;
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 800;
+
+    z-index: 0;
+}
+
+.incident-page-event-head {
+    position: relative;
+    z-index: 1;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    gap: 10px;
+
+    padding: 7px 9px;
+
+    border-bottom: 1px solid #DADDE3;
+
+    background: #FFFAF7;
+}
+
+.incident-page-event-main {
+    display: flex;
+    align-items: center;
+
+    gap: 8px;
+
+    min-width: 0;
+}
+
+.incident-page-fire {
+    flex: 0 0 31px;
+
+    width: 31px;
+    height: 31px;
+}
+
+.incident-page-warehouse {
+    color: #14213D;
+
+    font-family: Georgia, serif;
+    font-size: 13px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.incident-page-event-title {
+    margin-top: 3px;
+
+    color: #667085;
+
+    font-size: 6.5px;
+    line-height: 1.15;
+}
+
+.incident-page-status {
+    flex: 0 0 auto;
+
+    padding: 3px 7px;
+
+    border: 1px solid #E77B90;
+    border-radius: 10px;
+
+    background: #FFF1F4;
+
+    color: #B83D56;
+
+    font-size: 6px;
+    line-height: 1;
+    font-weight: 800;
+
+    text-transform: uppercase;
+}
+
+
+/* ==================================================================
+   ДАТЫ + ОПИСАНИЕ
+   ================================================================== */
+
+.incident-page-event-body {
+    display: grid;
+
+    grid-template-columns:
+        150px
+        minmax(0, 1fr);
+
+    gap: 9px;
+
+    padding: 7px 9px;
+}
+
+.incident-page-dates {
+    padding-right: 9px;
+
+    border-right: 1px solid #DADDE3;
+}
+
+.incident-page-date + .incident-page-date {
+    margin-top: 7px;
+}
+
+.incident-page-date-label,
+.incident-page-description-label {
+    color: #98A2B3;
+
+    font-size: 5.3px;
+    line-height: 1;
+    font-weight: 800;
+
+    text-transform: uppercase;
+    letter-spacing: .4px;
+}
+
+.incident-page-date-value {
+    margin-top: 3px;
+
+    color: #14213D;
+
+    font-family: Georgia, serif;
+    font-size: 8px;
+    line-height: 1.15;
+    font-weight: 700;
+}
+
+.incident-page-description-text {
+    margin-top: 4px;
+
+    color: #354052;
+
+    font-family: Georgia, serif;
+    font-size: 7px;
+    line-height: 1.45;
+
+    text-align: justify;
+}
+
+
+/* ==================================================================
+   KPI СОБЫТИЯ
+   ================================================================== */
+
+.incident-page-metrics {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        1fr
+        1fr;
+
+    gap: 5px;
+
+    padding: 0 9px 7px;
+}
+
+.incident-page-metric {
+    min-width: 0;
+
+    padding: 5px 7px;
+
+    border: 1px solid #DADDE3;
+    border-top: 2px solid #14213D;
+
+    background: #FFFDF7;
+}
+
+.incident-page-metric.stock {
+    border-top-color: #E85D75;
+}
+
+.incident-page-metric.management {
+    border-top-color: #A993CB;
+
+    background: #FAF8FC;
+}
+
+.incident-page-metric-label {
+    color: #667085;
+
+    font-size: 5.2px;
+    line-height: 1;
+    font-weight: 800;
+
+    text-transform: uppercase;
+}
+
+.incident-page-metric-value {
+    margin-top: 4px;
+
+    color: #14213D;
+
+    font-family: Georgia, serif;
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.incident-page-metric-note {
+    margin-top: 3px;
+
+    color: #7A8494;
+
+    font-size: 5.2px;
+}
+
+
+/* ==================================================================
+   ПРЕДУПРЕЖДЕНИЯ
+   ================================================================== */
+
+.incident-page-info,
+.incident-page-warning {
+    display: grid;
+
+    grid-template-columns: 17px 1fr;
+
+    gap: 6px;
+
+    align-items: start;
+
+    margin: 0 9px 7px;
+    padding: 5px 7px;
+
+    font-size: 6px;
+    line-height: 1.35;
+}
+
+.incident-page-info {
+    background: #F4F6F8;
+
+    color: #4B5563;
+}
+
+.incident-page-warning {
+    background: #FFF1F4;
+
+    border-left: 3px solid #C23D58;
+
+    color: #7A3444;
+}
+
+.incident-page-info-symbol,
+.incident-page-warning-symbol {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 15px;
+    height: 15px;
+
+    border-radius: 50%;
+
+    font-size: 8px;
+    line-height: 1;
+    font-weight: 900;
+}
+
+.incident-page-info-symbol {
+    border: 1px solid #667085;
+
+    color: #667085;
+}
+
+.incident-page-warning-symbol {
+    background: #C23D58;
+
+    color: white;
+}
+
+.incident-page-no-stock {
+    margin: 0 9px 7px;
+    padding: 7px;
+
+    background: #F4F6F8;
+
+    color: #667085;
+
+    font-size: 6.5px;
+}
+
+
+/* ==================================================================
+   НИЖНЯЯ СТРОКА
+   ================================================================== */
+
+.incidents-page-footer {
+    display: flex;
+    justify-content: space-between;
+
+    gap: 15px;
+
+    margin-top: 7px;
+    padding-top: 5px;
+
+    border-top: 1px solid #D7DCE2;
+
+    color: #8A939F;
+
+    font-size: 5.3px;
+}
+
+
+
 '''

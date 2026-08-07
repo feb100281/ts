@@ -212,17 +212,112 @@ def comparison_card(
     </article>
     """
 
-def bar_chart(rows, value_key: str, suffix: str = "₽", limit: int = 6) -> str:
-    rows = list(rows or [])[:limit]
+def bar_chart(
+    rows,
+    value_key: str,
+    suffix: str = "₽",
+    limit: int = 6,
+    *,
+    tone: str = "coral",
+    show_share: bool = False,
+    total: float | None = None,
+) -> str:
+    rows = list(
+        rows
+        or []
+    )[:limit]
+
     if not rows:
         return '<div class="empty">Нет данных</div>'
-    maximum = max(float(row.get(value_key) or 0) for row in rows) or 1
+
+    values = [
+        float(
+            row.get(value_key)
+            or 0
+        )
+        for row in rows
+    ]
+
+    maximum = max(
+        values
+    ) or 1
+
+    if total is None:
+        total = sum(
+            values
+        )
+
     items = []
+
     for row in rows:
-        value = float(row.get(value_key) or 0)
-        width = max(0, value / maximum * 100)
-        items.append(f'''<div class="bar-row"><div class="bar-label">{safe(row.get("name") or row.get("warehouse_name") or row.get("region"))}</div><div class="bar-track"><div class="bar-fill" style="width:{width:.2f}%"></div></div><div class="bar-number">{fmt_number(value)} {suffix}</div></div>''')
-    return "".join(items)
+        value = float(
+            row.get(value_key)
+            or 0
+        )
+
+        width = max(
+            0,
+            value
+            / maximum
+            * 100,
+        )
+
+        label = (
+            row.get("name")
+            or row.get("warehouse")
+            or row.get("warehouse_name")
+            or row.get("region")
+            or "Не указано"
+        )
+
+        share = (
+            value
+            / total
+            * 100
+            if total
+            else 0
+        )
+
+        share_html = (
+            f"""
+            <span class="bar-share">
+                {share:.1f}%
+            </span>
+            """.replace(".", ",")
+            if show_share
+            else ""
+        )
+
+        items.append(
+            f"""
+            <div class="bar-row bar-tone-{safe(tone)}">
+
+                <div
+                    class="bar-label"
+                    title="{safe(label)}"
+                >
+                    {safe(label)}
+                </div>
+
+                <div class="bar-track">
+                    <div
+                        class="bar-fill"
+                        style="width:{width:.2f}%"
+                    ></div>
+                </div>
+
+                <div class="bar-number">
+                    {fmt_number(value)} {safe(suffix)}
+                    {share_html}
+                </div>
+
+            </div>
+            """
+        )
+
+    return "".join(
+        items
+    )
 
 
 def prose(text: str, dropcap: bool = False) -> str:

@@ -1,3 +1,4 @@
+# gear/app/daily_sales/daily_brief/helpers.py
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -49,12 +50,20 @@ def number(value, default=0.0) -> float:
 
 def fmt_number(value, digits=0) -> str:
     value = number(value)
-    result = f"{value:,.0f}" if digits == 0 else f"{value:,.{digits}f}"
-    return result.replace(",", " ")
+
+    result = (
+        f"{value:,.0f}"
+        if digits == 0
+        else f"{value:,.{digits}f}"
+    )
+
+    # Неразрывный пробел между разрядами числа.
+    return result.replace(",", "\u00A0")
 
 
 def fmt_money(value) -> str:
-    return f"{fmt_number(value, 0)} ₽"
+    # Неразрывный пробел между числом и знаком рубля.
+    return f"{fmt_number(value, 0)}\u00A0₽"
 
 
 def fmt_pct(value, digits=1) -> str:

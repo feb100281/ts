@@ -1,6 +1,4 @@
 # gear/app/daily_sales/daily_brief/presentation/sections.py
-# presentation/sections.py
-
 from __future__ import annotations
 
 import pandas as pd
@@ -8,18 +6,15 @@ import pandas as pd
 from ..helpers import (
     fmt_money,
     fmt_number,
-    fmt_pct,
     number,
 )
 from .charts import (
     daily_qty_price_scatter,
-    plan_sparkline,
     sales_12m_chart,
-    stock_map,
+
 )
 from .components import (
     bar_chart,
-    metric,
     prose,
     safe,
     section,
@@ -155,252 +150,7 @@ def price_analysis(payload: dict) -> str:
     )
 
 
-def plan_block(payload: dict) -> str:
-    plan = payload.get("plan", {})
 
-    if not plan.get("available"):
-        return section(
-            "ПЛАН-ФАКТ",
-            "Месячный темп",
-            '<div class="empty">План не рассчитан</div>',
-            icon_name="plan",
-        )
-
-    body = (
-        '<div class="metric-grid">'
-        + "".join(
-            [
-                metric(
-                    "Выполнение к дате",
-                    fmt_pct(plan.get("exec_to_date_pct")),
-                    f"Факт {fmt_money(plan.get('fact_to_date'))}",
-                    "plan",
-                ),
-                metric(
-                    "Отклонение",
-                    fmt_money(plan.get("delta_to_date")),
-                    f"План {fmt_money(plan.get('plan_to_date'))}",
-                    "margin",
-                ),
-                metric(
-                    "Нужный темп",
-                    fmt_money(plan.get("required_daily_rate")),
-                    f"Осталось {plan.get('remaining_days', 0)} дн.",
-                    "focus",
-                ),
-                metric(
-                    "Выполнение месяца",
-                    fmt_pct(plan.get("month_exec_pct")),
-                    f"План {fmt_money(plan.get('month_plan'))}",
-                    "calendar",
-                ),
-            ]
-        )
-        + "</div>"
-        + plan_sparkline(plan.get("rows", []))
-        + prose(payload.get("editorial", {}).get("plan", ""), True)
-    )
-
-    return section(
-        "ПЛАН-ФАКТ",
-        "Идём ли по графику",
-        body,
-        plan.get("label", ""),
-        "plan",
-    )
-
-
-def half_year(payload: dict) -> str:
-    data = payload.get("half_year_wb_plan", {})
-
-    if not data.get("available"):
-        return ""
-
-    fact = max(
-        0,
-        min(number(data.get("execution_pct")), 100),
-    )
-    calendar = max(
-        0,
-        min(number(data.get("calendar_pct")), 100),
-    )
-
-    body = (
-        '<div class="metric-grid">'
-        + "".join(
-            [
-                metric(
-                    "Выполнено полного плана",
-                    fmt_pct(data.get("execution_pct")),
-                    fmt_money(data.get("fact_amount")),
-                    "plan",
-                ),
-                metric(
-                    "Выполнение к дате",
-                    fmt_pct(data.get("execution_to_date_pct")),
-                    f"План {fmt_money(data.get('plan_to_date'))}",
-                    "focus",
-                ),
-                metric(
-                    "Прошло дней периода",
-                    fmt_pct(data.get("calendar_pct")),
-                    "календарный прогресс",
-                    "calendar",
-                ),
-                metric(
-                    "Нужный темп",
-                    fmt_money(data.get("required_daily_rate")),
-                    "в среднем за день",
-                    "margin",
-                ),
-            ]
-        )
-        + "</div>"
-        + (
-            '<div class="progress-caption">'
-            '<b>Выполнение полного плана</b>'
-            f'<span>{fmt_pct(data.get("execution_pct"))}</span>'
-            "</div>"
-        )
-        + (
-            '<div class="progress">'
-            f'<span style="width:{fact:.2f}%"></span>'
-            f'<i class="progress-marker" style="left:{calendar:.2f}%"></i>'
-            "</div>"
-        )
-        + '''
-        <div class="progress-key">
-            <span><i class="key-fill"></i>доля выполненного плана</span>
-            <span><i class="key-line"></i>доля прошедших дней</span>
-        </div>
-        '''
-        + prose(
-            payload.get("editorial", {}).get("half_year", ""),
-            True,
-        )
-    )
-
-    return section(
-        "СОГЛАШЕНИЕ С WILDBERRIES",
-        "Темп полугодия",
-        body,
-        f'{data.get("date_start", "")} — {data.get("date_finish", "")}',
-        "plan",
-        "soft",
-    )
-
-
-def stock_summary(payload: dict) -> str:
-    data = payload.get("stocks", {})
-
-    if not data.get("available"):
-        return section(
-            "ТОВАРНЫЙ КОНТУР",
-            "Остатки",
-            '<div class="empty">Нет данных</div>',
-            icon_name="stock",
-        )
-
-    body = (
-        '<div class="metric-grid four">'
-        + "".join(
-            [
-                metric(
-                    "Всего товара",
-                    f"{fmt_number(data.get('total_qty'))} шт",
-                    f"{fmt_number(data.get('products'))} NM ID",
-                    "stock",
-                ),
-                metric(
-                    "На складах",
-                    f"{fmt_number(data.get('on_hand'))} шт",
-                    f"{data.get('warehouses', 0)} складов",
-                    "warehouse",
-                ),
-                metric(
-                    "В пути",
-                    f"{fmt_number(data.get('in_transit'))} шт",
-                    "к клиенту и от клиента",
-                    "truck",
-                ),
-                metric(
-                    "Доля в пути",
-                    fmt_pct(data.get("transit_share")),
-                    "от общего товарного контура",
-                    "map",
-                ),
-            ]
-        )
-        + "</div>"
-        + prose(
-            payload.get("editorial", {}).get("stocks", ""),
-            True,
-        )
-    )
-
-    return section(
-        "ТОВАРНЫЙ КОНТУР",
-        "Что лежит и что едет",
-        body,
-        f'Снимок на {data.get("report_date", "")}',
-        "stock",
-    )
-
-
-def stock_geography(payload: dict) -> str:
-    data = payload.get("stocks", {})
-    map_uri = stock_map(
-        data.get("regions", []),
-        str(data.get("report_date") or ""),
-        data,
-    )
-
-    body = prose(
-        payload.get("editorial", {}).get("geography", ""),
-        True,
-    )
-
-    if map_uri:
-        body += f'<img class="map-image" src="{map_uri}">'
-    else:
-        body += (
-            '<div class="map-fallback">'
-            "Карта не построена. Проверьте geopandas, пути к shapefile "
-            "и сопоставление складов с группами регионов из map_config.py."
-            "</div>"
-        )
-
-    body += (
-        '<div class="columns compact">'
-        '<div><div class="mini-title">Регионы по общему запасу</div>'
-        + bar_chart(
-            data.get("regions"),
-            "total_qty",
-            "шт",
-            8,
-        )
-        + "</div>"
-        '<div><div class="mini-title">Крупнейшие склады</div>'
-        + bar_chart(
-            data.get("top_warehouses"),
-            "total_qty",
-            "шт",
-            8,
-        )
-        + "</div></div>"
-    )
-
-    return section(
-        "ГЕОГРАФИЯ ЗАПАСА",
-        "Где сосредоточен товар",
-        body,
-        (
-            "Общий запас = на складе + в пути; подписи карты показывают "
-            "количество складов и объём в пути"
-        ),
-        "map",
-        "feature",
-    )
 
 
 def recommendations(payload: dict) -> str:

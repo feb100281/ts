@@ -8,12 +8,21 @@ from datetime import date
 from typing import Any
 
 import pandas as pd
+from .stock_health import (
+    get_stock_health_data,
+)
 
 from gear.app.daily_sales.stocks.dashboard_data import (
     get_effective_stock_date,
     get_stock_dashboard_summary,
     get_stock_regions,
     get_stock_warehouses,
+)
+
+
+from gear.app.daily_sales.stocks.data import (
+    get_stock_dimension_distributions,
+    get_stocks_export_data,
 )
 
 from inventories.reporting.map.russia_regions_map import (
@@ -34,6 +43,8 @@ from ..helpers import (
 # =============================================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # =============================================================================
+
+
 
 
 def _to_dataframe(
@@ -270,6 +281,10 @@ def _prepare_warehouses(
     return frame[
         required
     ]
+    
+    
+
+
 
 
 def _prepare_regions(
@@ -707,6 +722,12 @@ def get_stock_data(
         .date()
         .isoformat()
     )
+    
+    stock_health = (
+            get_stock_health_data(
+                effective_date_string
+            )
+        )
 
     # -------------------------------------------------------------------------
     # Данные из рабочего dashboard
@@ -741,6 +762,73 @@ def get_stock_data(
     regions = _prepare_regions(
         regions_source,
         warehouses,
+    )
+    
+    
+    # -------------------------------------------------------------------------
+    # БРЕНДЫ И КАТЕГОРИИ
+    # -------------------------------------------------------------------------
+
+    brands_df, categories_df = (
+        get_stock_dimension_distributions(
+            effective_date_string
+        )
+    )
+
+
+    # -------------------------------------------------------------------------
+    # СТОИМОСТЬ ОСТАТКОВ
+    # -------------------------------------------------------------------------
+
+    costs_df = get_stocks_export_data(
+        effective_date_string
+    )
+
+    accounting_cost = 0.0
+    management_cost = 0.0
+
+    if (
+        costs_df is not None
+        and not costs_df.empty
+    ):
+        if "Бух. с/с всего" in costs_df.columns:
+            accounting_cost = (
+                number(
+                    pd.to_numeric(
+                        costs_df["Бух. с/с всего"],
+                        errors="coerce",
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+                / 100
+            )
+
+        if "Упр. с/с всего" in costs_df.columns:
+            management_cost = (
+                number(
+                    pd.to_numeric(
+                        costs_df["Упр. с/с всего"],
+                        errors="coerce",
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+                / 100
+            )
+
+
+    cost_delta = (
+        management_cost
+        - accounting_cost
+    )
+
+    cost_delta_pct = (
+        cost_delta
+        / abs(accounting_cost)
+        * 100
+        if accounting_cost
+        else None
     )
 
     # -------------------------------------------------------------------------
@@ -912,6 +1000,21 @@ def get_stock_data(
             warehouses,
             limit=10,
         ),
+        
+        "brands": dataframe_records(
+            brands_df,
+            limit=6,
+        ),
+
+        "categories": dataframe_records(
+            categories_df,
+            limit=6,
+        ),
+
+        "accounting_cost": accounting_cost,
+        "management_cost": management_cost,
+        "cost_delta": cost_delta,
+        "cost_delta_pct": cost_delta_pct,
 
         # Основная карта для существующего stock_geography().
         "map_image": primary_map,
@@ -929,6 +1032,7 @@ def get_stock_data(
         "region_map_error": (
             region_map_error
         ),
+        "health": stock_health,
 
         "debug": {
             "warehouse_rows": int(
@@ -943,5 +1047,6 @@ def get_stock_data(
             "region_columns": list(
                 regions.columns
             ),
+    
         },
     }
