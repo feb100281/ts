@@ -103,14 +103,18 @@ def _daily_kpis(
         ),
 
         metric(
-            "Упр. маржа",
-            fmt_money(kpi.get("margin_man")),
-            (
-                f"{fmt_pct(kpi.get('margin_percent'))} · "
-                "без маркетинга и штрафов WB"
+                "WB реализовал с НДС",
+                fmt_money(
+                    kpi.get("retail_amount")
+                ),
+                (
+                    "Скидка WB "
+                    f"{fmt_pct(kpi.get('wb_discount_percent'))}"
+                    " · "
+                    f"{fmt_money(kpi.get('wb_discount_amount'))}"
+                ),
+                "margin",
             ),
-            "margin",
-        ),
     ]
 
     return (

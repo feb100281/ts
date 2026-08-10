@@ -314,7 +314,7 @@ body {
 
     color: #14213D;
     font-family: Georgia, "Times New Roman", serif;
-    font-size: 13px;
+    font-size: 10.5px;
     line-height: 1.5;
 }
 

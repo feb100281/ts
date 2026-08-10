@@ -105,6 +105,19 @@ def build_editorial(
 
     net_revenue = number(kpi.get("amount"))
     gross_sales = number(kpi.get("sales_amount"))
+
+    retail_amount = number(
+        kpi.get("retail_amount")
+    )
+
+    wb_discount_amount = number(
+        kpi.get("wb_discount_amount")
+    )
+
+    wb_discount_percent = number(
+        kpi.get("wb_discount_percent")
+    )
+
     returns_amount = number(kpi.get("returns_amount"))
     net_units = number(kpi.get("total_net_sales"))
     sales_transactions = number(kpi.get("sales_transactions"))
@@ -174,24 +187,46 @@ def build_editorial(
 
     if returns_transactions > 0:
         sales_text += (
-            f"; после обработки {fmt_number(returns_transactions)} возвратов "
-            f"на сумму {fmt_money(returns_amount)} покупателям реализовано "
+            f"; после обработки "
+            f"{fmt_number(returns_transactions)} возвратов "
+            f"на сумму {fmt_money(returns_amount)} "
+            f"чистый объём продаж составил "
             f"{fmt_number(net_units)} единиц товара"
         )
     else:
         sales_text += (
-            f", покупателям реализовано "
+            f", чистый объём продаж составил "
             f"{fmt_number(net_units)} единиц товара"
         )
 
     if avg_price > 0:
         sales_text += (
-            f" при средней цене {fmt_money(avg_price)} за единицу"
+            f" при средней цене "
+            f"{fmt_money(avg_price)} за единицу"
         )
 
+    sales_text += "."
+
+    if retail_amount > 0:
+        sales_text += (
+            f" WB реализовал товар покупателям "
+            f"на {fmt_money(retail_amount)}"
+        )
+
+        if wb_discount_amount > 0:
+            sales_text += (
+                f"; разница с чистой выручкой составила "
+                f"{fmt_money(wb_discount_amount)}, "
+                f"или {fmt_pct(wb_discount_percent)}."
+            )
+        else:
+            sales_text += "."
+
     lead_parts.append(
-        sales_text + "."
+        sales_text
     )
+
+    
 
     # ---------------------------------------------------------------
     # 3. Сравнение с предыдущими периодами

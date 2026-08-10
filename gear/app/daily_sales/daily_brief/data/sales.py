@@ -2374,6 +2374,22 @@ def get_sales_data(
     fact = number(
         current_sales.get("fact")
     )
+    
+    retail_amount = number(
+        finance_row.get("retail_amount")
+    )
+
+    wb_discount_amount = (
+        retail_amount - fact
+    )
+
+    wb_discount_percent = (
+        wb_discount_amount
+        / fact
+        * 100
+        if fact
+        else 0
+    )
 
     sales_transactions = number(
         current_sales.get(
@@ -2472,6 +2488,16 @@ def get_sales_data(
             **finance_row,
 
             "amount": fact,
+            
+        "retail_amount": retail_amount,
+
+        "wb_discount_amount": (
+            wb_discount_amount
+        ),
+
+        "wb_discount_percent": (
+            wb_discount_percent
+        ),
 
             "sales_amount": number(
                 current_sales.get(
