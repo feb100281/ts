@@ -22,6 +22,7 @@ from .plan import (
 from .sales import get_sales_data
 from .stocks import get_stock_data
 from .financial import get_financial_data
+from .price_analysis import get_price_analysis_data
 
 def build_daily_brief_payload(
     report_date: date | str,
@@ -64,6 +65,20 @@ def build_daily_brief_payload(
         report_date,
         history_days=30,
     )
+    
+    # =====================================================================
+    # ЦЕНА И СКИДКИ WB
+    #
+    # История цены до СПП, цены покупателя, скидки WB,
+    # количества продаж и управленческой маржи.
+    # Используется отдельной страницей "Коммерческий обзор · цена".
+    # =====================================================================
+
+    price_analysis_page = get_price_analysis_data(
+        report_date
+    )
+    
+    
 
     plan = get_month_plan(
         plan_source
@@ -116,6 +131,7 @@ def build_daily_brief_payload(
         ),
         "stocks": stocks,
         "incidents": incidents,
+        "price_analysis_page": price_analysis_page,
     }
 
     # =====================================================================

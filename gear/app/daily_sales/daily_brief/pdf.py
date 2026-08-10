@@ -11,6 +11,8 @@ from .presentation.pages import (
     build_plans_page,
     build_stocks_page,
     build_demand_page,
+    build_sales_dynamics_page,
+    build_price_page,
 )
 
 from .presentation.styles import CSS
@@ -40,9 +42,10 @@ def build_daily_brief_html(
     <body>
 
         {build_first_page(payload)}
-        
-        {build_demand_page(payload)}
-        
+        {build_sales_dynamics_page(payload)}
+
+        {build_price_page(payload)}
+
         {build_financial_page(payload)}
 
         {build_plans_page(payload)}
