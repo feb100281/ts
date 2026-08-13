@@ -38,6 +38,10 @@ _________
 ssh -N -L 5433:localhost:5432 daria@82.202.197.94
 
 
+ssh -vv -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -N -L 127.0.0.1:5433:127.0.0.1:5432 daria@82.202.197.94
+
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+-N -L 5433:localhost:5432 daria@82.202.197.94
 
 🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
 🦆 DUCKDB: СОЗДАНИЕ БАЗЫ И ЗАЛИВКА ДАННЫХ
@@ -57,7 +61,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-08-08 2026-08-10 --overwrite
+1) python manage.py fin_report_range 2026-08-10 2026-08-12 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 
