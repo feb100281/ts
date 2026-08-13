@@ -25,10 +25,10 @@ from .stocks.dashboard import (
     register_stock_dashboard_callbacks,
 )
 
-from .pricing_strategy import (
-    PricingStrategyDashboard,
-    register_pricing_strategy_callbacks,
-)
+# from .pricing_strategy import (
+#     PricingStrategyDashboard,
+#     register_pricing_strategy_callbacks,
+# )
 
 from .daily_brief import (
     daily_brief_controls,
@@ -48,7 +48,7 @@ except locale.Error:
 FILTERS = WbFilters()
 PERIOD_CHIP_VALUE = "__whole_period__"
 STOCKS_DASHBOARD = StocksDashboard()
-PRICING_STRATEGY_DASHBOARD = PricingStrategyDashboard()
+# PRICING_STRATEGY_DASHBOARD = PricingStrategyDashboard()
 
 
 
@@ -132,10 +132,10 @@ class MainWindow:
                                         "label": "Остатки",
                                         "value": "3",
                                     },
-                                    {
-                                        "label": "Цены",
-                                        "value": "4",
-                                    },
+                                    # {
+                                    #     "label": "Цены",
+                                    #     "value": "4",
+                                    # },
                                 ],
                             radius=0,
                             size="sm",
@@ -296,13 +296,13 @@ class MainWindow:
                     gender_list=gender_list,
                 )
             
-            if tab_value == "4":
-                return PRICING_STRATEGY_DASHBOARD.layout(
-                    report_date=end,
-                    cat_list=cat_list,
-                    brand_list=brand_list,
-                    gender_list=gender_list,
-                )
+            # if tab_value == "4":
+            #     return PRICING_STRATEGY_DASHBOARD.layout(
+            #         report_date=end,
+            #         cat_list=cat_list,
+            #         brand_list=brand_list,
+            #         gender_list=gender_list,
+            #     )
 
             return [
                 get_sales_summary(
@@ -502,7 +502,7 @@ class MainWindow:
         register_price_analysis_export_callbacks(app)
         register_stock_dashboard_callbacks(app)
         register_daily_brief_callbacks(app)
-        register_pricing_strategy_callbacks(app)
+        # register_pricing_strategy_callbacks(app)
 
 
 
