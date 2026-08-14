@@ -65,6 +65,28 @@ FORMATS = {
 }
 
 
+
+COLUMN_WIDTHS = {
+    "Дата": 12,
+    'Дата остатка': 15,
+    "USK": 15,
+    "NM ID": 15,
+    "Наименование": 35,
+    "Бренд": 20,
+    "Категория": 22,
+    "Пол": 12,
+
+    "Остаток всего": 16,
+    "На WB": 14,
+    "FBS": 14,
+    "В пути": 14,
+
+    "Выручка": 16,
+    "WB реализовал": 16,
+    "Фин результат WB": 18,
+}
+
+
 def apply_excel_style(
     ws,
     freeze_panes="B2",
@@ -131,11 +153,22 @@ def apply_excel_style(
                 cell.alignment = ALIGNMENTS["left"]
 
     for column_cells in ws.columns:
-        max_len = 0
         column_letter = column_cells[0].column_letter
+        header = column_cells[0].value
+
+        # Если для колонки задана фиксированная ширина
+        if header in COLUMN_WIDTHS:
+            ws.column_dimensions[column_letter].width = COLUMN_WIDTHS[header]
+            continue
+
+        # Для остальных — автоматическая ширина
+        max_len = 0
 
         for cell in column_cells:
             value = "" if cell.value is None else str(cell.value)
             max_len = max(max_len, len(value))
 
-        ws.column_dimensions[column_letter].width = min(max_len + 2, 38)
+        ws.column_dimensions[column_letter].width = min(
+            max_len + 2,
+            38,
+        )

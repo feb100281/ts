@@ -61,7 +61,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-08-10 2026-08-12 --overwrite
+1) python manage.py fin_report_range 2026-08-11 2026-08-13 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 
@@ -76,7 +76,10 @@ python manage.py duck_etl
 5) python3 -m http.server 8000
 6) 82.202.197.94:8000 (скачиваем остатки в браузере)
 7) python manage.py stocks_etl (Распарсиваем остатки по складам) 
-8) python manage.py inventories
+8) python manage.py fbs_stocks_etl (Распарсиваем остатки FBS) 
+9) python manage.py inventories
+
+(прям сейчас снять остатки напрмире по fbs python utils/load_fbs_stocks.py)
 
 
 📥 ОБНОВЛЯТЬ КАРТЫ

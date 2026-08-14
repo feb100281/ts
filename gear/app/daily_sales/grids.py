@@ -1399,11 +1399,21 @@ def _stock_columns():
 
         _int_col(
             "ending_warehouse_stock",
-            "На складе",
-            135,
+            "На WB",
+            125,
             {
                 "backgroundColor": "#eff6ff",
                 "fontWeight": "600",
+            },
+        ),
+
+        _int_col(
+            "ending_fbs_stock",
+            "FBS",
+            110,
+            {
+                "backgroundColor": "#ecfdf5",
+                "fontWeight": "700",
             },
         ),
 

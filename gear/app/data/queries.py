@@ -1533,53 +1533,165 @@ LEFT JOIN commissions c
 """
 
 
+# BASE_STOCKS = """
+# CREATE OR REPLACE TEMP TABLE stocks_daily AS
+
+# SELECT
+#     t.date_from::DATE AS stock_date,
+
+#     /*
+#     Для остатков используем NM ID из исходного отчёта WB напрямую.
+#     Это не зависит от наличия записи в inventories.usk.
+#     */
+#     t.nm_id AS nm_id,
+#     t.nm_id AS usk,
+
+#     UPPER(w.brand) AS brand,
+#     w.subject_id,
+#     w.subject_name,
+#     w.title,
+#     COALESCE(w.gender, 'Не указан') AS gender,
+
+#     SUM(
+#         COALESCE(t.quantity, 0)
+#         + COALESCE(t.in_way_from_client, 0)
+#         + COALESCE(t.in_way_to_client, 0)
+#     ) AS stock_quantity,
+
+#     SUM(
+#         COALESCE(t.quantity, 0)
+#     ) AS warehouse_quantity,
+
+#     SUM(
+#         COALESCE(t.in_way_from_client, 0)
+#         + COALESCE(t.in_way_to_client, 0)
+#     ) AS in_transit_quantity
+
+# FROM stocks.unpacked_stocks t
+
+# LEFT JOIN inventories.wb_product w
+#     ON w.card_id = t.nm_id
+
+# GROUP BY
+#     t.date_from::DATE,
+#     t.nm_id,
+#     UPPER(w.brand),
+#     w.subject_id,
+#     w.subject_name,
+#     w.title,
+#     COALESCE(w.gender, 'Не указан')
+# ;
+# """
+
+
+
 BASE_STOCKS = """
 CREATE OR REPLACE TEMP TABLE stocks_daily AS
 
-SELECT
-    t.date_from::DATE AS stock_date,
+WITH wb AS (
+    SELECT
+        t.date_from::DATE AS stock_date,
+        t.nm_id,
 
-    /*
-    Для остатков используем NM ID из исходного отчёта WB напрямую.
-    Это не зависит от наличия записи в inventories.usk.
-    */
-    t.nm_id AS nm_id,
+        SUM(
+            COALESCE(t.quantity, 0)
+        ) AS warehouse_quantity,
+
+        SUM(
+            COALESCE(t.in_way_from_client, 0)
+            + COALESCE(t.in_way_to_client, 0)
+        ) AS in_transit_quantity
+
+    FROM stocks.unpacked_stocks t
+
+    GROUP BY
+        t.date_from::DATE,
+        t.nm_id
+),
+
+fbs AS (
+    SELECT
+        t.date_from::DATE AS stock_date,
+        t.nm_id,
+
+        SUM(
+            COALESCE(t.quantity, 0)
+        ) AS fbs_quantity
+
+    FROM stocks.unpacked_fbs_stocks t
+
+    WHERE t.nm_id IS NOT NULL
+
+    GROUP BY
+        t.date_from::DATE,
+        t.nm_id
+),
+
+combined AS (
+    SELECT
+        COALESCE(
+            wb.stock_date,
+            fbs.stock_date
+        ) AS stock_date,
+
+        COALESCE(
+            wb.nm_id,
+            fbs.nm_id
+        ) AS nm_id,
+
+        COALESCE(
+            wb.warehouse_quantity,
+            0
+        ) AS warehouse_quantity,
+
+        COALESCE(
+            fbs.fbs_quantity,
+            0
+        ) AS fbs_quantity,
+
+        COALESCE(
+            wb.in_transit_quantity,
+            0
+        ) AS in_transit_quantity
+
+    FROM wb
+
+    FULL OUTER JOIN fbs
+        ON wb.stock_date = fbs.stock_date
+        AND wb.nm_id = fbs.nm_id
+)
+
+SELECT
+    t.stock_date,
+
+    t.nm_id,
     t.nm_id AS usk,
 
     UPPER(w.brand) AS brand,
     w.subject_id,
     w.subject_name,
     w.title,
-    COALESCE(w.gender, 'Не указан') AS gender,
+    COALESCE(
+        w.gender,
+        'Не указан'
+    ) AS gender,
 
-    SUM(
-        COALESCE(t.quantity, 0)
-        + COALESCE(t.in_way_from_client, 0)
-        + COALESCE(t.in_way_to_client, 0)
+    (
+        t.warehouse_quantity
+        + t.fbs_quantity
+        + t.in_transit_quantity
     ) AS stock_quantity,
 
-    SUM(
-        COALESCE(t.quantity, 0)
-    ) AS warehouse_quantity,
+    t.warehouse_quantity,
 
-    SUM(
-        COALESCE(t.in_way_from_client, 0)
-        + COALESCE(t.in_way_to_client, 0)
-    ) AS in_transit_quantity
+    t.fbs_quantity,
 
-FROM stocks.unpacked_stocks t
+    t.in_transit_quantity
+
+FROM combined t
 
 LEFT JOIN inventories.wb_product w
     ON w.card_id = t.nm_id
-
-GROUP BY
-    t.date_from::DATE,
-    t.nm_id,
-    UPPER(w.brand),
-    w.subject_id,
-    w.subject_name,
-    w.title,
-    COALESCE(w.gender, 'Не указан')
 ;
 """
 
@@ -1730,6 +1842,7 @@ stock_by_day AS (
 
         SUM(t.stock_quantity) AS ending_stock,
         SUM(t.warehouse_quantity) AS ending_warehouse_stock,
+        SUM(t.fbs_quantity) AS ending_fbs_stock,
         SUM(t.in_transit_quantity) AS ending_in_transit_stock
 
     FROM stocks_daily t
@@ -1876,6 +1989,7 @@ SELECT
     st.stock_date AS ending_stock_date,
     st.ending_stock,
     st.ending_warehouse_stock,
+    st.ending_fbs_stock,
     st.ending_in_transit_stock,
 
     ROUND(
@@ -2016,6 +2130,7 @@ stock_end AS (
 
         SUM(t.stock_quantity) AS ending_stock,
         SUM(t.warehouse_quantity) AS ending_warehouse_stock,
+        SUM(t.fbs_quantity) AS ending_fbs_stock,
         SUM(t.in_transit_quantity) AS ending_in_transit_stock
 
     FROM stocks_daily t
@@ -2190,6 +2305,7 @@ SELECT
     st.ending_stock_date,
     st.ending_stock,
     st.ending_warehouse_stock,
+    st.ending_fbs_stock,
     st.ending_in_transit_stock,
 
     ROUND(
@@ -2396,6 +2512,7 @@ stock_end AS (
 
         SUM(t.stock_quantity) AS ending_stock,
         SUM(t.warehouse_quantity) AS ending_warehouse_stock,
+        SUM(t.fbs_quantity) AS ending_fbs_stock,
         SUM(t.in_transit_quantity) AS ending_in_transit_stock
 
     FROM stocks_daily t
@@ -2603,6 +2720,7 @@ SELECT
     se.ending_stock_date,
     se.ending_stock,
     se.ending_warehouse_stock,
+    se.ending_fbs_stock,
     se.ending_in_transit_stock,
 
     CASE
