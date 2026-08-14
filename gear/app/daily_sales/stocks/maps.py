@@ -5,8 +5,7 @@ from .data import (
     get_stocks_summary_stats,
 )
 
-# ВАЖНО:
-# путь поправь под свой проект, если импорт отличается
+
 from inventories.reporting.map.russia_regions_map import build_regions_stock_map_png
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+import calendar
 
 from django.db import connection
 from conns import get_duckdb_conn_with_opt
@@ -333,6 +334,371 @@ def get_semi_periods(year, monthly_plan):
     return periods
 
 
+def calculate_period_plan_to_date(
+    period,
+    monthly_plan,
+    report_date,
+):
+    """
+    Рассчитывает план периода, который должен быть выполнен
+    к report_date.
+
+    Логика:
+    - прошлые месяцы периода берём полностью;
+    - текущий месяц берём пропорционально календарным дням;
+    - будущие месяцы не включаем.
+    """
+    if report_date < period["start"]:
+        return 0.0
+
+    effective_date = min(report_date, period["end"])
+
+    plan_to_date = 0.0
+
+    for month_key in period["months"]:
+        year, month = map(int, month_key.split("-"))
+        month_plan = float(monthly_plan.get(month_key, 0) or 0)
+
+        month_start = date(year, month, 1)
+        month_days = calendar.monthrange(year, month)[1]
+        month_end = date(year, month, month_days)
+
+        # Месяц ещё не начался
+        if effective_date < month_start:
+            continue
+
+        # Месяц полностью завершён
+        if effective_date >= month_end:
+            plan_to_date += month_plan
+            continue
+
+        # Текущий незавершённый месяц
+        elapsed_days = effective_date.day
+
+        plan_to_date += (
+            month_plan
+            * elapsed_days
+            / month_days
+        )
+
+    return plan_to_date
+
+
+
+
+
+def build_current_month_analysis(
+    report_date,
+    monthly_plan,
+    daily_raw,
+):
+    """
+    Аналитика выполнения плана текущего месяца на report_date.
+    """
+    year = report_date.year
+    month = report_date.month
+
+    month_key = f"{year}-{month:02d}"
+
+    month_plan = float(
+        monthly_plan.get(month_key, 0) or 0
+    )
+
+    days_in_month = calendar.monthrange(
+        year,
+        month,
+    )[1]
+
+    elapsed_days = report_date.day
+
+    daily_plan = (
+        month_plan / days_in_month
+        if days_in_month > 0
+        else 0
+    )
+
+    plan_to_date = daily_plan * elapsed_days
+
+    fact_by_date = {
+        row["date"]: row
+        for row in daily_raw
+    }
+
+    rows = []
+
+    running_fact = 0.0
+
+    month_start = date(
+        year,
+        month,
+        1,
+    )
+
+    for day_num in range(1, elapsed_days + 1):
+        current_date = date(
+            year,
+            month,
+            day_num,
+        )
+
+        source = fact_by_date.get(current_date)
+
+        if source:
+            fact = float(source["fact"] or 0)
+            sales_amount = float(
+                source["sales_amount"] or 0
+            )
+            returns_amount = float(
+                source["returns_amount"] or 0
+            )
+            sales_transactions = int(
+                source["sales_transactions"] or 0
+            )
+            returns_transactions = int(
+                source["returns_transactions"] or 0
+            )
+            qty = int(source["qty"] or 0)
+            avg_price = float(
+                source["avg_price"] or 0
+            )
+        else:
+            fact = 0.0
+            sales_amount = 0.0
+            returns_amount = 0.0
+            sales_transactions = 0
+            returns_transactions = 0
+            qty = 0
+            avg_price = 0.0
+
+        running_fact += fact
+
+        running_plan = daily_plan * day_num
+
+        exec_to_date_pct = (
+            running_fact / running_plan * 100
+            if running_plan
+            else 0
+        )
+        
+
+        rows.append({
+            "date": current_date,
+            "date_label": current_date.strftime("%d.%m"),
+            "weekday": get_weekday_ru(current_date),
+
+            "daily_plan": daily_plan,
+
+            "fact": fact,
+            "running_fact": running_fact,
+            "running_plan": running_plan,
+
+            "delta_to_plan": (
+                running_fact - running_plan
+            ),
+
+            "exec_to_date_pct": exec_to_date_pct,
+
+            "sales_amount": sales_amount,
+            "returns_amount": returns_amount,
+            "sales_transactions": sales_transactions,
+            "returns_transactions": returns_transactions,
+            "qty": qty,
+            "avg_price": avg_price,
+        })
+
+    fact_to_date = running_fact
+
+    exec_to_date_pct = (
+        fact_to_date / plan_to_date * 100
+        if plan_to_date
+        else 0
+    )
+    
+    # Сколько процентов от ПОЛНОГО плана месяца уже выполнено
+    month_exec_pct = (
+            fact_to_date / month_plan * 100
+            if month_plan
+            else 0
+        )
+
+    delta_to_date = (
+        fact_to_date - plan_to_date
+    )
+
+    remaining_month = max(
+        month_plan - fact_to_date,
+        0,
+    )
+
+    over_month = max(
+        fact_to_date - month_plan,
+        0,
+    )
+
+    remaining_days = max(
+        days_in_month - elapsed_days,
+        0,
+    )
+
+    required_daily_rate = (
+        remaining_month / remaining_days
+        if remaining_days > 0
+        else 0
+    )
+
+    return {
+        "label": (
+            f"{get_month_name_ru(month)} {year}"
+        ),
+        "month_start": month_start,
+        "report_date": report_date,
+
+        "month_plan": month_plan,
+        "daily_plan": daily_plan,
+
+        "days_in_month": days_in_month,
+        "elapsed_days": elapsed_days,
+        "remaining_days": remaining_days,
+
+        "plan_to_date": plan_to_date,
+        "fact_to_date": fact_to_date,
+
+        "exec_to_date_pct": exec_to_date_pct,
+        "delta_to_date": delta_to_date,
+
+        "remaining_month": remaining_month,
+        "over_month": over_month,
+
+        "required_daily_rate": required_daily_rate,
+
+        "rows": rows,
+        "month_exec_pct": month_exec_pct,
+    }
+    
+    
+
+def build_year_daily_analysis(
+    report_date,
+    monthly_plan,
+    daily_raw,
+):
+    """
+    Формирует дневную аналитику с 1 января
+    по дату последней загрузки данных.
+
+    Используется для Excel-листа «По дням».
+    """
+
+    year = report_date.year
+
+    fact_by_date = {
+        row["date"]: row
+        for row in daily_raw
+    }
+
+    rows = []
+
+    running_plan = 0.0
+    running_fact = 0.0
+
+    current_date = date(year, 1, 1)
+
+    while current_date <= report_date:
+        month_key = (
+            f"{current_date.year}-"
+            f"{current_date.month:02d}"
+        )
+
+        month_plan = float(
+            monthly_plan.get(month_key, 0) or 0
+        )
+
+        days_in_month = calendar.monthrange(
+            current_date.year,
+            current_date.month,
+        )[1]
+
+        daily_plan = (
+            month_plan / days_in_month
+            if days_in_month > 0
+            else 0.0
+        )
+
+        source = fact_by_date.get(current_date)
+
+        if source:
+            fact = float(source.get("fact") or 0)
+            sales_amount = float(
+                source.get("sales_amount") or 0
+            )
+            returns_amount = float(
+                source.get("returns_amount") or 0
+            )
+            sales_transactions = int(
+                source.get("sales_transactions") or 0
+            )
+            returns_transactions = int(
+                source.get("returns_transactions") or 0
+            )
+            qty = int(source.get("qty") or 0)
+            avg_price = float(
+                source.get("avg_price") or 0
+            )
+        else:
+            fact = 0.0
+            sales_amount = 0.0
+            returns_amount = 0.0
+            sales_transactions = 0
+            returns_transactions = 0
+            qty = 0
+            avg_price = 0.0
+
+        running_plan += daily_plan
+        running_fact += fact
+
+        daily_delta = fact - daily_plan
+        running_delta = running_fact - running_plan
+
+        daily_exec_pct = (
+            fact / daily_plan * 100
+            if daily_plan
+            else 0.0
+        )
+
+        exec_to_date_pct = (
+            running_fact / running_plan * 100
+            if running_plan
+            else 0.0
+        )
+
+        rows.append({
+            "date": current_date,
+            "date_label": current_date.strftime("%d.%m"),
+            "weekday": get_weekday_ru(current_date),
+
+            "daily_plan": daily_plan,
+            "fact": fact,
+            "delta_to_plan": daily_delta,
+            "daily_exec_pct": daily_exec_pct,
+
+            "running_plan": running_plan,
+            "running_fact": running_fact,
+            "running_delta": running_delta,
+            "exec_to_date_pct": exec_to_date_pct,
+
+            "sales_amount": sales_amount,
+            "returns_amount": returns_amount,
+            "sales_transactions": sales_transactions,
+            "returns_transactions": returns_transactions,
+            "qty": qty,
+            "avg_price": avg_price,
+        })
+
+        current_date += timedelta(days=1)
+
+    return rows
+
+
 def build_plan_analysis():
     version = get_budget_version()
 
@@ -383,12 +749,41 @@ def build_plan_analysis():
     semi_rows = []
 
     for period in semi_periods:
-        fact = sum(float(monthly_fact.get(m, 0)) for m in period["months"])
+        fact = sum(
+            float(monthly_fact.get(m, 0))
+            for m in period["months"]
+        )
+
         plan = float(period["plan"])
 
         remaining = max(plan - fact, 0)
         over = max(fact - plan, 0)
-        exec_pct = fact / plan * 100 if plan else 0
+
+        # Выполнение полного плана периода
+        exec_pct = (
+            fact / plan * 100
+            if plan
+            else 0
+        )
+
+        # План, который должен быть выполнен
+        # к текущей фактической дате
+        plan_to_date = calculate_period_plan_to_date(
+            period=period,
+            monthly_plan=monthly_plan,
+            report_date=report_date,
+        )
+
+        # Выполнение плана именно НА ТЕКУЩУЮ ДАТУ
+        exec_to_date_pct = (
+            fact / plan_to_date * 100
+            if plan_to_date
+            else 0
+        )
+
+        delta_to_date = (
+            fact - plan_to_date
+        )
 
         is_current = period["start"] <= report_date <= period["end"]
         is_completed = report_date > period["end"]
@@ -446,6 +841,9 @@ def build_plan_analysis():
             "gap_total": gap_total,
             "rate_start": rate_start,
             "rate_days": rate_days,
+            "plan_to_date": plan_to_date,
+            "exec_to_date_pct": exec_to_date_pct,
+            "delta_to_date": delta_to_date,
         })
 
     current_semi = next(
@@ -457,6 +855,30 @@ def build_plan_analysis():
         report_date.year,
         report_date.month,
         report_date.day,
+    )
+    
+    current_month = build_current_month_analysis(
+        report_date=report_date,
+        monthly_plan=monthly_plan,
+        daily_raw=daily_raw,
+    )
+    
+    
+    year_start = date(
+        report_date.year,
+        1,
+        1,
+    )
+
+    year_daily_raw = get_daily_fact_for_period(
+        date_start=year_start,
+        date_end=report_date,
+    )
+
+    year_daily_rows = build_year_daily_analysis(
+        report_date=report_date,
+        monthly_plan=monthly_plan,
+        daily_raw=year_daily_raw,
     )
 
     # daily_rows = []
@@ -504,7 +926,9 @@ def build_plan_analysis():
         "monthly_rows": monthly_rows,
         "semi_rows": semi_rows,
         "current_semi": current_semi,
+        "current_month": current_month,
         "daily_rows": daily_rows,
+        "year_daily_rows": year_daily_rows,
         "totals": {
             "plan": total_plan,
             "fact": total_fact,
@@ -512,3 +936,98 @@ def build_plan_analysis():
             "exec_pct": total_fact / total_plan * 100 if total_plan else 0,
         },
     }
+    
+    
+
+def get_daily_fact_for_period(date_start, date_end):
+    """
+    Возвращает продажи и возвраты по каждому дню
+    за произвольный период.
+    """
+
+    with get_duckdb_conn_with_opt() as con:
+        rows = con.execute(
+            """
+            SELECT
+                date_from::date AS date_from,
+
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN oper = 'dt'
+                            THEN val
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) / 100.0 AS sales_amount,
+
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN oper = 'cr'
+                            THEN val
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) / 100.0 AS returns_amount,
+
+                COUNT(
+                    CASE
+                        WHEN oper = 'dt'
+                        THEN 1
+                    END
+                ) AS sales_transactions,
+
+                COUNT(
+                    CASE
+                        WHEN oper = 'cr'
+                        THEN 1
+                    END
+                ) AS returns_transactions
+
+            FROM sales.sales_long
+
+            WHERE date_from BETWEEN ? AND ?
+              AND field = 'retail_price'
+
+            GROUP BY date_from::date
+            ORDER BY date_from::date
+            """,
+            [
+                date_start,
+                date_end,
+            ],
+        ).fetchall()
+
+    result = []
+
+    for row in rows:
+        sales_amount = float(row[1] or 0)
+        returns_amount = float(row[2] or 0)
+
+        sales_transactions = int(row[3] or 0)
+        returns_transactions = int(row[4] or 0)
+
+        fact = sales_amount - returns_amount
+        qty = sales_transactions - returns_transactions
+
+        avg_price = (
+            fact / qty
+            if qty > 0
+            else 0
+        )
+
+        result.append({
+            "date": row[0],
+            "fact": fact,
+            "sales_amount": sales_amount,
+            "returns_amount": returns_amount,
+            "sales_transactions": sales_transactions,
+            "returns_transactions": returns_transactions,
+            "qty": qty,
+            "avg_price": avg_price,
+        })
+
+    return result

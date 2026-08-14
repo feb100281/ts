@@ -1,3 +1,4 @@
+# inventories/reporting/map/russia_warehouses_map.py
 from __future__ import annotations
 
 import io

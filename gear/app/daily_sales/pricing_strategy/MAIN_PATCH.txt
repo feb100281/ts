@@ -1,0 +1,86 @@
+
+# 1. IMPORT
+
+from .pricing_strategy import (
+    PricingStrategyDashboard,
+    register_pricing_strategy_callbacks,
+)
+
+
+# 2. РЯДОМ С STOCKS_DASHBOARD
+
+STOCKS_DASHBOARD = StocksDashboard()
+PRICING_STRATEGY_DASHBOARD = PricingStrategyDashboard()
+
+
+# 3. SEGMENTED CONTROL
+
+data=[
+    {
+        "label": "Статистика",
+        "value": "1",
+    },
+    {
+        "label": "Данные",
+        "value": "2",
+    },
+    {
+        "label": "Остатки",
+        "value": "3",
+    },
+    {
+        "label": "Цены",
+        "value": "4",
+    },
+],
+
+
+# 4. render_tab
+
+if tab_value == "1":
+    stat_container = StatWindow(
+        date_range,
+        cat_list,
+        brand_list,
+        gender_list,
+    )
+    return stat_container.layout()
+
+if tab_value == "3":
+    return STOCKS_DASHBOARD.layout(
+        report_date=end,
+        cat_list=cat_list,
+        brand_list=brand_list,
+        gender_list=gender_list,
+    )
+
+if tab_value == "4":
+    return PRICING_STRATEGY_DASHBOARD.layout(
+        report_date=end,
+        cat_list=cat_list,
+        brand_list=brand_list,
+        gender_list=gender_list,
+    )
+
+return [
+    get_sales_summary(
+        start,
+        end,
+        cat_list,
+        brand_list,
+        gender_list,
+    ),
+    export_panel_main(),
+    grid_date(
+        start,
+        end,
+        cat_list,
+        brand_list,
+        gender_list,
+    ),
+]
+
+
+# 5. В КОНЦЕ register_callbacks
+
+register_pricing_strategy_callbacks(app)

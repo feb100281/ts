@@ -75,8 +75,8 @@ class Command(BaseCommand):
             "--currencies",
             dest="currencies",
             help=(
-                "Список валют через запятую (например: USD,EUR,CNY,HKD,AED). "
-                "Если не указано — по умолчанию USD,EUR,CNY,HKD,AED."
+                "Список валют через запятую (например: USD,EUR,CNY,HKD,AED, KGS). "
+                "Если не указано — по умолчанию USD,EUR,CNY,HKD,AED, KGS."
             ),
         )
         parser.add_argument(
@@ -132,7 +132,7 @@ class Command(BaseCommand):
             currencies = [c.strip().upper() for c in options["currencies"].split(",")]
         else:
             # по умолчанию — наши 6 основных валют
-            currencies = ["USD", "EUR", "CNY", "HKD", "AED", "AMD"]
+            currencies = ["USD", "EUR", "CNY", "HKD", "AED", "AMD", "KGS",]
 
         for c in currencies:
             if c not in valid_currencies:

@@ -376,15 +376,15 @@ def build_article_report_modal():
                     "gap": "8px",
                 },
                 children=[
-                    dmc.Button(
-                        "Закрыть",
-                        id=(
-                            ARTICLE_REPORT_CLOSE_BTN_ID
-                        ),
-                        variant="default",
-                        radius=0,
-                        size="xs",
-                    ),
+                    # dmc.Button(
+                    #     "Закрыть",
+                    #     id=(
+                    #         ARTICLE_REPORT_CLOSE_BTN_ID
+                    #     ),
+                    #     variant="default",
+                    #     radius=0,
+                    #     size="xs",
+                    # ),
 
                     dmc.Button(
                         "Скачать анализ",

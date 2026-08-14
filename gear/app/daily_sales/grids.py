@@ -1181,7 +1181,7 @@
 #     return columns
 
 
-
+# gear/app/daily_sales/grids.py
 from datetime import date
 
 import dash_ag_grid as dag
@@ -1293,8 +1293,9 @@ def _date_col(
     header,
     width=130,
     cell_style=None,
+    pinned=False,
 ):
-    return {
+    column = {
         "field": field,
         "headerName": header,
         "width": width,
@@ -1302,6 +1303,12 @@ def _date_col(
         "valueFormatter": DATE_FORMATTER,
         "cellStyle": cell_style or {},
     }
+
+    if pinned:
+        column["pinned"] = "left"
+        column["lockPinned"] = True
+
+    return column
 
 
 def _base_grid(
@@ -1392,11 +1399,21 @@ def _stock_columns():
 
         _int_col(
             "ending_warehouse_stock",
-            "На складе",
-            135,
+            "На WB",
+            125,
             {
                 "backgroundColor": "#eff6ff",
                 "fontWeight": "600",
+            },
+        ),
+
+        _int_col(
+            "ending_fbs_stock",
+            "FBS",
+            110,
+            {
+                "backgroundColor": "#ecfdf5",
+                "fontWeight": "700",
             },
         ),
 
@@ -1448,6 +1465,7 @@ def _daily_columns(
                         "1px solid #e5e7eb"
                     ),
                 },
+                pinned=True,
             ),
 
             _money_col(

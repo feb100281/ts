@@ -38,6 +38,10 @@ _________
 ssh -N -L 5433:localhost:5432 daria@82.202.197.94
 
 
+ssh -vv -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -N -L 127.0.0.1:5433:127.0.0.1:5432 daria@82.202.197.94
+
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+-N -L 5433:localhost:5432 daria@82.202.197.94
 
 🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
 🦆 DUCKDB: СОЗДАНИЕ БАЗЫ И ЗАЛИВКА ДАННЫХ
@@ -57,7 +61,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-07-15 2026-07-16 --overwrite
+1) python manage.py fin_report_range 2026-08-11 2026-08-13 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 
@@ -72,7 +76,10 @@ python manage.py duck_etl
 5) python3 -m http.server 8000
 6) 82.202.197.94:8000 (скачиваем остатки в браузере)
 7) python manage.py stocks_etl (Распарсиваем остатки по складам) 
-8) python manage.py inventories
+8) python manage.py fbs_stocks_etl (Распарсиваем остатки FBS) 
+9) python manage.py inventories
+
+(прям сейчас снять остатки напрмире по fbs python utils/load_fbs_stocks.py)
 
 
 📥 ОБНОВЛЯТЬ КАРТЫ

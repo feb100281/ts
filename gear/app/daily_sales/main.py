@@ -15,11 +15,26 @@ from .ui import export_panel_main, export_panel_details
 from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
 from .stat import StatWindow
-from .excel_export import register_excel_export_callbacks
+from .excel_export import register_excel_export_callbacks, register_revenue_structure_excel_callbacks
 from .stocks.export import register_stock_export_callbacks
 from .wb_plan_monitor import register_wb_plan_callbacks
 from .ai_analysis import register_ai_analysis_callbacks
 from .price_analysis import register_price_analysis_export_callbacks
+from .stocks.dashboard import (
+    StocksDashboard,
+    register_stock_dashboard_callbacks,
+)
+
+# from .pricing_strategy import (
+#     PricingStrategyDashboard,
+#     register_pricing_strategy_callbacks,
+# )
+
+from .daily_brief import (
+    daily_brief_controls,
+    register_daily_brief_callbacks,
+)
+
 
 
 
@@ -32,6 +47,9 @@ except locale.Error:
 
 FILTERS = WbFilters()
 PERIOD_CHIP_VALUE = "__whole_period__"
+STOCKS_DASHBOARD = StocksDashboard()
+# PRICING_STRATEGY_DASHBOARD = PricingStrategyDashboard()
+
 
 
 def chip_maker(row):
@@ -101,10 +119,24 @@ class MainWindow:
                         dmc.SegmentedControl(
                             id=self.summary_tab_id,
                             value="2",
-                            data=[
-                                {"label": "Статистика", "value": "1"},
-                                {"label": "Данные", "value": "2"},
-                            ],
+                           data=[
+                                    {
+                                        "label": "Статистика",
+                                        "value": "1",
+                                    },
+                                    {
+                                        "label": "Данные",
+                                        "value": "2",
+                                    },
+                                    {
+                                        "label": "Остатки",
+                                        "value": "3",
+                                    },
+                                    # {
+                                    #     "label": "Цены",
+                                    #     "value": "4",
+                                    # },
+                                ],
                             radius=0,
                             size="sm",
                             color="blue",
@@ -130,15 +162,39 @@ class MainWindow:
             ],
         )
 
+        # self.content_container = dcc.Loading(
+        #     dmc.Container(
+        #         id=self.ag_container_id,
+        #         fluid=True,
+        #         px=0,
+        #         style={"display": "block"},
+        #     ),
+        #     type="graph",
+        # )
+        
+        
         self.content_container = dcc.Loading(
-            dmc.Container(
-                id=self.ag_container_id,
-                fluid=True,
-                px=0,
-                style={"display": "block"},
-            ),
-            type="graph",
-        )
+    type="dot",
+
+    delay_show=150,
+    delay_hide=100,
+
+    children=dmc.Container(
+        id=self.ag_container_id,
+
+        fluid=True,
+
+        px=0,
+
+        style={
+            "display": "block",
+
+            # В момент переключения вкладки
+            # создаём нормальную область под loader.
+            "minHeight": "320px",
+        },
+    ),
+)
 
         self.details_container = dcc.Loading(
             dmc.Container(
@@ -163,12 +219,19 @@ class MainWindow:
                 "backgroundColor": "#ffffff",
             },
             children=[
-                dmc.Title(
-                    "Продажи за период",
-                    order=1,
-                    fw=800,
-                    mb=6,
-                ),
+               dmc.Group(
+                        justify="space-between",
+                        align="center",
+                        mb=6,
+                        children=[
+                            dmc.Title(
+                                "Продажи за период",
+                                order=1,
+                                fw=800,
+                            ),
+                            daily_brief_controls(),
+                        ],
+                    ),
 
                 dmc.Divider(
                     size="xs",
@@ -202,7 +265,13 @@ class MainWindow:
             Input(FILTERS.brand_multy_id, "value"),
             Input(FILTERS.gender_multy_id, "value"),
         )
-        def render_tab(tab_value, date_range, cat_list, brand_list, gender_list):
+        def render_tab(
+            tab_value,
+            date_range,
+            cat_list,
+            brand_list,
+            gender_list,
+        ):
             if date_range and len(date_range) == 2:
                 start = date_range[0]
                 end = date_range[1]
@@ -211,15 +280,47 @@ class MainWindow:
                 end = date.today()
 
             if tab_value == "1":
-                stat_container = StatWindow(date_range,cat_list,brand_list,gender_list)
+                stat_container = StatWindow(
+                    date_range,
+                    cat_list,
+                    brand_list,
+                    gender_list,
+                )
                 return stat_container.layout()
 
-            return [
-                    get_sales_summary(start, end, cat_list, brand_list, gender_list),
-                    export_panel_main(),
-                    grid_date(start, end, cat_list, brand_list, gender_list),
-                ]
+            if tab_value == "3":
+                return STOCKS_DASHBOARD.layout(
+                    report_date=end,
+                    cat_list=cat_list,
+                    brand_list=brand_list,
+                    gender_list=gender_list,
+                )
+            
+            # if tab_value == "4":
+            #     return PRICING_STRATEGY_DASHBOARD.layout(
+            #         report_date=end,
+            #         cat_list=cat_list,
+            #         brand_list=brand_list,
+            #         gender_list=gender_list,
+            #     )
 
+            return [
+                get_sales_summary(
+                    start,
+                    end,
+                    cat_list,
+                    brand_list,
+                    gender_list,
+                ),
+                export_panel_main(),
+                grid_date(
+                    start,
+                    end,
+                    cat_list,
+                    brand_list,
+                    gender_list,
+                ),
+            ]
         @app.callback(
             Output(self.selected_dates_chips_id, "children"),
             Input({"type": "dates_grid", "index": "1"}, "selectedRows"),
@@ -393,11 +494,15 @@ class MainWindow:
         ###-------------------###
         
         register_excel_export_callbacks(app,self.selected_dates_chips_id,)
+        register_revenue_structure_excel_callbacks(app)
         register_stock_export_callbacks(app)
         register_methodology_callbacks(app)
         register_wb_plan_callbacks(app)
         register_ai_analysis_callbacks(app)
         register_price_analysis_export_callbacks(app)
+        register_stock_dashboard_callbacks(app)
+        register_daily_brief_callbacks(app)
+        # register_pricing_strategy_callbacks(app)
 
 
 

@@ -6,38 +6,128 @@ from dash_iconify import DashIconify
 from .formatters import format_money, format_money_short, format_pct
 
 
-def kpi_card(label, value, note=None, color="blue", icon="solar:chart-linear"):
+# def kpi_card(label, value, note=None, color="blue", icon="solar:chart-linear"):
+#     return dmc.Paper(
+#         withBorder=True,
+#         radius="sm",
+#         p="sm",
+#         style={
+#             "height": "100%",
+#             "backgroundColor": "#ffffff",
+#             "borderColor": "#e9ecef",
+#         },
+#         children=[
+#             dmc.Group(
+#                 justify="space-between",
+#                 align="flex-start",
+#                 children=[
+#                     dmc.Box(
+#                         children=[
+#                             dmc.Text(label, size="xs", c="dimmed", fw=700),
+#                             dmc.Text(value, size="xl", fw=900, c="#212529"),
+#                             dmc.Text(note or "", size="xs", c="dimmed", mt=2),
+#                         ],
+#                     ),
+#                     dmc.ThemeIcon(
+#                         variant="light",
+#                         color=color,
+#                         radius="sm",
+#                         size=34,
+#                         children=DashIconify(icon=icon, width=18),
+#                     ),
+#                 ],
+#             )
+#         ],
+#     )
+
+
+
+def kpi_card(
+    label,
+    value,
+    note=None,
+    color="blue",
+    icon="solar:chart-linear",
+):
     return dmc.Paper(
         withBorder=True,
         radius="sm",
-        p="sm",
+        px="md",
+        py="sm",
         style={
             "height": "100%",
+            "minHeight": "112px",
             "backgroundColor": "#ffffff",
-            "borderColor": "#e9ecef",
+            "borderColor": "#e2e8f0",
         },
-        children=[
-            dmc.Group(
-                justify="space-between",
-                align="flex-start",
-                children=[
-                    dmc.Box(
-                        children=[
-                            dmc.Text(label, size="xs", c="dimmed", fw=700),
-                            dmc.Text(value, size="xl", fw=900, c="#212529"),
-                            dmc.Text(note or "", size="xs", c="dimmed", mt=2),
-                        ],
+        children=dmc.Box(
+            style={
+                "position": "relative",
+                "height": "100%",
+            },
+            children=[
+                # Иконка фиксированно справа сверху
+                dmc.ThemeIcon(
+                    variant="light",
+                    color=color,
+                    radius="sm",
+                    size=36,
+                    style={
+                        "position": "absolute",
+                        "top": "0",
+                        "right": "0",
+                    },
+                    children=DashIconify(
+                        icon=icon,
+                        width=18,
+                        height=18,
                     ),
-                    dmc.ThemeIcon(
-                        variant="light",
-                        color=color,
-                        radius="sm",
-                        size=34,
-                        children=DashIconify(icon=icon, width=18),
-                    ),
-                ],
-            )
-        ],
+                ),
+
+                # Контент
+                dmc.Box(
+                    style={
+                        "paddingRight": "46px",
+                    },
+                    children=[
+                        dmc.Text(
+                            label,
+                            c="#7C8797",
+                            fw=700,
+                            style={
+                                "fontSize": "13px",
+                                "lineHeight": "1.2",
+                                "minHeight": "31px",
+                            },
+                        ),
+
+                        dmc.Text(
+                            value,
+                            fw=900,
+                            c="#212529",
+                            mt=2,
+                            style={
+                                "fontSize": "24px",
+                                "lineHeight": "1.05",
+                                "whiteSpace": "nowrap",
+                                "fontVariantNumeric": "tabular-nums",
+                                "letterSpacing": "-0.5px",
+                            },
+                        ),
+
+                        dmc.Text(
+                            note or "",
+                            c="#8A94A3",
+                            mt=6,
+                            style={
+                                "fontSize": "12px",
+                                "lineHeight": "1.2",
+                            },
+                        ),
+                    ],
+                ),
+            ],
+        ),
     )
 
 
@@ -495,5 +585,243 @@ def forecast_block(current_semi):
                     ),
                 ],
             )
+        ],
+    )
+    
+    
+    
+
+def current_month_plan_table(current_month):
+    rows = current_month.get("rows", [])
+
+    cell_style = {
+        "paddingTop": "8px",
+        "paddingBottom": "8px",
+        "borderBottom": "1px solid #E2E8F0",
+        "fontVariantNumeric": "tabular-nums",
+        "fontSize": "12px",
+        "lineHeight": "1.25",
+        "color": "#1F2F46",
+    }
+
+    head_style = {
+        "paddingTop": "10px",
+        "paddingBottom": "10px",
+        "backgroundColor": "#F1F5F9",
+        "borderBottom": "1px solid #CBD5E1",
+        "color": "#22324D",
+        "fontSize": "11px",
+        "fontWeight": 800,
+        "lineHeight": "1.15",
+    }
+
+    def exec_color(value):
+        if value >= 100:
+            return "green"
+
+        if value >= 90:
+            return "yellow"
+
+        return "red"
+
+    body = []
+
+    for row in rows:
+        delta = float(
+            row.get("delta_to_plan") or 0
+        )
+
+        exec_pct = float(
+            row.get("exec_to_date_pct") or 0
+        )
+
+        body.append(
+            html.Tr(
+                children=[
+                    html.Td(
+                        row["date"].strftime(
+                            "%d.%m.%Y"
+                        ),
+                        style={
+                            **cell_style,
+                            "fontWeight": 700,
+                            "paddingLeft": "16px",
+                        },
+                    ),
+
+                    html.Td(
+                        row["weekday"],
+                        style={
+                            **cell_style,
+                            "textAlign": "center",
+                            "color": "#64748B",
+                        },
+                    ),
+
+                    html.Td(
+                        format_money(
+                            row["daily_plan"]
+                        ),
+                        style={
+                            **cell_style,
+                            "textAlign": "right",
+                        },
+                    ),
+
+                    html.Td(
+                        format_money(
+                            row["running_plan"]
+                        ),
+                        style={
+                            **cell_style,
+                            "textAlign": "right",
+                            "fontWeight": 600,
+                        },
+                    ),
+
+                    html.Td(
+                        format_money(
+                            row["fact"]
+                        ),
+                        style={
+                            **cell_style,
+                            "textAlign": "right",
+                        },
+                    ),
+
+                    html.Td(
+                        format_money(
+                            row["running_fact"]
+                        ),
+                        style={
+                            **cell_style,
+                            "textAlign": "right",
+                            "fontWeight": 700,
+                        },
+                    ),
+
+                    html.Td(
+                        dmc.Badge(
+                            format_pct(exec_pct),
+                            color=exec_color(
+                                exec_pct
+                            ),
+                            variant="light",
+                            radius="sm",
+                            size="sm",
+                        ),
+                        style={
+                            **cell_style,
+                            "textAlign": "center",
+                        },
+                    ),
+
+                    html.Td(
+                        (
+                            f"+{format_money(delta)}"
+                            if delta >= 0
+                            else format_money(delta)
+                        ),
+                        style={
+                            **cell_style,
+                            "textAlign": "right",
+                            "fontWeight": 700,
+                            "color": (
+                                "#15803D"
+                                if delta >= 0
+                                else "#C92A2A"
+                            ),
+                        },
+                    ),
+                ],
+            )
+        )
+
+    return dmc.Table(
+        striped=False,
+        highlightOnHover=True,
+        withTableBorder=True,
+        withColumnBorders=False,
+        horizontalSpacing="md",
+        verticalSpacing=0,
+
+        style={
+            "borderColor": "#E2E8F0",
+            "borderCollapse": "collapse",
+            "width": "100%",
+        },
+
+        children=[
+            html.Thead(
+                html.Tr(
+                    [
+                        html.Th(
+                            "Дата",
+                            style={
+                                **head_style,
+                                "paddingLeft": "16px",
+                            },
+                        ),
+
+                        html.Th(
+                            "День",
+                            style={
+                                **head_style,
+                                "textAlign": "center",
+                            },
+                        ),
+
+                        html.Th(
+                            "План дня",
+                            style={
+                                **head_style,
+                                "textAlign": "right",
+                            },
+                        ),
+
+                        html.Th(
+                            "План к дате",
+                            style={
+                                **head_style,
+                                "textAlign": "right",
+                            },
+                        ),
+
+                        html.Th(
+                            "Факт дня",
+                            style={
+                                **head_style,
+                                "textAlign": "right",
+                            },
+                        ),
+
+                        html.Th(
+                            "Факт к дате",
+                            style={
+                                **head_style,
+                                "textAlign": "right",
+                            },
+                        ),
+
+                        html.Th(
+                            "Выполнение",
+                            style={
+                                **head_style,
+                                "textAlign": "center",
+                            },
+                        ),
+
+                        html.Th(
+                            "Отклонение",
+                            style={
+                                **head_style,
+                                "textAlign": "right",
+                            },
+                        ),
+                    ]
+                )
+            ),
+
+            html.Tbody(body),
         ],
     )
