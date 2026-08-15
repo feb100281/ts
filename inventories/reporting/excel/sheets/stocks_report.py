@@ -10,6 +10,7 @@ from .brand_sheet import BrandSheet
 from .turnover_sheet import TurnoverSheet
 from .certificate_sheet import CertificateSheet
 from ..queries import StocksQueries
+from .fbs_sheet import FBSSheet
 
 
 class StocksReportGenerator:
@@ -23,6 +24,7 @@ class StocksReportGenerator:
         # Получаем данные
         df = self.queries.get_stocks_data(report_date)
         stats = self.queries.get_summary_stats(report_date)
+        df_fbs = (self.queries.get_fbs_stocks_data(report_date))
         df_categories = self.queries.get_stocks_by_category(report_date)
         df_gender = self.queries.get_stocks_by_gender(report_date)
         df_warehouse = self.queries.get_stocks_by_warehouse(report_date)
@@ -39,25 +41,137 @@ class StocksReportGenerator:
         # Создаем оглавление
         toc = TOCSheet(self.wb)
         sheets_info = [
-            {'number': 1, 'name': 'Детальные остатки', 'description': 'Полная детализация по всем товарам с размерами'},
-            {'number': 2, 'name': 'По категориям', 'description': 'Сводка остатков по категориям с разбивкой по полу'},
-            {'number': 3, 'name': 'По полу', 'description': 'Распределение остатков по полу товаров'},
-            {'number': 4, 'name': 'Остатки по складам', 'description': 'Детализация по складам с учетом товаров в пути'},
-            {'number': 5, 'name': 'По брендам', 'description': 'Анализ остатков по брендам: товары, остатки на складах, в пути и доля'},
-            {'number': 6, 'name': 'Оборачиваемость', 'description': 'Анализ скорости продаж, дней и месяцев запаса по товарам'},
-            {'number': 7, 'name': 'Сертификаты', 'description': 'Товары с просроченными и истекающими сертификатами соответствия'},
-
-        ]
+                {
+                    "number": 1,
+                    "name": "Детальные остатки",
+                    "description": (
+                        "Все товары: WB + FBS + товары в пути"
+                    ),
+                },
+                {
+                    "number": 2,
+                    "name": "FBS",
+                    "description": (
+                        "Физические остатки на нашем складе FBS"
+                    ),
+                },
+                {
+                    "number": 3,
+                    "name": "По категориям",
+                    "description": (
+                        "Остатки по категориям"
+                    ),
+                },
+                {
+                    "number": 4,
+                    "name": "По полу",
+                    "description": (
+                        "Распределение остатков по полу товаров"
+                    ),
+                },
+                {
+                    "number": 5,
+                    "name": "Остатки по складам",
+                    "description": (
+                        "Склады Wildberries и товары в пути"
+                    ),
+                },
+                {
+                    "number": 6,
+                    "name": "По брендам",
+                    "description": (
+                        "WB + FBS + товары в пути по брендам"
+                    ),
+                },
+                {
+                    "number": 7,
+                    "name": "Оборачиваемость",
+                    "description": (
+                        "Анализ скорости продаж и запаса"
+                    ),
+                },
+                {
+                    "number": 8,
+                    "name": "Сертификаты",
+                    "description": (
+                        "Просроченные и истекающие сертификаты"
+                    ),
+                },
+            ]
         toc.build(sheets_info, report_date)
         
         # Создаем листы
-        DetailSheet(self.wb, 1).build(df, stats, report_date)
-        CategorySheet(self.wb, 2).build(df_categories, stats, report_date)
-        GenderSheet(self.wb, 3).build(df_gender, stats, report_date)
-        WarehouseSheet(self.wb, 4).build(df_warehouse, stats, report_date)
-        BrandSheet(self.wb, 5).build(df_brands, stats, report_date)
-        TurnoverSheet(self.wb, 6).build(df_turnover, stats, report_date, days=turnover_days)
-        CertificateSheet(self.wb, 7).build(df_certificates, report_date)
+        DetailSheet(
+            self.wb,
+            1,
+        ).build(
+            df,
+            stats,
+            report_date,
+        )
+
+        FBSSheet(
+            self.wb,
+            2,
+        ).build(
+            df_fbs,
+            stats,
+            report_date,
+        )
+
+        CategorySheet(
+            self.wb,
+            3,
+        ).build(
+            df_categories,
+            stats,
+            report_date,
+        )
+
+        GenderSheet(
+            self.wb,
+            4,
+        ).build(
+            df_gender,
+            stats,
+            report_date,
+        )
+
+        WarehouseSheet(
+            self.wb,
+            5,
+        ).build(
+            df_warehouse,
+            stats,
+            report_date,
+        )
+
+        BrandSheet(
+            self.wb,
+            6,
+        ).build(
+            df_brands,
+            stats,
+            report_date,
+        )
+
+        TurnoverSheet(
+            self.wb,
+            7,
+        ).build(
+            df_turnover,
+            stats,
+            report_date,
+            days=turnover_days,
+        )
+
+        CertificateSheet(
+            self.wb,
+            8,
+        ).build(
+            df_certificates,
+            report_date,
+        )
 
 
         

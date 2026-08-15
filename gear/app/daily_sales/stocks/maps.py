@@ -1,3 +1,4 @@
+# gear/app/daily_sales/stocks/maps.py
 import pandas as pd
 
 from .data import (

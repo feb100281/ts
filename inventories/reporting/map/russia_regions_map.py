@@ -976,22 +976,68 @@ def build_russia_regions_map(
     # ─────────────────────────────────────────────────────────────────────────
     
     if summary_stats is not None:
-        total_warehouses = summary_stats.get('total_warehouses', 0)
+        total_warehouses = summary_stats.get(
+            "total_warehouses",
+            0,
+        )
 
-        total_on_hand = summary_stats.get('total_on_hand', 0)
-        total_in_transit = summary_stats.get('total_in_transit', 0)
-        total_all = summary_stats.get('total_quantity', 0)
+        total_on_hand = summary_stats.get(
+            "total_on_hand",
+            0,
+        )
+
+        total_fbs = summary_stats.get(
+            "total_fbs",
+            0,
+        )
+
+        total_in_transit = summary_stats.get(
+            "total_in_transit",
+            0,
+        )
+
+        total_all = summary_stats.get(
+            "total_quantity",
+            0,
+        )
+
+        # ----------------------------------------------------------
         # Форматируем числа
-        on_hand_str = format_number(total_on_hand)
-        in_transit_str = format_number(total_in_transit)
-        total_str = format_number(total_all)
-        
+        # ----------------------------------------------------------
+        on_hand_str = format_number(
+            total_on_hand
+        )
+
+        fbs_str = format_number(
+            total_fbs
+        )
+
+        in_transit_str = format_number(
+            total_in_transit
+        )
+
+        total_str = format_number(
+            total_all
+        )
+
+        # ----------------------------------------------------------
+        # Заголовок карты
+        # ----------------------------------------------------------
         title_text = (
             f"География остатков товаров\n"
             f"на {report_date}\n"
             f"\n"
-            f"Всего складов: {total_warehouses}    |    На складах: {on_hand_str}    |    В пути: {in_transit_str}    |    Итого: {total_str}"
+            f"Всего складов WB: {total_warehouses}"
+            f"    |    "
+            f"На складах WB: {on_hand_str}"
+            f"    |    "
+            f"FBS — наш склад: {fbs_str}"
+            f"    |    "
+            f"В пути: {in_transit_str}"
+            f"    |    "
+            f"Итого: {total_str}"
         )
+
         title_fontsize = 14
         title_linespace = 1.25
     else:
