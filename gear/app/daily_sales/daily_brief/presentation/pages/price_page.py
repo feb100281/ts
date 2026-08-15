@@ -876,7 +876,7 @@ def _kpi_row(
             _pct(
                 recent.get("margin_pct")
             ),
-            "до распределяемых расходов WB",
+            "после комиссии WB до прочих расходов",
             (
                 number(recent.get("margin_pct"))
                 - number(previous.get("margin_pct"))
