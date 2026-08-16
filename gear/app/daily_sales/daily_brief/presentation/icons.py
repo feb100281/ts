@@ -1,3 +1,4 @@
+# gear/app/daily_sales/daily_brief/presentation/icons.py
 from __future__ import annotations
 
 # Все иллюстрации локальные SVG: PDF не зависит от интернета, JS и CDN.
