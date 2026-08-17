@@ -55,7 +55,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-08-13 2026-08-15 --overwrite
+1) python manage.py fin_report_range 2026-08-14 2026-08-16 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 
@@ -247,6 +247,27 @@ rsync -avP daria@82.202.197.94:/home/daria/ts/data/realization ~/Downloads/
 9) zstd -T0 -19 -k analytics.duckdb 
 10) повторяем шаги 2-5  
    
-test
+
+
+
+🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
+🛠️  ЕСЛИ НАДО В ПАРКЕТЕ (НАПРМИЕР ОСТАТКИ ПО FBS)поменять дату - но сначала надо еще и менять имя паркета
+🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
+python - <<'PY'
+import pandas as pd
+
+path = "/home/daria/ts/data/realization/fbs_stocks/fbs_stocks_2026-08-16.parquet"
+
+df = pd.read_parquet(path)
+
+print("Было:", df["_loaded_at"].min())
+
+df["_loaded_at"] = df["_loaded_at"] - pd.Timedelta(days=1)
+
+df.to_parquet(path, index=False)
+
+print("Стало:", df["_loaded_at"].min())
+print("Готово")
+PY
 
 

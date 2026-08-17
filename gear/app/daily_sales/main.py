@@ -24,6 +24,10 @@ from .stocks.dashboard import (
     StocksDashboard,
     register_stock_dashboard_callbacks,
 )
+from .pricing_strategy import (
+    pricing_strategy_controls,
+    register_pricing_strategy_callbacks,
+)
 
 # from .pricing_strategy import (
 #     PricingStrategyDashboard,
@@ -223,14 +227,30 @@ class MainWindow:
                         justify="space-between",
                         align="center",
                         mb=6,
+                        # children=[
+                        #     dmc.Title(
+                        #         "Продажи за период",
+                        #         order=1,
+                        #         fw=800,
+                        #     ),
+                        #     daily_brief_controls(),
+                        # ],
+                        
                         children=[
-                            dmc.Title(
-                                "Продажи за период",
-                                order=1,
-                                fw=800,
-                            ),
-                            daily_brief_controls(),
-                        ],
+                                dmc.Title(
+                                    "Продажи за период",
+                                    order=1,
+                                    fw=800,
+                                ),
+
+                                dmc.Group(
+                                    gap="xs",
+                                    children=[
+                                        pricing_strategy_controls(),
+                                        daily_brief_controls(),
+                                    ],
+                                ),
+                            ],
                     ),
 
                 dmc.Divider(
@@ -502,6 +522,7 @@ class MainWindow:
         register_price_analysis_export_callbacks(app)
         register_stock_dashboard_callbacks(app)
         register_daily_brief_callbacks(app)
+        register_pricing_strategy_callbacks(app,FILTERS,)
         # register_pricing_strategy_callbacks(app)
 
 

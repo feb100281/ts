@@ -1,7 +1,8 @@
+# gear/app/daily_sales/pricing_strategy/analytics.py
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import numpy as np
 import pandas as pd
@@ -10,153 +11,321 @@ from .config import (
     SALES_WINDOW_7D,
     SALES_WINDOW_30D,
     SALES_WINDOW_90D,
+
     MIN_ELASTICITY_DAYS,
-    MIN_ELASTICITY_DAYS_AFTER_TRIM,
     MIN_PRICE_CV_PCT,
+
     SCENARIO_MIN_PCT,
     SCENARIO_MAX_PCT,
     SCENARIO_STEP_PCT,
-    MIN_QTY_FACTOR,
-    MAX_QTY_FACTOR,
-    MIN_MARGIN_PCT,
+
     LOW_STOCK_DAYS,
     TARGET_STOCK_DAYS,
     HIGH_STOCK_DAYS,
     CLEARANCE_STOCK_DAYS,
+
     OLD_STOCK_DAYS,
     VERY_OLD_STOCK_DAYS,
-    BALANCE_MARGIN_KEEP,
-    MAX_MARGIN_LOSS_PP,
-    MAX_PRIORITY,
+
+    MIN_MARGIN_PCT,
 )
 
 
-def number(value, default=0.0):
+def number(
+    value,
+    default=0.0,
+):
     try:
-        if value is None or pd.isna(value):
+        if (
+            value is None
+            or pd.isna(value)
+        ):
             return default
-        return float(value)
-    except (TypeError, ValueError):
+
+        return float(
+            value
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
         return default
 
 
-def pct_change(current, previous):
-    current = number(current)
-    previous = number(previous)
+def pct_change(
+    current,
+    previous,
+):
+    current = number(
+        current
+    )
+
+    previous = number(
+        previous
+    )
 
     if previous == 0:
         return None
 
-    return (current / previous - 1.0) * 100.0
+    return (
+        current
+        / previous
+        - 1.0
+    ) * 100.0
 
 
-def clamp(value, low, high):
-    return max(low, min(high, value))
-
+# ============================================================
+# МЕТРИКИ ПЕРИОДА
+# ============================================================
 
 def period_metrics(
     frame: pd.DataFrame,
-    report_date: date,
+    report_date,
     days: int,
 ) -> dict:
-    start = report_date - timedelta(days=days - 1)
+
+    start = (
+        report_date
+        - timedelta(
+            days=days - 1
+        )
+    )
 
     if frame.empty:
         work = frame
+
     else:
+        dates = pd.to_datetime(
+            frame[
+                "date_from"
+            ],
+            errors="coerce",
+        ).dt.date
+
         work = frame[
-            pd.to_datetime(
-                frame["date_from"],
-                errors="coerce",
-            ).dt.date.between(
+            dates.between(
                 start,
                 report_date,
             )
         ].copy()
 
+    fields = (
+        "sales_qty",
+        "returns_qty",
+        "net_qty",
+
+        "seller_sales_amount",
+        "wb_sales_amount",
+
+        "amount",
+        "amount_vatless",
+
+        "cogs_man",
+        "net_comission",
+        "margin_man",
+    )
+
     if work.empty:
         return {
             "days": days,
-            "sales_qty": 0.0,
-            "returns_qty": 0.0,
-            "net_qty": 0.0,
-            "seller_sales_amount": 0.0,
-            "wb_sales_amount": 0.0,
-            "amount": 0.0,
-            "retail_amount": 0.0,
-            "amount_vatless": 0.0,
-            "cogs_man": 0.0,
-            "net_comission": 0.0,
-            "margin_man": 0.0,
+
+            **{
+                field: 0.0
+                for field in fields
+            },
+
             "seller_price": 0.0,
+
             "buyer_price": 0.0,
+
+            "wb_discount_pct": None,
+
+            # Совместимость со старым названием:
+            # отрицательное значение = покупатель платил дешевле нашей цены.
             "wb_price_delta_pct": None,
+
             "margin_pct": 0.0,
+
             "daily_sales_qty": 0.0,
         }
 
     sums = {}
 
-    for field in (
-        "sales_qty",
-        "returns_qty",
-        "net_qty",
-        "seller_sales_amount",
-        "wb_sales_amount",
-        "amount",
-        "retail_amount",
-        "amount_vatless",
-        "cogs_man",
-        "net_comission",
-        "margin_man",
-    ):
-        sums[field] = number(
+    for field in fields:
+
+        if field not in work.columns:
+            sums[
+                field
+            ] = 0.0
+
+            continue
+
+        sums[
+            field
+        ] = number(
             pd.to_numeric(
-                work[field],
+                work[
+                    field
+                ],
                 errors="coerce",
-            ).fillna(0).sum()
+            )
+            .fillna(0)
+            .sum()
         )
 
-    sales_qty = sums["sales_qty"]
+    sales_qty = sums[
+        "sales_qty"
+    ]
 
     seller_price = (
-        sums["seller_sales_amount"] / sales_qty
+        sums[
+            "seller_sales_amount"
+        ]
+        / sales_qty
         if sales_qty > 0
         else 0.0
     )
 
     buyer_price = (
-        sums["wb_sales_amount"] / sales_qty
+        sums[
+            "wb_sales_amount"
+        ]
+        / sales_qty
         if sales_qty > 0
         else 0.0
     )
 
+    wb_discount_pct = (
+        (
+            seller_price
+            - buyer_price
+        )
+        / seller_price
+        * 100.0
+        if (
+            seller_price > 0
+            and buyer_price > 0
+        )
+        else None
+    )
+
+    # Старое техническое представление сохраняем для совместимости:
+    # если WB продал покупателю дешевле нашей цены, здесь будет минус.
     wb_price_delta_pct = (
-        (buyer_price / seller_price - 1.0) * 100.0
-        if seller_price > 0 and buyer_price > 0
+        -wb_discount_pct
+        if wb_discount_pct is not None
         else None
     )
 
     margin_pct = (
-        sums["margin_man"]
-        / sums["amount_vatless"]
+        sums[
+            "margin_man"
+        ]
+        / sums[
+            "amount_vatless"
+        ]
         * 100.0
-        if sums["amount_vatless"]
+
+        if sums[
+            "amount_vatless"
+        ]
+
         else 0.0
     )
 
     return {
         "days": days,
+
         **sums,
-        "seller_price": seller_price,
-        "buyer_price": buyer_price,
-        "wb_price_delta_pct": wb_price_delta_pct,
-        "margin_pct": margin_pct,
+
+        "seller_price": (
+            seller_price
+        ),
+
+        "buyer_price": (
+            buyer_price
+        ),
+
+        "wb_discount_pct": (
+            wb_discount_pct
+        ),
+
+        "wb_price_delta_pct": (
+            wb_price_delta_pct
+        ),
+
+        "margin_pct": (
+            margin_pct
+        ),
+
         "daily_sales_qty": (
-            sales_qty / max(days, 1)
+            sales_qty
+            / max(
+                days,
+                1,
+            )
+        ),
+    }
+    
+    
+
+def latest_sale_metrics(
+    frame: pd.DataFrame,
+) -> dict | None:
+    """
+    Последняя фактическая продажа товара.
+    Используется как текущая ценовая точка.
+    """
+
+    if frame is None or frame.empty:
+        return None
+
+    work = frame.copy()
+
+    work["date_from"] = pd.to_datetime(
+        work["date_from"],
+        errors="coerce",
+    )
+
+    work["sales_qty"] = pd.to_numeric(
+        work["sales_qty"],
+        errors="coerce",
+    ).fillna(0)
+
+    work = work[
+        work["sales_qty"] > 0
+    ].copy()
+
+    if work.empty:
+        return None
+
+    work = work.sort_values(
+        "date_from"
+    )
+
+    row = work.iloc[-1]
+
+    return {
+        "date_from": row.get(
+            "date_from"
+        ),
+        "seller_price": number(
+            row.get(
+                "seller_price"
+            )
+        ),
+        "buyer_price": number(
+            row.get(
+                "buyer_price"
+            )
         ),
     }
 
+
+# ============================================================
+# ЭЛАСТИЧНОСТЬ
+# ============================================================
 
 def estimate_elasticity(
     frame: pd.DataFrame,
@@ -164,11 +333,13 @@ def estimate_elasticity(
     """
     ln(Q) = a + b * ln(P)
 
-    P = buyer_price, то есть фактическая цена реализации WB покупателю.
-    Q = положительные продажи за день.
+    P = фактическая цена WB покупателю.
+    Q = количество положительных продаж.
 
-    Это наблюдаемая чувствительность, а не причинная оценка.
+    Это наблюдаемая статистическая связь,
+    а не причинный эффект.
     """
+
     if frame.empty:
         return {
             "elasticity": None,
@@ -180,19 +351,38 @@ def estimate_elasticity(
 
     work = frame.copy()
 
-    work["sales_qty"] = pd.to_numeric(
-        work["sales_qty"],
+    work[
+        "sales_qty"
+    ] = pd.to_numeric(
+        work[
+            "sales_qty"
+        ],
         errors="coerce",
     )
 
-    work["buyer_price"] = pd.to_numeric(
-        work["buyer_price"],
+    work[
+        "buyer_price"
+    ] = pd.to_numeric(
+        work[
+            "buyer_price"
+        ],
         errors="coerce",
     )
 
     work = work[
-        (work["sales_qty"] >= 1)
-        & (work["buyer_price"] > 0)
+        (
+            work[
+                "sales_qty"
+            ]
+            >= 1
+        )
+        &
+        (
+            work[
+                "buyer_price"
+            ]
+            > 0
+        )
     ][
         [
             "date_from",
@@ -201,7 +391,10 @@ def estimate_elasticity(
         ]
     ].dropna()
 
-    if len(work) < MIN_ELASTICITY_DAYS:
+    if (
+        len(work)
+        < MIN_ELASTICITY_DAYS
+    ):
         return {
             "elasticity": None,
             "r2": None,
@@ -211,64 +404,85 @@ def estimate_elasticity(
         }
 
     price_mean = float(
-        work["buyer_price"].mean()
+        work[
+            "buyer_price"
+        ].mean()
     )
 
     price_std = float(
-        work["buyer_price"].std()
+        work[
+            "buyer_price"
+        ].std()
     )
 
     price_cv_pct = (
-        price_std / price_mean * 100.0
+        price_std
+        / price_mean
+        * 100.0
+
         if price_mean
         else 0.0
     )
 
-    if price_cv_pct < MIN_PRICE_CV_PCT:
+    if (
+        price_cv_pct
+        < MIN_PRICE_CV_PCT
+    ):
         return {
             "elasticity": None,
             "r2": None,
             "observations": len(work),
             "price_cv_pct": price_cv_pct,
-            "confidence": "Цена почти не менялась",
+            "confidence": (
+                "Цена почти не менялась"
+            ),
         }
 
-    price_low = work[
+    # --------------------------------------------------------
+    # убираем крайние выбросы
+    # --------------------------------------------------------
+
+    p_low = work[
         "buyer_price"
     ].quantile(
         0.025
     )
 
-    price_high = work[
+    p_high = work[
         "buyer_price"
     ].quantile(
         0.975
     )
 
-    qty_low = work[
+    q_low = work[
         "sales_qty"
     ].quantile(
         0.025
     )
 
-    qty_high = work[
+    q_high = work[
         "sales_qty"
     ].quantile(
         0.975
     )
 
     work = work[
-        work["buyer_price"].between(
-            price_low,
-            price_high,
+        work[
+            "buyer_price"
+        ].between(
+            p_low,
+            p_high,
         )
-        & work["sales_qty"].between(
-            qty_low,
-            qty_high,
+        &
+        work[
+            "sales_qty"
+        ].between(
+            q_low,
+            q_high,
         )
     ].copy()
 
-    if len(work) < MIN_ELASTICITY_DAYS_AFTER_TRIM:
+    if len(work) < 10:
         return {
             "elasticity": None,
             "r2": None,
@@ -278,33 +492,48 @@ def estimate_elasticity(
         }
 
     x = np.log(
-        work["buyer_price"]
+        work[
+            "buyer_price"
+        ]
         .astype(float)
         .values
     )
 
     y = np.log(
-        work["sales_qty"]
+        work[
+            "sales_qty"
+        ]
         .astype(float)
         .values
     )
 
     if (
-        len(np.unique(x)) < 3
-        or len(np.unique(y)) < 3
+        len(
+            np.unique(x)
+        )
+        < 3
+        or
+        len(
+            np.unique(y)
+        )
+        < 3
     ):
         return {
             "elasticity": None,
             "r2": None,
             "observations": len(work),
             "price_cv_pct": price_cv_pct,
-            "confidence": "Недостаточно вариации",
+            "confidence": (
+                "Недостаточно вариации"
+            ),
         }
 
-    slope, intercept = np.polyfit(
-        x,
-        y,
-        1,
+    slope, intercept = (
+        np.polyfit(
+            x,
+            y,
+            1,
+        )
     )
 
     predicted = (
@@ -314,27 +543,40 @@ def estimate_elasticity(
 
     ss_res = float(
         np.sum(
-            (y - predicted) ** 2
+            (
+                y
+                - predicted
+            )
+            ** 2
         )
     )
 
     ss_tot = float(
         np.sum(
-            (y - y.mean()) ** 2
+            (
+                y
+                - y.mean()
+            )
+            ** 2
         )
     )
 
     r2 = (
-        1.0 - ss_res / ss_tot
+        1.0
+        - ss_res
+        / ss_tot
+
         if ss_tot
         else 0.0
     )
 
     elasticity = float(
-        clamp(
-            slope,
+        max(
             -4.0,
-            4.0,
+            min(
+                4.0,
+                slope,
+            ),
         )
     )
 
@@ -354,53 +596,36 @@ def estimate_elasticity(
         confidence = "Низкая"
 
     return {
-        "elasticity": elasticity,
+        "elasticity": (
+            elasticity
+        ),
+
         "r2": r2,
-        "observations": len(work),
-        "price_cv_pct": price_cv_pct,
-        "confidence": confidence,
+
+        "observations": (
+            len(work)
+        ),
+
+        "price_cv_pct": (
+            price_cv_pct
+        ),
+
+        "confidence": (
+            confidence
+        ),
     }
 
 
-def _qty_factor(
-    buyer_price_factor,
-    elasticity,
-):
-    if elasticity is None:
-        return 1.0
-
-    try:
-        factor = (
-            buyer_price_factor
-            ** elasticity
-        )
-    except (
-        ValueError,
-        OverflowError,
-        ZeroDivisionError,
-    ):
-        factor = 1.0
-
-    return clamp(
-        factor,
-        MIN_QTY_FACTOR,
-        MAX_QTY_FACTOR,
-    )
-
+# ============================================================
+# СЦЕНАРИИ ЦЕН
+# ============================================================
 
 def build_scenarios(
     current: dict,
     elasticity_info: dict,
-    stock_on_hand: float,
+    stock_total: float,
 ) -> list[dict]:
-    """
-    Изменяем нашу цену и условно сохраняем текущий коэффициент:
 
-        buyer_price / seller_price.
-
-    То есть WB/СПП в сценарии пока не прогнозируется отдельно,
-    а переносится пропорционально.
-    """
     base_qty = number(
         current.get(
             "sales_qty"
@@ -452,8 +677,10 @@ def build_scenarios(
     ):
         return []
 
-    elasticity = elasticity_info.get(
-        "elasticity"
+    elasticity = (
+        elasticity_info.get(
+            "elasticity"
+        )
     )
 
     revenue_net_per_unit = (
@@ -469,6 +696,7 @@ def build_scenarios(
     commission_rate = (
         base_commission
         / base_revenue_net
+
         if base_revenue_net
         else 0.0
     )
@@ -476,31 +704,32 @@ def build_scenarios(
     wb_factor = (
         base_buyer_price
         / base_seller_price
+
         if (
             base_seller_price > 0
             and base_buyer_price > 0
         )
+
         else 1.0
     )
 
     scenarios = []
 
-    change_pct = SCENARIO_MIN_PCT
+    change_pct = (
+        SCENARIO_MIN_PCT
+    )
 
     while (
         change_pct
-        <= SCENARIO_MAX_PCT + 0.0001
+        <= SCENARIO_MAX_PCT
+        + 0.0001
     ):
+
         price_factor = (
             1.0
-            + change_pct / 100.0
+            + change_pct
+            / 100.0
         )
-
-        if price_factor <= 0:
-            change_pct += (
-                SCENARIO_STEP_PCT
-            )
-            continue
 
         projected_seller_price = (
             base_seller_price
@@ -512,42 +741,106 @@ def build_scenarios(
             * wb_factor
         )
 
-        buyer_price_factor = (
-            projected_buyer_price
-            / base_buyer_price
-            if base_buyer_price > 0
-            else price_factor
+        # ----------------------------------------------------
+        # ПРОГНОЗ ОБЪЁМА
+        # ----------------------------------------------------
+
+        if (
+            elasticity is not None
+            and base_buyer_price > 0
+        ):
+
+            buyer_factor = (
+                projected_buyer_price
+                / base_buyer_price
+            )
+
+            try:
+                qty_factor = (
+                    buyer_factor
+                    ** float(
+                        elasticity
+                    )
+                )
+
+            except Exception:
+                qty_factor = 1.0
+
+            qty_factor = max(
+                0.25,
+                min(
+                    2.5,
+                    qty_factor,
+                ),
+            )
+
+        else:
+            qty_factor = 1.0
+
+        # ----------------------------------------------------
+        # ПРОГНОЗ ОБЪЁМА НОРМАЛИЗУЕМ НА 30 ДНЕЙ
+        #
+        # scenario_base может быть 7-дневным или 30-дневным,
+        # поэтому сначала считаем продажи в день, а затем
+        # приводим прогноз к единому горизонту 30 дней.
+        # ----------------------------------------------------
+
+        current_days = max(
+            number(
+                current.get(
+                    "days"
+                ),
+                30,
+            ),
+            1,
         )
 
-        qty_factor = _qty_factor(
-            buyer_price_factor,
-            elasticity,
-        )
-
-        projected_qty = (
+        base_daily_qty = (
             base_qty
+            / current_days
+        )
+
+        projected_daily_qty = (
+            base_daily_qty
             * qty_factor
         )
 
-        projected_revenue_net_per_unit = (
-            revenue_net_per_unit
-            * price_factor
+        projected_qty = (
+            projected_daily_qty
+            * 30.0
         )
+
+        # ----------------------------------------------------
+        # ВЫРУЧКА ЗА 30 ДНЕЙ
+        # ----------------------------------------------------
 
         projected_revenue_net = (
             projected_qty
-            * projected_revenue_net_per_unit
+            * revenue_net_per_unit
+            * price_factor
         )
+
+        # ----------------------------------------------------
+        # COGS
+        # ----------------------------------------------------
 
         projected_cogs = (
             projected_qty
             * cogs_per_unit
         )
 
+        # ----------------------------------------------------
+        # КОМИССИЯ
+        # ----------------------------------------------------
+
         projected_commission = (
             projected_revenue_net
             * commission_rate
         )
+
+        # ----------------------------------------------------
+        # МАРЖА
+        # ----------------------------------------------------
 
         projected_margin = (
             projected_revenue_net
@@ -559,68 +852,72 @@ def build_scenarios(
             projected_margin
             / projected_revenue_net
             * 100.0
+
             if projected_revenue_net
             else 0.0
         )
 
-        projected_daily_qty = (
-            projected_qty
-            / max(
-                number(
-                    current.get(
-                        "days"
-                    ),
-                    30,
-                ),
-                1,
-            )
-        )
+        # projected_daily_qty уже рассчитан выше
+        # из актуальной скорости продаж.
+
+        # ====================================================
+        # ЗАПАС В ДНЯХ
+        #
+        # ВАЖНО:
+        # здесь именно TOTAL STOCK:
+        #
+        # WB
+        # + FBS
+        # + к клиенту
+        # + от клиента
+        # ====================================================
 
         projected_stock_days = (
-            stock_on_hand
+            stock_total
             / projected_daily_qty
+
             if projected_daily_qty > 0
+
             else None
         )
 
         scenarios.append(
             {
-                "price_change_pct": round(
-                    change_pct,
-                    2,
+                "price_change_pct": (
+                    round(
+                        change_pct,
+                        2,
+                    )
                 ),
+
                 "seller_price": (
                     projected_seller_price
                 ),
+
                 "buyer_price": (
                     projected_buyer_price
                 ),
-                "wb_factor": wb_factor,
+
                 "projected_qty": (
                     projected_qty
                 ),
-                "qty_change_pct": (
-                    (
-                        projected_qty
-                        / base_qty
-                        - 1.0
-                    )
-                    * 100.0
-                    if base_qty
-                    else 0.0
-                ),
+
                 "projected_daily_qty": (
                     projected_daily_qty
                 ),
+
                 "projected_revenue_net": (
                     projected_revenue_net
                 ),
+
                 "projected_margin": (
                     projected_margin
                 ),
+
                 "projected_margin_pct": (
                     projected_margin_pct
                 ),
+
                 "margin_change_pct": (
                     (
                         projected_margin
@@ -628,12 +925,15 @@ def build_scenarios(
                         - 1.0
                     )
                     * 100.0
+
                     if base_margin
                     else None
                 ),
+
                 "projected_stock_days": (
                     projected_stock_days
                 ),
+
                 "is_margin_safe": (
                     projected_margin_pct
                     >= MIN_MARGIN_PCT
@@ -648,25 +948,19 @@ def build_scenarios(
     return scenarios
 
 
+# ============================================================
+# ВЫБОР СЦЕНАРИЯ
+# ============================================================
+
 def choose_recommendation(
     scenarios,
     elasticity_info,
     days_of_stock,
     stock_age_days,
 ):
+
     if not scenarios:
         return None
-
-    current = min(
-        scenarios,
-        key=lambda row: abs(
-            number(
-                row.get(
-                    "price_change_pct"
-                )
-            )
-        ),
-    )
 
     safe = [
         row
@@ -676,44 +970,58 @@ def choose_recommendation(
         )
     ]
 
-    if not safe:
-        return current
-
-    confidence = elasticity_info.get(
-        "confidence"
+    pool = (
+        safe
+        or scenarios
     )
 
-    low_confidence = confidence in (
-        "Нет данных",
-        "Мало наблюдений",
-        "Цена почти не менялась",
-        "Недостаточно вариации",
-        "Низкая",
+    confidence = (
+        elasticity_info.get(
+            "confidence"
+        )
     )
 
-    if low_confidence:
-        if days_of_stock is None:
-            target = -10.0
-        elif (
-            days_of_stock
+    reliable = (
+        confidence
+        in (
+            "Высокая",
+            "Средняя",
+        )
+    )
+
+    # --------------------------------------------------------
+    # Если эластичность ненадёжна,
+    # используем давление остатка
+    # --------------------------------------------------------
+
+    if not reliable:
+
+        if (
+            days_of_stock is not None
+            and days_of_stock
             >= CLEARANCE_STOCK_DAYS
         ):
-            target = -15.0
+            target = -10.0
+
         elif (
-            days_of_stock
+            days_of_stock is not None
+            and days_of_stock
             >= HIGH_STOCK_DAYS
         ):
-            target = -10.0
+            target = -5.0
+
         elif (
-            days_of_stock
+            days_of_stock is not None
+            and days_of_stock
             <= LOW_STOCK_DAYS
         ):
             target = 5.0
+
         else:
             target = 0.0
 
         return min(
-            safe,
+            pool,
             key=lambda row: abs(
                 number(
                     row.get(
@@ -724,8 +1032,12 @@ def choose_recommendation(
             ),
         )
 
+    # --------------------------------------------------------
+    # Максимальная модельная маржа
+    # --------------------------------------------------------
+
     max_margin = max(
-        safe,
+        pool,
         key=lambda row: number(
             row.get(
                 "projected_margin"
@@ -739,15 +1051,10 @@ def choose_recommendation(
         )
     )
 
-    current_margin_pct = number(
-        current.get(
-            "projected_margin_pct"
-        )
-    )
-
+    # сохраняем 98% максимальной маржи
     candidates = [
         row
-        for row in safe
+        for row in pool
         if (
             number(
                 row.get(
@@ -755,16 +1062,7 @@ def choose_recommendation(
                 )
             )
             >= max_margin_value
-            * BALANCE_MARGIN_KEEP
-        )
-        and (
-            number(
-                row.get(
-                    "projected_margin_pct"
-                )
-            )
-            >= current_margin_pct
-            - MAX_MARGIN_LOSS_PP
+            * 0.98
         )
     ]
 
@@ -775,7 +1073,12 @@ def choose_recommendation(
 
     stock_pressure = (
         days_of_stock is None
-        or days_of_stock >= HIGH_STOCK_DAYS
+
+        or (
+            days_of_stock
+            >= HIGH_STOCK_DAYS
+        )
+
         or (
             stock_age_days is not None
             and stock_age_days
@@ -783,7 +1086,12 @@ def choose_recommendation(
         )
     )
 
+    # Если запаса много —
+    # среди почти максимальной маржи
+    # выбираем больший объём.
+
     if stock_pressure:
+
         return max(
             candidates,
             key=lambda row: (
@@ -810,12 +1118,17 @@ def choose_recommendation(
     )
 
 
+# ============================================================
+# СТАТУС
+# ============================================================
+
 def recommendation_status(
     change_pct,
     days_of_stock,
     stock_age_days,
     confidence,
 ):
+
     change_pct = number(
         change_pct
     )
@@ -831,6 +1144,7 @@ def recommendation_status(
         stock_age_days is not None
         and stock_age_days
         >= VERY_OLD_STOCK_DAYS
+
         and (
             days_of_stock is None
             or days_of_stock
@@ -839,15 +1153,18 @@ def recommendation_status(
     ):
         return "CLEARANCE"
 
-    if confidence in (
-        "Нет данных",
-        "Мало наблюдений",
-        "Цена почти не менялась",
-        "Недостаточно вариации",
-        "Низкая",
+    if (
+        confidence
+        not in (
+            "Высокая",
+            "Средняя",
+        )
+        and abs(
+            change_pct
+        )
+        >= 2.5
     ):
-        if abs(change_pct) >= 2.5:
-            return "TEST"
+        return "TEST"
 
     if change_pct <= -2.5:
         return "REDUCE"
@@ -858,240 +1175,127 @@ def recommendation_status(
     return "HOLD"
 
 
-def confidence_score(
-    elasticity_info,
-    sales_qty_30,
-):
-    label = elasticity_info.get(
-        "confidence"
-    )
-
-    score = {
-        "Высокая": 90,
-        "Средняя": 70,
-        "Низкая": 45,
-        "Цена почти не менялась": 35,
-        "Недостаточно вариации": 30,
-        "Мало наблюдений": 25,
-        "Нет данных": 10,
-    }.get(
-        label,
-        20,
-    )
-
-    if sales_qty_30 < 10:
-        score = min(
-            score,
-            30,
-        )
-
-    return score
-
-
-def priority_score(
-    status,
-    days_of_stock,
-    stock_age_days,
-    recommended_change_pct,
-    margin_upside_day,
-):
-    score = {
-        "CLEARANCE": 35,
-        "REDUCE": 25,
-        "TEST": 15,
-        "RAISE": 12,
-        "HOLD": 0,
-    }.get(
-        status,
-        0,
-    )
-
-    if days_of_stock is None:
-        score += 20
-    else:
-        score += min(
-            max(
-                days_of_stock
-                - TARGET_STOCK_DAYS,
-                0,
-            )
-            / 8.0,
-            30,
-        )
-
-    if stock_age_days is not None:
-        score += min(
-            stock_age_days / 25.0,
-            15,
-        )
-
-    score += min(
-        abs(
-            number(
-                recommended_change_pct
-            )
-        ),
-        15,
-    )
-
-    if margin_upside_day > 0:
-        score += min(
-            margin_upside_day / 1000.0,
-            10,
-        )
-
-    return round(
-        min(
-            score,
-            MAX_PRIORITY,
-        ),
-        1,
-    )
-
+# ============================================================
+# ОБЪЯСНЕНИЕ
+# ============================================================
 
 def build_reason(
-    change_pct,
-    days_of_stock,
-    stock_age_days,
+    *,
     m7,
     m30,
     elasticity_info,
-    recommended_buyer_price,
+    days_of_stock,
+    stock_age_days,
+    recommended_change_pct,
 ):
+
     parts = []
 
     if days_of_stock is None:
-        parts.append(
-            "нет устойчивой скорости продаж для расчёта запаса"
-        )
-    elif (
-        days_of_stock
-        >= CLEARANCE_STOCK_DAYS
-    ):
-        parts.append(
-            f"запас около {days_of_stock:.0f} дней"
-        )
-    elif (
-        days_of_stock
-        >= HIGH_STOCK_DAYS
-    ):
-        parts.append(
-            f"повышенный запас: {days_of_stock:.0f} дней"
-        )
-    elif (
-        days_of_stock
-        <= LOW_STOCK_DAYS
-    ):
-        parts.append(
-            f"низкий запас: {days_of_stock:.0f} дней"
-        )
-    else:
-        parts.append(
-            f"запас: {days_of_stock:.0f} дней"
-        )
 
-    if (
-        stock_age_days is not None
-        and stock_age_days
-        >= OLD_STOCK_DAYS
-    ):
-        parts.append(
-            f"возраст остатка {stock_age_days} дней"
-        )
-
-    elasticity = elasticity_info.get(
-        "elasticity"
-    )
-
-    if elasticity is not None:
         parts.append(
             (
-                f"эластичность по цене покупателя "
-                f"{elasticity:.2f}, "
-                f"R² {number(elasticity_info.get('r2')):.2f}"
+                "нет устойчивой скорости продаж "
+                "для расчёта запаса"
             )
         )
+
     else:
+
         parts.append(
             (
-                "эластичность пока ненадёжна: "
-                f"{elasticity_info.get('confidence')}"
+                f"общий запас примерно "
+                f"{days_of_stock:.0f} дн."
+            )
+        )
+
+    if stock_age_days is not None:
+
+        parts.append(
+            (
+                f"возраст товара "
+                f"{stock_age_days:.0f} дн."
             )
         )
 
     speed_change = pct_change(
-        number(
-            m7.get(
-                "daily_sales_qty"
-            )
+        m7.get(
+            "daily_sales_qty"
         ),
-        number(
-            m30.get(
-                "daily_sales_qty"
-            )
-        ),
-    )
-
-    if (
-        speed_change is not None
-        and speed_change <= -20
-    ):
-        parts.append(
-            (
-                f"скорость 7д ниже 30д "
-                f"на {abs(speed_change):.0f}%"
-            )
-        )
-
-    elif (
-        speed_change is not None
-        and speed_change >= 20
-    ):
-        parts.append(
-            (
-                f"скорость 7д выше 30д "
-                f"на {speed_change:.0f}%"
-            )
-        )
-
-    current_buyer = number(
         m30.get(
-            "buyer_price"
+            "daily_sales_qty"
+        ),
+    )
+
+    if speed_change is not None:
+
+        if speed_change <= -20:
+
+            parts.append(
+                (
+                    f"скорость 7д ниже 30д "
+                    f"на {abs(speed_change):.0f}%"
+                )
+            )
+
+        elif speed_change >= 20:
+
+            parts.append(
+                (
+                    f"скорость 7д выше 30д "
+                    f"на {speed_change:.0f}%"
+                )
+            )
+
+    elasticity = (
+        elasticity_info.get(
+            "elasticity"
         )
     )
 
-    if (
-        current_buyer > 0
-        and recommended_buyer_price > 0
-    ):
+    if elasticity is not None:
+
         parts.append(
             (
-                f"цена покупателя "
-                f"{current_buyer:.0f} → "
-                f"{recommended_buyer_price:.0f} ₽"
+                f"эластичность "
+                f"{elasticity:.2f}, "
+                f"R² "
+                f"{number(elasticity_info.get('r2')):.2f}"
             )
         )
 
-    if change_pct:
-        parts.append(
-            (
-                f"рекомендованное изменение нашей цены "
-                f"{change_pct:+.1f}%"
-            )
-        )
     else:
+
         parts.append(
-            "текущая цена близка к выбранному балансу"
+            (
+                "эластичность ненадёжна: "
+                f"{elasticity_info.get('confidence')}"
+            )
         )
 
-    return "; ".join(
-        parts
-    ) + "."
+    parts.append(
+        (
+            "рекомендуемое изменение цены "
+            f"{recommended_change_pct:+.1f}%"
+        )
+    )
 
+    return (
+        "; ".join(
+            parts
+        )
+        + "."
+    )
+
+
+# ============================================================
+# ОСНОВНОЙ АНАЛИЗ
+# ============================================================
 
 def analyze_pricing(
     source: dict,
 ) -> dict:
+
     products = source[
         "products"
     ].copy()
@@ -1105,15 +1309,29 @@ def analyze_pricing(
     ]
 
     if products.empty:
+
         return {
             **source,
-            "recommendations": pd.DataFrame(),
-            "scenarios": pd.DataFrame(),
+
+            "recommendations": (
+                pd.DataFrame()
+            ),
+
+            "portfolio": (
+                pd.DataFrame()
+            ),
+
+            "scenarios": (
+                pd.DataFrame()
+            ),
+
             "history": daily,
+
             "summary": {},
         }
 
     if not daily.empty:
+
         daily[
             "date_from"
         ] = pd.to_datetime(
@@ -1124,21 +1342,37 @@ def analyze_pricing(
         ).dt.date
 
     recommendations = []
+
     scenario_rows = []
 
-    for _, product in products.iterrows():
+    # ========================================================
+    # ПО КАЖДОМУ NM ID
+    # ========================================================
+
+    for _, product in (
+        products.iterrows()
+    ):
+
         nm_id = product[
             "nm_id"
         ]
 
         history = (
             daily[
-                daily["nm_id"]
+                daily[
+                    "nm_id"
+                ]
                 == nm_id
             ].copy()
+
             if not daily.empty
+
             else pd.DataFrame()
         )
+
+        # ----------------------------------------------------
+        # 7 / 30 / 90
+        # ----------------------------------------------------
 
         m7 = period_metrics(
             history,
@@ -1157,26 +1391,17 @@ def analyze_pricing(
             report_date,
             SALES_WINDOW_90D,
         )
-
-        elasticity_info = estimate_elasticity(
-            history
-        )
-
-        stock_on_hand = number(
-            product.get(
-                "stock_on_hand"
+        
+        
+        latest_sale = (
+            latest_sale_metrics(
+                history
             )
         )
 
-        stock_in_transit = number(
-            product.get(
-                "stock_in_transit"
-            )
-        )
-
-        stock_total = number(
-            product.get(
-                "stock_total"
+        daily_qty_7 = number(
+            m7.get(
+                "daily_sales_qty"
             )
         )
 
@@ -1186,15 +1411,92 @@ def analyze_pricing(
             )
         )
 
+        current_daily_qty = (
+            daily_qty_7
+            if daily_qty_7 > 0
+            else daily_qty_30
+        )
+
+        elasticity_info = (
+            estimate_elasticity(
+                history
+            )
+        )
+
+        # ====================================================
+        # ОСТАТКИ
+        # ====================================================
+
+        wb_stock = number(
+            product.get(
+                "wb_stock"
+            )
+        )
+
+        fbs_stock = number(
+            product.get(
+                "fbs_stock"
+            )
+        )
+
+        in_way_to_client = number(
+            product.get(
+                "in_way_to_client"
+            )
+        )
+
+        in_way_from_client = number(
+            product.get(
+                "in_way_from_client"
+            )
+        )
+
+        in_transit = number(
+            product.get(
+                "in_transit"
+            )
+        )
+
+        physical_stock = number(
+            product.get(
+                "physical_stock"
+            )
+        )
+
+        # ====================================================
+        # ВАЖНО
+        #
+        # ВСЯ МОДЕЛЬ РАБОТАЕТ ОТ TOTAL STOCK
+        #
+        # WB
+        # + FBS
+        # + к клиенту
+        # + от клиента
+        # ====================================================
+
+        total_stock = number(
+            product.get(
+                "total_stock"
+            )
+        )
+
         days_of_stock = (
-            stock_on_hand
-            / daily_qty_30
-            if daily_qty_30 > 0
+            total_stock
+            / current_daily_qty
+
+            if current_daily_qty > 0
+
             else None
         )
 
-        raw_income = product.get(
-            "last_income_date"
+        # ----------------------------------------------------
+        # ВОЗРАСТ
+        # ----------------------------------------------------
+
+        raw_income = (
+            product.get(
+                "last_income_date"
+            )
         )
 
         stock_age_days = None
@@ -1205,6 +1507,7 @@ def analyze_pricing(
                 raw_income
             )
         ):
+
             parsed = pd.to_datetime(
                 raw_income,
                 errors="coerce",
@@ -1213,52 +1516,140 @@ def analyze_pricing(
             if not pd.isna(
                 parsed
             ):
+
                 stock_age_days = (
                     report_date
                     - parsed.date()
                 ).days
 
-        scenarios = build_scenarios(
-            current=m30,
-            elasticity_info=elasticity_info,
-            stock_on_hand=stock_on_hand,
-        )
+        # ====================================================
+        # СЦЕНАРИИ
+        # ====================================================
 
-        recommended = choose_recommendation(
-            scenarios=scenarios,
-            elasticity_info=elasticity_info,
-            days_of_stock=days_of_stock,
-            stock_age_days=stock_age_days,
-        )
-
-        if recommended:
-            recommended_change_pct = number(
-                recommended.get(
-                    "price_change_pct"
+        # Для текущей скорости берём последние 7 дней.
+        # Если за 7 дней продаж не было — используем 30 дней.
+        scenario_base = (
+            m7.copy()
+            if number(
+                m7.get(
+                    "sales_qty"
                 )
-            )
+            ) > 0
+            else m30.copy()
+        )
 
-            recommended_seller_price = number(
-                recommended.get(
+        # Базовую цену для следующего решения берём
+        # из последней фактической продажи, а не из средней за период.
+        if latest_sale:
+            latest_seller_price = number(
+                latest_sale.get(
                     "seller_price"
                 )
             )
 
-            recommended_buyer_price = number(
-                recommended.get(
+            latest_buyer_price = number(
+                latest_sale.get(
                     "buyer_price"
                 )
             )
 
-            recommended_margin = number(
-                recommended.get(
-                    "projected_margin"
+            if latest_seller_price > 0:
+                scenario_base[
+                    "seller_price"
+                ] = latest_seller_price
+
+            if latest_buyer_price > 0:
+                scenario_base[
+                    "buyer_price"
+                ] = latest_buyer_price
+
+        scenarios = (
+            build_scenarios(
+                current=scenario_base,
+
+                elasticity_info=(
+                    elasticity_info
+                ),
+
+                stock_total=(
+                    total_stock
+                ),
+            )
+        )
+
+        recommended = (
+            choose_recommendation(
+                scenarios=scenarios,
+
+                elasticity_info=(
+                    elasticity_info
+                ),
+
+                days_of_stock=(
+                    days_of_stock
+                ),
+
+                stock_age_days=(
+                    stock_age_days
+                ),
+            )
+        )
+
+        if recommended:
+
+            recommended_change_pct = (
+                number(
+                    recommended.get(
+                        "price_change_pct"
+                    )
                 )
             )
 
-            recommended_margin_pct = number(
-                recommended.get(
-                    "projected_margin_pct"
+            recommended_seller_price = (
+                number(
+                    recommended.get(
+                        "seller_price"
+                    )
+                )
+            )
+
+            recommended_buyer_price = (
+                number(
+                    recommended.get(
+                        "buyer_price"
+                    )
+                )
+            )
+
+            recommended_margin = (
+                number(
+                    recommended.get(
+                        "projected_margin"
+                    )
+                )
+            )
+
+            recommended_margin_pct = (
+                number(
+                    recommended.get(
+                        "projected_margin_pct"
+                    )
+                )
+            )
+
+            recommended_sales_qty_30d = (
+                number(
+                    recommended.get(
+                        "projected_qty"
+                    )
+                )
+            )
+
+            recommended_daily_sales_qty = (
+                number(
+                    recommended.get(
+                        "projected_daily_qty"
+                    )
                 )
             )
 
@@ -1269,405 +1660,418 @@ def analyze_pricing(
             )
 
         else:
-            recommended_change_pct = 0.0
-            recommended_seller_price = number(
-                m30.get(
-                    "seller_price"
+
+            recommended_change_pct = (
+                0.0
+            )
+
+            recommended_seller_price = (
+                number(
+                    product.get(
+                        "current_seller_list_price"
+                    )
+                )
+                or
+                number(
+                    m30.get(
+                        "seller_price"
+                    )
                 )
             )
-            recommended_buyer_price = number(
-                m30.get(
-                    "buyer_price"
+
+            recommended_buyer_price = (
+                number(
+                    m30.get(
+                        "buyer_price"
+                    )
                 )
             )
-            recommended_margin = number(
+
+            recommended_margin = (
+                number(
+                    m30.get(
+                        "margin_man"
+                    )
+                )
+            )
+
+            recommended_margin_pct = (
+                number(
+                    m30.get(
+                        "margin_pct"
+                    )
+                )
+            )
+
+            recommended_daily_sales_qty = (
+                current_daily_qty
+            )
+
+            recommended_sales_qty_30d = (
+                current_daily_qty
+                * 30.0
+            )
+
+            recommended_stock_days = (
+                days_of_stock
+            )
+
+        # ----------------------------------------------------
+        # STATUS
+        # ----------------------------------------------------
+
+        status = (
+            recommendation_status(
+                change_pct=(
+                    recommended_change_pct
+                ),
+
+                days_of_stock=(
+                    days_of_stock
+                ),
+
+                stock_age_days=(
+                    stock_age_days
+                ),
+
+                confidence=(
+                    elasticity_info.get(
+                        "confidence"
+                    )
+                ),
+            )
+        )
+
+        # ----------------------------------------------------
+        # ПОТЕНЦИАЛ МАРЖИ
+        # ----------------------------------------------------
+
+        margin_upside_30 = (
+            recommended_margin
+            - number(
                 m30.get(
                     "margin_man"
                 )
             )
-            recommended_margin_pct = number(
-                m30.get(
-                    "margin_pct"
-                )
-            )
-            recommended_stock_days = days_of_stock
-
-        current_margin = number(
-            m30.get(
-                "margin_man"
-            )
-        )
-
-        margin_upside_30d = (
-            recommended_margin
-            - current_margin
         )
 
         margin_upside_day = (
-            margin_upside_30d
-            / SALES_WINDOW_30D
+            margin_upside_30
+            / 30.0
         )
 
-        status = recommendation_status(
-            change_pct=(
-                recommended_change_pct
-            ),
-            days_of_stock=days_of_stock,
-            stock_age_days=stock_age_days,
-            confidence=elasticity_info.get(
-                "confidence"
-            ),
-        )
-
-        confidence = confidence_score(
-            elasticity_info,
-            number(
+        speed_trend = (
+            pct_change(
+                m7.get(
+                    "daily_sales_qty"
+                ),
                 m30.get(
-                    "sales_qty"
-                )
-            ),
+                    "daily_sales_qty"
+                ),
+            )
         )
 
-        priority = priority_score(
-            status=status,
-            days_of_stock=days_of_stock,
-            stock_age_days=stock_age_days,
-            recommended_change_pct=(
-                recommended_change_pct
-            ),
-            margin_upside_day=(
-                margin_upside_day
-            ),
+        # ----------------------------------------------------
+        # PRIORITY
+        # ----------------------------------------------------
+
+        priority = {
+            "CLEARANCE": 100,
+            "REDUCE": 80,
+            "RAISE": 70,
+            "TEST": 50,
+            "HOLD": 10,
+        }.get(
+            status,
+            0,
+        )
+
+        if (
+            days_of_stock
+            is not None
+        ):
+
+            priority += min(
+                max(
+                    days_of_stock
+                    - TARGET_STOCK_DAYS,
+                    0,
+                )
+                / 10.0,
+                40,
+            )
+
+        priority += min(
+            max(
+                margin_upside_day,
+                0,
+            )
+            / 100.0,
+            30,
         )
 
         reason = build_reason(
-            change_pct=(
+            m7=m7,
+
+            m30=m30,
+
+            elasticity_info=(
+                elasticity_info
+            ),
+
+            days_of_stock=(
+                days_of_stock
+            ),
+
+            stock_age_days=(
+                stock_age_days
+            ),
+
+            recommended_change_pct=(
                 recommended_change_pct
             ),
-            days_of_stock=days_of_stock,
-            stock_age_days=stock_age_days,
-            m7=m7,
-            m30=m30,
-            elasticity_info=elasticity_info,
-            recommended_buyer_price=(
-                recommended_buyer_price
-            ),
         )
 
-        speed_trend = pct_change(
-            number(
-                m7.get(
-                    "daily_sales_qty"
-                )
-            ),
-            number(
-                m30.get(
-                    "daily_sales_qty"
-                )
-            ),
-        )
-
-        wb_delta = m30.get(
-            "wb_price_delta_pct"
-        )
+        # ====================================================
+        # RESULT NM ID
+        # ====================================================
 
         recommendations.append(
             {
-                "priority": priority,
-                "status": status,
-                "confidence_score": (
-                    confidence
+                "priority": round(
+                    priority,
+                    1,
                 ),
 
-                "nm_id": (
-                    int(nm_id)
-                    if pd.notna(nm_id)
-                    else nm_id
-                ),
+                "status": status,
+
+                "nm_id": nm_id,
 
                 "sa_name": product.get(
-                    "sa_name",
-                    "",
-                ),
-                "brand": product.get(
-                    "brand",
-                    "",
-                ),
-                "category": product.get(
-                    "category",
-                    "",
-                ),
-                "gender": product.get(
-                    "gender",
-                    "",
-                ),
-                "title": product.get(
-                    "title",
-                    "",
+                    "sa_name"
                 ),
 
-                "current_seller_list_price": round(
+                "brand": product.get(
+                    "brand"
+                ),
+
+                "category": product.get(
+                    "category"
+                ),
+
+                "gender": product.get(
+                    "gender"
+                ),
+
+                "title": product.get(
+                    "title"
+                ),
+
+                # --------------------------------------------
+                # PRICE
+                # --------------------------------------------
+
+                "current_seller_list_price": (
                     number(
                         product.get(
                             "current_seller_list_price"
                         )
-                    ),
-                    2,
+                    )
                 ),
 
-                "seller_price_30d": round(
+                "last_man_cost": (
+                    number(
+                        product.get(
+                            "last_man_cost"
+                        )
+                    )
+                ),
+
+                "seller_price_30d": (
                     number(
                         m30.get(
                             "seller_price"
                         )
-                    ),
-                    2,
+                    )
                 ),
 
-                "buyer_price_30d": round(
+                "buyer_price_30d": (
                     number(
                         m30.get(
                             "buyer_price"
                         )
-                    ),
-                    2,
+                    )
                 ),
 
-                "wb_price_delta_pct_30d": (
-                    round(
-                        number(
-                            wb_delta
+                "wb_discount_pct_30d": (
+                    number(
+                        m30.get(
+                            "wb_discount_pct"
                         ),
-                        2,
+                        None,
                     )
-                    if wb_delta is not None
+                    if m30.get(
+                        "wb_discount_pct"
+                    ) is not None
                     else None
                 ),
 
-                "latest_seller_realized_price": round(
-                    number(
-                        product.get(
-                            "latest_seller_realized_price"
-                        )
-                    ),
-                    2,
-                ),
-
-                "latest_buyer_price": round(
-                    number(
-                        product.get(
-                            "latest_buyer_price"
-                        )
-                    ),
-                    2,
-                ),
-
-                "recommended_change_pct": round(
-                    recommended_change_pct,
-                    1,
-                ),
-
-                "recommended_seller_price": round(
-                    recommended_seller_price,
-                    2,
-                ),
-
-                "recommended_buyer_price": round(
-                    recommended_buyer_price,
-                    2,
-                ),
-
-                "amount_vatless_30d": round(
+                # старое поле оставляем, чтобы не сломать Excel/старые места
+                "wb_price_delta_pct_30d": (
                     number(
                         m30.get(
-                            "amount_vatless"
-                        )
-                    ),
-                    2,
+                            "wb_price_delta_pct"
+                        ),
+                        None,
+                    )
+                    if m30.get(
+                        "wb_price_delta_pct"
+                    ) is not None
+                    else None
                 ),
 
-                "cogs_man_30d": round(
+                # --------------------------------------------
+                # MARGIN
+                # --------------------------------------------
+
+                "margin_man_30d": (
                     number(
                         m30.get(
-                            "cogs_man"
+                            "margin_man"
                         )
-                    ),
-                    2,
+                    )
                 ),
 
-                "net_comission_30d": round(
-                    number(
-                        m30.get(
-                            "net_comission"
-                        )
-                    ),
-                    2,
-                ),
-
-                "margin_man_30d": round(
-                    current_margin,
-                    2,
-                ),
-
-                "margin_pct_30d": round(
+                "margin_pct_30d": (
                     number(
                         m30.get(
                             "margin_pct"
                         )
-                    ),
-                    2,
+                    )
                 ),
 
-                "recommended_margin_30d": round(
-                    recommended_margin,
-                    2,
+                # --------------------------------------------
+                # RECOMMENDATION
+                # --------------------------------------------
+
+                "recommended_seller_price": (
+                    recommended_seller_price
                 ),
 
-                "recommended_margin_pct": round(
-                    recommended_margin_pct,
-                    2,
+                "recommended_buyer_price": (
+                    recommended_buyer_price
                 ),
 
-                "margin_upside_30d": round(
-                    margin_upside_30d,
-                    2,
+                "recommended_change_pct": (
+                    recommended_change_pct
                 ),
 
-                "margin_upside_day": round(
-                    margin_upside_day,
-                    2,
+                "recommended_sales_qty_30d": (
+                    recommended_sales_qty_30d
                 ),
 
-                "stock_on_hand": round(
-                    stock_on_hand,
-                    0,
+                "recommended_daily_sales_qty": (
+                    recommended_daily_sales_qty
                 ),
 
-                "stock_in_transit": round(
-                    stock_in_transit,
-                    0,
+                "recommended_margin_30d": (
+                    recommended_margin
                 ),
 
-                "stock_total": round(
-                    stock_total,
-                    0,
+                "recommended_margin_pct": (
+                    recommended_margin_pct
+                ),
+
+                "margin_upside_day": (
+                    margin_upside_day
+                ),
+
+                # --------------------------------------------
+                # STOCKS
+                # --------------------------------------------
+
+                "wb_stock": wb_stock,
+
+                "fbs_stock": fbs_stock,
+
+                "in_way_to_client": (
+                    in_way_to_client
+                ),
+
+                "in_way_from_client": (
+                    in_way_from_client
+                ),
+
+                "in_transit": (
+                    in_transit
+                ),
+
+                "physical_stock": (
+                    physical_stock
+                ),
+
+                "total_stock": (
+                    total_stock
                 ),
 
                 "days_of_stock": (
-                    round(
-                        days_of_stock,
-                        1,
-                    )
-                    if days_of_stock is not None
-                    else None
+                    days_of_stock
                 ),
 
                 "recommended_stock_days": (
-                    round(
-                        number(
-                            recommended_stock_days
-                        ),
-                        1,
-                    )
-                    if recommended_stock_days is not None
-                    else None
+                    recommended_stock_days
                 ),
 
                 "stock_age_days": (
-                    int(
-                        stock_age_days
-                    )
-                    if stock_age_days is not None
-                    else None
+                    stock_age_days
                 ),
 
-                "last_income_date": raw_income,
+                # --------------------------------------------
+                # SALES
+                # --------------------------------------------
 
-                "sales_qty_7d": round(
+                "sales_qty_7d": (
                     number(
                         m7.get(
                             "sales_qty"
                         )
-                    ),
-                    0,
+                    )
                 ),
 
-                "sales_qty_30d": round(
+                "sales_qty_30d": (
                     number(
                         m30.get(
                             "sales_qty"
                         )
-                    ),
-                    0,
+                    )
                 ),
 
-                "sales_qty_90d": round(
+                "sales_qty_90d": (
                     number(
                         m90.get(
                             "sales_qty"
                         )
-                    ),
-                    0,
-                ),
-
-                "daily_sales_qty_30d": round(
-                    daily_qty_30,
-                    2,
+                    )
                 ),
 
                 "sales_speed_trend_pct": (
-                    round(
-                        speed_trend,
-                        1,
-                    )
-                    if speed_trend is not None
-                    else None
+                    speed_trend
                 ),
 
+                # --------------------------------------------
+                # ELASTICITY
+                # --------------------------------------------
+
                 "elasticity": (
-                    round(
-                        number(
-                            elasticity_info.get(
-                                "elasticity"
-                            )
-                        ),
-                        3,
-                    )
-                    if elasticity_info.get(
+                    elasticity_info.get(
                         "elasticity"
-                    ) is not None
-                    else None
+                    )
                 ),
 
                 "elasticity_r2": (
-                    round(
-                        number(
-                            elasticity_info.get(
-                                "r2"
-                            )
-                        ),
-                        3,
-                    )
-                    if elasticity_info.get(
-                        "r2"
-                    ) is not None
-                    else None
-                ),
-
-                "elasticity_observations": int(
                     elasticity_info.get(
-                        "observations",
-                        0,
+                        "r2"
                     )
-                ),
-
-                "price_cv_pct": round(
-                    number(
-                        elasticity_info.get(
-                            "price_cv_pct"
-                        )
-                    ),
-                    2,
                 ),
 
                 "elasticity_confidence": (
@@ -1680,37 +2084,52 @@ def analyze_pricing(
             }
         )
 
+        # ====================================================
+        # SCENARIO ROWS
+        # ====================================================
+
         for scenario in scenarios:
+
             scenario_rows.append(
                 {
-                    "nm_id": (
-                        int(nm_id)
-                        if pd.notna(nm_id)
-                        else nm_id
-                    ),
+                    "nm_id": nm_id,
+
                     "brand": product.get(
-                        "brand",
-                        "",
+                        "brand"
                     ),
-                    "title": product.get(
-                        "title",
-                        "",
+
+                    "category": product.get(
+                        "category"
                     ),
+
                     **scenario,
                 }
             )
 
-    recommendations_df = pd.DataFrame(
+    # ========================================================
+    # DATAFRAMES
+    # ========================================================
+
+    rec = pd.DataFrame(
         recommendations
     )
 
-    if not recommendations_df.empty:
-        recommendations_df = (
-            recommendations_df
+    scenarios_df = pd.DataFrame(
+        scenario_rows
+    )
+
+    # ========================================================
+    # БРЕНД + КАТЕГОРИЯ
+    # ========================================================
+
+    if not rec.empty:
+
+        rec = (
+            rec
             .sort_values(
-                by=[
+                [
                     "priority",
-                    "stock_on_hand",
+                    "total_stock",
                 ],
                 ascending=[
                     False,
@@ -1722,85 +2141,247 @@ def analyze_pricing(
             )
         )
 
-    scenarios_df = pd.DataFrame(
-        scenario_rows
-    )
+        portfolio = (
+            rec
+            .groupby(
+                [
+                    "brand",
+                    "category",
+                ],
+                dropna=False,
+            )
+            .agg(
+                products=(
+                    "nm_id",
+                    "nunique",
+                ),
 
-    if recommendations_df.empty:
-        summary = {}
+                action_products=(
+                    "status",
+                    lambda s: (
+                        s != "HOLD"
+                    ).sum(),
+                ),
+
+                # ============================================
+                # ВАЖНО:
+                # portfolio использует TOTAL STOCK
+                # ============================================
+
+                stock_units=(
+                    "total_stock",
+                    "sum",
+                ),
+
+                wb_stock=(
+                    "wb_stock",
+                    "sum",
+                ),
+
+                fbs_stock=(
+                    "fbs_stock",
+                    "sum",
+                ),
+
+                in_transit=(
+                    "in_transit",
+                    "sum",
+                ),
+
+                sales_30d=(
+                    "sales_qty_30d",
+                    "sum",
+                ),
+
+                current_margin_30d=(
+                    "margin_man_30d",
+                    "sum",
+                ),
+
+                margin_upside_day=(
+                    "margin_upside_day",
+                    "sum",
+                ),
+            )
+            .reset_index()
+        )
+
+        portfolio[
+            "stock_days"
+        ] = (
+            portfolio[
+                "stock_units"
+            ]
+            /
+            (
+                portfolio[
+                    "sales_30d"
+                ]
+                / 30.0
+            )
+            .replace(
+                0,
+                np.nan,
+            )
+        )
+
+        portfolio = (
+            portfolio
+            .sort_values(
+                [
+                    "margin_upside_day",
+                    "stock_units",
+                ],
+                ascending=[
+                    False,
+                    False,
+                ],
+            )
+            .reset_index(
+                drop=True
+            )
+        )
 
     else:
-        summary = {
-            "products": int(
-                len(
-                    recommendations_df
-                )
-            ),
 
-            "action_products": int(
-                recommendations_df[
-                    "status"
-                ].isin(
-                    [
-                        "CLEARANCE",
-                        "REDUCE",
-                        "RAISE",
-                        "TEST",
-                    ]
-                ).sum()
-            ),
+        portfolio = (
+            pd.DataFrame()
+        )
 
-            "clearance_products": int(
+    # ========================================================
+    # SUMMARY
+    # ========================================================
+
+    summary = {
+        "products": (
+            int(
+                rec[
+                    "nm_id"
+                ].nunique()
+            )
+            if not rec.empty
+            else 0
+        ),
+
+        "action_products": (
+            int(
                 (
-                    recommendations_df[
+                    rec[
+                        "status"
+                    ]
+                    != "HOLD"
+                ).sum()
+            )
+            if not rec.empty
+            else 0
+        ),
+
+        "clearance_products": (
+            int(
+                (
+                    rec[
                         "status"
                     ]
                     == "CLEARANCE"
                 ).sum()
-            ),
+            )
+            if not rec.empty
+            else 0
+        ),
 
-            "high_stock_products": int(
+        "raise_products": (
+            int(
                 (
-                    pd.to_numeric(
-                        recommendations_df[
-                            "days_of_stock"
-                        ],
-                        errors="coerce",
-                    )
-                    >= HIGH_STOCK_DAYS
+                    rec[
+                        "status"
+                    ]
+                    == "RAISE"
                 ).sum()
-            ),
+            )
+            if not rec.empty
+            else 0
+        ),
 
-            "stock_units": float(
-                pd.to_numeric(
-                    recommendations_df[
-                        "stock_on_hand"
-                    ],
-                    errors="coerce",
-                )
-                .fillna(0)
-                .sum()
-            ),
+        # ====================================================
+        # ВАЖНО:
+        # общий остаток тоже TOTAL STOCK
+        # ====================================================
 
-            "margin_upside_day": float(
-                pd.to_numeric(
-                    recommendations_df[
-                        "margin_upside_day"
-                    ],
-                    errors="coerce",
-                )
-                .fillna(0)
+        "stock_units": (
+            float(
+                rec[
+                    "total_stock"
+                ].sum()
+            )
+            if not rec.empty
+            else 0.0
+        ),
+
+        "wb_stock_units": (
+            float(
+                rec[
+                    "wb_stock"
+                ].sum()
+            )
+            if not rec.empty
+            else 0.0
+        ),
+
+        "fbs_stock_units": (
+            float(
+                rec[
+                    "fbs_stock"
+                ].sum()
+            )
+            if not rec.empty
+            else 0.0
+        ),
+
+        "in_transit_units": (
+            float(
+                rec[
+                    "in_transit"
+                ].sum()
+            )
+            if not rec.empty
+            else 0.0
+        ),
+
+        "margin_upside_day": (
+            float(
+                rec[
+                    "margin_upside_day"
+                ]
                 .clip(
                     lower=0
                 )
                 .sum()
-            ),
-        }
+            )
+            if not rec.empty
+            else 0.0
+        ),
+    }
 
     return {
         **source,
-        "recommendations": recommendations_df,
-        "scenarios": scenarios_df,
-        "history": daily,
-        "summary": summary,
+
+        "recommendations": (
+            rec
+        ),
+
+        "portfolio": (
+            portfolio
+        ),
+
+        "scenarios": (
+            scenarios_df
+        ),
+
+        "history": (
+            daily
+        ),
+
+        "summary": (
+            summary
+        ),
     }
