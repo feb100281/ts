@@ -3052,3 +3052,122 @@ def get_stock_dimension_distributions(
         categories,
     )
 
+
+
+
+def get_warehouse_incident_stock_items(warehouse_name, report_date):
+    """
+    Постатейная детализация ФИЗИЧЕСКОГО остатка одного склада на дату —
+    для оценки товарного ущерба при происшествии (пожаре).
+
+    Использует тот же источник, что и общая выгрузка по складам
+    (get_stocks_by_warehouse_products), но:
+
+    - фильтрует строго по одному складу;
+    - берёт только физический остаток ("Остаток на складе"),
+      БЕЗ товаров в пути;
+    - переводит себестоимость из копеек в рубли (в этой выгрузке
+      она остаётся в копейках, см. docstring get_stocks_export_data).
+
+    ВАЖНО про себестоимость: 0 и "данных нет" здесь считаются
+    ОДНИМ И ТЕМ ЖЕ ("нет с/с") — в реальных данных управленческая
+    (а иногда и бухгалтерская) себестоимость для многих товаров
+    просто не ведётся и хранится как 0, отличить это от истинного
+    NaN не имеет смысла для целей отчёта. incident_loss_export.py
+    помечает такие позиции в колонке "Без с/с" по значению 0.
+
+    Возвращает список словарей — пригоден для передачи как
+    event["items"] в incident_loss_export.build_incident_loss_excel:
+
+        {
+            "nm_id": ...,
+            "name": ...,
+            "brand": ...,
+            "size": ...,
+            "qty": ...,                     # физический остаток, шт
+            "accounting_unit_cost": ...,    # ₽ за единицу (0, если нет данных)
+            "management_unit_cost": ...,    # ₽ за единицу (0, если нет данных)
+        }
+    """
+
+    import pandas as pd
+
+    def _safe_str(value, default=""):
+        if value is None:
+            return default
+        try:
+            if pd.isna(value):
+                return default
+        except (TypeError, ValueError):
+            pass
+        return str(value)
+
+    def _safe_float(value, default=0.0):
+        if value is None:
+            return default
+        try:
+            if pd.isna(value):
+                return default
+        except (TypeError, ValueError):
+            pass
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _safe_scalar(value):
+        if value is None:
+            return None
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        return value
+
+    df = get_stocks_by_warehouse_products(report_date)
+
+    if df is None or df.empty:
+        return []
+
+    target = str(warehouse_name or "").strip()
+
+    # pd.to_numeric(...).fillna(0) — чтобы сравнение "> 0" не споткнулось
+    # о NA внутри булевой маски (прямое df[col] > 0 на nullable Int64
+    # с пропусками кидает "Cannot mask with non-boolean array
+    # containing NA / NaN values").
+    on_hand_numeric = pd.to_numeric(
+        df["Остаток на складе"],
+        errors="coerce",
+    ).fillna(0)
+
+    mask = (
+        df["Склад"].astype(str).str.strip() == target
+    ) & (
+        on_hand_numeric > 0
+    )
+
+    df = df.loc[mask].copy()
+
+    if df.empty:
+        return []
+
+    items = []
+
+    for _, row in df.iterrows():
+        acc_kopecks = _safe_float(row.get("Бух. с/с за ед."))
+        mgmt_kopecks = _safe_float(row.get("Упр. с/с за ед."))
+
+        items.append(
+            {
+                "nm_id": _safe_scalar(row.get("NM ID")),
+                "name": _safe_str(row.get("Наименование")),
+                "brand": _safe_str(row.get("Бренд")),
+                "size": _safe_str(row.get("Размер")),
+                "qty": _safe_float(row.get("Остаток на складе")),
+                "accounting_unit_cost": acc_kopecks / 100.0,
+                "management_unit_cost": mgmt_kopecks / 100.0,
+            }
+        )
+
+    return items

@@ -6,11 +6,21 @@
 
 # import pandas as pd
 # import dash_mantine_components as dmc
+# from dash_iconify import DashIconify
 
 # from dash import html
 
 # from ..dashboard_data import (
 #     get_warehouse_incident_snapshot,
+# )
+
+# from ..data import get_warehouse_incident_stock_items
+
+# from .ids import (
+#     STOCK_INCIDENT_EXCEL_BTN_ID,
+#     STOCK_INCIDENT_EXCEL_DOWNLOAD_ID,
+#     STOCK_INCIDENT_PDF_BTN_ID,
+#     STOCK_INCIDENT_PDF_DOWNLOAD_ID,
 # )
 
 # from .warehouse_incidents import (
@@ -38,6 +48,10 @@
 
 # EMPTY_BG = "#F7F9F8"
 # EMPTY_BORDER = "#DCE4E0"
+
+# SUMMARY_BG = "#F7F9F8"
+# SUMMARY_ACCENT = "#315E52"
+# SUMMARY_VALUE = "#18352F"
 
 
 # # =============================================================================
@@ -132,6 +146,7 @@
 #     Унифицированный KPI.
 
 #     subvalue используется, например, для:
+
 #         15 шт
 #         4 NM ID
 #     """
@@ -169,6 +184,312 @@
 
 
 # # =============================================================================
+# # SUMMARY ПО ВСЕМ ПРОИСШЕСТВИЯМ
+# # =============================================================================
+
+
+# def _build_incidents_summary(
+#     prepared_events: list[dict],
+# ):
+#     """
+#     Общая оценка товарного остатка,
+#     потенциально затронутого происшествиями.
+
+#     Для каждого события используется исторический снимок
+#     на конец календарного дня, предшествующего происшествию.
+
+#     В расчёт входит только физический остаток.
+
+#     Товары в пути не учитываются.
+#     """
+
+#     total_events = len(
+#         prepared_events
+#     )
+
+#     total_on_hand = 0.0
+
+#     total_accounting_cost = 0.0
+#     total_management_cost = 0.0
+
+#     warehouses_with_stock = set()
+
+#     no_accounting_cost_qty = 0
+#     no_management_cost_qty = 0
+
+#     no_snapshot_count = 0
+
+#     # =========================================================================
+#     # Собираем итог
+#     # =========================================================================
+
+#     for item in prepared_events:
+
+#         snapshot = (
+#             item.get("snapshot")
+#             or {}
+#         )
+
+#         effective_date = snapshot.get(
+#             "effective_date"
+#         )
+
+#         if not effective_date:
+#             no_snapshot_count += 1
+#             continue
+
+#         on_hand = float(
+#             snapshot.get(
+#                 "on_hand",
+#                 0,
+#             )
+#             or 0
+#         )
+
+#         accounting_cost = float(
+#             snapshot.get(
+#                 "accounting_cost",
+#                 0,
+#             )
+#             or 0
+#         )
+
+#         management_cost = float(
+#             snapshot.get(
+#                 "management_cost",
+#                 0,
+#             )
+#             or 0
+#         )
+
+#         total_on_hand += on_hand
+
+#         total_accounting_cost += (
+#             accounting_cost
+#         )
+
+#         total_management_cost += (
+#             management_cost
+#         )
+
+#         no_accounting_cost_qty += int(
+#             snapshot.get(
+#                 "no_accounting_cost_qty",
+#                 0,
+#             )
+#             or 0
+#         )
+
+#         no_management_cost_qty += int(
+#             snapshot.get(
+#                 "no_management_cost_qty",
+#                 0,
+#             )
+#             or 0
+#         )
+
+#         if on_hand > 0:
+#             warehouses_with_stock.add(
+#                 item.get(
+#                     "warehouse_name",
+#                     "",
+#                 )
+#             )
+
+#     warehouse_count = len(
+#         warehouses_with_stock
+#     )
+
+#     # =========================================================================
+#     # Дополнительное примечание
+#     # =========================================================================
+
+#     footnote_parts = [
+#         (
+#             "Итог рассчитан по физическому товарному остатку "
+#             "на конец дня, предшествующего каждому происшествию. "
+#             "Товары в пути не включены."
+#         )
+#     ]
+
+#     if (
+#         no_accounting_cost_qty > 0
+#         or no_management_cost_qty > 0
+#     ):
+#         footnote_parts.append(
+#             (
+#                 " Позиции без определённой себестоимости "
+#                 "не включены в соответствующую стоимостную оценку."
+#             )
+#         )
+
+#     if no_snapshot_count > 0:
+#         footnote_parts.append(
+#             (
+#                 f" Для {fmt(no_snapshot_count)} "
+#                 f"{_event_word(no_snapshot_count)} "
+#                 "исторический снимок остатков не найден."
+#             )
+#         )
+
+#     # =========================================================================
+#     # Карточка summary
+#     # =========================================================================
+
+#     return dmc.Paper(
+#         radius=0,
+#         p="md",
+#         mb="md",
+
+#         style={
+#             "background": SUMMARY_BG,
+#             "border": f"1px solid {BORDER}",
+#             "borderLeft": (
+#                 f"4px solid {SUMMARY_ACCENT}"
+#             ),
+#         },
+
+#         children=[
+
+#             # =================================================================
+#             # HEADER
+#             # =================================================================
+
+#             dmc.Group(
+#                 justify="space-between",
+#                 align="center",
+#                 gap="md",
+#                 mb="md",
+
+#                 children=[
+
+#                     html.Div(
+#                         style={
+#                             "minWidth": 0,
+#                         },
+
+#                         children=[
+
+#                             dmc.Text(
+#                                 "Общая оценка товарных потерь",
+#                                 fw=700,
+#                                 size="sm",
+#                                 c=TEXT,
+#                             ),
+
+#                             dmc.Text(
+#                                 (
+#                                     "Сводная оценка физического остатка "
+#                                     "по зарегистрированным происшествиям"
+#                                 ),
+#                                 size="xs",
+#                                 c="dimmed",
+#                                 mt=2,
+#                             ),
+#                         ],
+#                     ),
+
+#                     dmc.Badge(
+#                         (
+#                             f"{total_events} "
+#                             f"{_event_word(total_events)}"
+#                         ),
+#                         color="gray",
+#                         variant="light",
+#                         radius=0,
+#                     ),
+#                 ],
+#             ),
+
+#             # =================================================================
+#             # KPI
+#             # =================================================================
+
+#             dmc.SimpleGrid(
+#                 cols={
+#                     "base": 2,
+#                     "sm": 2,
+#                     "lg": 4,
+#                 },
+
+#                 spacing="lg",
+
+#                 children=[
+
+#                     # ---------------------------------------------------------
+#                     # Склады
+#                     # ---------------------------------------------------------
+
+#                     _metric(
+#                         "Складов с остатком",
+#                         fmt(
+#                             warehouse_count
+#                         ),
+#                     ),
+
+#                     # ---------------------------------------------------------
+#                     # Физический остаток
+#                     # ---------------------------------------------------------
+
+#                     _metric(
+#                         "Физический остаток",
+#                         (
+#                             f"{fmt(
+#                                 total_on_hand
+#                             )} шт"
+#                         ),
+#                     ),
+
+#                     # ---------------------------------------------------------
+#                     # Бухгалтерская себестоимость
+#                     # ---------------------------------------------------------
+
+#                     _metric(
+#                         "Бухгалтерская с/с",
+#                         (
+#                             f"{fmt_money(
+#                                 total_accounting_cost
+#                             )} ₽"
+#                         ),
+#                         value_color=SUMMARY_VALUE,
+#                     ),
+
+#                     # ---------------------------------------------------------
+#                     # Управленческая себестоимость
+#                     # ---------------------------------------------------------
+
+#                     _metric(
+#                         "Управленческая с/с",
+#                         (
+#                             f"{fmt_money(
+#                                 total_management_cost
+#                             )} ₽"
+#                         ),
+#                         value_color=SUMMARY_VALUE,
+#                     ),
+#                 ],
+#             ),
+
+#             # =================================================================
+#             # FOOTNOTE
+#             # =================================================================
+
+#             dmc.Text(
+#                 "".join(
+#                     footnote_parts
+#                 ),
+#                 size="xs",
+#                 c="dimmed",
+#                 mt="md",
+#                 style={
+#                     "lineHeight": 1.45,
+#                 },
+#             ),
+#         ],
+#     )
+
+
+# # =============================================================================
 # # КАРТОЧКА ПРОИСШЕСТВИЯ
 # # =============================================================================
 
@@ -176,6 +497,7 @@
 # def _incident_card(
 #     warehouse_name: str,
 #     incident: dict,
+#     snapshot: dict | None = None,
 # ):
 #     """
 #     Карточка одного происшествия.
@@ -193,6 +515,9 @@
 #     В оценку включается только физический остаток quantity.
 
 #     Товары в пути не учитываются.
+
+#     snapshot можно передать извне, чтобы повторно
+#     не обращаться к базе данных.
 #     """
 
 #     # =========================================================================
@@ -218,19 +543,26 @@
 
 #     # =========================================================================
 #     # Исторический снимок
+#     #
+#     # Если snapshot уже был получен при построении основной панели,
+#     # повторный запрос к БД не выполняем.
 #     # =========================================================================
 
-#     snapshot = (
-#         get_warehouse_incident_snapshot(
-#             warehouse_name=warehouse_name,
+#     if snapshot is None:
 
-#             incident_date=(
-#                 requested_snapshot_date.strftime(
-#                     "%Y-%m-%d"
-#                 )
-#             ),
+#         snapshot = (
+#             get_warehouse_incident_snapshot(
+#                 warehouse_name=warehouse_name,
+
+#                 incident_date=(
+#                     requested_snapshot_date.strftime(
+#                         "%Y-%m-%d"
+#                     )
+#                 ),
+#             )
 #         )
-#     )
+
+#     snapshot = snapshot or {}
 
 #     # =========================================================================
 #     # Фактическая дата снимка
@@ -327,7 +659,9 @@
 
 #             style={
 #                 "background": "#FFF8F8",
-#                 "border": f"1px solid {INCIDENT_BORDER}",
+#                 "border": (
+#                     f"1px solid {INCIDENT_BORDER}"
+#                 ),
 #             },
 
 #             children=[
@@ -437,11 +771,13 @@
 #                             no_accounting_cost_qty
 #                         )} шт"
 #                     ),
+
 #                     value_color=(
 #                         INCIDENT_ACCENT
 #                         if no_accounting_cost_qty > 0
 #                         else TEXT
 #                     ),
+
 #                     subvalue=(
 #                         (
 #                             f"{fmt(
@@ -480,11 +816,13 @@
 #                             no_management_cost_qty
 #                         )} шт"
 #                     ),
+
 #                     value_color=(
 #                         INCIDENT_ACCENT
 #                         if no_management_cost_qty > 0
 #                         else TEXT
 #                     ),
+
 #                     subvalue=(
 #                         (
 #                             f"{fmt(
@@ -712,7 +1050,9 @@
 #     Особенности:
 
 #     - события сортируются от новых к старым;
-#     - заголовок блока остаётся неподвижным;
+#     - snapshot каждого события загружается только один раз;
+#     - сверху показывается общая оценка потерь;
+#     - заголовок и общий итог остаются неподвижными;
 #     - прокручиваются только карточки событий;
 #     - при небольшом числе событий scroll не показывается;
 #     - при большом числе событий dashboard не растягивается вниз.
@@ -720,6 +1060,12 @@
 
 #     # =========================================================================
 #     # Собираем все события
+#     #
+#     # Здесь же сразу получаем snapshot, чтобы:
+#     #
+#     # 1. использовать его в общей summary;
+#     # 2. передать его в карточку;
+#     # 3. не выполнять второй одинаковый запрос к БД.
 #     # =========================================================================
 
 #     events = []
@@ -730,17 +1076,48 @@
 
 #         for incident in incidents:
 
+#             incident_date = pd.to_datetime(
+#                 incident.get(
+#                     "date",
+#                     "",
+#                 )
+#             )
+
+#             requested_snapshot_date = (
+#                 incident_date
+#                 - pd.Timedelta(days=1)
+#             )
+
+#             snapshot = (
+#                 get_warehouse_incident_snapshot(
+#                     warehouse_name=warehouse_name,
+
+#                     incident_date=(
+#                         requested_snapshot_date.strftime(
+#                             "%Y-%m-%d"
+#                         )
+#                     ),
+#                 )
+#             )
+
 #             events.append(
-#                 (
-#                     incident.get(
+#                 {
+#                     "date": incident.get(
 #                         "date",
 #                         "",
 #                     ),
 
-#                     warehouse_name,
+#                     "warehouse_name": (
+#                         warehouse_name
+#                     ),
 
-#                     incident,
-#                 )
+#                     "incident": incident,
+
+#                     "snapshot": (
+#                         snapshot
+#                         or {}
+#                     ),
+#                 }
 #             )
 
 #     # =========================================================================
@@ -755,7 +1132,12 @@
 #     # =========================================================================
 
 #     events.sort(
-#         key=lambda item: item[0],
+#         key=lambda item: (
+#             item.get(
+#                 "date",
+#                 "",
+#             )
+#         ),
 #         reverse=True,
 #     )
 
@@ -821,28 +1203,28 @@
 #                         ],
 #                     ),
 
-#                     dmc.Badge(
-#                         (
-#                             f"{len(events)} "
-#                             f"{_event_word(len(events))}"
-#                         ),
-
-#                         color="red",
-
-#                         variant="light",
-
-#                         radius=0,
-#                     ),
+                    
 #                 ],
 #             ),
 
 #             # =================================================================
+#             # ОБЩАЯ ОЦЕНКА
+#             # =================================================================
+
+#             _build_incidents_summary(
+#                 prepared_events=events,
+#             ),
+
+#             # =================================================================
 #             # SCROLL
+#             #
+#             # Summary находится выше scroll,
+#             # поэтому всегда остаётся на экране.
 #             # =================================================================
 
 #             html.Div(
 #                 style={
-#                     "maxHeight": "520px",
+#                     "maxHeight": "280px",
 
 #                     "overflowY": "auto",
 
@@ -863,16 +1245,26 @@
 #                         children=[
 
 #                             _incident_card(
-#                                 warehouse_name=warehouse_name,
-#                                 incident=incident,
+#                                 warehouse_name=(
+#                                     item[
+#                                         "warehouse_name"
+#                                     ]
+#                                 ),
+
+#                                 incident=(
+#                                     item[
+#                                         "incident"
+#                                     ]
+#                                 ),
+
+#                                 snapshot=(
+#                                     item[
+#                                         "snapshot"
+#                                     ]
+#                                 ),
 #                             )
 
-#                             for (
-#                                 _,
-#                                 warehouse_name,
-#                                 incident,
-#                             )
-#                             in events
+#                             for item in events
 #                         ],
 #                     ),
 #                 ],
@@ -937,6 +1329,7 @@
 
 
 
+
 # gear/app/daily_sales/stocks/dashboard_stock/incidents_panel.py
 
 """Панель происшествий на основной странице dashboard."""
@@ -945,11 +1338,21 @@ from __future__ import annotations
 
 import pandas as pd
 import dash_mantine_components as dmc
+from dash_iconify import DashIconify
 
-from dash import html
+from dash import dcc, html
 
 from ..dashboard_data import (
     get_warehouse_incident_snapshot,
+)
+
+from ..data import get_warehouse_incident_stock_items
+
+from .ids import (
+    STOCK_INCIDENT_EXCEL_BTN_ID,
+    STOCK_INCIDENT_EXCEL_DOWNLOAD_ID,
+    STOCK_INCIDENT_PDF_BTN_ID,
+    STOCK_INCIDENT_PDF_DOWNLOAD_ID,
 )
 
 from .warehouse_incidents import (
@@ -1110,6 +1513,64 @@ def _metric(
     return html.Div(
         children=children,
     )
+
+
+# =============================================================================
+# СБОР СОБЫТИЙ
+#
+# Переиспользуется:
+#   1. панелью происшествий на dashboard (build_incidents_panel);
+#   2. экспортом в Excel/PDF (callbacks.py).
+#
+# Snapshot и постатейная детализация (items) запрашиваются один раз
+# на событие, чтобы не дублировать обращения к БД.
+# =============================================================================
+
+
+def get_incident_events() -> list[dict]:
+    events = []
+
+    for warehouse_name, incidents in WAREHOUSE_INCIDENTS.items():
+        for incident in incidents:
+            incident_date = pd.to_datetime(
+                incident.get("date", "")
+            )
+
+            requested_snapshot_date = (
+                incident_date
+                - pd.Timedelta(days=1)
+            )
+
+            snapshot_date_str = (
+                requested_snapshot_date.strftime("%Y-%m-%d")
+            )
+
+            snapshot = get_warehouse_incident_snapshot(
+                warehouse_name=warehouse_name,
+                incident_date=snapshot_date_str,
+            )
+
+            items = get_warehouse_incident_stock_items(
+                warehouse_name=warehouse_name,
+                report_date=snapshot_date_str,
+            )
+
+            events.append(
+                {
+                    "date": incident.get("date", ""),
+                    "warehouse_name": warehouse_name,
+                    "incident": incident,
+                    "snapshot": snapshot or {},
+                    "items": items,
+                }
+            )
+
+    events.sort(
+        key=lambda item: item.get("date", ""),
+        reverse=True,
+    )
+
+    return events
 
 
 # =============================================================================
@@ -1979,75 +2440,22 @@ def build_incidents_panel():
     Особенности:
 
     - события сортируются от новых к старым;
-    - snapshot каждого события загружается только один раз;
+    - snapshot и постатейная детализация каждого события
+      загружаются только один раз (через get_incident_events);
     - сверху показывается общая оценка потерь;
     - заголовок и общий итог остаются неподвижными;
     - прокручиваются только карточки событий;
     - при небольшом числе событий scroll не показывается;
-    - при большом числе событий dashboard не растягивается вниз.
+    - при большом числе событий dashboard не растягивается вниз;
+    - в шапке — кнопки скачивания остатков (Excel) и
+      сопроводительного письма (PDF) для оценки ущерба.
     """
 
     # =========================================================================
     # Собираем все события
-    #
-    # Здесь же сразу получаем snapshot, чтобы:
-    #
-    # 1. использовать его в общей summary;
-    # 2. передать его в карточку;
-    # 3. не выполнять второй одинаковый запрос к БД.
     # =========================================================================
 
-    events = []
-
-    for warehouse_name, incidents in (
-        WAREHOUSE_INCIDENTS.items()
-    ):
-
-        for incident in incidents:
-
-            incident_date = pd.to_datetime(
-                incident.get(
-                    "date",
-                    "",
-                )
-            )
-
-            requested_snapshot_date = (
-                incident_date
-                - pd.Timedelta(days=1)
-            )
-
-            snapshot = (
-                get_warehouse_incident_snapshot(
-                    warehouse_name=warehouse_name,
-
-                    incident_date=(
-                        requested_snapshot_date.strftime(
-                            "%Y-%m-%d"
-                        )
-                    ),
-                )
-            )
-
-            events.append(
-                {
-                    "date": incident.get(
-                        "date",
-                        "",
-                    ),
-
-                    "warehouse_name": (
-                        warehouse_name
-                    ),
-
-                    "incident": incident,
-
-                    "snapshot": (
-                        snapshot
-                        or {}
-                    ),
-                }
-            )
+    events = get_incident_events()
 
     # =========================================================================
     # Нет происшествий
@@ -2055,20 +2463,6 @@ def build_incidents_panel():
 
     if not events:
         return None
-
-    # =========================================================================
-    # Новые события сверху
-    # =========================================================================
-
-    events.sort(
-        key=lambda item: (
-            item.get(
-                "date",
-                "",
-            )
-        ),
-        reverse=True,
-    )
 
     # =========================================================================
     # Панель
@@ -2132,7 +2526,52 @@ def build_incidents_panel():
                         ],
                     ),
 
-                    
+                    dmc.Group(
+                        gap="xs",
+
+                        children=[
+
+                            dcc.Download(
+                                id=STOCK_INCIDENT_EXCEL_DOWNLOAD_ID
+                            ),
+
+                            dcc.Download(
+                                id=STOCK_INCIDENT_PDF_DOWNLOAD_ID
+                            ),
+
+                            dmc.Button(
+                                "Остатки для оценки ущерба (Excel)",
+                                id=STOCK_INCIDENT_EXCEL_BTN_ID,
+                                leftSection=DashIconify(
+                                    icon=(
+                                        "material-symbols:"
+                                        "download-rounded"
+                                    ),
+                                    width=16,
+                                ),
+                                variant="outline",
+                                color="red",
+                                radius=0,
+                                size="xs",
+                            ),
+
+                            dmc.Button(
+                                "Сопроводительное письмо (PDF)",
+                                id=STOCK_INCIDENT_PDF_BTN_ID,
+                                leftSection=DashIconify(
+                                    icon=(
+                                        "material-symbols:"
+                                        "picture-as-pdf-outline"
+                                    ),
+                                    width=16,
+                                ),
+                                variant="outline",
+                                color="red",
+                                radius=0,
+                                size="xs",
+                            ),
+                        ],
+                    ),
                 ],
             ),
 
