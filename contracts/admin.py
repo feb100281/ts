@@ -168,14 +168,16 @@ class ConditionsInlineForm(forms.ModelForm):
         # =============================================================
 
         hidden_fields = (
-            "accounting_method",
-            "params",
-            "params_editor",
-            "accrual_fn",
-            "pay_rule",
-            "pay_day",
-            "penalty_rate_day",
-        )
+                "accounting_method",
+                "params",
+                "params_editor",
+                "accrual_fn",
+                "pay_rule",
+                "pay_timing",
+                "pay_day",
+                "pay_offset_months",
+                "penalty_rate_day",
+            )
 
         for field_name in hidden_fields:
             if field_name in self.fields:
@@ -466,58 +468,47 @@ class ConditionsInline(admin.StackedInline):
     )
 
     fieldsets = (
-        (
-            "Начисление",
-            {
-                "fields": (
-                    # Скрытые служебные поля
-                    "accounting_method",
-                    "accrual_fn",
-                    "params_editor",
-                    "params",
+    (
+        "Начисление",
+        {
+            "fields": (
+                # Все скрытые служебные поля
+                "accounting_method",
+                "accrual_fn",
+                "params_editor",
+                "params",
+                "pay_rule",
+                "pay_timing",
+                "pay_day",
+                "pay_offset_months",
+                "penalty_rate_day",
 
-                    # Видимые поля
-                    "date_start",
-                    "date_finish",
-                    "vat_mode",
-                ),
-            },
-        ),
+                # Видимые поля
+                "date_start",
+                "date_finish",
+                "vat_mode",
+            ),
+        },
+    ),
 
-        (
-            "Оплата",
-            {
-                "fields": (
-                    # Скрытые служебные поля
-                    "pay_rule",
-                    "pay_day",
-                    "penalty_rate_day",
+    (
+        "Новые поля. параметры",
+        {
+            "classes": (
+                "collapse",
+            ),
 
-                    # Видимые поля
-                    "pay_timing",
-                    "pay_offset_months",
-                ),
-            },
-        ),
-
-        (
-            "Новые поля. параметры",
-            {
-                "classes": (
-                    "collapse",
-                ),
-
-                "fields": (
-                    "fn",
-                    "param_json",
-                    "vat_json",
-                    "acc_bs",
-                    "subconto_bs",
-                    "acc_pl",
-                ),
-            },
-        ),
-    )
+            "fields": (
+                "fn",
+                "param_json",
+                "vat_json",
+                "acc_bs",
+                "subconto_bs",
+                "acc_pl",
+            ),
+        },
+    ),
+)
 
     verbose_name = mark_safe(
         "<b>✅ Условие</b>"
