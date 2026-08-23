@@ -158,13 +158,111 @@ class ConditionsInlineForm(forms.ModelForm):
     class Meta:
         model = Conditions
         fields = "__all__"
-
+        
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # params храним скрыто, редактируем через params_editor
-        self.fields["params"].widget = forms.HiddenInput()
+        # =============================================================
+        # СКРЫТЫЕ СЛУЖЕБНЫЕ ПОЛЯ
+        # Поля остаются в форме и базе, но пользователь их не видит.
+        # =============================================================
+
+        hidden_fields = (
+            "accounting_method",
+            "params",
+            "params_editor",
+            "accrual_fn",
+            "pay_rule",
+            "pay_day",
+            "penalty_rate_day",
+        )
+
+        for field_name in hidden_fields:
+            if field_name in self.fields:
+                self.fields[field_name].widget = (
+                    forms.HiddenInput()
+                )
+
         self.fields["params"].required = False
+        self.fields["params_editor"].required = False
+
+        inst = getattr(
+            self,
+            "instance",
+            None,
+        )
+
+        params = (
+            (inst.params or {})
+            if inst
+            else {}
+        )
+
+        if params:
+            self.initial["params_editor"] = json.dumps(
+                params,
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+        else:
+            self.initial["params_editor"] = ""
+
+        if self.is_bound:
+            pe_key = self.add_prefix(
+                "params_editor"
+            )
+
+            fn_key = self.add_prefix(
+                "accrual_fn"
+            )
+
+            current = (
+                self.data.get(pe_key)
+                or ""
+            ).strip()
+
+            if current == "":
+                fn = (
+                    self.data.get(fn_key)
+                    or getattr(
+                        self.instance,
+                        "accrual_fn",
+                        None,
+                    )
+                    or "fixed_payments"
+                )
+
+                # Сохраняем существующие параметры.
+                # Новый шаблон создаём только тогда,
+                # когда параметров ещё действительно нет.
+                existing_params = (
+                    self.instance.params
+                    if (
+                        self.instance
+                        and self.instance.pk
+                        and self.instance.params
+                    )
+                    else build_params_template(fn)
+                )
+
+                qd = self.data.copy()
+
+                qd[pe_key] = json.dumps(
+                    existing_params,
+                    ensure_ascii=False,
+                    indent=2,
+                    default=str,
+                )
+
+                self.data = qd
+
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+
+    #     # params храним скрыто, редактируем через params_editor
+    #     self.fields["params"].widget = forms.HiddenInput()
+    #     self.fields["params"].required = False
 
         inst = getattr(self, "instance", None)
         params = (inst.params or {}) if inst else {}
@@ -287,44 +385,132 @@ class ContractItemsInline(admin.StackedInline):
 #         return [f.name for f in self.model._meta.fields]
     
 
+# class ConditionsInline(admin.StackedInline):
+#     model = Conditions
+#     form = ConditionsInlineForm
+#     extra = 0
+#     show_change_link = True
+#     formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
+#     # autocomplete_fields = ("accounting_method", "tax")
+#     template = "admin/contracts/inlines/conditions_stacked_inline.html"
+
+#     fieldsets = (
+#         (
+#             "Начисление",
+#             {
+#                 "fields": (
+#                     "accounting_method",
+#                     "accrual_fn",
+#                     "date_start",
+#                     "date_finish",
+#                     "vat_mode",
+#                     "params_editor",
+#                 )
+#             },
+#         ),
+#         (
+#             "Оплата",
+#             {
+#                 "fields": (
+#                     ("pay_rule", "pay_timing"),
+#                     ("pay_day", "pay_offset_months"),
+#                 )
+#             },
+#         ),
+#         ("Неустойка", {"fields": ("penalty_rate_day",)}),
+#         ("Доп. параметры", {"classes": ("collapse",), "fields": ("params",)}),
+#         (
+#             "Новые поля. параметры",
+#             {
+#                 "classes": ("collapse",),
+#                 "fields": (
+#                     "fn",
+#                     "param_json",
+#                     "vat_json",
+#                     "acc_bs",
+#                     "subconto_bs",
+#                     "acc_pl",
+#                 ),
+#             },
+#         ),
+#     )
+#     verbose_name = mark_safe("<b>✅ Условие</b>")
+#     verbose_name_plural = mark_safe("✅<b>Условия</b>")
+
+#     class Meta:
+#         model = Conditions
+#         fields = "__all__"
+#         widgets = {
+#             "param_json": JSONEditor,
+#             "vat_json": JSONEditor,
+#         }
+
+
+
+
 class ConditionsInline(admin.StackedInline):
     model = Conditions
     form = ConditionsInlineForm
+
     extra = 0
     show_change_link = True
-    formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
-    # autocomplete_fields = ("accounting_method", "tax")
-    template = "admin/contracts/inlines/conditions_stacked_inline.html"
+
+    formfield_overrides = {
+        models.JSONField: {
+            "widget": JSONEditor,
+        }
+    }
+
+    template = (
+        "admin/contracts/inlines/"
+        "conditions_stacked_inline.html"
+    )
 
     fieldsets = (
         (
-            "Начисление",
-            {
-                "fields": (
-                    "accounting_method",
-                    "accrual_fn",
-                    "date_start",
-                    "date_finish",
-                    "vat_mode",
-                    "params_editor",
-                )
-            },
+           (
+        "Начисление",
+        {
+            "fields": (
+                # Скрытые служебные поля
+                "accounting_method",
+                "accrual_fn",
+                "params_editor",
+                "params",
+
+                # Видимые поля
+                "date_start",
+                "date_finish",
+                "vat_mode",
+            ),
+        },
+    ),
+
         ),
+
         (
             "Оплата",
             {
                 "fields": (
-                    ("pay_rule", "pay_timing"),
-                    ("pay_day", "pay_offset_months"),
-                )
+                    # Служебные скрытые поля.
+                    "pay_rule",
+                    "pay_day",
+                    "penalty_rate_day",
+
+                    # Видимые поля.
+                    "pay_timing",
+                    "pay_offset_months",
+                ),
             },
         ),
-        ("Неустойка", {"fields": ("penalty_rate_day",)}),
-        ("Доп. параметры", {"classes": ("collapse",), "fields": ("params",)}),
+
         (
             "Новые поля. параметры",
             {
-                "classes": ("collapse",),
+                "classes": (
+                    "collapse",
+                ),
+
                 "fields": (
                     "fn",
                     "param_json",
@@ -336,12 +522,19 @@ class ConditionsInline(admin.StackedInline):
             },
         ),
     )
-    verbose_name = mark_safe("<b>✅ Условие</b>")
-    verbose_name_plural = mark_safe("✅<b>Условия</b>")
+
+    verbose_name = mark_safe(
+        "<b>✅ Условие</b>"
+    )
+
+    verbose_name_plural = mark_safe(
+        "✅ <b>Условия</b>"
+    )
 
     class Meta:
         model = Conditions
         fields = "__all__"
+
         widgets = {
             "param_json": JSONEditor,
             "vat_json": JSONEditor,
