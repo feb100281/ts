@@ -518,6 +518,7 @@ def recommendation_structure_figure(
     )
 
     order = [
+        "LOSS",
         "CLEARANCE",
         "REDUCE",
         "TEST",
@@ -526,6 +527,9 @@ def recommendation_structure_figure(
     ]
 
     labels = {
+        "LOSS": (
+            "Убыток"
+        ),
         "CLEARANCE": (
             "Распродажа"
         ),
@@ -544,6 +548,9 @@ def recommendation_structure_figure(
     }
 
     colors = {
+        "LOSS": (
+            "#B91C1C"
+        ),
         "CLEARANCE": (
             "#DC2626"
         ),
@@ -980,6 +987,41 @@ def _chart_card(
 # ============================================================
 
 def pricing_charts_section(
+    portfolio: pd.DataFrame,
+    recommendations: pd.DataFrame,
+):
+    """
+    Секция графиков.
+
+    Сначала пробуем графики Mantine — они визуально совпадают
+    с остальным интерфейсом. Если версия dash-mantine-components
+    их не поддерживает, молча возвращаемся к Plotly: пользователь
+    в любом случае увидит графики, а не сообщение об ошибке.
+    """
+
+    try:
+        from .charts_dmc import dmc_charts_section
+
+        section = dmc_charts_section(
+            portfolio=portfolio,
+            recommendations=recommendations,
+        )
+
+        if section is not None:
+            return section
+
+    except Exception:
+        # Версия DMC без графиков или изменившийся API —
+        # это не повод ронять весь отчёт.
+        pass
+
+    return _plotly_charts_section(
+        portfolio=portfolio,
+        recommendations=recommendations,
+    )
+
+
+def _plotly_charts_section(
     portfolio: pd.DataFrame,
     recommendations: pd.DataFrame,
 ):

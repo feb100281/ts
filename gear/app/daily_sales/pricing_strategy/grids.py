@@ -4,6 +4,18 @@ from __future__ import annotations
 
 import dash_ag_grid as dag
 
+from .theme import (
+    DANGER,
+    DANGER_SOFT,
+    MUTED,
+    PRIMARY,
+    PRIMARY_SOFT,
+    SUBTLE,
+    SUCCESS,
+    WARNING,
+    WARNING_SOFT,
+)
+
 
 # ============================================================
 # FORMATTERS
@@ -82,7 +94,9 @@ STATUS_FORMATTER = {
         params.value == null
         ? ''
         : (
-            params.value === 'CLEARANCE'
+            params.value === 'LOSS'
+                ? 'Убыток'
+                : params.value === 'CLEARANCE'
                 ? 'Распродажа'
                 : params.value === 'REDUCE'
                     ? 'Снизить цену'
@@ -333,267 +347,323 @@ def _base_grid(
 # STYLES
 # ============================================================
 
+# ============================================================
+# ПОДСВЕТКА
+#
+# Правило одно: цветом отмечаем только то, что требует
+# решения. Раньше была окрашена почти каждая колонка, и
+# таблица рябила — глазу не за что зацепиться.
+#
+# Насыщенный цвет идёт в текст, очень светлый — в фон.
+# Белым по красному в плотной таблице читать тяжело.
+# ============================================================
+
+def _js(body):
+    return {"function": body}
+
+
 def _stock_days_style():
-    return {
-        "function": """
+    """Запас в днях: красим только избыточный."""
+
+    return _js(
+        f"""
         const value = Number(params.value);
 
-        if (!Number.isFinite(value)) return {};
+        if (!Number.isFinite(value)) return {{}};
 
-        if (value >= 365) {
-            return {
-                backgroundColor: '#FEE2E2',
-                color: '#991B1B',
+        if (value >= 365) {{
+            return {{
+                backgroundColor: '{DANGER_SOFT}',
+                color: '{DANGER}',
                 fontWeight: '700'
-            };
-        }
+            }};
+        }}
 
-        if (value >= 180) {
-            return {
-                backgroundColor: '#FFEDD5',
-                color: '#9A3412',
-                fontWeight: '700'
-            };
-        }
+        if (value >= 180) {{
+            return {{
+                backgroundColor: '{WARNING_SOFT}',
+                color: '{WARNING}',
+                fontWeight: '600'
+            }};
+        }}
 
-        if (value <= 30) {
-            return {
-                backgroundColor: '#DCFCE7',
-                color: '#166534',
-                fontWeight: '700'
-            };
-        }
-
-        return {};
+        return {{}};
         """
-    }
+    )
 
 
 def _status_style():
-    return {
-        "function": """
+    """Статус — единственная колонка с постоянной заливкой."""
+
+    return _js(
+        f"""
         const value = params.value;
 
-        if (value === 'CLEARANCE') {
-            return {
-                backgroundColor: '#FEE2E2',
-                color: '#991B1B',
-                fontWeight: '700'
-            };
-        }
+        const map = {{
+            'LOSS':      ['{DANGER_SOFT}', '{DANGER}'],
+            'CLEARANCE': ['{WARNING_SOFT}', '{WARNING}'],
+            'REDUCE':    ['{WARNING_SOFT}', '{WARNING}'],
+            'RAISE':     ['#ECFDF3', '{SUCCESS}'],
+            'TEST':      ['{SUBTLE}', '#0E7490'],
+            'HOLD':      ['{SUBTLE}', '{MUTED}']
+        }};
 
-        if (value === 'REDUCE') {
-            return {
-                backgroundColor: '#FFEDD5',
-                color: '#9A3412',
-                fontWeight: '700'
-            };
-        }
+        const pair = map[value];
 
-        if (value === 'RAISE') {
-            return {
-                backgroundColor: '#DCFCE7',
-                color: '#166534',
-                fontWeight: '700'
-            };
-        }
+        if (!pair) return {{}};
 
-        if (value === 'TEST') {
-            return {
-                backgroundColor: '#FEF9C3',
-                color: '#854D0E',
-                fontWeight: '700'
-            };
-        }
-
-        return {
-            backgroundColor: '#F1F5F9',
-            color: '#475569',
-            fontWeight: '600'
-        };
+        return {{
+            backgroundColor: pair[0],
+            color: pair[1],
+            fontWeight: '700'
+        }};
         """
-    }
+    )
 
 
 def _priority_style():
-    return {
-        "function": """
+    """Приоритет: без заливки, только насыщенность текста."""
+
+    return _js(
+        f"""
         const value = Number(params.value);
 
-        if (!Number.isFinite(value)) return {};
+        if (!Number.isFinite(value)) return {{}};
 
-        if (value >= 120) {
-            return {
-                backgroundColor: '#FEE2E2',
-                color: '#991B1B',
-                fontWeight: '700'
-            };
-        }
+        if (value >= 120) {{
+            return {{color: '{DANGER}', fontWeight: '700'}};
+        }}
 
-        if (value >= 90) {
-            return {
-                backgroundColor: '#FFEDD5',
-                color: '#9A3412',
-                fontWeight: '700'
-            };
-        }
+        if (value >= 90) {{
+            return {{color: '{WARNING}', fontWeight: '700'}};
+        }}
 
-        if (value >= 60) {
-            return {
-                backgroundColor: '#FEF9C3',
-                color: '#854D0E',
-                fontWeight: '700'
-            };
-        }
+        if (value >= 60) {{
+            return {{color: '#0E7490', fontWeight: '600'}};
+        }}
 
-        return {
-            backgroundColor: '#F1F5F9',
-            color: '#475569',
-            fontWeight: '600'
-        };
+        return {{color: '{MUTED}'}};
         """
-    }
+    )
 
 
 def _price_change_style():
-    return {
-        "function": """
+    """Направление изменения цены: цветом текста."""
+
+    return _js(
+        f"""
         const value = Number(params.value);
 
-        if (!Number.isFinite(value)) return {};
+        if (!Number.isFinite(value)) return {{}};
 
-        // СНИЗИТЬ ЦЕНУ
-        if (value < 0) {
-            return {
-                backgroundColor: '#FEE2E2',
-                color: '#B91C1C',
-                fontWeight: '800'
-            };
-        }
+        if (value < 0) {{
+            return {{color: '{WARNING}', fontWeight: '700'}};
+        }}
 
-        // ПОВЫСИТЬ ЦЕНУ
-        if (value > 0) {
-            return {
-                backgroundColor: '#DCFCE7',
-                color: '#15803D',
-                fontWeight: '800'
-            };
-        }
+        if (value > 0) {{
+            return {{color: '{SUCCESS}', fontWeight: '700'}};
+        }}
 
-        // НЕ МЕНЯТЬ
-        return {
-            backgroundColor: '#F1F5F9',
-            color: '#475569',
-            fontWeight: '700'
-        };
+        return {{color: '{MUTED}'}};
         """
-    }
+    )
+
 
 def _wb_discount_style():
-    return {
-        "function": """
-        const value = Number(params.value);
+    """Скидка WB — справочная величина, красить нечего."""
 
-        if (!Number.isFinite(value)) return {};
-
-        if (value >= 40) {
-            return {
-                backgroundColor: '#DCFCE7',
-                color: '#166534',
-                fontWeight: '700'
-            };
-        }
-
-        if (value >= 20) {
-            return {
-                backgroundColor: '#ECFDF5',
-                color: '#047857',
-                fontWeight: '700'
-            };
-        }
-
-        return {};
-        """
-    }
+    return None
 
 
 def _margin_value_style():
-    return {
-        "function": """
+    return _js(
+        f"""
         const value = Number(params.value);
 
-        if (!Number.isFinite(value)) return {};
+        if (!Number.isFinite(value)) return {{}};
 
-        if (value < 0) {
-            return {
-                backgroundColor: '#FEE2E2',
-                color: '#B91C1C',
+        if (value < 0) {{
+            return {{
+                backgroundColor: '{DANGER_SOFT}',
+                color: '{DANGER}',
                 fontWeight: '700'
-            };
-        }
+            }};
+        }}
 
-        return {
-            backgroundColor: '#F0FDF4',
-            fontWeight: '700'
-        };
+        return {{}};
         """
-    }
+    )
 
 
 def _margin_pct_style():
-    return {
-        "function": """
+    return _js(
+        f"""
         const value = Number(params.value);
 
-        if (!Number.isFinite(value)) return {};
+        if (!Number.isFinite(value)) return {{}};
 
-        if (value < 0) {
-            return {
-                backgroundColor: '#FEE2E2',
-                color: '#B91C1C',
-                fontWeight: '700'
-            };
-        }
+        if (value < 0) {{
+            return {{color: '{DANGER}', fontWeight: '700'}};
+        }}
 
-        if (value < 10) {
-            return {
-                backgroundColor: '#FFF7ED',
-                color: '#9A3412',
-                fontWeight: '700'
-            };
-        }
+        if (value < 10) {{
+            return {{color: '{WARNING}', fontWeight: '600'}};
+        }}
 
-        return {};
+        return {{}};
         """
-    }
+    )
 
 
 def _trend_style():
-    return {
-        "function": """
+    return _js(
+        f"""
         const value = Number(params.value);
 
-        if (!Number.isFinite(value)) return {};
+        if (!Number.isFinite(value)) return {{}};
 
-        if (value <= -20) {
-            return {
-                backgroundColor: '#FEE2E2',
-                color: '#B91C1C',
-                fontWeight: '700'
-            };
-        }
+        if (value <= -20) {{
+            return {{color: '{DANGER}', fontWeight: '600'}};
+        }}
 
-        if (value >= 20) {
-            return {
-                backgroundColor: '#DCFCE7',
-                color: '#166534',
-                fontWeight: '700'
-            };
-        }
+        if (value >= 20) {{
+            return {{color: '{SUCCESS}', fontWeight: '600'}};
+        }}
 
-        return {};
+        return {{}};
         """
-    }
+    )
+
+
+def _headroom_style():
+    """
+    Запас по скидке до точки безубыточности.
+    Минус — продаём в убыток, тут полутонов быть не может.
+    """
+
+    return _js(
+        f"""
+        const value = Number(params.value);
+
+        if (!Number.isFinite(value)) return {{}};
+
+        if (value < 0) {{
+            return {{
+                backgroundColor: '{DANGER_SOFT}',
+                color: '{DANGER}',
+                fontWeight: '700'
+            }};
+        }}
+
+        if (value < 10) {{
+            return {{color: '{WARNING}', fontWeight: '700'}};
+        }}
+
+        return {{}};
+        """
+    )
+
+
+def _floor_price_style():
+    """Минимальная цена — опорная колонка отчёта."""
+
+    return _js(
+        f"""
+        if (params.value == null) {{
+            return {{color: '{MUTED}'}};
+        }}
+
+        return {{
+            color: '{DANGER}',
+            fontWeight: '700'
+        }};
+        """
+    )
+
+
+def _action_price_style():
+    """Цена к установке — то, что мы предлагаем сделать."""
+
+    return _js(
+        f"""
+        if (params.value == null) return {{}};
+
+        return {{
+            backgroundColor: '{PRIMARY_SOFT}',
+            color: '{PRIMARY}',
+            fontWeight: '700'
+        }};
+        """
+    )
+
+
+def _cost_style():
+    """
+    Себестоимость: подсвечиваем, если текущая цена
+    опустилась ниже неё. Сравнение делаем прямо в ячейке,
+    поэтому колонка знает про соседнюю.
+    """
+
+    return _js(
+        f"""
+        const cost = Number(params.value);
+
+        if (!Number.isFinite(cost) || cost <= 0) {{
+            return {{color: '{MUTED}'}};
+        }}
+
+        const price = Number(
+            params.data ? params.data.current_effective_price : null
+        );
+
+        if (Number.isFinite(price) && price > 0 && price < cost) {{
+            return {{
+                backgroundColor: '{DANGER_SOFT}',
+                color: '{DANGER}',
+                fontWeight: '700'
+            }};
+        }}
+
+        return {{}};
+        """
+    )
+
+
+def _ratios_source_style():
+    """Оценка по медиане — не факт, это должно быть видно."""
+
+    return _js(
+        f"""
+        const value = params.value;
+
+        if (value === 'Свои продажи') {{
+            return {{color: '{MUTED}'}};
+        }}
+
+        return {{
+            color: '{WARNING}',
+            fontStyle: 'italic'
+        }};
+        """
+    )
+
+
+def _risk_value_style():
+    return _js(
+        f"""
+        const value = Number(params.value);
+
+        if (!Number.isFinite(value) || value <= 0) {{
+            return {{color: '{MUTED}'}};
+        }}
+
+        return {{
+            backgroundColor: '{DANGER_SOFT}',
+            color: '{DANGER}',
+            fontWeight: '700'
+        }};
+        """
+    )
 
 
 # ============================================================
@@ -635,7 +705,6 @@ def _portfolio_columns():
             "Требуют действия",
             135,
             cell_style={
-                "backgroundColor": "#FFF7ED",
                 "fontWeight": "700",
             },
         ),
@@ -645,7 +714,6 @@ def _portfolio_columns():
             "Остаток всего",
             125,
             cell_style={
-                "backgroundColor": "#EEF2FF",
                 "fontWeight": "700",
             },
         ),
@@ -654,27 +722,21 @@ def _portfolio_columns():
             "wb_stock",
             "WB",
             90,
-            cell_style={
-                "backgroundColor": "#EFF6FF",
-            },
+            cell_style=None,
         ),
 
         _int_col(
             "fbs_stock",
             "FBS",
             90,
-            cell_style={
-                "backgroundColor": "#ECFDF5",
-            },
+            cell_style=None,
         ),
 
         _int_col(
             "in_transit",
             "В пути",
             100,
-            cell_style={
-                "backgroundColor": "#FFF7ED",
-            },
+            cell_style=None,
         ),
 
         _int_col(
@@ -691,22 +753,35 @@ def _portfolio_columns():
             cell_style=_stock_days_style(),
         ),
 
+        _int_col(
+            "below_breakeven",
+            "Ниже минимальной цены",
+            160,
+            cell_style=_risk_value_style(),
+        ),
+
+        _money_col(
+            "stock_at_risk_value",
+            "Потенциальный убыток на остатке",
+            195,
+            cell_style=_risk_value_style(),
+        ),
+
         _money_col(
             "current_margin_30d",
             "Маржа факт 30д",
             140,
             cell_style={
-                "backgroundColor": "#F0FDF4",
                 "fontWeight": "700",
             },
         ),
+
 
         _money_col(
             "margin_upside_day",
             "+ маржа / день, прогноз",
             165,
             cell_style={
-                "backgroundColor": "#ECFDF5",
                 "fontWeight": "700",
                 "color": "#047857",
             },
@@ -733,8 +808,63 @@ def portfolio_grid(records):
 # 2. NM ID — ОСНОВНАЯ ТАБЛИЦА
 # ============================================================
 
+# Колонки второго плана: они нужны при разборе конкретного
+# товара, но в обычном просмотре только мешают. AG Grid
+# показывает их по стрелке на заголовке группы.
+SECONDARY_FIELDS = {
+    "wb_discount_pct_30d",
+    "last_man_cost",
+    "unit_acc_cost",
+    "ratios_source",
+    "recommended_seller_price",
+    "recommended_change_pct",
+    "recommended_buyer_price",
+    "recommended_sales_qty_30d",
+    "recommended_margin_30d",
+    "margin_upside_day",
+    "sales_qty_7d",
+    "elasticity",
+    "elasticity_confidence",
+}
+
+
+def _mark_secondary(columns):
+    """
+    Проставляет columnGroupShow там, где колонка
+    второстепенная. Первичные колонки видны всегда.
+    """
+
+    for group in columns:
+
+        children = group.get("children")
+
+        if not children:
+            continue
+
+        has_secondary = any(
+            child.get("field") in SECONDARY_FIELDS
+            for child in children
+        )
+
+        if not has_secondary:
+            continue
+
+        for child in children:
+
+            child["columnGroupShow"] = (
+                "open"
+                if child.get("field") in SECONDARY_FIELDS
+                else None
+            )
+
+            if child["columnGroupShow"] is None:
+                child.pop("columnGroupShow")
+
+    return columns
+
+
 def _products_columns():
-    return [
+    columns = [
 
         # ====================================================
         # РЕШЕНИЕ
@@ -821,7 +951,6 @@ def _products_columns():
                     "Наша цена сейчас",
                     135,
                     cell_style={
-                        "backgroundColor": "#EFF6FF",
                         "fontWeight": "700",
                     },
                 ),
@@ -850,9 +979,72 @@ def _products_columns():
                     "last_man_cost",
                     "Упр. с/с",
                     110,
+                    cell_style=None,
+                ),
+            ],
+        },
+
+        # ====================================================
+        # ГРАНИЦА ЦЕНЫ
+        #
+        # Ради этих колонок отчёт и существует: ниже
+        # минимальной цены продавать нельзя, ниже целевой —
+        # можно, но с потерей плановой маржинальности.
+        # ====================================================
+
+        {
+            "headerName": "Граница цены",
+            "marryChildren": True,
+            "children": [
+
+                _money_col(
+                    "breakeven_price",
+                    "Минимальная цена",
+                    145,
+                    cell_style=_floor_price_style(),
+                ),
+
+                _money_col(
+                    "target_margin_price",
+                    "Цена под целевую маржу",
+                    170,
                     cell_style={
-                        "backgroundColor": "#F5F3FF",
+                        "fontWeight": "700",
                     },
+                ),
+
+                _percent_col(
+                    "price_headroom_pct",
+                    "Запас по скидке",
+                    130,
+                    digits=1,
+                    cell_style=_headroom_style(),
+                ),
+
+                # Обе себестоимости рядом: сразу видно,
+                # где цена ушла ниже управленческой, а где
+                # уже и ниже бухгалтерской. Подсветка
+                # включается, когда текущая цена ниже
+                # значения в ячейке.
+                _money_col(
+                    "unit_cogs",
+                    "Упр. с/с",
+                    115,
+                    cell_style=_cost_style(),
+                ),
+
+                _money_col(
+                    "unit_acc_cost",
+                    "Бух. с/с",
+                    115,
+                    cell_style=_cost_style(),
+                ),
+
+                _text_col(
+                    "ratios_source",
+                    "Источник коэффициентов",
+                    175,
+                    cell_style=_ratios_source_style(),
                 ),
             ],
         },
@@ -867,31 +1059,45 @@ def _products_columns():
             "children": [
 
                 _money_col(
-                    "recommended_seller_price",
-                    "Наша новая цена",
-                    140,
-                    cell_style={
-                        "backgroundColor": "#EEF2FF",
-                        "fontWeight": "700",
-                    },
+                    "action_price",
+                    "Цена к установке",
+                    145,
+                    cell_style=_action_price_style(),
                 ),
 
                 _percent_col(
-                        "recommended_change_pct",
-                        "Изменить цену, %",
-                        150,
-                        digits=1,
-                        signed=True,
-                        cell_style=_price_change_style(),
-                    ),
+                    "action_change_pct",
+                    "Изменение, %",
+                    130,
+                    digits=1,
+                    signed=True,
+                    cell_style=_price_change_style(),
+                ),
+
+                # Цена по модели и её процент — второй план.
+                # На первом плане только «Цена к установке»
+                # и её изменение, иначе рядом стоят два
+                # похожих процента и непонятно, какой из них
+                # решение.
+                _money_col(
+                    "recommended_seller_price",
+                    "Цена по модели",
+                    140,
+                ),
+
+                _percent_col(
+                    "recommended_change_pct",
+                    "Изменение по модели, %",
+                    175,
+                    digits=1,
+                    signed=True,
+                    cell_style=_price_change_style(),
+                ),
 
                 _money_col(
                     "recommended_buyer_price",
                     "Прогноз покупателю",
                     145,
-                    cell_style={
-                        "backgroundColor": "#F8FAFC",
-                    },
                 ),
 
                 _number_col(
@@ -900,7 +1106,6 @@ def _products_columns():
                     150,
                     digits=0,
                     cell_style={
-                        "backgroundColor": "#F0FDF4",
                         "fontWeight": "700",
                     },
                 ),
@@ -936,7 +1141,6 @@ def _products_columns():
                     "Маржа прогноз 30д",
                     145,
                     cell_style={
-                        "backgroundColor": "#ECFDF5",
                         "fontWeight": "700",
                     },
                 ),
@@ -946,7 +1150,6 @@ def _products_columns():
                     "+ маржа / день",
                     130,
                     cell_style={
-                        "backgroundColor": "#ECFDF5",
                         "fontWeight": "700",
                         "color": "#047857",
                     },
@@ -972,7 +1175,6 @@ def _products_columns():
                     "Остаток всего",
                     115,
                     cell_style={
-                        "backgroundColor": "#EEF2FF",
                         "fontWeight": "700",
                     },
                 ),
@@ -1032,14 +1234,22 @@ def _products_columns():
                 {
                     "field": "reason",
                     "headerName": "Почему",
-                    "minWidth": 500,
+                    "minWidth": 360,
                     "flex": 1,
                     "wrapText": True,
                     "autoHeight": True,
+                    "cellStyle": {
+                        "fontSize": "11px",
+                        "lineHeight": "1.35",
+                        "color": "#475569",
+                        "whiteSpace": "normal",
+                    },
                 },
             ],
         },
     ]
+
+    return _mark_secondary(columns)
 
 
 def products_grid(records):

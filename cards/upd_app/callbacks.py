@@ -10,6 +10,7 @@ from .data import (
 )
 
 from .upload_upd import upload_data
+from .upload_man_cost import upload_man_cost
 
 
 def register_callbacks(app):
@@ -242,3 +243,158 @@ def register_callbacks(app):
             f"📄 "
             f"{filename}"
         )
+        
+        # =====================================================================
+    # НАЗВАНИЕ ВЫБРАННОГО EXCEL С УПРАВЛЕНЧЕСКОЙ СЕБЕСТОИМОСТЬЮ
+    # =====================================================================
+
+    @app.callback(
+        Output(
+            "man-cost-filename",
+            "children",
+        ),
+
+        Input(
+            "man-cost-upload",
+            "filename",
+        ),
+    )
+    def show_man_cost_filename(
+        filename,
+    ):
+
+        if not filename:
+            return "Файл не выбран"
+
+        return f"📊 {filename}"
+
+
+    # =====================================================================
+    # ЗАГРУЗКА УПРАВЛЕНЧЕСКОЙ СЕБЕСТОИМОСТИ
+    # =====================================================================
+
+    @app.callback(
+        Output(
+            "man-cost-alert-slot",
+            "children",
+        ),
+
+        Output(
+            "upd-grid",
+            "rowData",
+            allow_duplicate=True,
+        ),
+
+        Input(
+            "import-man-cost-btn",
+            "n_clicks",
+        ),
+
+        State(
+            "man-cost-upload",
+            "contents",
+        ),
+
+        State(
+            "man-cost-upload",
+            "filename",
+        ),
+
+        State(
+            "upd-id-store",
+            "data",
+        ),
+
+        prevent_initial_call=True,
+    )
+    def upload_man_cost_callback(
+        n_clicks,
+        contents,
+        filename,
+        upd_id,
+    ):
+
+        if not contents:
+            return (
+                dmc.Alert(
+                    title="Файл не выбран",
+                    children=(
+                        "Выберите Excel-файл "
+                        "с управленческой себестоимостью."
+                    ),
+                    color="red",
+                    variant="filled",
+                    withCloseButton=True,
+                ),
+                no_update,
+            )
+
+        if not filename.lower().endswith(
+            ".xlsx"
+        ):
+            return (
+                dmc.Alert(
+                    title="Неверный формат",
+                    children=(
+                        "Для загрузки управленческой "
+                        "себестоимости нужен файл .xlsx."
+                    ),
+                    color="red",
+                    variant="filled",
+                    withCloseButton=True,
+                ),
+                no_update,
+            )
+
+        try:
+            _, content_string = (
+                contents.split(",", 1)
+            )
+
+            excel_bytes = base64.b64decode(
+                content_string
+            )
+
+            result = upload_man_cost(
+                upd_id=upd_id,
+                excel_bytes=excel_bytes,
+            )
+
+            # Заново читаем строки текущего УПД,
+            # чтобы новая себестоимость появилась в таблице.
+            df = get_grid_data(
+                upd_id
+            )
+
+            return (
+                dmc.Alert(
+                    title=(
+                        "Управленческая "
+                        "себестоимость обновлена"
+                    ),
+                    children=(
+                        f"{filename} → "
+                        f"{result['updated']:,} строк"
+                    ),
+                    color="green",
+                    variant="filled",
+                    withCloseButton=True,
+                ),
+
+                df.to_dict(
+                    "records"
+                ),
+            )
+
+        except Exception as exc:
+            return (
+                dmc.Alert(
+                    title="Ошибка загрузки себестоимости",
+                    children=str(exc),
+                    color="red",
+                    variant="filled",
+                    withCloseButton=True,
+                ),
+                no_update,
+            )
+        

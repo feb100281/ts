@@ -37,6 +37,15 @@ _________
 
 ssh -N -L 5433:localhost:5432 daria@82.202.197.94
 
+
+это какое-то безопасное подключение к тунеллю 
+
+ssh -N \
+  -L 127.0.0.1:5433:127.0.0.1:5432 \
+  daria@82.202.197.94 \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3
+
 🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
 🦆 DUCKDB: СОЗДАНИЕ БАЗЫ И ЗАЛИВКА ДАННЫХ
 🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
@@ -55,7 +64,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-08-17 2026-08-19 --overwrite
+1) python manage.py fin_report_range 2026-08-20 2026-08-22 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 

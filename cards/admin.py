@@ -106,7 +106,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         'counterparty_short',
         'upd_link',
         'dash_link',
-        'lot',
+        # 'lot',
         'total_amount_vatadd_display',
         'total_amount_vatless_display',
         'total_man_cost_display',
@@ -122,7 +122,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     
     list_display_links = ('counterparty_short', 'upd_link')
 
-    list_filter = ('lot', 'counterparty')
+    list_filter = ('counterparty',)
 
     search_fields = (
         'number', 'comment',
@@ -131,7 +131,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         'income_lines__nm__nm_id',
     )
 
-    autocomplete_fields = ('lot', 'counterparty', 'contract')
+    autocomplete_fields = ('counterparty', 'contract')
     inlines = [UpdDocumentFileInline]
 
 

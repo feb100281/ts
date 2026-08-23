@@ -550,10 +550,32 @@ def get_stock_products(
 
 
             -- ====================================================
-            -- ПОСЛЕДНЯЯ УПРАВЛЕНЧЕСКАЯ СЕБЕСТОИМОСТЬ
+            -- УПРАВЛЕНЧЕСКАЯ СЕБЕСТОИМОСТЬ ЗА ЕДИНИЦУ
+            --
+            -- ВАЖНО. Раньше здесь стояло MAX(adjust_man_wo[-1])
+            -- из inventories.pre_wo — это массив СПИСАНИЙ.
+            -- Он заполнен только у товаров, по которым уже были
+            -- продажи. Товар лежит на складе и ни разу не
+            -- продавался -> NULL -> 0 -> в таблице нулевая
+            -- себестоимость и завышенная маржа.
+            --
+            -- Для ценового анализа это критично: universe здесь —
+            -- ВСЕ товары с остатком, то есть непроданные товары
+            -- составляют заметную часть выборки.
+            --
+            -- Основной источник теперь — приходные УПД
+            -- (inventories.upd_income.man_cost_per_unit), тот же,
+            -- что в costs_control. Берём последний приход не позже
+            -- даты анализа: цена из будущего в историческую дату
+            -- не попадает. ARG_MAX пропускает NULL, поэтому если
+            -- в самом свежем УПД управленческая цена не заполнена,
+            -- подставится последняя заполненная.
+            --
+            -- ЕДИНИЦЫ: upd_income в РУБЛЯХ, pre_wo в КОПЕЙКАХ.
+            -- Поэтому резерв делится на 100, а цена УПД — нет.
             -- ====================================================
 
-            costs AS (
+            wo_costs AS (
                 SELECT
                     nu.nm_id,
 
@@ -570,6 +592,80 @@ def get_stock_products(
 
                 GROUP BY
                     nu.nm_id
+            ),
+
+
+            upd_costs AS (
+                SELECT
+                    ui.nm_id,
+
+                    ARG_MAX(
+                        ui.man_cost_per_unit,
+                        ud.date
+                    ) AS last_man_cost,
+
+                    ARG_MAX(
+                        ui.upd_price_vatless,
+                        ud.date
+                    ) AS last_acc_cost
+
+                FROM inventories.upd_income ui
+
+                LEFT JOIN inventories.upd_documents ud
+                    ON ud.id
+                        = ui.upd_document_id
+
+                WHERE
+                    ui.nm_id IS NOT NULL
+
+                    AND ud.date::DATE
+                        <= ?::DATE
+
+                GROUP BY
+                    ui.nm_id
+            ),
+
+
+            costs AS (
+                SELECT
+                    COALESCE(
+                        uc.nm_id,
+                        wc.nm_id
+                    ) AS nm_id,
+
+                    COALESCE(
+                        NULLIF(
+                            uc.last_man_cost,
+                            0
+                        ),
+                        wc.last_man_cost
+                    ) AS last_man_cost,
+
+                    uc.last_acc_cost
+                        AS last_acc_cost,
+
+                    -- откуда взялась цифра — показываем
+                    -- пользователю, чтобы не гадал
+                    CASE
+                        WHEN COALESCE(
+                            uc.last_man_cost,
+                            0
+                        ) <> 0
+                            THEN 'УПД'
+
+                        WHEN COALESCE(
+                            wc.last_man_cost,
+                            0
+                        ) <> 0
+                            THEN 'Списание'
+
+                        ELSE 'Нет данных'
+                    END AS cost_source
+
+                FROM upd_costs uc
+
+                FULL OUTER JOIN wo_costs wc
+                    ON wc.nm_id = uc.nm_id
             ),
 
 
@@ -667,6 +763,16 @@ def get_stock_products(
                     0
                 ) AS last_man_cost,
 
+                COALESCE(
+                    c.last_acc_cost,
+                    0
+                ) AS last_acc_cost,
+
+                COALESCE(
+                    c.cost_source,
+                    'Нет данных'
+                ) AS cost_source,
+
                 i.last_income_date
 
             FROM stocks s
@@ -710,14 +816,21 @@ def get_stock_products(
                 title
             """,
             [
+                # wb: date IS NOT NULL / date =
                 wb_date,
                 wb_date,
 
+                # fbs: date IS NOT NULL / date =
                 fbs_date,
                 fbs_date,
 
+                # prices: date_from <=
                 report_date,
 
+                # upd_costs: ud.date <=
+                report_date,
+
+                # income: ud.date <=
                 report_date,
             ]
             + filter_params,

@@ -7,7 +7,19 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
+from .economics import (
+    breakeven_price,
+    margin_at_price,
+    price_headroom_pct,
+    target_margin_price,
+    unit_cost,
+    unit_ratios,
+)
+
 from .config import (
+    LOW_HEADROOM_PCT,
+    TARGET_MARGIN_PCT,
+
     SALES_WINDOW_7D,
     SALES_WINDOW_30D,
     SALES_WINDOW_90D,
@@ -1289,6 +1301,434 @@ def build_reason(
 
 
 # ============================================================
+# УДЕЛЬНАЯ ЭКОНОМИКА ПО ВСЕЙ ВЫБОРКЕ
+#
+# Здесь закрывается главная дыра прежней версии: товары,
+# которые ни разу не продавались, не имеют собственных
+# коэффициентов НДС, комиссии и логистики. Раньше это
+# означало пустую экономику, теперь — оценку по медиане
+# категории с честной пометкой источника.
+# ============================================================
+
+RATIO_BOUNDS = (
+    ("vat_ratio", 0.5, 1.0),
+    ("commission_ratio", -0.9, 0.0),
+)
+
+
+def _fill_ratio(
+    rec: pd.DataFrame,
+    column: str,
+):
+    """
+    Заполняет пропуски: медиана категории, затем медиана
+    по всей выборке. Возвращает (значения, источник).
+    """
+
+    values = pd.to_numeric(
+        rec[column],
+        errors="coerce",
+    )
+
+    own = values.notna()
+
+    by_category = (
+        values
+        .groupby(
+            rec["category"]
+        )
+        .transform(
+            "median"
+        )
+    )
+
+    overall = values.median()
+
+    filled = (
+        values
+        .fillna(by_category)
+        .fillna(overall)
+    )
+
+    source = pd.Series(
+        "Нет данных",
+        index=rec.index,
+        dtype=object,
+    )
+
+    source[filled.notna()] = "Медиана по выборке"
+
+    source[by_category.notna()] = "Медиана категории"
+
+    source[own] = "Свои продажи"
+
+    return filled, source
+
+
+def attach_unit_economics(
+    rec: pd.DataFrame,
+) -> pd.DataFrame:
+
+    if rec is None or rec.empty:
+        return rec
+
+    rec = rec.copy()
+
+    if "category" not in rec.columns:
+        rec["category"] = "Категория не указана"
+
+    sources = {}
+
+    for column, low, high in RATIO_BOUNDS:
+
+        if column not in rec.columns:
+            rec[column] = None
+
+        filled, source = _fill_ratio(
+            rec,
+            column,
+        )
+
+        if low is not None:
+            filled = filled.clip(lower=low)
+
+        if high is not None:
+            filled = filled.clip(upper=high)
+
+        rec[column] = filled
+
+        sources[column] = source
+
+    # источник считаем по самому слабому звену:
+    # если хоть один коэффициент оценочный — вся строка оценочная
+    priority = {
+        "Свои продажи": 0,
+        "Медиана категории": 1,
+        "Медиана по выборке": 2,
+        "Нет данных": 3,
+    }
+
+    weakest = None
+
+    for column in (
+        "vat_ratio",
+        "commission_ratio",
+    ):
+        current = sources[column].map(
+            priority
+        )
+
+        weakest = (
+            current
+            if weakest is None
+            else weakest.combine(
+                current,
+                max,
+            )
+        )
+
+    inverse = {
+        value: key
+        for key, value in priority.items()
+    }
+
+    rec["ratios_source"] = weakest.map(
+        inverse
+    )
+
+    # --------------------------------------------------------
+    # ПОСТРОЧНЫЙ РАСЧЁТ
+    # --------------------------------------------------------
+
+    def _row_economics(row):
+
+        cost = number(
+            row.get("unit_cogs")
+        )
+
+        vat_ratio = row.get("vat_ratio")
+
+        commission_ratio = row.get(
+            "commission_ratio"
+        )
+
+        floor_price = breakeven_price(
+            cost_per_unit=cost,
+            vat_ratio=vat_ratio,
+            commission_ratio=commission_ratio,
+        )
+
+        target_price = target_margin_price(
+            cost_per_unit=cost,
+            vat_ratio=vat_ratio,
+            commission_ratio=commission_ratio,
+            target_margin_pct=TARGET_MARGIN_PCT,
+        )
+
+        # ТЕКУЩАЯ ЦЕНА — ОДНА НА ВЕСЬ ОТЧЁТ.
+        #
+        # Порядок: цена, от которой модель считала сценарии
+        # (последняя фактическая продажа), затем средняя за
+        # 30 дней, затем цена в карточке. Проценты изменения
+        # и запас по скидке считаются от неё же, иначе
+        # колонки не сходятся между собой.
+        current_price = number(
+            row.get("base_price_for_change")
+        )
+
+        if current_price <= 0:
+            current_price = number(
+                row.get("seller_price_30d")
+            )
+
+        if current_price <= 0:
+            current_price = number(
+                row.get(
+                    "current_seller_list_price"
+                )
+            )
+
+        margin_unit, margin_unit_pct = (
+            margin_at_price(
+                current_price,
+                cost_per_unit=cost,
+                vat_ratio=vat_ratio,
+                commission_ratio=commission_ratio,
+            )
+        )
+
+        headroom = price_headroom_pct(
+            current_price,
+            floor_price,
+        )
+
+        below = bool(
+            floor_price
+            and current_price > 0
+            and current_price < floor_price
+        )
+
+        loss_per_unit = (
+            floor_price - current_price
+            if below
+            else 0.0
+        )
+
+        total_stock = number(
+            row.get("total_stock")
+        )
+
+        gap_to_target = None
+
+        if (
+            target_price
+            and current_price > 0
+        ):
+            gap_to_target = (
+                (
+                    target_price
+                    - current_price
+                )
+                / current_price
+                * 100.0
+            )
+
+        return pd.Series(
+            {
+                "current_effective_price": (
+                    current_price
+                ),
+
+                "breakeven_price": floor_price,
+
+                "target_margin_price": (
+                    target_price
+                ),
+
+                "unit_margin_now": margin_unit,
+
+                "unit_margin_pct_now": (
+                    margin_unit_pct
+                ),
+
+                "price_headroom_pct": headroom,
+
+                "below_breakeven": below,
+
+                "loss_per_unit": loss_per_unit,
+
+                "stock_at_risk_value": (
+                    loss_per_unit
+                    * total_stock
+                ),
+
+                "gap_to_target_pct": (
+                    gap_to_target
+                ),
+
+                "margin_at_risk": bool(
+                    headroom is not None
+                    and 0
+                    <= headroom
+                    < LOW_HEADROOM_PCT
+                ),
+
+                # Отдельно от точки безубыточности: цена
+                # опустилась ниже самой себестоимости, ещё
+                # до комиссии, НДС и логистики. Это крайний
+                # случай, его видно сразу.
+                "below_unit_cost": bool(
+                    cost > 0
+                    and current_price > 0
+                    and current_price < cost
+                ),
+            }
+        )
+
+    economics = rec.apply(
+        _row_economics,
+        axis=1,
+    )
+
+    for column in economics.columns:
+        rec[column] = economics[column]
+
+    # --------------------------------------------------------
+    # ЦЕНА К УСТАНОВКЕ
+    #
+    # Модель оптимизирует маржу, но результат нельзя ставить
+    # на витрину, если он ниже точки безубыточности. Поэтому
+    # рекомендацию модели оставляем как есть (её видно в
+    # сценариях), а рядом даём цену, которую действительно
+    # можно поставить.
+    #
+    # Для распродажи ограничение не применяется: там продажа
+    # ниже себестоимости — осознанное решение.
+    # --------------------------------------------------------
+
+    recommended = pd.to_numeric(
+        rec["recommended_seller_price"],
+        errors="coerce",
+    ).fillna(0.0)
+
+    floor_price = pd.to_numeric(
+        rec["breakeven_price"],
+        errors="coerce",
+    )
+
+    is_clearance = (
+        rec["status"] == "CLEARANCE"
+    )
+
+    action_price = recommended.where(
+        is_clearance
+        | floor_price.isna()
+        | (recommended >= floor_price),
+        floor_price,
+    )
+
+    rec["action_price"] = action_price
+
+    current_price = pd.to_numeric(
+        rec["current_effective_price"],
+        errors="coerce",
+    )
+
+    rec["action_change_pct"] = (
+        (
+            action_price
+            / current_price.replace(0, np.nan)
+            - 1.0
+        )
+        * 100.0
+    )
+
+    rec["action_capped"] = (
+        (~is_clearance)
+        & floor_price.notna()
+        & (recommended < floor_price)
+    )
+
+    # --------------------------------------------------------
+    # СТАТУС «УБЫТОК»
+    #
+    # Продажа ниже точки безубыточности — это не «повысить
+    # цену на 7%», это отдельная проблема, которую надо
+    # увидеть первой.
+    # --------------------------------------------------------
+
+    loss_mask = (
+        rec["below_breakeven"].fillna(False).astype(bool)
+        & (~is_clearance)
+    )
+
+    rec.loc[loss_mask, "status"] = "LOSS"
+
+    rec.loc[loss_mask, "priority"] = (
+        pd.to_numeric(
+            rec.loc[loss_mask, "priority"],
+            errors="coerce",
+        ).fillna(0.0)
+        + 60.0
+    )
+
+    # --------------------------------------------------------
+    # ДОПОЛНЯЕМ ОБЪЯСНЕНИЕ ТАМ, ГДЕ ЕГО НЕ БЫЛО
+    #
+    # У товаров без продаж минимальная цена появляется только
+    # здесь, после расчёта по медианам. Значит и в объяснении
+    # про неё надо сказать именно тут.
+    # --------------------------------------------------------
+
+    def _augment_reason(row):
+
+        reason = str(
+            row.get("reason") or ""
+        )
+
+        if "минимальная цена" in reason:
+            return reason
+
+        floor_value = row.get(
+            "breakeven_price"
+        )
+
+        if not floor_value or floor_value != floor_value:
+            return reason
+
+        note = (
+            "минимальная цена "
+            f"{float(floor_value):,.0f} ₽"
+        ).replace(",", " ")
+
+        if row.get("ratios_source") != "Свои продажи":
+            note += (
+                " (оценка по медиане категории: "
+                "своих продаж у товара нет)"
+            )
+
+        if row.get("below_breakeven"):
+            note += (
+                "; текущая цена ниже минимальной — "
+                "каждая проданная единица приносит убыток"
+            )
+
+        return (
+            reason.rstrip(".")
+            + "; "
+            + note
+            + "."
+        )
+
+    rec["reason"] = rec.apply(
+        _augment_reason,
+        axis=1,
+    )
+
+    return rec
+
+
+# ============================================================
 # ОСНОВНОЙ АНАЛИЗ
 # ============================================================
 
@@ -1422,6 +1862,43 @@ def analyze_pricing(
                 history
             )
         )
+
+        # ====================================================
+        # УДЕЛЬНАЯ ЭКОНОМИКА
+        #
+        # Коэффициенты (доля без НДС, доля комиссии, логистика
+        # на единицу) берём по самому широкому окну, где были
+        # продажи: чем больше наблюдений, тем устойчивее доли.
+        #
+        # Если продаж не было вовсе — оставляем пусто, ниже
+        # такие товары получат медиану по категории.
+        # ====================================================
+
+        ratio_metrics = None
+
+        for candidate in (m90, m30, m7):
+            if number(
+                candidate.get(
+                    "sales_qty"
+                )
+            ) > 0:
+                ratio_metrics = candidate
+                break
+
+        ratios = unit_ratios(
+            ratio_metrics
+            or {}
+        )
+
+        unit_cogs, unit_cogs_basis = (
+            unit_cost(
+                last_man_cost=product.get(
+                    "last_man_cost"
+                ),
+                metrics=ratio_metrics or {},
+            )
+        )
+
 
         # ====================================================
         # ОСТАТКИ
@@ -1742,6 +2219,242 @@ def analyze_pricing(
             )
         )
 
+        # ====================================================
+        # РАСПРОДАЖА НЕ МОЖЕТ ОЗНАЧАТЬ ПОВЫШЕНИЕ ЦЕНЫ
+        #
+        # Модель максимизирует модельную маржу и на товаре
+        # с надёжной эластичностью может предложить рост цены
+        # даже там, где запаса на несколько лет. Для человека
+        # это выглядит как противоречие: статус «Распродажа»,
+        # а рядом «+20%».
+        #
+        # Поэтому для распродажи выбираем лучший сценарий
+        # среди тех, где цена не растёт.
+        # ====================================================
+
+        if (
+            status == "CLEARANCE"
+            and scenarios
+            and recommended_change_pct > 0
+        ):
+
+            down_scenarios = [
+                row
+                for row in scenarios
+                if number(
+                    row.get(
+                        "price_change_pct"
+                    )
+                ) <= 0
+            ]
+
+            if down_scenarios:
+
+                replacement = max(
+                    down_scenarios,
+                    key=lambda row: number(
+                        row.get(
+                            "projected_margin"
+                        )
+                    ),
+                )
+
+                recommended_change_pct = number(
+                    replacement.get(
+                        "price_change_pct"
+                    )
+                )
+
+                recommended_seller_price = number(
+                    replacement.get(
+                        "seller_price"
+                    )
+                )
+
+                recommended_buyer_price = number(
+                    replacement.get(
+                        "buyer_price"
+                    )
+                )
+
+                recommended_margin = number(
+                    replacement.get(
+                        "projected_margin"
+                    )
+                )
+
+                recommended_margin_pct = number(
+                    replacement.get(
+                        "projected_margin_pct"
+                    )
+                )
+
+                recommended_sales_qty_30d = number(
+                    replacement.get(
+                        "projected_qty"
+                    )
+                )
+
+                recommended_daily_sales_qty = number(
+                    replacement.get(
+                        "projected_daily_qty"
+                    )
+                )
+
+                recommended_stock_days = (
+                    replacement.get(
+                        "projected_stock_days"
+                    )
+                )
+
+
+        # ====================================================
+        # ОГРАНИЧЕНИЕ СНИЗУ: НЕ РЕКОМЕНДУЕМ ЦЕНУ НИЖЕ
+        # ТОЧКИ БЕЗУБЫТОЧНОСТИ
+        #
+        # Модель максимизирует модельную маржу и в принципе
+        # может предложить цену, при которой единица продаётся
+        # в минус. Для распродажи это может быть осознанным
+        # решением, для всего остального — нет.
+        #
+        # Здесь используются СОБСТВЕННЫЕ коэффициенты товара.
+        # У товаров без продаж сценариев нет вообще, поэтому
+        # ограничивать нечего.
+        # ====================================================
+
+        own_breakeven = breakeven_price(
+            cost_per_unit=unit_cogs,
+            vat_ratio=ratios.get(
+                "vat_ratio"
+            ),
+            commission_ratio=ratios.get(
+                "commission_ratio"
+            ),
+        )
+
+        capped_by_breakeven = False
+
+        unreachable_breakeven = False
+
+        if (
+            own_breakeven
+            and scenarios
+            and status != "CLEARANCE"
+            and recommended_seller_price > 0
+            and recommended_seller_price < own_breakeven
+        ):
+
+            safe_scenarios = [
+                row
+                for row in scenarios
+                if number(
+                    row.get(
+                        "seller_price"
+                    )
+                )
+                >= own_breakeven
+            ]
+
+            if safe_scenarios:
+
+                replacement = min(
+                    safe_scenarios,
+                    key=lambda row: number(
+                        row.get(
+                            "seller_price"
+                        )
+                    ),
+                )
+
+                capped_by_breakeven = True
+
+            else:
+
+                # даже максимальное повышение цены
+                # не выводит товар в плюс
+                replacement = max(
+                    scenarios,
+                    key=lambda row: number(
+                        row.get(
+                            "seller_price"
+                        )
+                    ),
+                )
+
+                unreachable_breakeven = True
+
+            recommended_change_pct = number(
+                replacement.get(
+                    "price_change_pct"
+                )
+            )
+
+            recommended_seller_price = number(
+                replacement.get(
+                    "seller_price"
+                )
+            )
+
+            recommended_buyer_price = number(
+                replacement.get(
+                    "buyer_price"
+                )
+            )
+
+            recommended_margin = number(
+                replacement.get(
+                    "projected_margin"
+                )
+            )
+
+            recommended_margin_pct = number(
+                replacement.get(
+                    "projected_margin_pct"
+                )
+            )
+
+            recommended_sales_qty_30d = number(
+                replacement.get(
+                    "projected_qty"
+                )
+            )
+
+            recommended_daily_sales_qty = number(
+                replacement.get(
+                    "projected_daily_qty"
+                )
+            )
+
+            recommended_stock_days = (
+                replacement.get(
+                    "projected_stock_days"
+                )
+            )
+
+            # статус пересчитываем: изменение цены другое
+            status = (
+                recommendation_status(
+                    change_pct=(
+                        recommended_change_pct
+                    ),
+
+                    days_of_stock=(
+                        days_of_stock
+                    ),
+
+                    stock_age_days=(
+                        stock_age_days
+                    ),
+
+                    confidence=(
+                        elasticity_info.get(
+                            "confidence"
+                        )
+                    ),
+                )
+            )
+
+
         # ----------------------------------------------------
         # ПОТЕНЦИАЛ МАРЖИ
         # ----------------------------------------------------
@@ -1776,6 +2489,7 @@ def analyze_pricing(
         # ----------------------------------------------------
 
         priority = {
+            "LOSS": 120,
             "CLEARANCE": 100,
             "REDUCE": 80,
             "RAISE": 70,
@@ -1832,6 +2546,75 @@ def analyze_pricing(
             ),
         )
 
+        # ----------------------------------------------------
+        # ДОБАВЛЯЕМ В ОБЪЯСНЕНИЕ ФАКТЫ ПРО МИНИМАЛЬНУЮ ЦЕНУ.
+        #
+        # Коллеге важно видеть не только «снизить на 5%»,
+        # но и «ниже 430 ₽ опускаться нельзя».
+        # ----------------------------------------------------
+
+        notes = []
+
+        current_price_for_note = number(
+            m30.get(
+                "seller_price"
+            )
+        ) or number(
+            product.get(
+                "current_seller_list_price"
+            )
+        )
+
+        if own_breakeven:
+
+            notes.append(
+                (
+                    "минимальная цена "
+                    f"{own_breakeven:,.0f} ₽"
+                ).replace(",", " ")
+            )
+
+            if (
+                current_price_for_note > 0
+                and current_price_for_note
+                < own_breakeven
+            ):
+
+                notes.append(
+                    (
+                        "текущая цена ниже минимальной на "
+                        f"{(own_breakeven - current_price_for_note) / own_breakeven * 100:.0f}%"
+                    )
+                )
+
+        if capped_by_breakeven:
+
+            notes.append(
+                (
+                    "рекомендация поднята до минимальной цены: "
+                    "более низкая цена уводит единицу в минус"
+                )
+            )
+
+        if unreachable_breakeven:
+
+            notes.append(
+                (
+                    "даже максимальное повышение цены в модели "
+                    "не выводит товар в плюс — вопрос не в цене, "
+                    "а в себестоимости или в комиссии"
+                )
+            )
+
+        if notes:
+
+            reason = (
+                reason.rstrip(".")
+                + "; "
+                + "; ".join(notes)
+                + "."
+            )
+
         # ====================================================
         # RESULT NM ID
         # ====================================================
@@ -1885,6 +2668,69 @@ def analyze_pricing(
                             "last_man_cost"
                         )
                     )
+                ),
+
+                # --------------------------------------------
+                # УДЕЛЬНАЯ ЭКОНОМИКА
+                #
+                # Всё, из чего складывается минимальная цена.
+                # Держим в строке целиком, чтобы любую цифру
+                # можно было пересчитать руками.
+                # --------------------------------------------
+
+                "unit_cogs": unit_cogs,
+
+                # Бухгалтерская цена последнего прихода —
+                # чтобы было видно, где цена ушла ниже даже
+                # учётной стоимости товара.
+                "unit_acc_cost": (
+                    number(
+                        product.get(
+                            "last_acc_cost"
+                        )
+                    )
+                ),
+
+                # База, от которой модель считала изменение
+                # цены. Раньше проценты в таблице считались
+                # от разных баз (последняя продажа против
+                # средней за 30 дней) и не сходились между
+                # собой — теперь база одна.
+                "base_price_for_change": (
+                    number(
+                        scenario_base.get(
+                            "seller_price"
+                        )
+                    )
+                ),
+
+                "unit_cogs_basis": (
+                    unit_cogs_basis
+                ),
+
+                "cost_source": (
+                    product.get(
+                        "cost_source"
+                    )
+                    or "Нет данных"
+                ),
+
+                "vat_ratio": ratios.get(
+                    "vat_ratio"
+                ),
+
+                "commission_ratio": (
+                    ratios.get(
+                        "commission_ratio"
+                    )
+                ),
+
+                "capped_by_breakeven": (
+                    capped_by_breakeven
+                ),
+
+                "unreachable_breakeven": (
+                    unreachable_breakeven
                 ),
 
                 "seller_price_30d": (
@@ -2114,6 +2960,13 @@ def analyze_pricing(
         recommendations
     )
 
+    # Минимальная цена, цена под целевую маржу и запас
+    # по скидке — считаются по всей выборке сразу, потому
+    # что товарам без продаж нужны медианы соседей.
+    rec = attach_unit_economics(
+        rec
+    )
+
     scenarios_df = pd.DataFrame(
         scenario_rows
     )
@@ -2195,6 +3048,16 @@ def analyze_pricing(
 
                 current_margin_30d=(
                     "margin_man_30d",
+                    "sum",
+                ),
+
+                below_breakeven=(
+                    "below_breakeven",
+                    "sum",
+                ),
+
+                stock_at_risk_value=(
+                    "stock_at_risk_value",
                     "sum",
                 ),
 
@@ -2359,6 +3222,71 @@ def analyze_pricing(
             )
             if not rec.empty
             else 0.0
+        ),
+
+        # ====================================================
+        # ГЛАВНАЯ ЦИФРА ОТЧЁТА
+        #
+        # Сколько артикулов продаётся ниже точки
+        # безубыточности и во сколько это обходится,
+        # если распродать по текущей цене весь остаток.
+        # ====================================================
+
+        "below_breakeven_products": (
+            int(
+                rec[
+                    "below_breakeven"
+                ].sum()
+            )
+            if (
+                not rec.empty
+                and "below_breakeven" in rec.columns
+            )
+            else 0
+        ),
+
+        "margin_at_risk_products": (
+            int(
+                rec[
+                    "margin_at_risk"
+                ].sum()
+            )
+            if (
+                not rec.empty
+                and "margin_at_risk" in rec.columns
+            )
+            else 0
+        ),
+
+        "stock_at_risk_value": (
+            float(
+                rec[
+                    "stock_at_risk_value"
+                ].sum()
+            )
+            if (
+                not rec.empty
+                and "stock_at_risk_value" in rec.columns
+            )
+            else 0.0
+        ),
+
+        "no_cost_products": (
+            int(
+                (
+                    pd.to_numeric(
+                        rec["unit_cogs"],
+                        errors="coerce",
+                    )
+                    .fillna(0)
+                    <= 0
+                ).sum()
+            )
+            if (
+                not rec.empty
+                and "unit_cogs" in rec.columns
+            )
+            else 0
         ),
     }
 

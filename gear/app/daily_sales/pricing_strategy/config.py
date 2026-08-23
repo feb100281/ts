@@ -98,3 +98,69 @@ VERY_OLD_STOCK_DAYS = 365
 # ниже этого значения считаем нежелательными.
 
 MIN_MARGIN_PCT = 5.0
+
+
+# ============================================================
+# ЦЕЛЕВАЯ МАРЖИНАЛЬНОСТЬ
+#
+# MIN_MARGIN_PCT выше — это порог «сценарий не считаем
+# безопасным». TARGET_MARGIN_PCT — это то, ради чего
+# приложение существует: цена, которая держит нужную
+# маржинальность.
+#
+# Если бизнес поменяет целевую планку, менять надо ЗДЕСЬ,
+# и она сама подтянется в таблицы, методику и выгрузки.
+# ============================================================
+
+TARGET_MARGIN_PCT = 15.0
+
+
+# Запас по скидке, ниже которого товар считается
+# «на грани»: до точки безубыточности осталось мало.
+LOW_HEADROOM_PCT = 10.0
+
+
+# ============================================================
+# ID ЭЛЕМЕНТОВ ИНТЕРФЕЙСА
+#
+# Держим в одном месте, чтобы callbacks и layout
+# не расходились по опечаткам.
+# ============================================================
+
+OPEN_BTN_ID = "pricing-strategy-open"
+MODAL_ID = "pricing-strategy-modal"
+BODY_ID = "pricing-strategy-body"
+STORE_ID = "pricing-strategy-store"
+CLOSE_BTN_ID = "pricing-strategy-close"
+
+DOWNLOAD_ID = "pricing-strategy-download"
+
+METHOD_BTN_ID = "pricing-strategy-method-btn"
+METHOD_DRAWER_ID = "pricing-strategy-method-drawer"
+
+PORTFOLIO_GRID_ID = "pricing-portfolio-grid"
+PRODUCTS_GRID_ID = "pricing-products-grid"
+PRODUCT_DETAIL_ID = "pricing-product-detail"
+SHOW_ALL_BTN_ID = "pricing-show-all"
+SCOPE_LABEL_ID = "pricing-scope-label"
+
+RISK_FILTER_ID = "pricing-risk-filter"
+
+EXPORT_EXCEL_ID = "pricing-export-excel"
+EXPORT_LOSS_ID = "pricing-export-loss"
+EXPORT_WB_PRICES_ID = "pricing-export-wb-prices"
+EXPORT_ZIP_ID = "pricing-export-zip"
+EXPORT_PRODUCT_ID = "pricing-export-product"
+
+# Строка состояния выгрузок: «готовлю файл», «готово»,
+# текст ошибки. Без неё сбой при сборке файла выглядит
+# как отсутствие реакции на нажатие.
+EXPORT_STATUS_ID = "pricing-export-status"
+
+# Счётчики нажатий кнопок выгрузки.
+#
+# django-plotly-dash не даёт callback-у контекст, поэтому
+# определить нажатую кнопку через ctx нельзя. Храним
+# предыдущие значения n_clicks и сравниваем — сработала та
+# кнопка, у которой счётчик изменился.
+EXPORT_CLICKS_ID = "pricing-export-clicks"

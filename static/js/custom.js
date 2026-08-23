@@ -390,631 +390,706 @@ document.addEventListener("click", function (event) {
 
 
 // -------------------------------------------------
-// 3) Bell: секции + строки уведомлений (масштабируемо)
+// 3) УВЕДОМЛЕНИЯ: ТОЛЬКО КУРСЫ ВАЛЮТ
 // -------------------------------------------------
 (function () {
   function getNavbarUl() {
-    return document.querySelector(".main-header .navbar-nav");
+    return document.querySelector(
+      ".main-header .navbar-nav"
+    );
   }
+
+  // -------------------------------------------------
+  // СТИЛИ КОЛОКОЛЬЧИКА
+  // -------------------------------------------------
 
   function injectBellStylesOnce() {
-    if (document.getElementById("jmBellStyles")) return;
+    if (
+      document.getElementById(
+        "jmBellStyles"
+      )
+    ) {
+      return;
+    }
 
-    const st = document.createElement("style");
-    st.id = "jmBellStyles";
-    st.textContent = `
-:root{
-  --jm-fg: #111827;
-  --jm-muted: #6b7280;
-  --jm-border: #e5e7eb;
-  --jm-bg: #ffffff;
-  --jm-bg2: #f9fafb;
-  --jm-shadow: 0 18px 42px rgba(17,24,39,.12);
-}
+    const style = document.createElement(
+      "style"
+    );
 
-.jm-bell-wrap{ position: relative; }
+    style.id = "jmBellStyles";
 
-.jm-bell-badge{
-  position:absolute;
-  top: 5px;
-  right: 5px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 800;
-  background: #ef4444;
-  color: #fff;
-  box-shadow: 0 10px 20px rgba(17,24,39,.18);
-}
+    style.textContent = `
+      :root {
+        --jm-fg: #111827;
+        --jm-muted: #6b7280;
+        --jm-border: #e5e7eb;
+        --jm-bg: #ffffff;
+        --jm-bg-hover: #f9fafb;
+        --jm-shadow:
+          0 18px 42px rgba(17, 24, 39, 0.12);
+      }
 
-.jm-bell-menu{
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 8px;
-  width: 420px;
-  z-index: 9999;
+      .jm-bell-wrap {
+        position: relative;
+      }
 
-  background: var(--jm-bg);
-  border: 1px solid var(--jm-border);
-  border-radius: 4px;
-  box-shadow: var(--jm-shadow);
+      .jm-bell-btn {
+        position: relative;
+      }
 
-  max-height: min(520px, 70vh);
-  overflow: auto;
+      .jm-bell-badge {
+        position: absolute;
+        top: 5px;
+        right: 5px;
 
-  transform-origin: top right;
-  transform: translateY(6px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .12s ease, transform .12s ease;
-}
-.jm-bell-menu.is-open{
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: auto;
-}
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
 
-.jm-bell-menu__head{
-  padding: 12px 12px 10px 12px;
-  border-bottom: 1px solid var(--jm-border);
-  background: var(--jm-bg);
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-.jm-bell-menu__title{
-  font-size: 14px;
-  font-weight: 900;
-  color: var(--jm-fg);
-  line-height: 1.1;
-}
-.jm-bell-menu__sub{
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--jm-muted);
-}
+        min-width: 18px;
+        height: 18px;
+        padding: 0 6px;
 
-/* Секция */
-.jm-bell-section{
-  padding: 10px 10px 0 10px;
-}
-.jm-bell-section__title{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: var(--jm-muted);
-  padding: 6px 4px 6px 4px;
-}
+        border-radius: 6px;
 
-/* Строка-уведомление */
-.jm-bell-item{
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  margin: 8px 0 10px 0;
-  padding: 11px 12px;
-  border-radius: 2px;
-  text-decoration:none;
+        background: #ef4444;
+        color: #ffffff;
 
-  color: var(--jm-fg);
-  background: var(--jm-bg);
-  border: 1px solid var(--jm-border);
+        font-size: 11px;
+        font-weight: 800;
 
-  transition: background .12s ease, transform .08s ease;
-}
-.jm-bell-item:hover{
-  background: var(--jm-bg2);
-  transform: translateY(-1px);
-}
+        box-shadow:
+          0 10px 20px rgba(17, 24, 39, 0.18);
 
-.jm-dot{
-  width: 8px;
-  height: 8px;
-  border-radius: 6px;
-  flex: 0 0 auto;
-  background: #9ca3af;
-  box-shadow: 0 0 0 3px rgba(17,24,39,.05);
-}
-.jm-dot-danger{ background: #ef4444; }
-.jm-dot-ok{ background: #10b981; }
+        z-index: 5;
+      }
 
-.jm-bell-item__label{
-  flex: 1 1 auto;
-  min-width: 0;
-  display:flex;
-  flex-direction:column;
-  gap: 2px;
-  font-size: 13px;
-  font-weight: 850;
-  line-height: 1.15;
-}
-.jm-bell-item__sub{
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--jm-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+      .jm-bell-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
 
-.jm-bell-item__badge{
-  flex: 0 0 auto;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width: 34px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 900;
-  border: 1px solid var(--jm-border);
-  background: #fff;
-  color: var(--jm-fg);
-}
-.jm-bell-item__badge.ok{
-  border-color: rgba(16,185,129,.25);
-  background: rgba(16,185,129,.08);
-  color: #047857;
-}
-.jm-bell-item__badge.danger{
-  border-color: rgba(185,28,28,.25);
-  background: rgba(185,28,28,.06);
-  color: #991b1b;
-}
+        width: 390px;
+        margin-top: 8px;
 
-/* badge позиционируем относительно jm-toplink */
-.jm-bell-btn { position: relative; }
-#jmBellBadge { z-index: 5; }
+        background: var(--jm-bg);
+        border: 1px solid var(--jm-border);
+        border-radius: 4px;
 
-.jm-bell-btn:focus-visible,
-.jm-bell-item:focus-visible{
-  outline: 2px solid rgba(17,24,39,.25);
-  outline-offset: 2px;
-}
-`;
-    document.head.appendChild(st);
+        box-shadow: var(--jm-shadow);
+
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(6px);
+
+        transition:
+          opacity 0.12s ease,
+          transform 0.12s ease;
+
+        z-index: 9999;
+      }
+
+      .jm-bell-menu.is-open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+
+      .jm-bell-menu__head {
+        padding: 13px 14px 11px;
+
+        background: var(--jm-bg);
+        border-bottom: 1px solid var(--jm-border);
+      }
+
+      .jm-bell-menu__title {
+        color: var(--jm-fg);
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+
+      .jm-bell-menu__sub {
+        margin-top: 4px;
+
+        color: var(--jm-muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .jm-bell-section {
+        padding: 10px;
+      }
+
+      .jm-bell-section__title {
+        padding: 3px 4px 8px;
+
+        color: var(--jm-muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .jm-bell-item {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+
+        min-height: 58px;
+        padding: 11px 12px;
+
+        background: var(--jm-bg);
+        border: 1px solid var(--jm-border);
+        border-radius: 2px;
+
+        color: var(--jm-fg);
+        text-decoration: none;
+
+        transition:
+          background 0.12s ease,
+          border-color 0.12s ease;
+      }
+
+      .jm-bell-item:hover {
+        background: var(--jm-bg-hover);
+        color: var(--jm-fg);
+        text-decoration: none;
+      }
+
+      .jm-bell-item:focus-visible,
+      .jm-bell-btn:focus-visible {
+        outline: 2px solid rgba(17, 24, 39, 0.25);
+        outline-offset: 2px;
+      }
+
+      .jm-bell-dot {
+        width: 9px;
+        height: 9px;
+
+        border-radius: 50%;
+
+        flex: 0 0 9px;
+      }
+
+      .jm-bell-dot--ok {
+        background: #10b981;
+
+        box-shadow:
+          0 0 0 4px rgba(16, 185, 129, 0.10);
+      }
+
+      .jm-bell-dot--danger {
+        background: #ef4444;
+
+        box-shadow:
+          0 0 0 4px rgba(239, 68, 68, 0.10);
+      }
+
+      .jm-bell-item__content {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: 3px;
+
+        min-width: 0;
+      }
+
+      .jm-bell-item__title {
+        color: var(--jm-fg);
+        font-size: 13px;
+        font-weight: 750;
+        line-height: 1.25;
+      }
+
+      .jm-bell-item__description {
+        overflow: hidden;
+
+        color: var(--jm-muted);
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 1.35;
+
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .jm-bell-item__status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        min-width: 34px;
+        height: 23px;
+        padding: 0 8px;
+
+        border: 1px solid var(--jm-border);
+        border-radius: 6px;
+
+        flex: 0 0 auto;
+
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .jm-bell-item__status--ok {
+        background: rgba(16, 185, 129, 0.08);
+        border-color: rgba(16, 185, 129, 0.25);
+        color: #047857;
+      }
+
+      .jm-bell-item__status--danger {
+        background: rgba(185, 28, 28, 0.06);
+        border-color: rgba(185, 28, 28, 0.25);
+        color: #991b1b;
+      }
+
+      .jm-bell-empty {
+        padding: 18px 14px;
+
+        color: var(--jm-muted);
+        font-size: 12px;
+        text-align: center;
+      }
+    `;
+
+    document.head.appendChild(
+      style
+    );
   }
+
+  // -------------------------------------------------
+  // СОЗДАЁМ КОЛОКОЛЬЧИК
+  // -------------------------------------------------
 
   function ensureBellUI() {
     const nav = getNavbarUl();
-    if (!nav) return;
-    if (document.getElementById("jmBellBtn")) return;
+
+    if (!nav) {
+      return;
+    }
+
+    if (
+      document.getElementById(
+        "jmBellBtn"
+      )
+    ) {
+      return;
+    }
 
     injectBellStylesOnce();
 
-    const li = document.createElement("li");
-    li.className = "nav-item jm-bell-wrap";
+    const li = document.createElement(
+      "li"
+    );
+
+    li.className = (
+      "nav-item jm-bell-wrap"
+    );
 
     li.innerHTML = `
-      <a href="#" class="nav-link jm-toplink jm-bell-btn" id="jmBellBtn" title="Уведомления">
+      <a
+        href="#"
+        class="nav-link jm-toplink jm-bell-btn"
+        id="jmBellBtn"
+        title="Курсы валют"
+        aria-label="Курсы валют"
+      >
         <span class="jm-ico">
-          <i class="fa-solid fa-bell" aria-hidden="true"></i>
+          <i
+            class="fa-solid fa-bell"
+            aria-hidden="true"
+          ></i>
         </span>
-        <span class="jm-bell-badge" id="jmBellBadge" style="display:none;">0</span>
+
+        <span
+          class="jm-bell-badge"
+          id="jmBellBadge"
+          style="display: none;"
+        >
+          1
+        </span>
       </a>
 
-      <div class="jm-bell-menu" id="jmBellMenu" aria-hidden="true">
+      <div
+        class="jm-bell-menu"
+        id="jmBellMenu"
+        aria-hidden="true"
+      >
         <div class="jm-bell-menu__head">
-          <div class="jm-bell-menu__title">Уведомления</div>
-          <div class="jm-bell-menu__sub" id="jmBellSub">—</div>
+          <div class="jm-bell-menu__title">
+            Курсы валют
+          </div>
+
+          <div
+            class="jm-bell-menu__sub"
+            id="jmBellSub"
+          >
+            Проверяем наличие курса на сегодня
+          </div>
         </div>
 
-        <!-- сюда рендерим секции -->
         <div id="jmBellBody"></div>
       </div>
     `;
 
     nav.appendChild(li);
 
-    const btn = li.querySelector("#jmBellBtn");
-    const menu = li.querySelector("#jmBellMenu");
+    const button = li.querySelector(
+      "#jmBellBtn"
+    );
+
+    const menu = li.querySelector(
+      "#jmBellMenu"
+    );
 
     function closeMenu() {
-      menu.classList.remove("is-open");
-      menu.setAttribute("aria-hidden", "true");
+      menu.classList.remove(
+        "is-open"
+      );
+
+      menu.setAttribute(
+        "aria-hidden",
+        "true"
+      );
     }
 
     function toggleMenu() {
-      const open = menu.classList.contains("is-open");
-      if (open) closeMenu();
-      else {
-        menu.classList.add("is-open");
-        menu.setAttribute("aria-hidden", "false");
+      const isOpen = (
+        menu.classList.contains(
+          "is-open"
+        )
+      );
+
+      if (isOpen) {
+        closeMenu();
+        return;
       }
+
+      menu.classList.add(
+        "is-open"
+      );
+
+      menu.setAttribute(
+        "aria-hidden",
+        "false"
+      );
     }
 
-    btn.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleMenu();
-    });
+    button.addEventListener(
+      "click",
+      function (event) {
+        event.preventDefault();
+        event.stopPropagation();
 
-    document.addEventListener("click", function (e) {
-      if (!li.contains(e.target)) closeMenu();
-    });
+        toggleMenu();
+      }
+    );
 
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") closeMenu();
-    });
+    document.addEventListener(
+      "click",
+      function (event) {
+        if (
+          !li.contains(
+            event.target
+          )
+        ) {
+          closeMenu();
+        }
+      }
+    );
+
+    document.addEventListener(
+      "keydown",
+      function (event) {
+        if (
+          event.key === "Escape"
+        ) {
+          closeMenu();
+        }
+      }
+    );
   }
 
-  // ---- UI builders (секции и строки) ----
+  // -------------------------------------------------
+  // СОЗДАЁМ СТРОКУ КУРСОВ ВАЛЮТ
+  // -------------------------------------------------
 
-  function makeItem({ href = "#", status = "ok", title = "—", sub = "—", badge = "—" }) {
-    const dotClass = status === "danger" ? "jm-dot jm-dot-danger" : "jm-dot jm-dot-ok";
-    const badgeClass = status === "danger" ? "jm-bell-item__badge danger" : "jm-bell-item__badge ok";
+  function createFxItem({
+    href,
+    status,
+    title,
+    description,
+    badge,
+  }) {
+    const link = document.createElement(
+      "a"
+    );
 
-    const a = document.createElement("a");
-    a.className = "jm-bell-item";
-    a.href = href;
+    link.className = "jm-bell-item";
+    link.href = href || "#";
 
-    a.innerHTML = `
+    const isDanger = (
+      status === "danger"
+    );
+
+    const dotClass = isDanger
+      ? "jm-bell-dot jm-bell-dot--danger"
+      : "jm-bell-dot jm-bell-dot--ok";
+
+    const badgeClass = isDanger
+      ? (
+          "jm-bell-item__status "
+          + "jm-bell-item__status--danger"
+        )
+      : (
+          "jm-bell-item__status "
+          + "jm-bell-item__status--ok"
+        );
+
+    link.innerHTML = `
       <span class="${dotClass}"></span>
-      <span class="jm-bell-item__label">
-        <span>${escapeHtml(title)}</span>
-        <span class="jm-bell-item__sub">${escapeHtml(sub)}</span>
+
+      <span class="jm-bell-item__content">
+        <span class="jm-bell-item__title">
+          ${escapeHtml(title)}
+        </span>
+
+        <span class="jm-bell-item__description">
+          ${escapeHtml(description)}
+        </span>
       </span>
-      <span class="${badgeClass}">${escapeHtml(badge)}</span>
+
+      <span class="${badgeClass}">
+        ${escapeHtml(badge)}
+      </span>
     `;
-    return a;
-  }
 
-  function makeSection(title, items) {
-    const wrap = document.createElement("div");
-    wrap.className = "jm-bell-section";
-
-    const head = document.createElement("div");
-    head.className = "jm-bell-section__title";
-    head.textContent = title;
-
-    wrap.appendChild(head);
-    items.forEach((it) => wrap.appendChild(makeItem(it)));
-
-    return wrap;
+    return link;
   }
 
   // -------------------------------------------------
-  // refreshBell: собираем все уведомления как список секций
+  // ПРОВЕРКА КУРСОВ ВАЛЮТ
   // -------------------------------------------------
+
   async function refreshBell() {
     ensureBellUI();
 
-    const bellBadge = document.getElementById("jmBellBadge");
-    const bellSub = document.getElementById("jmBellSub");
-    const bellBody = document.getElementById("jmBellBody");
-    if (!bellBody) return;
+    const bellBadge = (
+      document.getElementById(
+        "jmBellBadge"
+      )
+    );
 
-    const sections = [];
-    let problems = 0;
+    const bellSub = (
+      document.getElementById(
+        "jmBellSub"
+      )
+    );
 
-    // 1) FX (1 строка в секции "Курсы валют")
+    const bellBody = (
+      document.getElementById(
+        "jmBellBody"
+      )
+    );
+
+    if (!bellBody) {
+      return;
+    }
+
+    bellBody.innerHTML = `
+      <div class="jm-bell-empty">
+        Проверяем курсы валют…
+      </div>
+    `;
+
     try {
-      const resp = await fetch("/admin/fx-status/", { credentials: "same-origin" });
-      if (resp.ok) {
-        const data = await resp.json();
-        const todayStr = data.date ? formatRuDate(data.date) : "сегодня";
-        const href = data.admin_url || "/admin/macro/currencyrate/";
-
-        if (data.has_fx_today) {
-          sections.push({
-            title: "Макро показатели",
-            items: [
-              { status: "ok", title: "Курсы валют загружены", sub: `Дата: ${todayStr}`, badge: "OK", href },
-            ],
-          });
-        } else {
-          problems += 1;
-          sections.push({
-            title: "Курсы валют",
-            items: [
-              { status: "danger", title: "Нет курса валют на сегодня", sub: `Дата: ${todayStr}. Нужно обновить курс в базе`, badge: "!", href },
-            ],
-          });
+      const response = await fetch(
+        "/admin/fx-status/",
+        {
+          credentials: "same-origin",
         }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `HTTP ${response.status}`
+        );
       }
-    } catch (e) {
-      console.warn("fx status error", e);
-    }
 
-    // 2) Контрагенты (2 отдельные строки)
-    try {
-      const resp = await fetch("/admin/cp-issues-status/", { credentials: "same-origin" });
-      if (resp.ok) {
-        const data = await resp.json();
+      const data = await response.json();
 
-        const nc = data.no_contracts || {};
-        const ng = data.no_glyph || {};
+      const todayText = data.date
+        ? formatRuDate(data.date)
+        : "сегодня";
 
-        const totalNoContracts = num(nc.total);
-        const totalNoGlyph = num(ng.total);
+      const href = (
+        data.admin_url
+        || "/admin/macro/currencyrate/"
+      );
 
-        const items = [];
+      bellBody.innerHTML = "";
 
-        if (totalNoContracts === 0) {
-          items.push({
+      const section = (
+        document.createElement("div")
+      );
+
+      section.className = (
+        "jm-bell-section"
+      );
+
+      const sectionTitle = (
+        document.createElement("div")
+      );
+
+      sectionTitle.className = (
+        "jm-bell-section__title"
+      );
+
+      sectionTitle.textContent = (
+        "Макроэкономика"
+      );
+
+      section.appendChild(
+        sectionTitle
+      );
+
+      if (data.has_fx_today) {
+        section.appendChild(
+          createFxItem({
+            href: href,
             status: "ok",
-            title: "Контрагенты без договоров",
-            sub: "Пусто",
+            title: (
+              "Курсы валют загружены"
+            ),
+            description: (
+              `Дата: ${todayText}`
+            ),
             badge: "OK",
-            href: nc.admin_url || "/admin/counterparties/counterparty/?has_contract=0",
-          });
-        } else {
-          problems += 1;
-          items.push({
-            status: "danger",
-            title: "Контрагенты без договоров",
-            sub: "Нужно проверить и привязать договоры",
-            badge: String(totalNoContracts),
-            href: nc.admin_url || "/admin/counterparties/counterparty/?has_contract=0",
-          });
+          })
+        );
+
+        if (bellSub) {
+          bellSub.textContent = (
+            "Курс на сегодня загружен"
+          );
         }
 
-        if (totalNoGlyph === 0) {
-          items.push({
-            status: "ok",
-            title: "Контрагенты без глифа",
-            sub: "Пусто",
-            badge: "OK",
-            href: ng.admin_url || "/admin/counterparties/counterparty/?logo__isnull=1",
-          });
-        } else {
-          problems += 1;
-          items.push({
-            status: "danger",
-            title: "Контрагенты без глифа",
-            sub: "Нужно добавить логотип/глиф",
-            badge: String(totalNoGlyph),
-            href: ng.admin_url || "/admin/counterparties/counterparty/?logo__isnull=1",
-          });
+        if (bellBadge) {
+          bellBadge.style.display = (
+            "none"
+          );
         }
 
-        sections.push({ title: "Контрагенты", items });
-      }
-    } catch (e) {
-      console.warn("cp issues status error", e);
-    }
-
-
-
-        // 3) Договоры
-try {
-  const resp = await fetch("/admin/contracts-issues-status/", { credentials: "same-origin" });
-  if (resp.ok) {
-    const data = await resp.json();
-
-
-    const noAccrual = data.no_accrual_fn || {};
-    const missingDistribution = data.missing_distribution || {};
-    const missingBs = data.missing_bs || {};
-    const missingPl = data.missing_pl || {};
-    const missingSubcontoPl = data.missing_subconto_pl || {};
-
-    const totalNoAccrual = num(noAccrual.total);
-    const totalMissingDistribution = num(missingDistribution.total);
-    const totalMissingBs = num(missingBs.total);
-    const totalMissingPl = num(missingPl.total);
-    const totalMissingSubcontoPl = num(missingSubcontoPl.total);
-
-    const items = [];
-
-    if (totalNoAccrual === 0) {
-      items.push({
-        status: "ok",
-        title: "Договоры без функции начисления",
-        sub: "Пусто",
-        badge: "OK",
-        href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
-      });
-    } else {
-      problems += 1;
-      items.push({
-        status: "danger",
-        title: "Договоры без функции начисления",
-        sub: "Нужно добавить условия начисления",
-        badge: String(totalNoAccrual),
-        href: noAccrual.admin_url || "/admin/contracts/contracts/?has_accrual_fn=no",
-      });
-    }
-
-
-
-    if (totalMissingBs === 0) {
-      items.push({
-        status: "ok",
-        title: "Не заполнен Счет ST",
-        sub: "Пусто",
-        badge: "OK",
-        href: missingBs.admin_url || "/admin/contracts/contracts/?missing_distribution=bs",
-      });
-    } else {
-      problems += 1;
-      items.push({
-        status: "danger",
-        title: "Не заполнен Счет ST",
-        sub: "Нужно заполнить поле Счет ST",
-        badge: String(totalMissingBs),
-        href: missingBs.admin_url || "/admin/contracts/contracts/?missing_distribution=bs",
-      });
-    }
-
-    if (totalMissingPl === 0) {
-      items.push({
-        status: "ok",
-        title: "Не заполнен Счет PL",
-        sub: "Пусто",
-        badge: "OK",
-        href: missingPl.admin_url || "/admin/contracts/contracts/?missing_distribution=pl",
-      });
-    } else {
-      problems += 1;
-      items.push({
-        status: "danger",
-        title: "Не заполнен Счет PL",
-        sub: "Нужно заполнить поле Счет PL",
-        badge: String(totalMissingPl),
-        href: missingPl.admin_url || "/admin/contracts/contracts/?missing_distribution=pl",
-      });
-    }
-
-    if (totalMissingSubcontoPl === 0) {
-      items.push({
-        status: "ok",
-        title: "Не заполнено Субконто PL",
-        sub: "Пусто",
-        badge: "OK",
-        href: missingSubcontoPl.admin_url || "/admin/contracts/contracts/?missing_distribution=subconto_pl",
-      });
-    } else {
-      problems += 1;
-      items.push({
-        status: "danger",
-        title: "Не заполнено Субконто PL",
-        sub: "Нужно заполнить поле Субконто PL",
-        badge: String(totalMissingSubcontoPl),
-        href: missingSubcontoPl.admin_url || "/admin/contracts/contracts/?missing_distribution=subconto_pl",
-      });
-    }
-
-    sections.push({ title: "Договоры", items });
-  }
-} catch (e) {
-  console.warn("contracts issues status error", e);
-}
-
-
-
-    // 4) Казначейство (3 отдельные строки)
-    try {
-      const resp = await fetch("/admin/treasury-status/", { credentials: "same-origin" });
-      if (resp.ok) {
-        const data = await resp.json();
-
-        const noContract = data.no_contract || {};
-        const noCfItem = data.no_cfitem || {};
-        const noCpFinal = data.no_cp_final || {};
-
-        const c1 = num(noContract.total);
-        const c2 = num(noCfItem.total);
-        const c3 = num(noCpFinal.total);
-
-        const items = [];
-
-        // CF без договоров
-        if (c1 === 0) {
-          items.push({
-            status: "ok",
-            title: "CF документы без договоров",
-            sub: "Пусто",
-            badge: "OK",
-            href: noContract.admin_url || "#",
-          });
-        } else {
-          problems += 1;
-          items.push({
-            status: "danger",
-            title: "CF документы без договоров",
-            sub: "Нужно привязать договор",
-            badge: String(c1),
-            href: noContract.admin_url || "#",
-          });
-        }
-
-        // CF без статьи CF
-        if (c2 === 0) {
-          items.push({
-            status: "ok",
-            title: "CF документы без статьи CF",
-            sub: "Пусто",
-            badge: "OK",
-            href: noCfItem.admin_url || "#",
-          });
-        } else {
-          problems += 1;
-          items.push({
-            status: "danger",
-            title: "CF документы без статьи CF",
-            sub: "Нужно назначить статью CF",
-            badge: String(c2),
-            href: noCfItem.admin_url || "#",
-          });
-        }
-
-        // CF без финального контрагента
-        if (c3 === 0) {
-          items.push({
-            status: "ok",
-            title: "CF документы без финального контрагента",
-            sub: "Пусто",
-            badge: "OK",
-            href: noCpFinal.admin_url || "#",
-          });
-        } else {
-          problems += 1;
-          items.push({
-            status: "danger",
-            title: "CF документы без финального контрагента",
-            sub: "Нужно указать финального контрагента",
-            badge: String(c3),
-            href: noCpFinal.admin_url || "#",
-          });
-        }
-
-        sections.push({ title: "Казначейство", items });
-      }
-    } catch (e) {
-      console.warn("treasury status error", e);
-    }
-
-    // ---- Рендер ----
-    bellBody.innerHTML = "";
-    if (!sections.length) {
-      bellBody.innerHTML = `<div style="padding:12px;color:#6b7280;">Нет данных для уведомлений</div>`;
-    } else {
-      sections.forEach((s) => bellBody.appendChild(makeSection(s.title, s.items)));
-    }
-
-    // Header summary
-    if (bellSub) {
-      bellSub.textContent = problems ? `Есть замечания: ${problems}` : "Всё в порядке";
-    }
-
-    // Badge на колокольчике: количество проблемных строк
-    if (bellBadge) {
-      if (problems) {
-        bellBadge.textContent = String(problems);
-        bellBadge.style.display = "inline-flex";
       } else {
-        bellBadge.style.display = "none";
+        section.appendChild(
+          createFxItem({
+            href: href,
+            status: "danger",
+            title: (
+              "Нет курса валют на сегодня"
+            ),
+            description: (
+              `Дата: ${todayText}. `
+              + "Нужно обновить курс в базе"
+            ),
+            badge: "!",
+          })
+        );
+
+        if (bellSub) {
+          bellSub.textContent = (
+            "Требуется обновление"
+          );
+        }
+
+        if (bellBadge) {
+          bellBadge.textContent = "1";
+          bellBadge.style.display = (
+            "inline-flex"
+          );
+        }
+      }
+
+      bellBody.appendChild(
+        section
+      );
+
+    } catch (error) {
+      console.warn(
+        "fx status error",
+        error
+      );
+
+      bellBody.innerHTML = "";
+
+      const section = (
+        document.createElement("div")
+      );
+
+      section.className = (
+        "jm-bell-section"
+      );
+
+      section.appendChild(
+        createFxItem({
+          href: (
+            "/admin/macro/currencyrate/"
+          ),
+          status: "danger",
+          title: (
+            "Не удалось проверить курсы"
+          ),
+          description: (
+            "Сервис проверки временно недоступен"
+          ),
+          badge: "!",
+        })
+      );
+
+      bellBody.appendChild(
+        section
+      );
+
+      if (bellSub) {
+        bellSub.textContent = (
+          "Ошибка проверки"
+        );
+      }
+
+      if (bellBadge) {
+        bellBadge.textContent = "1";
+        bellBadge.style.display = (
+          "inline-flex"
+        );
       }
     }
   }
+
+  // -------------------------------------------------
+  // ЗАПУСК
+  // -------------------------------------------------
 
   function boot() {
     refreshBell();
-    setInterval(refreshBell, 60 * 1000);
   }
 
-  document.addEventListener("DOMContentLoaded", boot);
-  document.addEventListener("pjax:end", boot);
+  document.addEventListener(
+    "DOMContentLoaded",
+    boot
+  );
+
+  document.addEventListener(
+    "pjax:end",
+    boot
+  );
+
+  // Обновляем статус один раз в минуту.
+  setInterval(
+    refreshBell,
+    60 * 1000
+  );
 })();
-
-
-
-
-
-
-
-
-
-
 
 
 
