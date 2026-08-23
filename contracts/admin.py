@@ -447,7 +447,6 @@ class ContractItemsInline(admin.StackedInline):
 
 
 
-
 class ConditionsInline(admin.StackedInline):
     model = Conditions
     form = ConditionsInlineForm
@@ -458,7 +457,7 @@ class ConditionsInline(admin.StackedInline):
     formfield_overrides = {
         models.JSONField: {
             "widget": JSONEditor,
-        }
+        },
     }
 
     template = (
@@ -468,36 +467,33 @@ class ConditionsInline(admin.StackedInline):
 
     fieldsets = (
         (
-           (
-        "Начисление",
-        {
-            "fields": (
-                # Скрытые служебные поля
-                "accounting_method",
-                "accrual_fn",
-                "params_editor",
-                "params",
+            "Начисление",
+            {
+                "fields": (
+                    # Скрытые служебные поля
+                    "accounting_method",
+                    "accrual_fn",
+                    "params_editor",
+                    "params",
 
-                # Видимые поля
-                "date_start",
-                "date_finish",
-                "vat_mode",
-            ),
-        },
-    ),
-
+                    # Видимые поля
+                    "date_start",
+                    "date_finish",
+                    "vat_mode",
+                ),
+            },
         ),
 
         (
             "Оплата",
             {
                 "fields": (
-                    # Служебные скрытые поля.
+                    # Скрытые служебные поля
                     "pay_rule",
                     "pay_day",
                     "penalty_rate_day",
 
-                    # Видимые поля.
+                    # Видимые поля
                     "pay_timing",
                     "pay_offset_months",
                 ),
