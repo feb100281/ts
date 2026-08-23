@@ -23,6 +23,8 @@ from .sales import get_sales_data
 from .stocks import get_stock_data
 from .financial import get_financial_data
 from .price_analysis import get_price_analysis_data
+from .stock_balance import get_stock_balance_data
+
 
 def build_daily_brief_payload(
     report_date: date | str,
@@ -89,13 +91,11 @@ def build_daily_brief_payload(
         plan_source,
     )
 
-    stocks = get_stock_data(
-        report_date
-    )
+    stocks = get_stock_data(report_date)
+    
+    stock_balance = get_stock_balance_data(report_date)
 
-    incidents = get_incidents_data(
-        report_date
-    )
+    incidents = get_incidents_data(report_date)
 
     # =====================================================================
     # PROPHET
@@ -130,6 +130,7 @@ def build_daily_brief_payload(
             prophet_plan
         ),
         "stocks": stocks,
+        "stock_balance": stock_balance,
         "incidents": incidents,
         "price_analysis_page": price_analysis_page,
     }

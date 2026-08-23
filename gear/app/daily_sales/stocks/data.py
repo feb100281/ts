@@ -4,6 +4,154 @@ from datetime import date, timedelta
 from conns import get_duckdb_conn_with_opt
 
 
+# =============================================================================
+# СЕБЕСТОИМОСТЬ ЗА ЕДИНИЦУ — ЕДИНАЯ МЕТОДИКА ДЛЯ ВСЕХ ОТЧЁТОВ ПО ОСТАТКАМ
+#
+# Раньше каждый отчёт независимо считал себестоимость как
+# MAX(pre_wo.adjust_wo[-1]) — последний элемент массива СПИСАНИЙ.
+# Такой массив заполнен ТОЛЬКО у товаров, по которым уже были продажи:
+# непроданный товар получал NULL -> 0 и попадал в отчёт с нулевой
+# стоимостью остатка. Для оценки ущерба (пожар) это критично —
+# сгорает весь остаток, включая ни разу не проданный.
+#
+# Основной источник теперь — приходные УПД (inventories.upd_income),
+# тот же, что в costs_control:
+#
+#     upd_price_vatless  — бухгалтерская цена за единицу
+#     man_cost_per_unit  — управленческая цена за единицу
+#
+# ЕДИНИЦЫ. upd_income хранит РУБЛИ, pre_wo — КОПЕЙКИ. Наружу этот
+# блок отдаёт КОПЕЙКИ (цена из УПД умножается на 100), чтобы не
+# трогать перевод в рубли, который выполняется ниже по течению
+# (excel.py, снимок происшествия в dashboard_data.py).
+#
+# ДАТА. Берётся последний приход НЕ ПОЗЖЕ $report_date. Приход из
+# будущего в историческую дату не попадает. ARG_MAX в DuckDB
+# пропускает NULL, поэтому если в самом свежем УПД управленческая
+# цена не заполнена, подставится последняя заполненная.
+#
+# pre_wo остаётся РЕЗЕРВОМ: если приходов по УПД до даты отчёта нет
+# (например, товар пришёл не по УПД), используется последняя
+# себестоимость списания — прежнее поведение.
+#
+# ТРЕБОВАНИЯ К ЗАПРОСУ, КУДА ВСТАВЛЯЕТСЯ БЛОК:
+#   1. выше должен быть определён CTE nm_usk (nm_id, usk);
+#   2. в запросе должен быть параметр $report_date;
+#   3. блок НЕ заканчивается запятой — её ставит место вставки.
+#
+# Итоговый CTE называется costs и отдаёт колонки:
+#   nm_id, last_costs, last_man_costs   (копейки)
+# =============================================================================
+
+COSTS_CTES_SQL = """
+            /*
+            ============================================================
+            РЕЗЕРВ: ПОСЛЕДНЯЯ СЕБЕСТОИМОСТЬ СПИСАНИЯ (копейки)
+
+            Если у nm_id несколько USK, берём максимальную
+            последнюю известную стоимость среди связанных USK.
+            ============================================================
+            */
+            wo_costs AS (
+                SELECT
+                    nu.nm_id,
+
+                    MAX(
+                        w.adjust_wo[-1]
+                    ) AS last_costs,
+
+                    MAX(
+                        w.adjust_man_wo[-1]
+                    ) AS last_man_costs
+
+                FROM nm_usk nu
+
+                LEFT JOIN inventories.pre_wo w
+                    ON w.usk = nu.usk
+
+                GROUP BY
+                    nu.nm_id
+            ),
+
+
+            /*
+            ============================================================
+            ОСНОВНОЙ ИСТОЧНИК: ПРИХОДНЫЕ УПД
+
+            Последний приход не позже даты отчёта.
+            Рубли переводим в копейки (* 100).
+            ============================================================
+            */
+            upd_costs AS (
+                SELECT
+                    t.nm_id,
+
+                    ARG_MAX(
+                        t.upd_price_vatless,
+                        u.date
+                    ) * 100 AS last_costs,
+
+                    ARG_MAX(
+                        t.man_cost_per_unit,
+                        u.date
+                    ) * 100 AS last_man_costs
+
+                FROM inventories.upd_income t
+
+                LEFT JOIN inventories.upd_documents u
+                    ON u.id = t.upd_document_id
+
+                WHERE
+                    t.nm_id IS NOT NULL
+                    AND u.date::DATE <= $report_date::DATE
+
+                GROUP BY
+                    t.nm_id
+            ),
+
+
+            /*
+            ============================================================
+            ИТОГОВАЯ СЕБЕСТОИМОСТЬ: УПД, ПРИ ОТСУТСТВИИ — СПИСАНИЕ
+
+            FULL OUTER JOIN, потому что nm_id может быть только
+            в УПД (нет связи с USK) или только в pre_wo
+            (пришёл не по УПД).
+
+            NULLIF(..., 0) — незаполненная цена в УПД хранится
+            как 0 и должна уступать место резерву.
+            ============================================================
+            */
+            costs AS (
+                SELECT
+                    COALESCE(
+                        uc.nm_id,
+                        wc.nm_id
+                    ) AS nm_id,
+
+                    COALESCE(
+                        NULLIF(
+                            uc.last_costs,
+                            0
+                        ),
+                        wc.last_costs
+                    ) AS last_costs,
+
+                    COALESCE(
+                        NULLIF(
+                            uc.last_man_costs,
+                            0
+                        ),
+                        wc.last_man_costs
+                    ) AS last_man_costs
+
+                FROM upd_costs uc
+
+                FULL OUTER JOIN wo_costs wc
+                    ON wc.nm_id = uc.nm_id
+            )"""
+
+
 def get_default_stocks_date():
     return date.today() - timedelta(days=1)
 
@@ -330,37 +478,9 @@ stocks_by_nm AS (
             ),
 
 
-            /*
-            ============================================================
-            ПОСЛЕДНЯЯ СЕБЕСТОИМОСТЬ ПО NM_ID
-
-            Если у nm_id несколько USK, берём максимальную
-            последнюю известную стоимость среди связанных USK.
-
-            Это повторяет смысл прежнего MAX(w.adjust_wo[-1]),
-            но уже без размножения остатков.
-            ============================================================
-            */
-            costs AS (
-                SELECT
-                    nu.nm_id,
-
-                    MAX(
-                        w.adjust_wo[-1]
-                    ) AS last_costs,
-
-                    MAX(
-                        w.adjust_man_wo[-1]
-                    ) AS last_man_costs
-
-                FROM nm_usk nu
-
-                LEFT JOIN inventories.pre_wo w
-                    ON w.usk = nu.usk
-
-                GROUP BY
-                    nu.nm_id
-            ),
+            """
+            + COSTS_CTES_SQL
+            + """,
 
 
             /*
@@ -1886,35 +2006,9 @@ def get_stocks_by_warehouse_products(report_date):
             ),
 
 
-            /*
-            ============================================================
-            ПОСЛЕДНЯЯ СЕБЕСТОИМОСТЬ ПО NM_ID
-
-            Повторяем логику основной выгрузки:
-            берём последнюю известную бухгалтерскую
-            и управленческую себестоимость.
-            ============================================================
-            */
-            costs AS (
-                SELECT
-                    nu.nm_id,
-
-                    MAX(
-                        w.adjust_wo[-1]
-                    ) AS last_costs,
-
-                    MAX(
-                        w.adjust_man_wo[-1]
-                    ) AS last_man_costs
-
-                FROM nm_usk nu
-
-                LEFT JOIN inventories.pre_wo w
-                    ON w.usk = nu.usk
-
-                GROUP BY
-                    nu.nm_id
-            ),
+            """
+            + COSTS_CTES_SQL
+            + """,
 
 
             /*
@@ -3052,3 +3146,135 @@ def get_stock_dimension_distributions(
         categories,
     )
 
+
+
+
+def get_warehouse_incident_stock_items(warehouse_name, report_date):
+    """
+    Постатейная детализация ФИЗИЧЕСКОГО остатка одного склада на дату —
+    для оценки товарного ущерба при происшествии (пожаре).
+
+    Использует тот же источник, что и общая выгрузка по складам
+    (get_stocks_by_warehouse_products), но:
+
+    - фильтрует строго по одному складу;
+    - берёт только физический остаток ("Остаток на складе"),
+      БЕЗ товаров в пути;
+    - переводит себестоимость из копеек в рубли (в этой выгрузке
+      она остаётся в копейках, см. docstring get_stocks_export_data).
+
+    ВАЖНО про себестоимость: она считается единой методикой
+    COSTS_CTES_SQL (основной источник — приходные УПД, тот же,
+    что в costs_control; резерв — последнее списание из pre_wo).
+    Подробности и причина отказа от pre_wo как основного
+    источника — в комментарии к константе в начале файла.
+
+    Единицы: SQL отдаёт копейки, наружу функция отдаёт РУБЛИ.
+
+    0 и "данных нет" здесь по-прежнему считаются ОДНИМ И ТЕМ ЖЕ
+    ("нет с/с"): incident_loss_export.py помечает такие позиции
+    в колонке "Без с/с" по значению 0. После перехода на УПД
+    туда должны попадать только товары вообще без приходов.
+
+    Возвращает список словарей — пригоден для передачи как
+    event["items"] в incident_loss_export.build_incident_loss_excel:
+
+        {
+            "nm_id": ...,
+            "name": ...,
+            "brand": ...,
+            "size": ...,
+            "qty": ...,                     # физический остаток, шт
+            "accounting_unit_cost": ...,    # ₽ за единицу (0, если нет данных)
+            "management_unit_cost": ...,    # ₽ за единицу (0, если нет данных)
+            #   ^ рубли, НЕ копейки
+        }
+    """
+
+    import pandas as pd
+
+    def _safe_str(value, default=""):
+        if value is None:
+            return default
+        try:
+            if pd.isna(value):
+                return default
+        except (TypeError, ValueError):
+            pass
+        return str(value)
+
+    def _safe_float(value, default=0.0):
+        if value is None:
+            return default
+        try:
+            if pd.isna(value):
+                return default
+        except (TypeError, ValueError):
+            pass
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _safe_scalar(value):
+        if value is None:
+            return None
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        return value
+
+    df = get_stocks_by_warehouse_products(report_date)
+
+    if df is None or df.empty:
+        return []
+
+    target = str(warehouse_name or "").strip()
+
+    # pd.to_numeric(...).fillna(0) — чтобы сравнение "> 0" не споткнулось
+    # о NA внутри булевой маски (прямое df[col] > 0 на nullable Int64
+    # с пропусками кидает "Cannot mask with non-boolean array
+    # containing NA / NaN values").
+    on_hand_numeric = pd.to_numeric(
+        df["Остаток на складе"],
+        errors="coerce",
+    ).fillna(0)
+
+    mask = (
+        df["Склад"].astype(str).str.strip() == target
+    ) & (
+        on_hand_numeric > 0
+    )
+
+    df = df.loc[mask].copy()
+
+    if df.empty:
+        return []
+
+    items = []
+
+    for _, row in df.iterrows():
+        # Себестоимость уже посчитана в SQL по единой методике
+        # (COSTS_CTES_SQL: приходные УПД, резерв — списания)
+        # и приходит в копейках — здесь только перевод в рубли.
+        acc_kopecks = _safe_float(row.get("Бух. с/с за ед."))
+        mgmt_kopecks = _safe_float(row.get("Упр. с/с за ед."))
+
+        acc_unit = acc_kopecks / 100.0
+        mgmt_unit = mgmt_kopecks / 100.0
+
+        items.append(
+            {
+                "nm_id": _safe_scalar(row.get("NM ID")),
+                "name": _safe_str(row.get("Наименование")),
+                "brand": _safe_str(row.get("Бренд")),
+                "size": _safe_str(row.get("Размер")),
+                "qty": _safe_float(row.get("Остаток на складе")),
+                "accounting_unit_cost": acc_unit,
+                "management_unit_cost": mgmt_unit,
+            }
+        )
+
+    return items

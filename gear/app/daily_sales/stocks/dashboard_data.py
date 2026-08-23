@@ -7,6 +7,7 @@ from typing import Optional
 import pandas as pd
 
 from conns import get_duckdb_conn_with_opt
+from .data import COSTS_CTES_SQL
 from .warehouse_coordinates import (
     WAREHOUSE_POINTS,
     WAREHOUSE_MAP_EXCLUDE,
@@ -1343,7 +1344,10 @@ def get_warehouse_incident_snapshot(
 
     ВАЖНО:
     - товары в пути НЕ включаем;
-    - себестоимость в inventories.pre_wo хранится в копейках;
+    - себестоимость берётся по единой методике COSTS_CTES_SQL
+      (основной источник — приходные УПД, резерв — списания
+      из inventories.pre_wo), см. комментарий к константе в data.py;
+    - блок отдаёт копейки, поэтому ниже деление на 100;
     - в результат возвращаем стоимость уже в рублях;
     - используем последнюю доступную дату остатков <= incident_date.
     """
@@ -1405,26 +1409,9 @@ def get_warehouse_incident_snapshot(
                     usk
             ),
 
-            costs AS (
-                SELECT
-                    nu.nm_id,
-
-                    MAX(
-                        w.adjust_wo[-1]
-                    ) AS last_costs,
-
-                    MAX(
-                        w.adjust_man_wo[-1]
-                    ) AS last_man_costs
-
-                FROM nm_usk nu
-
-                LEFT JOIN inventories.pre_wo w
-                    ON w.usk = nu.usk
-
-                GROUP BY
-                    nu.nm_id
-            )
+            """
+            + COSTS_CTES_SQL
+            + """
 
             SELECT
                 SUM(

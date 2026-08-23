@@ -41,7 +41,7 @@
 # STOCK_TRANSFER_DOWNLOAD_ID = "stock-dashboard-transfer-download"
 
 
-
+# gear/app/daily_sales/stocks/dashboard_stock/ids.py
 """Все Dash ID раздела остатков."""
 
 STOCK_MAP_ID = "stock-dashboard-map"
@@ -88,3 +88,11 @@ STOCK_TRANSFER_BULK_WAREHOUSE_ID = "stock-dashboard-transfer-bulk-warehouse"
 STOCK_TRANSFER_ALL_QTY_BTN_ID = "stock-dashboard-transfer-all-qty-btn"
 STOCK_TRANSFER_DOWNLOAD_BTN_ID = "stock-dashboard-transfer-download-btn"
 STOCK_TRANSFER_DOWNLOAD_ID = "stock-dashboard-transfer-download"
+
+
+
+# Оценка ущерба по происшествиям на складах (Excel + сопроводительное письмо PDF)
+STOCK_INCIDENT_EXCEL_BTN_ID = "stock-dashboard-incident-excel-btn"
+STOCK_INCIDENT_EXCEL_DOWNLOAD_ID = "stock-dashboard-incident-excel-download"
+STOCK_INCIDENT_PDF_BTN_ID = "stock-dashboard-incident-pdf-btn"
+STOCK_INCIDENT_PDF_DOWNLOAD_ID = "stock-dashboard-incident-pdf-download"
