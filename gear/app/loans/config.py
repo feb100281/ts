@@ -1,3 +1,4 @@
+# gear/app/loans/config.py
 from __future__ import annotations
 
 APP_NAME = "loans_app"
