@@ -1,0 +1,31 @@
+/* Базовый текст */
+.mantine-Text-root {
+    --text-lh: 1.55;
+    font-weight: 500;
+    color: #1f2937;  /* тёмно-серый вместо чисто чёрного */
+}
+
+/* Заголовки */
+.mantine-Title-root {
+    letter-spacing: -0.01em;
+    color: #111827;
+}
+
+/* Убираем излишнюю “воздушность” */
+.mantine-Container-root {
+    padding-top: 24px;
+    padding-bottom: 24px;
+}
+
+.mantine-Button-root {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.mantine-Card-root {
+    border: 1px solid #e5e7eb;
+}
+
+.mantine-Table-root {
+    font-size: 14px;
+}

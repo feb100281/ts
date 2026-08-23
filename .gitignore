@@ -1,7 +1,10 @@
 .env
 /.tmp/
+*.xlsx
 /media/
 /venv/
+/.venv/
+.venv/
 /staticfiles/
 __pycache__/
 .vscode/
@@ -15,3 +18,9 @@ __pycache__/
 .Trashes
 ehthumbs.db
 Thumbs.db
+*.parquet
+*.duckdb
+*.db
+*.zip
+*.sql
+/data/
