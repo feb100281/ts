@@ -39,7 +39,8 @@ from .methodology import methodology_rows
 # ОФОРМЛЕНИЕ
 # ============================================================
 
-FONT_NAME = "Calibri"
+FONT_NAME = "Helvetica Light"
+FONT_SIZE = 10
 
 COLOR_HEADER = "1E293B"
 COLOR_HEADER_TEXT = "FFFFFF"
@@ -260,12 +261,33 @@ def loss_frame(payload) -> pd.DataFrame:
 # ЗАПИСЬ ЛИСТА
 # ============================================================
 
+# Поле, по которому закрепляем колонки (freeze panes) на
+# листах с товарными таблицами: «Наименование» и всё левее
+# него остаются на месте при прокрутке вправо. На листах, где
+# такого поля нет (портфель, сценарии, история), закрепляется
+# только шапка — как и раньше.
+FREEZE_COLUMN_FIELD = "title"
+
+
+def _new_sheet(workbook, name):
+    """
+    Создаёт лист и сразу убирает сетку ячеек (gridlines) —
+    так таблица со своими границами и подсветкой читается
+    чище, без лишних серых линий вокруг.
+    """
+
+    ws = workbook.create_sheet(name)
+    ws.sheet_view.showGridLines = False
+
+    return ws
+
+
 def _write_title(ws, title, subtitle, width):
 
     cell = ws.cell(1, 1, title)
     cell.font = Font(
         name=FONT_NAME,
-        size=15,
+        size=FONT_SIZE,
         bold=True,
         color=COLOR_TITLE,
     )
@@ -280,7 +302,7 @@ def _write_title(ws, title, subtitle, width):
     cell = ws.cell(2, 1, subtitle)
     cell.font = Font(
         name=FONT_NAME,
-        size=10,
+        size=FONT_SIZE,
         italic=True,
         color="64748B",
     )
@@ -333,7 +355,7 @@ def write_sheet(
 
         ws.cell(4, 1, "Нет данных для этого раздела.").font = Font(
             name=FONT_NAME,
-            size=11,
+            size=FONT_SIZE,
             italic=True,
             color="94A3B8",
         )
@@ -361,7 +383,7 @@ def write_sheet(
 
         cell.font = Font(
             name=FONT_NAME,
-            size=10,
+            size=FONT_SIZE,
             bold=True,
             color=COLOR_HEADER_TEXT,
         )
@@ -429,7 +451,7 @@ def write_sheet(
 
             cell.font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 color="0F172A",
             )
 
@@ -453,7 +475,20 @@ def write_sheet(
             if highlight:
                 _highlight(cell, column["field"], value)
 
-    ws.freeze_panes = ws.cell(header_row + 1, 1).coordinate
+    # Закрепляем шапку и, если на листе есть колонка
+    # «Наименование», всё, что левее неё включительно — чтобы
+    # название товара не убегало при прокрутке вправо.
+    freeze_column = 1
+
+    for index, column in enumerate(available, start=1):
+        if column["field"] == FREEZE_COLUMN_FIELD:
+            freeze_column = index + 1
+            break
+
+    ws.freeze_panes = ws.cell(
+        header_row + 1,
+        freeze_column,
+    ).coordinate
 
     ws.auto_filter.ref = (
         f"A{header_row}:"
@@ -475,7 +510,7 @@ def write_sheet(
             ).replace(",", " "),
         ).font = Font(
             name=FONT_NAME,
-            size=10,
+            size=FONT_SIZE,
             italic=True,
             color=TEXT_WARNING,
         )
@@ -498,7 +533,7 @@ def _highlight(cell, field, value):
             cell.fill = PatternFill("solid", fgColor=FILL_DANGER)
             cell.font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 bold=True,
                 color=TEXT_DANGER,
             )
@@ -507,7 +542,7 @@ def _highlight(cell, field, value):
             cell.fill = PatternFill("solid", fgColor=FILL_WARNING)
             cell.font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 bold=True,
                 color=TEXT_WARNING,
             )
@@ -516,7 +551,7 @@ def _highlight(cell, field, value):
             cell.fill = PatternFill("solid", fgColor=FILL_GOOD)
             cell.font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 bold=True,
                 color=TEXT_GOOD,
             )
@@ -532,7 +567,7 @@ def _highlight(cell, field, value):
             cell.fill = PatternFill("solid", fgColor=FILL_DANGER)
             cell.font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 bold=True,
                 color=TEXT_DANGER,
             )
@@ -548,7 +583,7 @@ def _highlight(cell, field, value):
             cell.fill = PatternFill("solid", fgColor=FILL_DANGER)
             cell.font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 bold=True,
                 color=TEXT_DANGER,
             )
@@ -559,7 +594,7 @@ def _highlight(cell, field, value):
         cell.fill = PatternFill("solid", fgColor=FILL_ACCENT)
         cell.font = Font(
             name=FONT_NAME,
-            size=10,
+            size=FONT_SIZE,
             bold=True,
             color="1E293B",
         )
@@ -570,7 +605,7 @@ def _highlight(cell, field, value):
         if number < 0:
             cell.font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 bold=True,
                 color=TEXT_DANGER,
             )
@@ -693,7 +728,7 @@ def _write_summary(ws, payload):
         if value is None:
             cell.font = Font(
                 name=FONT_NAME,
-                size=11,
+                size=FONT_SIZE,
                 bold=True,
                 color=COLOR_HEADER,
             )
@@ -711,7 +746,7 @@ def _write_summary(ws, payload):
             )
 
         else:
-            cell.font = Font(name=FONT_NAME, size=10)
+            cell.font = Font(name=FONT_NAME, size=FONT_SIZE)
 
             value_cell = ws.cell(row_index, 2, value)
 
@@ -719,7 +754,7 @@ def _write_summary(ws, payload):
 
             value_cell.font = Font(
                 name=FONT_NAME,
-                size=11,
+                size=FONT_SIZE,
                 bold=True,
             )
 
@@ -739,7 +774,7 @@ def _write_summary(ws, payload):
 
     ws.cell(row_index + 1, 1, note).font = Font(
         name=FONT_NAME,
-        size=10,
+        size=FONT_SIZE,
         italic=True,
         color="64748B",
     )
@@ -770,14 +805,14 @@ def _write_methodology(ws):
             cell = ws.cell(row_index, 1, section)
             cell.font = Font(
                 name=FONT_NAME,
-                size=12,
+                size=FONT_SIZE,
                 bold=True,
                 color=COLOR_HEADER,
             )
 
             ws.cell(row_index, 3, text).font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 italic=True,
                 color="475569",
             )
@@ -785,13 +820,13 @@ def _write_methodology(ws):
         elif term:
             ws.cell(row_index, 2, term).font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
                 bold=True,
             )
 
             ws.cell(row_index, 3, text).font = Font(
                 name=FONT_NAME,
-                size=10,
+                size=FONT_SIZE,
             )
 
         for column in (1, 2, 3):
@@ -817,12 +852,12 @@ def build_pricing_excel(payload) -> bytes:
     decisions = prepare_decisions(payload)
 
     _write_summary(
-        workbook.create_sheet("Сводка"),
+        _new_sheet(workbook, "Сводка"),
         payload,
     )
 
     write_sheet(
-        workbook.create_sheet("Ценовые решения"),
+        _new_sheet(workbook, "Ценовые решения"),
         decisions,
         DECISION_COLUMNS,
         title="Ценовые решения по каждому артикулу",
@@ -833,7 +868,7 @@ def build_pricing_excel(payload) -> bytes:
     )
 
     write_sheet(
-        workbook.create_sheet("Продаём в убыток"),
+        _new_sheet(workbook, "Продаём в убыток"),
         loss_frame(payload),
         DECISION_COLUMNS,
         title="Товары, которые продаются ниже минимальной цены",
@@ -844,7 +879,7 @@ def build_pricing_excel(payload) -> bytes:
     )
 
     write_sheet(
-        workbook.create_sheet("Бренды и категории"),
+        _new_sheet(workbook, "Бренды и категории"),
         to_frame(payload.get("portfolio")),
         PORTFOLIO_COLUMNS,
         title="Срез по брендам и категориям",
@@ -852,7 +887,7 @@ def build_pricing_excel(payload) -> bytes:
     )
 
     write_sheet(
-        workbook.create_sheet("Сценарии"),
+        _new_sheet(workbook, "Сценарии"),
         to_frame(payload.get("scenarios")),
         SCENARIO_COLUMNS,
         title="Сценарии изменения цены",
@@ -877,7 +912,7 @@ def build_pricing_excel(payload) -> bytes:
         )
 
     write_sheet(
-        workbook.create_sheet("История"),
+        _new_sheet(workbook, "История"),
         history,
         HISTORY_COLUMNS,
         title="История продаж, цен и маржи по дням",
@@ -891,7 +926,7 @@ def build_pricing_excel(payload) -> bytes:
     )
 
     _write_methodology(
-        workbook.create_sheet("Методика"),
+        _new_sheet(workbook, "Методика"),
     )
 
     for name, color in (
@@ -922,7 +957,7 @@ def build_loss_excel(payload) -> bytes:
     frame = loss_frame(payload)
 
     write_sheet(
-        workbook.create_sheet("Продаём в убыток"),
+        _new_sheet(workbook, "Продаём в убыток"),
         frame,
         DECISION_COLUMNS,
         title="Товары, которые продаются ниже минимальной цены",
@@ -933,7 +968,7 @@ def build_loss_excel(payload) -> bytes:
     )
 
     _write_methodology(
-        workbook.create_sheet("Методика"),
+        _new_sheet(workbook, "Методика"),
     )
 
     workbook["Продаём в убыток"].sheet_properties.tabColor = "B91C1C"
@@ -983,7 +1018,7 @@ def build_product_excel(payload, nm_id) -> bytes:
         )
 
     write_sheet(
-        workbook.create_sheet("Решение"),
+        _new_sheet(workbook, "Решение"),
         decisions,
         DECISION_COLUMNS,
         title=f"NM ID {nm_id} · {title}",
@@ -991,7 +1026,7 @@ def build_product_excel(payload, nm_id) -> bytes:
     )
 
     write_sheet(
-        workbook.create_sheet("Сценарии"),
+        _new_sheet(workbook, "Сценарии"),
         scenarios,
         SCENARIO_COLUMNS,
         title="Сценарии изменения цены",
@@ -1000,7 +1035,7 @@ def build_product_excel(payload, nm_id) -> bytes:
     )
 
     write_sheet(
-        workbook.create_sheet("История"),
+        _new_sheet(workbook, "История"),
         history,
         HISTORY_COLUMNS,
         title="История продаж и цен",
@@ -1009,7 +1044,7 @@ def build_product_excel(payload, nm_id) -> bytes:
     )
 
     _write_methodology(
-        workbook.create_sheet("Методика"),
+        _new_sheet(workbook, "Методика"),
     )
 
     stream = BytesIO()

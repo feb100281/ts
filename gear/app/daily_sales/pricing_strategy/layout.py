@@ -436,7 +436,9 @@ def pricing_strategy_controls():
                 id=MODAL_ID,
                 opened=False,
                 withCloseButton=False,
-                fullScreen=True,
+                size="95%",
+                centered=True,
+                radius="lg",
                 padding="md",
                 zIndex=10000,
                 children=[

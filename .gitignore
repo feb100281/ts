@@ -20,7 +20,11 @@ ehthumbs.db
 Thumbs.db
 *.parquet
 *.duckdb
+*.duckdb.tmp/
+*.duckdb.wal
 *.db
 *.zip
 *.sql
-/data/
+*.tmp
+*.zst
+**/pricing_strategy/_cache/
