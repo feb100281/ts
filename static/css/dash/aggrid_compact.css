@@ -1,0 +1,39 @@
+.ag-theme-alpine.compact-grid {
+
+    --ag-font-size: 11px;
+
+    --ag-grid-size: 4px;
+
+    --ag-list-item-height: 20px;
+
+    --ag-row-height: 24px;
+
+    --ag-header-height: 26px;
+
+    --ag-cell-horizontal-padding: 6px;
+
+}
+
+.compact-grid .ag-header-cell-label {
+
+    font-weight: 600;
+
+}
+
+.compact-grid .ag-cell {
+
+    line-height: 22px;
+
+}
+
+.compact-grid .ag-row {
+
+    border-bottom: 1px solid #f1f1f1;
+
+}
+
+.compact-grid .ag-header {
+
+    border-bottom: 1px solid #dcdcdc;
+
+}

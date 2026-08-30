@@ -41,7 +41,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'fallback_secret_key')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = ['127.0.0.1','localhost','62.109.2.166']
 
-
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 
 
@@ -64,7 +64,18 @@ INSTALLED_APPS = [
     "contracts",
     "treasury",
     "sales",
+    "grossbook",
+    'accounting_analysis',
+    "wb",
+    "budget",
+    "cards",
     "mptt",    
+    "jsoneditor",
+    "app_wb",
+    "inventories",
+    "reports",    
+    "app_deliveries",
+    "gear",
     "django_plotly_dash.apps.DjangoPlotlyDashConfig",
     "django.contrib.humanize",
     "django.contrib.admin",
@@ -212,12 +223,16 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "Добро пожаловать в панель управления",
     "show_ui_builder": True,
     "navigation_expanded": False,
-    "custom_css": "css/custom.css",
     # "site_logo": "/img/logo_short.png",
     "site_logo": None,
     # "site_favicon": "/img/logo_short.png",
     "custom_css": "css/custom.css",
     "custom_js": "js/custom.js",
+    
+   
+
+    
+    "changeform_format": "horizontal_tabs",
 
 
 
@@ -230,12 +245,21 @@ JAZZMIN_SETTINGS = {
         {"model": "macro.CalendarExceptions"},
         {"model": "counterparties.Counterparty"},
         {"model": "contracts.Contracts"},
-         {"model": "treasury.BankStatements"},
-
-        
-        # {"name": "Помощь", "url": "https://github.com/farridav/django-jazzmin/issues", "new_window": True},
-
+        {"model": "treasury.BankStatements"},
+        {"name": "Запустить GL ETL", "url": "run_gl_etl", "new_window": False},
+        {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
+        {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
+        {"name": "Скачать проверку договоров GL/PL/BS CSV", "url": "export_contracts_gl_check"},
+        {"name": "Скачать ManPack", "url": "export_manpack", "new_window": False},
+        {"name": "Скачать остатки", "url": "export_stocks", "new_window": False},
+        {"name": "Контроль выручки", "url": "export_budget_analysis", "new_window": False},
+    
     ],
+    
+    # "usermenu_links": [
+    #     {"name": "Скачать GL CSV", "url": "export_pl_for_csv", "new_window": False},
+    #     {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
+    # ],
 
     "show_collapse": True,
 
@@ -275,6 +299,7 @@ JAZZMIN_SETTINGS = {
     #     # --- СОБСТВЕННИКИ ---
         "corporate": "fa-solid fa-building-user",
         "corporate.Owners": "fa-solid fa-building-circle-check",
+        "corporate.Countries": "fa-solid fa-globe",
 
         # --- БАНКИ ---
         "corporate.Bank": "fa-solid fa-landmark",
@@ -292,8 +317,15 @@ JAZZMIN_SETTINGS = {
         "macro.TaxesList": "fa-solid fa-file-invoice-dollar",
         "macro.CurrencyRate": "fa-solid fa-coins",
         "macro.MarketSnapshot": "fa-solid fa-magnifying-glass-chart",
+        
+    #     # --- ПРОДАЖИ --- 
+        "sales": "fa-solid fa-chart-column",
+        "sales.MVSalesDaily": "fa-solid fa-calendar-day",
+            # "fa-solid fa-calendar-day",
+        "sales.MVDataMartProduct":  "fa-solid fa-shirt",
+        "sales.WBDocument": "fa-solid fa-file-invoice",
 
-    #     # --- Договоры аренжды ---
+    #     # --- Договоры ---
         "contracts": "fa-solid fa-file-signature",
         "contracts.contracts": "fa-solid fa-file-signature",
     #     "la.Subject": "fa-solid fa-cubes",
@@ -304,11 +336,15 @@ JAZZMIN_SETTINGS = {
     #     "la.Indexation": "fa-solid fa-arrow-trend-up",
     #     "la.ProjectsType": "fa-solid fa-diagram-project",
         "contracts.ContractsTitle": "fa-solid fa-list-ul",
+        "contracts.AccuralFn": "fa-solid fa-gears",
     #     "la.AmendmentsType": "fa-solid fa-file-pen",
     #     "la.LaFiles": "fa-solid fa-file-upload",
     #     "la.LaEventLog": "fa-solid fa-clipboard-list",
     #     "la.LaManage": "fa-solid fa-sitemap",
 
+    #     # --- ГЛАВАЯ КНИГА ---
+        "grossbook": "fa-solid fa-book",
+        "grossbook.Manual": "fa-solid fa-book-bookmark",
 
     #     # --- Телеграмм-бот ---
     #     "botconfig": "fa-brands fa-telegram",
@@ -325,7 +361,50 @@ JAZZMIN_SETTINGS = {
         "treasury.BankStatements": "fa-solid fa-receipt",
         "treasury.CfData": "fa-solid fa-arrows-rotate",
         "treasury.ContractsRexex": "fa-solid fa-robot",
-    
+        
+        # --- БЮДЖЕТ ---
+        "budget": "fa-solid fa-chart-pie",
+        "budget.BudgetVersion": "fa-solid fa-layer-group",
+        "budget.Gl": "fa-solid fa-scale-balanced",
+        
+        
+        # --- АНАЛИЗ ФАЙЛОВ БУХГАЛТЕРИИ ---
+        "accounting_analysis": "fa-solid fa-magnifying-glass-chart",
+        "accounting_analysis.AccountingAnalysis": "fa-solid fa-calculator",
+        "accounting_analysis.AnalysisScript": "fa-solid fa-gears",
+        "accounting_analysis.AccountingMetric": "fa-solid fa-chart-line",
+        
+         # --- УПД И ЛОТЫ ---
+        "cards": "fa-solid fa-boxes-stacked",
+        "cards.WbCardRaw": "fa-solid fa-id-card",
+        "cards.WbSizes": "fa-solid fa-ruler-combined",
+        "cards.WbBarcodes": "fa-solid fa-barcode",
+
+        "cards.WbProduct": "fa-solid fa-shirt",
+
+        "cards.Lot": "fa-solid fa-box-open",
+        "cards.LotFile": "fa-solid fa-folder-open",
+
+        "cards.UpdDocument": "fa-solid fa-file-invoice",
+        "cards.UpdDocumentFile": "fa-solid fa-file-circle-check",
+
+        "cards.UPDData": "fa-solid fa-table-list",
+        
+         # --- ДЭШБОРДЫ ---
+        "gear": "fa-solid fa-chart-simple",
+        "gear.SegmentsSales": "fa-solid fa-layer-group",
+        "gear.DailySales": "fa-solid fa-calendar-days",
+        "gear.CostsControl": "fa-solid fa-magnifying-glass-dollar",
+        "gear.Stats": "fa-solid fa-square-poll-vertical",
+        "gear.Loans": "fa-solid fa-hand-holding-dollar",
+        
+        # --- ОТЧЕТЫ / ПРЕЗЕНТАЦИИ ---
+        "reports": "fa-solid fa-chart-area",
+        "reports.Report": "fa-solid fa-scroll",
+        "reports.SlideRegistered": "fa-solid fa-display",
+        "reports.Section": "fa-solid fa-layer-group",
+        "reports.ReportConstructor": "fa-solid fa-screwdriver-wrench",
+            
 
 
 
@@ -350,15 +429,24 @@ JAZZMIN_SETTINGS = {
     # "order_with_respect_to": ["rr.Properties", "rr.Premisses", "rr.PremissesTypes", "rr.Floors", "rr.PremissesStatus", "rr.PremissesUsage", "rr.SupportDocuments"],
 
     "order_with_respect_to": [
+        'gear',            # Дэшборды
+        'reports',         # Reports
         "macro",           # Макропоказатели
         "corporate",       # Собственники/банки
         "properties",      # Объекты недвижимости
         "counterparties",  # Контрагенты
         "contracts",       # Договоры 
+        'cards',           # УПД и приходы 
+        'sales',           # Продажи 
         'treasury',        # Казначейство 
+        'budget',          # Бюджет 
+        'grossbook',       # Главная книга
+        'accounting_analysis' # Анализ файло бухгалтерии
+,        
+        "auth",            # Пользователи и группы
 
         "botconfig",
-        "auth",            # Пользователи и группы
+
         "services",        # Служебные — всегда в конце
     ],
 
@@ -403,7 +491,7 @@ JAZZMIN_UI_TWEAKS = {
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": True,
 
-    "theme": "yeti",
+    "theme": "yeti", 
     "dark_mode_theme": None,
 
     "button_classes": {
@@ -425,8 +513,9 @@ JAZZMIN_UI_TWEAKS = {
 #     "ws_route": "ws/channel",  # нужно для WebSocket соединений (если используете live updates)
 # }
 
-# # Полностью пустой список компонентов
-# PLOTLY_COMPONENTS = []
+# PLOTLY_COMPONENTS = [
+#     "dash_ag_grid",
+# ]
 
 # # Также попробуйте явно отключить
 # import os
@@ -457,7 +546,14 @@ EMAIL_HOST_USER = "manunotify@yandex.ru"
 EMAIL_HOST_PASSWORD = "ntnmbmvvmqcchowo"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
+ANALYTICS_DB_PATH = BASE_DIR / "analytics" / "analytics.duckdb"
 
+
+# Максимальный размер POST-запроса
+DATA_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024   # 200 МБ
+
+# Максимальный размер файла в памяти
+FILE_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024   # 200 МБ
 
 # TENANT_PORTAL_SUPPORT_EMAIL = "help@yourcompany.ru"
 # TENANT_PORTAL_SUPPORT_TELEGRAM = "Daria_Voiten"

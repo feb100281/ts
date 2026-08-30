@@ -1,6 +1,7 @@
 from django_plotly_dash import DjangoDash
 from .mainwindow import MainWindow
-from utils.dash_components.common import THEME
+# from utils.dash_components.common import THEME
+from utils.dash_components.styles import corporate_theme
 from dash_mantine_components import MantineProvider, Container
 from dash import html, dcc, Input, Output
 import urllib.parse
@@ -12,8 +13,8 @@ scripts = [
 ]
 styles = [
     "/static/fonts/glyphs.css",
-    "/static/css/dash/clssic_tables.css",
-    "/static/css/dash/fancy_tables.css",
+    # "/static/css/dash/clssic_tables.css",
+    "/static/css/dash/corporate_sty.css",
 ]
 
 app = DjangoDash(
@@ -21,11 +22,12 @@ app = DjangoDash(
     external_scripts=scripts,
     external_stylesheets=styles,
     suppress_callback_exceptions=True,
+    serve_locally=True,
 )
 
 app.layout = MantineProvider(
     forceColorScheme="light",
-    theme=THEME,
+    theme=corporate_theme,
     withCssVariables=True,
     withGlobalClasses=True,
     children=[
@@ -46,7 +48,7 @@ def update_from_url(search):
     object_id = params.get("object_id", [None])[0]
 
     if not object_id:
-        return "NOT FOUND"
+        return "NOT FOUND" 
 
     content = MainWindow(object_id)
 

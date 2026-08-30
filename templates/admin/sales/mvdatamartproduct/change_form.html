@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  #content { width: 100% !important; }
+  .content, .container, #content-main { height: 100%; margin: 0; padding: 0; }
+  iframe { display:block; width:100%; height: calc(100vh - 120px); border:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<iframe src="{{ iframe_url }}"></iframe>
+{% endblock %}
