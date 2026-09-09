@@ -17,6 +17,10 @@ from .summary import get_sales_summary
 from .stat import StatWindow
 from .excel_export import register_excel_export_callbacks, register_revenue_structure_excel_callbacks
 from .stocks.export import register_stock_export_callbacks
+from .quality_control_export import (
+    QUALITY_CONTROL_EXPORT_DOWNLOAD_ID,
+    register_quality_control_export_callbacks,
+)
 from .wb_plan_monitor import register_wb_plan_callbacks
 from .ai_analysis import register_ai_analysis_callbacks
 from .price_analysis import register_price_analysis_export_callbacks
@@ -273,6 +277,10 @@ class MainWindow:
 
                 self.content_container,
                 self.details_container,
+
+                dcc.Download(
+                    id=QUALITY_CONTROL_EXPORT_DOWNLOAD_ID,
+                ),
             ],
         )
 
@@ -516,6 +524,7 @@ class MainWindow:
         register_excel_export_callbacks(app,self.selected_dates_chips_id,)
         register_revenue_structure_excel_callbacks(app)
         register_stock_export_callbacks(app)
+        register_quality_control_export_callbacks(app, FILTERS)
         register_methodology_callbacks(app)
         register_wb_plan_callbacks(app)
         register_ai_analysis_callbacks(app)

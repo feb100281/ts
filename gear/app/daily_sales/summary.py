@@ -11,6 +11,9 @@ from dash_iconify import DashIconify
 from .methodology import methodology_button
 from ..data.base import DashboardData
 from ..misc.baners import empty_df_banner
+from .quality_control_export import (
+    QUALITY_CONTROL_EXPORT_BTN_ID,
+)
 
 
 # ============================================================
@@ -238,42 +241,48 @@ def _section_title(
     color,
     background_color,
     tooltip=None,
+    action=None,
 ):
+    children = [
+        _section_icon(
+            icon=icon,
+            color=color,
+            background_color=background_color,
+            size=34,
+            icon_size=18,
+        ),
+        dmc.Stack(
+            gap=2,
+            style={
+                "minWidth": 0,
+                "flex": "1 1 auto",
+            },
+            children=[
+                _title_with_info(
+                    title=title,
+                    tooltip=tooltip,
+                    color=color,
+                    size="14px",
+                    weight=750,
+                ),
+                dmc.Text(
+                    subtitle,
+                    size="11px",
+                    c=MUTED_TEXT_COLOR,
+                    lh=1.2,
+                ),
+            ],
+        ),
+    ]
+
+    if action is not None:
+        children.append(action)
+
     return dmc.Group(
         gap=10,
         align="center",
         wrap="nowrap",
-        children=[
-            _section_icon(
-                icon=icon,
-                color=color,
-                background_color=background_color,
-                size=34,
-                icon_size=18,
-            ),
-            dmc.Stack(
-                gap=2,
-                style={
-                    "minWidth": 0,
-                    "flex": "1 1 auto",
-                },
-                children=[
-                    _title_with_info(
-                        title=title,
-                        tooltip=tooltip,
-                        color=color,
-                        size="14px",
-                        weight=750,
-                    ),
-                    dmc.Text(
-                        subtitle,
-                        size="11px",
-                        c=MUTED_TEXT_COLOR,
-                        lh=1.2,
-                    ),
-                ],
-            ),
-        ],
+        children=children,
     )
 
 
@@ -285,6 +294,7 @@ def _section_block(
     background_color,
     children,
     tooltip=None,
+    action=None,
 ):
     return html.Div(
         style={
@@ -302,6 +312,7 @@ def _section_block(
                 color=color,
                 background_color=background_color,
                 tooltip=tooltip,
+                action=action,
             ),
             dmc.Divider(
                 my=10,
@@ -742,6 +753,32 @@ def _wb_expenses_block(
 # КОНТРОЛЬ ДАННЫХ
 # ============================================================
 
+def _quality_control_export_button():
+    return dmc.Tooltip(
+        label=(
+            "Скачать проблемные позиции "
+            "(Excel: без себестоимости, "
+            "нет на складе, нет прихода)"
+        ),
+        position="top",
+        withArrow=True,
+        multiline=True,
+        w=260,
+        children=dmc.ActionIcon(
+            DashIconify(
+                icon="solar:download-minimalistic-linear",
+                width=16,
+                height=16,
+            ),
+            id=QUALITY_CONTROL_EXPORT_BTN_ID,
+            variant="light",
+            color="red",
+            size=30,
+            radius=0,
+        ),
+    )
+
+
 def _quality_metric(
     title,
     qty,
@@ -863,6 +900,7 @@ def _quality_control_block(
         color=RED if has_issues else GREEN,
         background_color=RED_BG if has_issues else GREEN_BG,
         tooltip=DATA_CONTROL_TOOLTIP,
+        action=_quality_control_export_button(),
         children=[
             html.Div(
                 style={

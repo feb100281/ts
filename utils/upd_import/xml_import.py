@@ -6,10 +6,10 @@ from pathlib import Path
 
 
 XML_FILE = Path(
-    "/Users/daria/Desktop/131.xml"
+    "/Users/daria/Desktop/136.xml"
 )
 
-OUTPUT_FILE = "./data/upd_rf/upd_ts_131_clean.parquet"
+OUTPUT_FILE = "./data/upd_rf/upd_ts_136_clean.parquet"
 
 
 # ---------------------------------------------------------

@@ -730,8 +730,10 @@ stocks_by_nm AS (
                 ) AS "Артикул",
 
                 COALESCE(
-                    p.title,
-                    ''
+                    NULLIF(p.title, ''),
+                    'Без карточки (chrt_id ' 
+                        || CAST(s.chrt_id AS VARCHAR)
+                        || ')'
                 ) AS "Наименование",
 
                 COALESCE(
@@ -2068,8 +2070,10 @@ def get_stocks_by_warehouse_products(report_date):
                 ) AS "Артикул",
 
                 COALESCE(
-                    p.title,
-                    ''
+                    NULLIF(p.title, ''),
+                    'Без карточки (chrt_id ' 
+                        || CAST(ws.chrt_id AS VARCHAR)
+                        || ')'
                 ) AS "Наименование",
 
                 COALESCE(
