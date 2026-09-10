@@ -2788,6 +2788,7 @@ COMPENSATION_HEADERS = [
     "№",
     "NM ID",
     "Товар",
+    "Бренд",
     "Предмет (категория WB)",
     "Кол-во, шт",
     "Продаж за 365 дн",
@@ -2807,19 +2808,20 @@ COMPENSATION_COL_WIDTHS = {
     "A": 5,
     "B": 12,
     "C": 34,
-    "D": 22,
-    "E": 11,
-    "F": 13,
-    "G": 12,
-    "H": 16,
-    "I": 13,
+    "D": 20,
+    "E": 22,
+    "F": 11,
+    "G": 13,
+    "H": 12,
+    "I": 16,
     "J": 13,
-    "K": 12,
+    "K": 13,
     "L": 12,
-    "M": 14,
-    "N": 16,
+    "M": 12,
+    "N": 14,
     "O": 16,
     "P": 16,
+    "Q": 16,
 }
 
 # Жёлтая заливка — редактируемые вручную ячейки (как в образце
@@ -2861,6 +2863,7 @@ def _write_compensation_item_row(
         idx,
         item.get("nm_id"),
         item.get("name") or "",
+        item.get("brand") or "Бренд не указан",
         subject_name,
         qty,
         own_sales if own_sales is not None else "",
@@ -2883,7 +2886,7 @@ def _write_compensation_item_row(
                 fill_type="solid", fgColor=FILL_STRIPE
             )
 
-    # -- редактируемые (жёлтые) входные ячейки: H..L (8..12) ---------
+    # -- редактируемые (жёлтые) входные ячейки: I..M (9..13) ---------
 
     editable_values = [
         item.get("potential_price"),
@@ -2894,37 +2897,37 @@ def _write_compensation_item_row(
     ]
 
     for offset, value in enumerate(editable_values):
-        col = 8 + offset
+        col = 9 + offset
         cell = ws.cell(row=row, column=col, value=value)
         cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
         cell.border = _thin_border()
         cell.fill = _editable_fill()
         cell.alignment = Alignment(vertical="center", horizontal="center")
 
-        if col in (8, 13, 14, 15, 16):
+        if col in (9, 14, 15, 16, 17):
             cell.number_format = "#,##0.00"
-        elif col in (9, 11, 12):
+        elif col in (10, 12, 13):
             cell.number_format = "0.00"
 
-    # -- формулы: M..P (13..16), пересчитываются в Excel живьём -------
+    # -- формулы: N..Q (14..17), пересчитываются в Excel живьём -------
 
-    h = f"H{row}"
-    i = f"I{row}"
-    j = f"J{row}"
-    k = f"K{row}"
-    l = f"L{row}"
-    e = f"E{row}"
+    i_ = f"I{row}"
+    j_ = f"J{row}"
+    k_ = f"K{row}"
+    l_ = f"L{row}"
+    m_ = f"M{row}"
+    f_ = f"F{row}"
 
     formulas = {
-        13: f'=IF({j}="Да",{h}*{k}/(100+{k}),0)',
-        14: f"={h}*{i}/100",
-        15: f"=MAX(({h}-M{row}-N{row})*(1-{l}/100),0)",
-        16: f"=O{row}*{e}",
+        14: f'=IF({k_}="Да",{i_}*{l_}/(100+{l_}),0)',
+        15: f"={i_}*{j_}/100",
+        16: f"=MAX(({i_}-N{row}-O{row})*(1-{m_}/100),0)",
+        17: f"=P{row}*{f_}",
     }
 
     for col, formula in formulas.items():
         cell = ws.cell(row=row, column=col, value=formula)
-        cell.font = Font(name=FONT_NAME, size=9.5, bold=(col == 16), color=TEXT_DARK)
+        cell.font = Font(name=FONT_NAME, size=9.5, bold=(col == 17), color=TEXT_DARK)
         cell.border = _thin_border()
         cell.number_format = "#,##0.00"
         cell.alignment = Alignment(vertical="center", horizontal="center")
@@ -3037,7 +3040,7 @@ def build_incident_compensation_excel(
 
             last_item_row = row - 1
 
-            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
             subtotal_label = ws.cell(
                 row=row, column=1, value=f"Итого по складу «{warehouse_name}»"
             )
@@ -3046,8 +3049,8 @@ def build_incident_compensation_excel(
 
             subtotal_cell = ws.cell(
                 row=row,
-                column=16,
-                value=f"=SUM(P{first_item_row}:P{last_item_row})",
+                column=17,
+                value=f"=SUM(Q{first_item_row}:Q{last_item_row})",
             )
             subtotal_cell.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
             subtotal_cell.number_format = "#,##0.00"
@@ -3056,7 +3059,7 @@ def build_incident_compensation_excel(
 
             for col in range(1, ncols + 1):
                 ws.cell(row=row, column=col).border = _thin_border()
-                if col != 16:
+                if col != 17:
                     ws.cell(row=row, column=col).fill = PatternFill(
                         fill_type="solid", fgColor=FILL_TOTAL
                     )
@@ -3070,7 +3073,7 @@ def build_incident_compensation_excel(
     # ИТОГО ПО ВСЕМ ПРОИСШЕСТВИЯМ
     # ------------------------------------------------------------------ #
 
-    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
     grand_label = ws.cell(
         row=row, column=1, value="ИТОГО сумма ущерба к возмещению, руб."
     )
@@ -3078,11 +3081,11 @@ def build_incident_compensation_excel(
     grand_label.alignment = Alignment(horizontal="right", vertical="center")
 
     if total_row_refs:
-        grand_formula = "=" + "+".join(f"P{r}" for r in total_row_refs)
+        grand_formula = "=" + "+".join(f"Q{r}" for r in total_row_refs)
     else:
         grand_formula = 0
 
-    grand_cell = ws.cell(row=row, column=16, value=grand_formula)
+    grand_cell = ws.cell(row=row, column=17, value=grand_formula)
     grand_cell.font = Font(name=FONT_NAME, size=12, bold=True, color="FFFFFF")
     grand_cell.fill = PatternFill(fill_type="solid", fgColor=ACCENT_GREEN)
     grand_cell.number_format = "#,##0.00"
@@ -3096,7 +3099,7 @@ def build_incident_compensation_excel(
     # ПОРОГ ГОСПОДДЕРЖКИ 5% (Постановление N 1074, п. 3)
     # ------------------------------------------------------------------ #
 
-    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
     income_label = ws.cell(
         row=row,
         column=1,
@@ -3108,7 +3111,7 @@ def build_incident_compensation_excel(
     income_label.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
     income_label.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
 
-    income_cell = ws.cell(row=row, column=16, value=None)
+    income_cell = ws.cell(row=row, column=17, value=None)
     income_cell.fill = _editable_fill()
     income_cell.number_format = "#,##0.00"
     income_cell.border = _thin_border()
@@ -3116,12 +3119,12 @@ def build_incident_compensation_excel(
     income_row = row
     row += 1
 
-    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
     pct_label = ws.cell(row=row, column=1, value="5% от дохода за 2025 год, руб.")
     pct_label.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
     pct_label.alignment = Alignment(horizontal="right", vertical="center")
 
-    pct_cell = ws.cell(row=row, column=16, value=f"=P{income_row}*0.05")
+    pct_cell = ws.cell(row=row, column=17, value=f"=Q{income_row}*0.05")
     pct_cell.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
     pct_cell.number_format = "#,##0.00"
     pct_cell.border = _thin_border()
@@ -3134,8 +3137,8 @@ def build_incident_compensation_excel(
         row=row,
         column=1,
         value=(
-            f'=IF(P{income_row}=0,"Внесите доход за 2025 год выше, чтобы проверить порог 5%",'
-            f'IF(P{grand_total_row}>=P{pct_row},'
+            f'=IF(Q{income_row}=0,"Внесите доход за 2025 год выше, чтобы проверить порог 5%",'
+            f'IF(Q{grand_total_row}>=Q{pct_row},'
             f'"Ущерб ≥ 5% от дохода за 2025 год — попадаем на господдержку по Постановлению N 1074 '
             f'(продление налогов на 12 мес., рассрочка)",'
             f'"Ущерб < 5% от дохода за 2025 год — по 1-й категории (действующие продавцы) на господдержку '
@@ -3148,15 +3151,15 @@ def build_incident_compensation_excel(
 
     # Заморозка: строки заголовка первого блока (дальше вниз, у
     # следующих складов, свой заголовок уже не будет закреплён —
-    # ограничение "стопки" таблиц на одном листе) + первые 4
-    # столбца (№, NM ID, Товар, Предмет), чтобы они оставались
-    # видны при прокрутке вправо к цене/формулам.
+    # ограничение "стопки" таблиц на одном листе) + первые 5
+    # столбцов (№, NM ID, Товар, Бренд, Предмет), чтобы они
+    # оставались видны при прокрутке вправо к цене/формулам.
     if first_header_row is not None:
         ws.freeze_panes = ws.cell(
-            row=first_header_row + 1, column=5
+            row=first_header_row + 1, column=6
         ).coordinate
     else:
-        ws.freeze_panes = "E5"
+        ws.freeze_panes = "F5"
 
     combined_ws = _add_all_items_combined_sheet(
         wb,
@@ -3169,6 +3172,10 @@ def build_incident_compensation_excel(
     # детальный "Калькулятор ущерба" по складам — вторым.
     wb.move_sheet(combined_ws.title, offset=-1)
     wb.active = 0
+
+    # Лист с формальным описанием методологии — третьим (после
+    # обоих расчётных листов).
+    _add_methodology_sheet(wb, generated_at=generated_at)
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -3198,6 +3205,7 @@ COMBINED_HEADERS = [
     "№",
     "NM ID",
     "Товар",
+    "Бренд",
     "Предмет (категория WB)",
     "Склады",
     "Кол-во, шт (всего)",
@@ -3218,20 +3226,21 @@ COMBINED_COL_WIDTHS = {
     "A": 5,
     "B": 12,
     "C": 34,
-    "D": 22,
-    "E": 26,
-    "F": 13,
+    "D": 20,
+    "E": 22,
+    "F": 26,
     "G": 13,
-    "H": 12,
-    "I": 16,
-    "J": 13,
+    "H": 13,
+    "I": 12,
+    "J": 16,
     "K": 13,
-    "L": 12,
+    "L": 13,
     "M": 12,
-    "N": 14,
-    "O": 16,
+    "N": 12,
+    "O": 14,
     "P": 16,
     "Q": 16,
+    "R": 16,
 }
 
 
@@ -3336,6 +3345,7 @@ def _write_combined_item_row(
         idx,
         item.get("nm_id"),
         item.get("name") or "",
+        item.get("brand") or "Бренд не указан",
         subject_name,
         item.get("warehouses_label") or "",
         qty,
@@ -3350,14 +3360,14 @@ def _write_combined_item_row(
         cell.border = _thin_border()
         cell.alignment = Alignment(
             vertical="center",
-            horizontal="center" if col not in (3, 5) else "left",
-            wrap_text=(col in (3, 5)),
+            horizontal="center" if col not in (3, 6) else "left",
+            wrap_text=(col in (3, 6)),
         )
 
         if stripe:
             cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
 
-    # -- редактируемые (жёлтые) входные ячейки: I..M (9..13) ---------
+    # -- редактируемые (жёлтые) входные ячейки: J..N (10..14) --------
 
     editable_values = [
         item.get("potential_price"),
@@ -3368,38 +3378,38 @@ def _write_combined_item_row(
     ]
 
     for offset, value in enumerate(editable_values):
-        col = 9 + offset
+        col = 10 + offset
         cell = ws.cell(row=row, column=col, value=value)
         cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
         cell.border = _thin_border()
         cell.fill = _editable_fill()
         cell.alignment = Alignment(vertical="center", horizontal="center")
 
-        if col in (9, 14, 15, 16, 17):
+        if col in (10, 15, 16, 17, 18):
             cell.number_format = "#,##0.00"
-        elif col in (10, 12, 13):
+        elif col in (11, 13, 14):
             cell.number_format = "0.00"
 
-    # -- формулы: N..Q (14..17) ---------------------------------------
+    # -- формулы: O..R (15..18) ---------------------------------------
 
-    i_ = f"I{row}"
     j_ = f"J{row}"
     k_ = f"K{row}"
     l_ = f"L{row}"
     m_ = f"M{row}"
-    f_ = f"F{row}"
+    n_ = f"N{row}"
+    g_ = f"G{row}"
 
     formulas = {
-        14: f'=IF({k_}="Да",{i_}*{l_}/(100+{l_}),0)',
-        15: f"={i_}*{j_}/100",
-        16: f"=MAX(({i_}-N{row}-O{row})*(1-{m_}/100),0)",
-        17: f"=P{row}*{f_}",
+        15: f'=IF({l_}="Да",{j_}*{m_}/(100+{m_}),0)',
+        16: f"={j_}*{k_}/100",
+        17: f"=MAX(({j_}-O{row}-P{row})*(1-{n_}/100),0)",
+        18: f"=Q{row}*{g_}",
     }
 
     for col, formula in formulas.items():
         cell = ws.cell(row=row, column=col, value=formula)
         cell.font = Font(
-            name=FONT_NAME, size=9.5, bold=(col == 17), color=TEXT_DARK
+            name=FONT_NAME, size=9.5, bold=(col == 18), color=TEXT_DARK
         )
         cell.border = _thin_border()
         cell.number_format = "#,##0.00"
@@ -3464,7 +3474,7 @@ def _add_all_items_combined_sheet(
 
     row += 1
 
-    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=17)
     grand_label = ws.cell(
         row=row, column=1, value="ИТОГО сумма ущерба к возмещению, руб."
     )
@@ -3472,11 +3482,11 @@ def _add_all_items_combined_sheet(
     grand_label.alignment = Alignment(horizontal="right", vertical="center")
 
     if combined_items:
-        grand_formula = f"=SUM(Q{first_item_row}:Q{last_item_row})"
+        grand_formula = f"=SUM(R{first_item_row}:R{last_item_row})"
     else:
         grand_formula = 0
 
-    grand_cell = ws.cell(row=row, column=17, value=grand_formula)
+    grand_cell = ws.cell(row=row, column=18, value=grand_formula)
     grand_cell.font = Font(name=FONT_NAME, size=12, bold=True, color="FFFFFF")
     grand_cell.fill = PatternFill(fill_type="solid", fgColor=ACCENT_GREEN)
     grand_cell.number_format = "#,##0.00"
@@ -3485,8 +3495,293 @@ def _add_all_items_combined_sheet(
 
     # Заморозка заголовка таблицы (одна сплошная таблица на этом
     # листе, без "стопки" по складам, поэтому заголовок остаётся
-    # закреплённым при прокрутке до самого низа) + первые 5
-    # столбцов (№, NM ID, Товар, Предмет, Склады).
-    ws.freeze_panes = ws.cell(row=header_row + 1, column=6).coordinate
+    # закреплённым при прокрутке до самого низа) + первые 6
+    # столбцов (№, NM ID, Товар, Бренд, Предмет, Склады).
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=7).coordinate
+
+    return ws
+
+
+# =============================================================================
+# EXCEL: лист "Методология" — формальное описание порядка расчёта
+# ущерба для внешнего использования (например, для пояснений
+# налоговому органу), без ссылок на внутренние таблицы/названия
+# листов приложения — только нормативные основания и формула.
+# =============================================================================
+
+
+def _write_methodology_paragraph(
+    ws: Worksheet,
+    *,
+    row: int,
+    text: str,
+    bold: bool = False,
+    size: float = 10.5,
+    color: str = None,
+    indent: bool = False,
+) -> int:
+    """
+    Пишет один абзац в колонку A (объединённую по ширине листа),
+    с переносом строк, и возвращает следующую свободную строку.
+    Высота строки подбирается приблизительно по длине текста.
+    """
+
+    ncols = 10
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    cell = ws.cell(row=row, column=1, value=text)
+    cell.font = Font(
+        name=FONT_NAME,
+        size=size,
+        bold=bold,
+        color=color or TEXT_DARK,
+    )
+    cell.alignment = Alignment(
+        vertical="top",
+        horizontal="left",
+        wrap_text=True,
+        indent=(2 if indent else 0),
+    )
+
+    chars_per_line = 118 if not indent else 112
+    lines = max(1, -(-len(text) // chars_per_line))
+    ws.row_dimensions[row].height = max(18, lines * 15 + 6)
+
+    return row + 1
+
+
+def _add_methodology_sheet(
+    wb: Workbook,
+    *,
+    generated_at: datetime,
+) -> Worksheet:
+    """
+    Добавляет лист "Методология" — формальное, самодостаточное
+    описание порядка расчёта суммы ущерба, без упоминания названий
+    внутренних листов/таблиц приложения (адресовано внешнему
+    читателю — например, налоговому органу).
+    """
+
+    ws = wb.create_sheet("Методология")
+
+    ws.sheet_view.showGridLines = False
+
+    for col, width in {
+        "A": 12,
+        "B": 12,
+        "C": 12,
+        "D": 12,
+        "E": 12,
+        "F": 12,
+        "G": 12,
+        "H": 12,
+        "I": 12,
+        "J": 12,
+    }.items():
+        ws.column_dimensions[col].width = width
+
+    row = 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=10)
+    title_cell = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            "Методология расчёта ущерба, причинённого товару продавца "
+            "в результате атак беспилотных летательных аппаратов на "
+            "объекты хранения (склады) Wildberries"
+        ),
+    )
+    title_cell.font = Font(name=FONT_NAME, size=14.5, bold=True, color=TEXT_DARK)
+    title_cell.alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[row].height = 40
+    row += 2
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=10)
+    date_cell = ws.cell(
+        row=row,
+        column=1,
+        value=f"Составлено {generated_at.strftime('%d.%m.%Y')}",
+    )
+    date_cell.font = Font(name=FONT_NAME, size=10, italic=True, color=MUTED)
+    row += 2
+
+    sections = [
+        ("1. Нормативные основания", True, 12, None, False),
+        (
+            "1.1. Договор публичной оферты о реализации товаров на "
+            "маркетплейсе Wildberries (далее — Оферта), заключаемый "
+            "между продавцом и ООО «Вайлдберриз» / оператором фулфилмент-"
+            "центра ООО «РВБ», пункты 11.3.4–11.3.9 которого устанавливают "
+            "порядок определения и возмещения ущерба, причинённого товару "
+            "продавца вследствие его утраты либо повреждения на складе.",
+            False, 10.5, None, True,
+        ),
+        (
+            "1.2. Постановление Правительства Российской Федерации от "
+            "25.08.2026 № 1074, устанавливающее порядок предоставления "
+            "мер государственной поддержки (отсрочки/рассрочки уплаты "
+            "налогов) продавцам — участникам электронной торговли, товар "
+            "которых пострадал в результате атак беспилотных летательных "
+            "аппаратов на объекты хранения товаров на территории Российской "
+            "Федерации, при условии, что совокупный размер причинённого "
+            "ущерба превышает 5 процентов от учитываемого при "
+            "налогообложении дохода продавца за 2025 год (для продавцов, "
+            "зарегистрированных до 01.12.2025), либо возникает в любом "
+            "размере (для продавцов, зарегистрированных после 01.12.2025).",
+            False, 10.5, None, True,
+        ),
+        ("2. Формула расчёта суммы ущерба", True, 12, None, False),
+        (
+            "2.1. Сумма ущерба, подлежащая возмещению за единицу товара "
+            "(далее — Св), определяется в соответствии с п. 11.3.5 Оферты "
+            "по формуле:",
+            False, 10.5, None, False,
+        ),
+        (
+            "Св = Ц − НДС − К − (Ц − НДС − К) × Нац%",
+            True, 12, ACCENT_GREEN, True,
+        ),
+        (
+            "2.2. Итоговая сумма ущерба по каждой позиции товара "
+            "определяется как произведение Св на количество утраченных "
+            "либо повреждённых единиц данного товара. Совокупная сумма "
+            "ущерба по происшествию определяется как сумма ущерба по всем "
+            "позициям физического остатка товара, находившегося на складе "
+            "на момент происшествия.",
+            False, 10.5, None, True,
+        ),
+        ("3. Составляющие формулы", True, 12, None, False),
+        (
+            "3.1. Ц (потенциальная цена реализации товара, руб.) — цена, "
+            "по которой товар предлагался к продаже. Определяется в "
+            "соответствии с п. 11.3.6 Оферты (порядок определения приведён "
+            "в разделе 4 настоящего документа).",
+            False, 10.5, None, True,
+        ),
+        (
+            "3.2. НДС (руб.) — сумма налога на добавленную стоимость, "
+            "включённая в цену Ц, рассчитываемая по формуле "
+            "НДС = Ц × Ставка / (100 + Ставка), где Ставка — применяемая "
+            "продавцом ставка НДС по соответствующему товару "
+            "(в процентах). Если продавец не является плательщиком НДС, "
+            "показатель принимается равным нулю.",
+            False, 10.5, None, True,
+        ),
+        (
+            "3.3. К (руб.) — сумма комиссионного вознаграждения "
+            "Wildberries, рассчитываемая по формуле К = Ц × К%, где К% — "
+            "размер комиссии, установленный Wildberries для товарной "
+            "категории («Предмета»), к которой относится товар (тариф за "
+            "продажу со склада Wildberries).",
+            False, 10.5, None, True,
+        ),
+        (
+            "3.4. Нац% — размер наценки, установленный Wildberries для "
+            "соответствующей товарной категории («Предмета») в "
+            "опубликованной методике расчёта наценки.",
+            False, 10.5, None, True,
+        ),
+        ("4. Порядок определения потенциальной цены реализации (Ц)", True, 12, None, False),
+        (
+            "В соответствии с п. 11.3.6 Оферты, потенциальная цена "
+            "реализации товара определяется на дату, предшествующую дате "
+            "наступления ущерба, следующим образом:",
+            False, 10.5, None, False,
+        ),
+        (
+            "4.1. Если товар был реализован 10 (десять) и более раз в "
+            "течение 365 дней, предшествующих указанной дате, Ц "
+            "принимается равной среднеарифметическому значению цен, по "
+            "которым данный товар предлагался к продаже, за указанный "
+            "период.",
+            False, 10.5, None, True,
+        ),
+        (
+            "4.2. Если товар был реализован менее 10 (десяти) раз в "
+            "течение указанного периода (либо не реализовывался вовсе), Ц "
+            "принимается равной среднеарифметическому значению цен всех "
+            "товаров, относящихся к тому же «Предмету» (товарной "
+            "категории Wildberries), что и рассматриваемый товар, за тот "
+            "же период.",
+            False, 10.5, None, True,
+        ),
+        (
+            "4.3. Итоговое значение Ц дополнительно не может превышать "
+            "максимальную цену реализации по соответствующему «Предмету» "
+            "среди всех продавцов торговой площадки. Указанное ограничение "
+            "применяется Wildberries / ООО «РВБ» при итоговом определении "
+            "суммы возмещения, поскольку сведения о ценах иных продавцов "
+            "площадки не находятся в открытом доступе для отдельного "
+            "продавца и не могут быть применены им самостоятельно.",
+            False, 10.5, None, True,
+        ),
+        (
+            "4.4. Если товар не реализовывался ни разу за указанный период "
+            "ни им самим, ни какими-либо иными товарами того же «Предмета», "
+            "потенциальная цена реализации определяется продавцом "
+            "самостоятельно на основании имеющихся у него данных о "
+            "стоимости товара.",
+            False, 10.5, None, True,
+        ),
+        ("5. Дата, на которую производится расчёт", True, 12, None, False),
+        (
+            "5.1. Расчёт производится на дату, предшествующую дате "
+            "наступления происшествия — по данным о физическом остатке "
+            "товара на складе на конец предшествующего календарного дня.",
+            False, 10.5, None, True,
+        ),
+        (
+            "5.2. Период для определения потенциальной цены реализации "
+            "(365 дней) отсчитывается назад от указанной даты включительно.",
+            False, 10.5, None, True,
+        ),
+        ("6. Проверка права на меры государственной поддержки", True, 12, None, False),
+        (
+            "6.1. Совокупная сумма ущерба по всем происшествиям, связанным "
+            "с атаками беспилотных летательных аппаратов, сопоставляется с "
+            "величиной, равной 5 процентам от дохода продавца за 2025 год, "
+            "учитываемого при налогообложении.",
+            False, 10.5, None, True,
+        ),
+        (
+            "6.2. Для продавцов, зарегистрированных после 01.12.2025, "
+            "право на меры государственной поддержки возникает при любом "
+            "подтверждённом размере ущерба, без применения порогового "
+            "значения 5 процентов.",
+            False, 10.5, None, True,
+        ),
+        ("7. Заключительные положения", True, 12, None, False),
+        (
+            "7.1. Настоящий расчёт представляет собой оценку суммы ущерба, "
+            "произведённую продавцом самостоятельно на основании "
+            "собственных учётных данных и порядка, установленного Офертой.",
+            False, 10.5, None, True,
+        ),
+        (
+            "7.2. Окончательное определение суммы ущерба, а также решение "
+            "о применении мер государственной поддержки в соответствии с "
+            "Постановлением Правительства РФ от 25.08.2026 № 1074, "
+            "принимается Wildberries / ООО «РВБ» при формировании и "
+            "направлении соответствующих сведений в налоговые органы; "
+            "отдельное обращение продавца для этого не требуется.",
+            False, 10.5, None, True,
+        ),
+    ]
+
+    for text, bold, size, color, indent in sections:
+        row = _write_methodology_paragraph(
+            ws,
+            row=row,
+            text=text,
+            bold=bold,
+            size=size,
+            color=color,
+            indent=indent,
+        )
+        if bold:
+            row += 0
+        else:
+            row += 1
 
     return ws
