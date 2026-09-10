@@ -1,0 +1,29 @@
+<div id="section-detail-total"></div>
+<div class="section-title section-title-roman">
+    {% if sales_block %}IV.{% else %}III.{% endif %} Структура бюджета за весь период
+</div>
+
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:38%;">Статья</th>
+            <th style="width:20%;">План</th>
+            <th style="width:20%;">Факт</th>
+            <th style="width:14%;">Δ</th>
+            <th style="width:8%;">% вып.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in detail_rows_total %}
+        <tr class="row-{{ row.row_type }}">
+            <td class="left label-cell" style="padding-left: {{ row.indent_px }}px;">
+                {{ row.label }}
+            </td>
+            <td class="right">{{ row.plan_total }}</td>
+            <td class="right">{{ row.fact_total }}</td>
+            <td class="right {{ row.delta_class }}">{{ row.delta_total }}</td>
+            <td class="center">{{ row.execution_total }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

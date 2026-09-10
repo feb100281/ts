@@ -1,0 +1,20 @@
+# gear/apps.py
+from django.apps import AppConfig
+
+
+class GearConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "gear"
+    verbose_name = "Dash Board"
+    
+    
+    def ready(self):       
+            # Импортируем Dash-приложение при старте Django
+            from .app.segement_sales import app as segments_sales_app
+            from .app.daily_sales import app as dayly_sales_app
+            from .app.costs_control import app as costs_control_app
+            from .app.stats import app as stats_app
+            from .app.loans import app as loans_app
+            
+            
+  

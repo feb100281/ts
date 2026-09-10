@@ -1,0 +1,240 @@
+{% extends "admin/change_form.html" %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block title %}
+  {% if original %}
+    Корректировка КЗ-{{ original.id }}
+  {% else %}
+    Новая корректировка займа
+  {% endif %}
+{% endblock %}
+
+{% block content_title %}
+  <div style="
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      flex-wrap:wrap;
+      padding-bottom:8px;
+  ">
+    <div style="
+        display:flex;
+        align-items:center;
+        gap:12px;
+    ">
+      <div style="
+          width:42px;
+          height:42px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:#173b34;
+          color:#e8f3ee;
+          font-size:14px;
+          font-weight:800;
+          border-radius:2px;
+      ">
+        КЗ
+      </div>
+
+      <div>
+        <div style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:.07em;
+            color:#64748b;
+            font-weight:700;
+        ">
+          Контрольная точка займа
+        </div>
+
+        <div style="
+            margin-top:3px;
+            font-size:20px;
+            font-weight:800;
+            color:#0f172a;
+        ">
+          {% if original %}
+            Корректировка КЗ-{{ original.id }}
+          {% else %}
+            Новая корректировка займа
+          {% endif %}
+        </div>
+
+        {% if original %}
+          <div style="
+              margin-top:4px;
+              color:#64748b;
+              font-size:12px;
+          ">
+            {{ original.adjustment_date|date:"d.m.Y" }}
+            · {{ original.contract }}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="
+        display:flex;
+        align-items:center;
+        gap:8px;
+        flex-wrap:wrap;
+    ">
+      {% if original %}
+        <a
+          href="{% url 'admin:grossbook_loanadjustment_pdf' original.id %}"
+          target="_blank"
+          style="
+            min-height:32px;
+            padding:6px 11px;
+            display:inline-flex;
+            align-items:center;
+            gap:6px;
+            background:#fff7ed;
+            color:#9a3412;
+            border:1px solid #fed7aa;
+            border-radius:2px;
+            text-decoration:none;
+            font-size:12px;
+            font-weight:700;
+          "
+        >
+          🖨️ Печать справки
+        </a>
+      {% endif %}
+
+      <a
+        href="{% url 'admin:grossbook_loanadjustment_changelist' %}"
+        style="
+          min-height:32px;
+          padding:6px 11px;
+          display:inline-flex;
+          align-items:center;
+          background:#f8fafc;
+          color:#334155;
+          border:1px solid #e2e8f0;
+          border-radius:2px;
+          text-decoration:none;
+          font-size:12px;
+          font-weight:700;
+        "
+      >
+        ← К списку
+      </a>
+    </div>
+  </div>
+
+  <div style="
+      margin-top:10px;
+      padding:10px 0 14px;
+      border-bottom:1px solid #e2e8f0;
+      color:#64748b;
+      font-size:11px;
+  ">
+    <a
+      href="{% url 'admin:index' %}"
+      style="color:#94a3b8;text-decoration:none;"
+    >
+      НАЧАЛО
+    </a>
+
+    <span style="margin:0 5px;">›</span>
+
+    <a
+      href="{% url 'admin:grossbook_loanadjustment_changelist' %}"
+      style="color:#94a3b8;text-decoration:none;"
+    >
+      КОРРЕКТИРОВКИ ЗАЙМОВ
+    </a>
+
+    <span style="margin:0 5px;">›</span>
+
+    <strong style="color:#475569;">
+      {% if original %}
+        КЗ-{{ original.id }}
+      {% else %}
+        НОВЫЙ ДОКУМЕНТ
+      {% endif %}
+    </strong>
+  </div>
+
+  <div style="
+      margin:16px 0;
+      padding:11px 13px;
+      background:#f7faf9;
+      border-left:4px solid #2f6656;
+      color:#475569;
+      font-size:12px;
+      line-height:1.5;
+  ">
+    <strong style="color:#173b34;">
+      Важно:
+    </strong>
+
+    корректировка не является оплатой или бухгалтерской проводкой.
+    Она устанавливает правильный остаток тела и процентов
+    на конец выбранного календарного дня.
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+    fieldset.module {
+      border:1px solid #e2e8f0;
+      border-radius:2px;
+      box-shadow:0 1px 2px rgba(15,23,42,.04);
+    }
+
+    fieldset.module h2 {
+      background:#f8fafc !important;
+      color:#0f172a !important;
+      font-weight:800 !important;
+      border-bottom:1px solid #e2e8f0;
+    }
+
+    .submit-row {
+      background:#f8fafc;
+      border:1px solid #e2e8f0;
+      border-radius:2px;
+    }
+
+    .loan-adj-form-pdf {
+      display:flex;
+      align-items:center;
+      gap:12px;
+      max-width:430px;
+      padding:11px 13px;
+      background:#f8fafc;
+      border:1px solid #dbe3e8;
+      color:#0f172a !important;
+      text-decoration:none !important;
+    }
+
+    .loan-adj-form-pdf-icon {
+      width:40px;
+      height:40px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#173b34;
+      color:#fff;
+      font-size:11px;
+      font-weight:800;
+    }
+
+    .loan-adj-form-pdf strong,
+    .loan-adj-form-pdf small {
+      display:block;
+    }
+
+    .loan-adj-form-pdf small {
+      margin-top:4px;
+      color:#64748b;
+    }
+  </style>
+{% endblock %}

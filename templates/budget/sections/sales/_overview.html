@@ -1,0 +1,239 @@
+{% comment %} <div id="section-sales-overview"></div>
+
+<div class="sales-summary-box">
+    {{ sales_block.narrative }}
+</div>
+
+<table class="kpi-grid">
+    <tr>
+        <td>
+            <div class="kpi-label">MTD Оборот</div>
+            <div class="kpi-main">{{ sales_block.mtd.sales_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.sales_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">MTD Возвраты</div>
+            <div class="kpi-main">{{ sales_block.mtd.returns_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.returns_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">MTD Чистая выручка</div>
+            <div class="kpi-main">{{ sales_block.mtd.net_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.net_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">Средняя цена продажи</div>
+            <div class="kpi-main">{{ sales_block.mtd.avg_price }} руб./шт.</div>
+            <div class="kpi-sub">по продажам текущего месяца</div>
+        </td>
+    </tr>
+</table>
+
+<div class="section-title">Сравнение показателей</div>
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:34%;">Показатель</th>
+            <th style="width:18%;">Текущее значение</th>
+            <th style="width:14%;">Δ</th>
+            <th style="width:34%;">База сравнения</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="left">Чистая выручка MTD к аналогичному периоду прошлого месяца</td>
+            <td class="right">{{ sales_block.mtd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.vs_prev_month_class }}">
+                {{ sales_block.compare.vs_prev_month_pct }}
+            </td>
+            <td class="center">{{ sales_block.compare.prev_month_period }}</td>
+        </tr>
+        <tr>
+            <td class="left">Чистая выручка MTD к аналогичному периоду прошлого года</td>
+            <td class="right">{{ sales_block.mtd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.vs_ly_class }}">
+                {{ sales_block.compare.vs_ly_pct }}
+            </td>
+            <td class="center">{{ sales_block.compare.ly_period }}</td>
+        </tr>
+        <tr>
+            <td class="left">Чистая выручка YTD к аналогичному периоду прошлого года</td>
+            <td class="right">{{ sales_block.ytd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.ytd_vs_ly_class }}">
+                {{ sales_block.compare.ytd_vs_ly_pct }}
+            </td>
+            <td class="center">С начала года к аналогичному периоду прошлого года</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="section-title">Показатели с начала года (YTD)</div>
+<table class="kpi-grid">
+    <tr>
+        <td>
+            <div class="kpi-label">YTD Оборот</div>
+            <div class="kpi-main">{{ sales_block.ytd.sales_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.sales_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Возвраты</div>
+            <div class="kpi-main">{{ sales_block.ytd.returns_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.returns_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Чистая выручка</div>
+            <div class="kpi-main">{{ sales_block.ytd.net_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.net_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Средняя цена продажи</div>
+            <div class="kpi-main">{{ sales_block.ytd.avg_price }} руб./шт.</div>
+            <div class="kpi-sub">по продажам с начала года</div>
+        </td>
+    </tr>
+</table>
+
+{% if sales_chart_base64 %}
+<div class="section-title">Динамика чистой выручки и средней цены продаж</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ sales_chart_base64 }}" alt="Динамика продаж">
+</div>
+<div class="small-note">
+    Столбцы отражают чистую выручку, линия — среднюю цену продажи за 1 шт.
+    Подписи Δ показывают изменение чистой выручки относительно предыдущего месяца.
+</div>
+{% endif %} {% endcomment %}
+
+
+<div id="section-sales-overview"></div>
+
+<!-- Основной раздел I.1 -->
+<div class="section-header">
+    <span class="section-number">I.1</span>
+    <div class="section-title-with-num">Ключевые показатели MTD / YTD</div>
+</div>
+
+<div class="sales-summary-box">
+    {{ sales_block.narrative }}
+</div>
+
+<!-- Подраздел I.1.1: Ключевые показатели MTD -->
+<div class="subsection-header">
+    <span class="subsection-number">I.1.1</span>
+    <div class="subsection-title">Ключевые показатели за месяц (MTD)</div>
+</div>
+
+<table class="kpi-grid">
+    <tr>
+        <td>
+            <div class="kpi-label">MTD Оборот</div>
+            <div class="kpi-main">{{ sales_block.mtd.sales_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.sales_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">MTD Возвраты</div>
+            <div class="kpi-main">{{ sales_block.mtd.returns_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.returns_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">MTD Чистая выручка</div>
+            <div class="kpi-main">{{ sales_block.mtd.net_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.net_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">Средняя цена продажи</div>
+            <div class="kpi-main">{{ sales_block.mtd.avg_price }} руб./шт.</div>
+            <div class="kpi-sub">по продажам текущего месяца</div>
+        </td>
+    </tr>
+</table>
+
+<!-- Подраздел I.1.2: Сравнение показателей -->
+<div class="subsection-header">
+    <span class="subsection-number">I.1.2</span>
+    <div class="subsection-title">Сравнение показателей</div>
+</div>
+
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:34%;">Показатель</th>
+            <th style="width:18%;">Текущее значение</th>
+            <th style="width:14%;">Δ</th>
+            <th style="width:34%;">База сравнения</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="left">Чистая выручка MTD к аналогичному периоду прошлого месяца</td>
+            <td class="right">{{ sales_block.mtd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.vs_prev_month_class }}">
+                {{ sales_block.compare.vs_prev_month_pct }}
+            </td>
+            <td class="center">{{ sales_block.compare.prev_month_period }}</td>
+        </tr>
+        <tr>
+            <td class="left">Чистая выручка MTD к аналогичному периоду прошлого года</td>
+            <td class="right">{{ sales_block.mtd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.vs_ly_class }}">
+                {{ sales_block.compare.vs_ly_pct }}
+            </td>
+            <td class="center">{{ sales_block.compare.ly_period }}</td>
+        </tr>
+        <tr>
+            <td class="left">Чистая выручка YTD к аналогичному периоду прошлого года</td>
+            <td class="right">{{ sales_block.ytd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.ytd_vs_ly_class }}">
+                {{ sales_block.compare.ytd_vs_ly_pct }}
+            </td>
+            <td class="center">С начала года к аналогичному периоду прошлого года</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- Подраздел I.1.3: Показатели с начала года -->
+<div class="subsection-header">
+    <span class="subsection-number">I.1.3</span>
+    <div class="subsection-title">Показатели с начала года (YTD)</div>
+</div>
+
+<table class="kpi-grid">
+    <tr>
+        <td>
+            <div class="kpi-label">YTD Оборот</div>
+            <div class="kpi-main">{{ sales_block.ytd.sales_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.sales_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Возвраты</div>
+            <div class="kpi-main">{{ sales_block.ytd.returns_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.returns_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Чистая выручка</div>
+            <div class="kpi-main">{{ sales_block.ytd.net_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.net_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Средняя цена продажи</div>
+            <div class="kpi-main">{{ sales_block.ytd.avg_price }} руб./шт.</div>
+            <div class="kpi-sub">по продажам с начала года</div>
+        </td>
+    </tr>
+</table>
+
+{% if sales_chart_base64 %}
+<!-- Подраздел I.1.4: Динамика -->
+<div class="subsection-header">
+    <span class="subsection-number">I.1.4</span>
+    <div class="subsection-title">Динамика чистой выручки и средней цены продаж</div>
+</div>
+
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ sales_chart_base64 }}" alt="Динамика продаж">
+</div>
+<div class="small-note">
+    Столбцы отражают чистую выручку, линия — среднюю цену продажи за 1 шт.
+    Подписи Δ показывают изменение чистой выручки относительно предыдущего месяца.
+</div>
+{% endif %}

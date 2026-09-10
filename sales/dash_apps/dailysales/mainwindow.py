@@ -6,11 +6,14 @@ import pandas as pd
 import numpy as np
 from dash_iconify import DashIconify
 import dash_mantine_components as dmc
+
 from utils.dash_components.common import CommonComponents as CC  #Отсюда импортируем компоненты одинаковые для все приложений
 from utils.dash_components.dftotable import df_dmc_table
 import locale
 locale.setlocale(locale.LC_TIME, "ru_RU.UTF-8")
 from .data import get_month_data,get_ytd_data
+from django.urls import reverse, NoReverseMatch
+
 
 FORMATERS = {
     "Выручка":  lambda v: f"₽{v:,.0f}",
@@ -111,11 +114,30 @@ class MainWindow:
         dt = pd.to_datetime(self.date)
         str_date = f"{dt.day} {dt.strftime('%B %Y')}"
         
+        try:
+            back_url = reverse("admin:sales_mvsalesdaily_changelist")
+        except NoReverseMatch:
+            back_url = "/admin/sales/mvsalesdaily/"
+
+        
         la = dmc.AppShell(
             [
                 dmc.AppShellHeader(
                 dmc.Group(
+                    
                     [
+                        
+                        dmc.Anchor(
+                            dmc.Button(
+                                [DashIconify(icon="tabler:arrow-left", width=18), "Назад"],
+                                variant="subtle",
+                                size="sm",
+                            ),
+                            href=back_url,
+                            target="_top",
+                            style={"textDecoration": "none"},
+                        ),
+
                         DashIconify(icon='streamline-freehand:cash-payment-bag-1',width=40,color='blue'),
                         CC.report_title(f"ОТЧЕТ ПО ПРОДАЖАМ ЗА {str_date.upper()}")
                     ],
