@@ -3424,7 +3424,8 @@ def get_incident_potential_prices(nm_ids, report_date):
             price_rows AS (
                 SELECT
                     s.nm_id,
-                    s.val AS price,
+                    -- retail_price хранится в копейках -> переводим в рубли
+                    s.val / 100.0 AS price,
                     s.vat_rate,
                     s.date_from::DATE AS sale_date
 

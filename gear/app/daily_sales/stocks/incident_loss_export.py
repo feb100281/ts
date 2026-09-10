@@ -2983,22 +2983,10 @@ def build_incident_compensation_excel(
         ncols=ncols,
     )
 
-    note = (
-        "Жёлтые ячейки (Ц, К%, Плательщик НДС?, Ставка НДС%, Нац%) — "
-        "редактируемые: при изменении формулы столбцов НДС/Комиссия/Ущерб "
-        "пересчитаются автоматически. К% и Нац% подставлены из справочников "
-        "WB автоматически там, где найдено соответствие по «Предмету» — "
-        "если ячейка пустая, справочник не нашёл значение, заполните вручную."
-    )
-
-    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
-    note_cell = ws.cell(row=row, column=1, value=note)
-    note_cell.font = Font(name=FONT_NAME, size=8.5, italic=True, color=MUTED)
-    note_cell.alignment = Alignment(wrap_text=True, vertical="top")
-    ws.row_dimensions[row].height = 28
-    row += 2
+    row += 1
 
     total_row_refs: list[int] = []
+    first_header_row: int | None = None
 
     for event in events:
         warehouse_name = event.get("warehouse_name") or "Склад не указан"
@@ -3021,6 +3009,10 @@ def build_incident_compensation_excel(
         row += 1
 
         _write_table_header(ws, row=row, headers=COMPENSATION_HEADERS)
+
+        if first_header_row is None:
+            first_header_row = row
+
         row += 1
 
         if not items:
@@ -3154,27 +3146,29 @@ def build_incident_compensation_excel(
     verdict_cell.alignment = Alignment(wrap_text=True, vertical="center")
     ws.row_dimensions[row].height = 34
 
-    row += 2
+    # Заморозка: строки заголовка первого блока (дальше вниз, у
+    # следующих складов, свой заголовок уже не будет закреплён —
+    # ограничение "стопки" таблиц на одном листе) + первые 4
+    # столбца (№, NM ID, Товар, Предмет), чтобы они оставались
+    # видны при прокрутке вправо к цене/формулам.
+    if first_header_row is not None:
+        ws.freeze_panes = ws.cell(
+            row=first_header_row + 1, column=5
+        ).coordinate
+    else:
+        ws.freeze_panes = "E5"
 
-    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
-    limitation_cell = ws.cell(
-        row=row,
-        column=1,
-        value=(
-            "Ограничения расчёта: (1) не применяется предусмотренный п. 11.3.6 Оферты "
-            "верхний предел Ц («Максимальная цена по Предмету» — максимальная розничная цена "
-            "ВСЕХ продавцов WB по Предмету), т.к. такие данные недоступны; "
-            "(2) справочник наценок (79 категорий) и справочник комиссий (актуальная таксономия WB) "
-            "не всегда совпадают по названию категории — для несовпавших позиций Нац% оставлен пустым; "
-            "(3) если продавец зарегистрирован после 01.12.2025, порог 5% к нему не применяется "
-            "(2-я категория Постановления N 1074) — учитывайте это отдельно."
-        ),
+    combined_ws = _add_all_items_combined_sheet(
+        wb,
+        events,
+        is_vat_payer=is_vat_payer,
+        generated_at=generated_at,
     )
-    limitation_cell.font = Font(name=FONT_NAME, size=8, italic=True, color=MUTED)
-    limitation_cell.alignment = Alignment(wrap_text=True, vertical="top")
-    ws.row_dimensions[row].height = 48
 
-    ws.freeze_panes = "A5"
+    # Сводный лист "Все товары" — первым (главный обзорный вид),
+    # детальный "Калькулятор ущерба" по складам — вторым.
+    wb.move_sheet(combined_ws.title, offset=-1)
+    wb.active = 0
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -3185,3 +3179,314 @@ def build_incident_compensation_excel(
     )
 
     return buffer.getvalue(), filename
+
+
+# =============================================================================
+# EXCEL: сводный лист "Все товары" — те же позиции, что и на листе
+# "Калькулятор ущерба", но БЕЗ разбивки по складам: один nm_id,
+# потерянный сразу на нескольких складах, сведён в одну строку
+# (Кол-во суммируется, склады перечислены текстом). Полезно, чтобы
+# увидеть ущерб по конкретному товару в целом по компании, не
+# просматривая каждый склад отдельно.
+#
+# Формулы и жёлтые редактируемые ячейки — те же, что и в
+# build_incident_compensation_excel (Св = Ц − НДС − К −
+# (Ц − НДС − К) × Нац%).
+# =============================================================================
+
+COMBINED_HEADERS = [
+    "№",
+    "NM ID",
+    "Товар",
+    "Предмет (категория WB)",
+    "Склады",
+    "Кол-во, шт (всего)",
+    "Продаж за 365 дн",
+    "Источник Ц",
+    "Цена продажи, Ц (руб.)",
+    "Комиссия WB, К%",
+    "Плательщик НДС?",
+    "Ставка НДС, %",
+    "Наценка, Нац%",
+    "НДС (руб.)",
+    "Комиссия К (руб.)",
+    "Ущерб на ед., Св (руб.)",
+    "Ущерб всего (руб.)",
+]
+
+COMBINED_COL_WIDTHS = {
+    "A": 5,
+    "B": 12,
+    "C": 34,
+    "D": 22,
+    "E": 26,
+    "F": 13,
+    "G": 13,
+    "H": 12,
+    "I": 16,
+    "J": 13,
+    "K": 13,
+    "L": 12,
+    "M": 12,
+    "N": 14,
+    "O": 16,
+    "P": 16,
+    "Q": 16,
+}
+
+
+def _combine_items_across_warehouses(events: list[dict]) -> list[dict]:
+    """
+    Сводит items всех events в один список без разбивки по складам.
+
+    Позиции с одинаковым nm_id (потерянные сразу на нескольких
+    складах) объединяются в одну строку: Кол-во суммируется,
+    список складов собирается текстом. Ц/К%/Нац%/ставка НДС не
+    зависят от склада, поэтому берутся из первой встреченной
+    позиции с этим nm_id (для полноты, если где-то не хватало
+    данных, а в другой строке того же nm_id они есть — подставляем
+    более полные).
+
+    Позиции без nm_id (такое в принципе не должно происходить, но
+    на случай пустых/битых данных) не объединяются — каждая идёт
+    отдельной строкой, чтобы ничего не потерялось молча.
+    """
+
+    combined: dict = {}
+    no_id_rows: list[dict] = []
+
+    for event in events:
+        warehouse_name = event.get("warehouse_name") or "Склад не указан"
+
+        for item in (event.get("items") or []):
+            nm_id = item.get("nm_id")
+
+            if nm_id is None:
+                row = dict(item)
+                row["_warehouses"] = {warehouse_name}
+                no_id_rows.append(row)
+                continue
+
+            key = int(nm_id)
+
+            if key not in combined:
+                row = dict(item)
+                row["qty"] = float(item.get("qty") or 0)
+                row["_warehouses"] = {warehouse_name}
+                combined[key] = row
+                continue
+
+            existing = combined[key]
+            existing["qty"] = (
+                float(existing.get("qty") or 0)
+                + float(item.get("qty") or 0)
+            )
+            existing["_warehouses"].add(warehouse_name)
+
+            # Подстраховка: если в первой встреченной строке
+            # чего-то не хватало (например, справочник не нашёл
+            # Ц/К%/Нац% для одной записи), а в другой — есть,
+            # используем то, что заполнено.
+            for field in (
+                "potential_price",
+                "commission_pct",
+                "markup_pct",
+                "vat_rate_pct",
+                "subject_name",
+                "price_source",
+                "own_sales_count_365d",
+            ):
+                if existing.get(field) is None and item.get(field) is not None:
+                    existing[field] = item.get(field)
+
+    result = list(combined.values()) + no_id_rows
+
+    for row in result:
+        row["warehouses_label"] = ", ".join(sorted(row.pop("_warehouses", [])))
+
+    # Сортировка: сначала позиции с наибольшим количеством —
+    # так самые заметные строки видно сразу сверху.
+    result.sort(key=lambda r: float(r.get("qty") or 0), reverse=True)
+
+    return result
+
+
+def _write_combined_item_row(
+    ws: Worksheet,
+    *,
+    row: int,
+    idx: int,
+    item: dict,
+    is_vat_payer_default: bool,
+    stripe: bool,
+) -> None:
+    subject_name = item.get("subject_name") or "—"
+    qty = item.get("qty") or 0
+
+    own_sales = item.get("own_sales_count_365d")
+    price_source = item.get("price_source")
+
+    source_label = {
+        "nm": "свой NM ID",
+        "subject": "по Предмету (<10 продаж)",
+        None: "нет данных",
+    }.get(price_source, "нет данных")
+
+    values_plain = [
+        idx,
+        item.get("nm_id"),
+        item.get("name") or "",
+        subject_name,
+        item.get("warehouses_label") or "",
+        qty,
+        own_sales if own_sales is not None else "",
+        source_label,
+    ]
+
+    for offset, value in enumerate(values_plain):
+        col = 1 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.alignment = Alignment(
+            vertical="center",
+            horizontal="center" if col not in (3, 5) else "left",
+            wrap_text=(col in (3, 5)),
+        )
+
+        if stripe:
+            cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+
+    # -- редактируемые (жёлтые) входные ячейки: I..M (9..13) ---------
+
+    editable_values = [
+        item.get("potential_price"),
+        item.get("commission_pct"),
+        ("Да" if is_vat_payer_default else "Нет"),
+        item.get("vat_rate_pct"),
+        item.get("markup_pct"),
+    ]
+
+    for offset, value in enumerate(editable_values):
+        col = 9 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.fill = _editable_fill()
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if col in (9, 14, 15, 16, 17):
+            cell.number_format = "#,##0.00"
+        elif col in (10, 12, 13):
+            cell.number_format = "0.00"
+
+    # -- формулы: N..Q (14..17) ---------------------------------------
+
+    i_ = f"I{row}"
+    j_ = f"J{row}"
+    k_ = f"K{row}"
+    l_ = f"L{row}"
+    m_ = f"M{row}"
+    f_ = f"F{row}"
+
+    formulas = {
+        14: f'=IF({k_}="Да",{i_}*{l_}/(100+{l_}),0)',
+        15: f"={i_}*{j_}/100",
+        16: f"=MAX(({i_}-N{row}-O{row})*(1-{m_}/100),0)",
+        17: f"=P{row}*{f_}",
+    }
+
+    for col, formula in formulas.items():
+        cell = ws.cell(row=row, column=col, value=formula)
+        cell.font = Font(
+            name=FONT_NAME, size=9.5, bold=(col == 17), color=TEXT_DARK
+        )
+        cell.border = _thin_border()
+        cell.number_format = "#,##0.00"
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if stripe:
+            cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+
+
+def _add_all_items_combined_sheet(
+    wb: Workbook,
+    events: list[dict],
+    *,
+    is_vat_payer: bool,
+    generated_at: datetime,
+) -> Worksheet:
+    """Добавляет в книгу лист "Все товары" (см. docstring блока выше)."""
+
+    ws = wb.create_sheet("Все товары")
+
+    ncols = len(COMBINED_HEADERS)
+
+    _set_col_widths(ws, COMBINED_COL_WIDTHS)
+
+    row = _write_title_block(
+        ws,
+        row=1,
+        title="Ущерб по товарам — все склады вместе",
+        subtitle=(
+            "Тот же расчёт, что и на листе «Калькулятор ущерба» "
+            "(Св = Ц − НДС − К − (Ц − НДС − К) × Нац%), но без разбивки "
+            "по складам: один товар, пострадавший сразу на нескольких "
+            f"складах, — одна строка. Сформировано {generated_at.strftime('%d.%m.%Y %H:%M')}."
+        ),
+        ncols=ncols,
+    )
+
+    row += 1
+
+    _write_table_header(ws, row=row, headers=COMBINED_HEADERS)
+
+    header_row = row
+
+    row += 1
+
+    combined_items = _combine_items_across_warehouses(events)
+
+    first_item_row = row
+
+    for idx, item in enumerate(combined_items, start=1):
+        _write_combined_item_row(
+            ws,
+            row=row,
+            idx=idx,
+            item=item,
+            is_vat_payer_default=is_vat_payer,
+            stripe=(idx % 2 == 0),
+        )
+        row += 1
+
+    last_item_row = row - 1
+
+    row += 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
+    grand_label = ws.cell(
+        row=row, column=1, value="ИТОГО сумма ущерба к возмещению, руб."
+    )
+    grand_label.font = Font(name=FONT_NAME, size=12, bold=True, color=TEXT_DARK)
+    grand_label.alignment = Alignment(horizontal="right", vertical="center")
+
+    if combined_items:
+        grand_formula = f"=SUM(Q{first_item_row}:Q{last_item_row})"
+    else:
+        grand_formula = 0
+
+    grand_cell = ws.cell(row=row, column=17, value=grand_formula)
+    grand_cell.font = Font(name=FONT_NAME, size=12, bold=True, color="FFFFFF")
+    grand_cell.fill = PatternFill(fill_type="solid", fgColor=ACCENT_GREEN)
+    grand_cell.number_format = "#,##0.00"
+    grand_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[row].height = 24
+
+    # Заморозка заголовка таблицы (одна сплошная таблица на этом
+    # листе, без "стопки" по складам, поэтому заголовок остаётся
+    # закреплённым при прокрутке до самого низа) + первые 5
+    # столбцов (№, NM ID, Товар, Предмет, Склады).
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=6).coordinate
+
+    return ws
