@@ -89,7 +89,10 @@ from ..transfer_excel import build_warehouses_excel
 from ..incident_loss_export import (
     build_incident_loss_excel,
     build_incident_cover_letter_pdf,
+    build_incident_compensation_excel,
 )
+from ..incident_compensation import lookup_subject_reference
+from ..data import get_incident_potential_prices
 from .incidents_panel import get_incident_events
 from .ids import (
     STOCK_WAREHOUSES_GRID_ID,
@@ -101,7 +104,88 @@ from .ids import (
     STOCK_INCIDENT_EXCEL_DOWNLOAD_ID,
     STOCK_INCIDENT_PDF_BTN_ID,
     STOCK_INCIDENT_PDF_DOWNLOAD_ID,
+    STOCK_INCIDENT_COMPENSATION_BTN_ID,
+    STOCK_INCIDENT_COMPENSATION_DOWNLOAD_ID,
 )
+
+
+# Плательщик НДС по умолчанию для калькулятора ущерба (Оферта WB
+# п. 11.3.5). Продавец подтвердил ставки 20/10% до 01.01.2026 и
+# 22% начиная с этой даты — то есть компания является плательщиком
+# НДС. Ставка по каждой позиции берётся отдельно (из карточки/
+# истории продаж — stocks/data.py::get_incident_potential_prices),
+# этот флаг влияет только на редактируемую колонку "Плательщик
+# НДС?" по умолчанию в выгруженном Excel — при необходимости
+# продавец меняет её построчно прямо в файле.
+DEFAULT_IS_VAT_PAYER = True
+
+
+def _enrich_items_with_compensation_inputs(events, is_vat_payer):
+    """
+    Дополняет events[i]["items"][j] входными данными для формулы
+    компенсации Оферты (Ц, К%, Нац%, ставка НДС) — см. docstring
+    build_incident_compensation_excel в incident_loss_export.py.
+
+    Мутирует переданные items на месте и возвращает events для
+    удобства вызова в одну строку.
+    """
+
+    for event in events:
+        items = event.get("items") or []
+
+        if not items:
+            continue
+
+        snapshot = event.get("snapshot") or {}
+        report_date = snapshot.get("effective_date")
+
+        nm_ids = [
+            item.get("nm_id")
+            for item in items
+            if item.get("nm_id") is not None
+        ]
+
+        price_map = {}
+
+        if nm_ids and report_date:
+            price_map = get_incident_potential_prices(
+                nm_ids,
+                report_date,
+            )
+
+        for item in items:
+            nm_id = item.get("nm_id")
+
+            price_info = None
+
+            if nm_id is not None:
+                try:
+                    price_info = price_map.get(int(nm_id))
+                except (TypeError, ValueError):
+                    price_info = None
+
+            price_info = price_info or {}
+
+            subject_name = (
+                price_info.get("subject_name")
+                or item.get("subject_name")
+            )
+
+            reference = lookup_subject_reference(subject_name)
+
+            item["subject_name"] = subject_name
+            item["potential_price"] = price_info.get(
+                "potential_price"
+            )
+            item["price_source"] = price_info.get("price_source")
+            item["own_sales_count_365d"] = price_info.get(
+                "own_sales_count_365d"
+            )
+            item["commission_pct"] = reference.get("commission_pct")
+            item["markup_pct"] = reference.get("markup_pct")
+            item["vat_rate_pct"] = price_info.get("vat_rate_pct")
+
+    return events
 
 
 def register_main_callbacks(app):
@@ -221,6 +305,43 @@ def register_main_callbacks(app):
             return no_update
 
         content, filename = build_incident_cover_letter_pdf(events)
+
+        return dcc.send_bytes(
+            content,
+            filename,
+        )
+
+    @app.callback(
+        Output(
+            STOCK_INCIDENT_COMPENSATION_DOWNLOAD_ID,
+            "data",
+        ),
+        Input(
+            STOCK_INCIDENT_COMPENSATION_BTN_ID,
+            "n_clicks",
+        ),
+        prevent_initial_call=True,
+    )
+    def download_incident_compensation_excel(
+        n_clicks,
+    ):
+        if not n_clicks:
+            return no_update
+
+        events = get_incident_events()
+
+        if not events:
+            return no_update
+
+        events = _enrich_items_with_compensation_inputs(
+            events,
+            is_vat_payer=DEFAULT_IS_VAT_PAYER,
+        )
+
+        content, filename = build_incident_compensation_excel(
+            events,
+            is_vat_payer=DEFAULT_IS_VAT_PAYER,
+        )
 
         return dcc.send_bytes(
             content,

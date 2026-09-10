@@ -3275,6 +3275,10 @@ def get_warehouse_incident_stock_items(warehouse_name, report_date):
                 "name": _safe_str(row.get("Наименование")),
                 "brand": _safe_str(row.get("Бренд")),
                 "size": _safe_str(row.get("Размер")),
+                "subject_name": _safe_str(
+                    row.get("Категория"),
+                    default="Категория не указана",
+                ),
                 "qty": _safe_float(row.get("Остаток на складе")),
                 "accounting_unit_cost": acc_unit,
                 "management_unit_cost": mgmt_unit,
@@ -3282,3 +3286,304 @@ def get_warehouse_incident_stock_items(warehouse_name, report_date):
         )
 
     return items
+
+def get_incident_potential_prices(nm_ids, report_date):
+    """
+    "Потенциальная цена" (Ц) и ставка НДС для расчёта компенсации
+    ущерба по формуле п. 11.3.5-11.3.6 оферты Wildberries
+    (см. stocks/incident_compensation.py).
+
+    Правило Ц из п. 11.3.6 Оферты:
+
+    - если товар (nm_id) продан 10 раз и более за 365 дней,
+      предшествующих дате утраты, Ц = среднее значение Розничных
+      цен продавца по каждой продаже ЭТОГО nm_id за этот период;
+
+    - если товар продан менее 10 раз за 365 дней, Ц = среднее
+      значение Розничных цен продавца по каждой продаже ВСЕХ
+      товаров продавца, относящихся к тому же Предмету
+      ("Категория" в этом приложении), за тот же период.
+
+    ВАЖНО, чего эта функция НЕ делает (ограничение, а не баг):
+    Оферта также ограничивает Ц "Максимальной ценой по Предмету" —
+    максимальной розничной ценой ВСЕХ продавцов WB (не только нас)
+    по этому Предмету. Такие данные (чужие цены на WB) нам
+    недоступны, поэтому это ограничение здесь не применяется.
+    При необходимости корректируется вручную в выгруженной таблице.
+
+    Источник данных о цене продажи — то же поле, что и для
+    "Последней нашей розничной цены" выше по файлу:
+    sales.sales_long, field='retail_price', oper='dt'. Здесь вместо
+    последнего значения берётся среднее по всем продажам в окне.
+
+    Ставка НДС (vat_rate) берётся как последнее известное значение
+    по nm_id на дату не позже report_date (аналогично
+    "последней нашей розничной цене"). Хранится в процентах
+    (например, 20, 10, 22 — не облагается НДС здесь не кодируется,
+    это выбирается отдельно флагом "Продавец — плательщик НДС?"
+    при расчёте компенсации).
+
+    Параметры
+    ---------
+    nm_ids : list
+        Список nm_id, для которых нужна Потенциальная цена.
+    report_date : str | date
+        Дата, на которую считаем ущерб (дата происшествия минус 1
+        день — тот же "снимок", что и для остатков). Окно 365 дней
+        отсчитывается НАЗАД от этой даты включительно.
+
+    Возвращает
+    ----------
+    dict[nm_id] -> {
+        "subject_name": str | None,
+        "potential_price": float | None,   # Ц, руб (None — нет данных совсем)
+        "price_source": "nm" | "subject" | None,
+        "own_sales_count_365d": int,
+        "subject_sales_count_365d": int,
+        "vat_rate_pct": float | None,
+    }
+    """
+
+    import pandas as pd
+
+    nm_ids = [
+        int(nm_id)
+        for nm_id in (nm_ids or [])
+        if nm_id is not None
+        and str(nm_id).strip() != ""
+    ]
+
+    nm_ids = sorted(set(nm_ids))
+
+    if not nm_ids:
+        return {}
+
+    params = {
+        "report_date": report_date,
+    }
+
+    placeholders = []
+
+    for index, nm_id in enumerate(nm_ids):
+        key = f"nm_{index}"
+        params[key] = nm_id
+        placeholders.append(f"${key}")
+
+    nm_in_sql = ", ".join(placeholders)
+
+    with get_duckdb_conn_with_opt() as con:
+        df = con.execute(
+            f"""
+            WITH
+
+            target_nm AS (
+                SELECT
+                    nm_id
+
+                FROM (
+                    VALUES
+                        {", ".join(f"({p})" for p in placeholders)}
+                ) AS v(nm_id)
+            ),
+
+            /*
+            ============================================================
+            NM_ID -> ПРЕДМЕТ ("Категория" в этом приложении)
+            ============================================================
+            */
+            nm_subject AS (
+                SELECT
+                    p.nm_id,
+
+                    MAX(
+                        COALESCE(
+                            NULLIF(TRIM(p.subject_name), ''),
+                            'Категория не указана'
+                        )
+                    ) AS subject_name
+
+                FROM cards.product p
+
+                WHERE
+                    p.nm_id IN ({nm_in_sql})
+
+                GROUP BY
+                    p.nm_id
+            ),
+
+            /*
+            ============================================================
+            КАЖДАЯ СТРОКА = ОДИН ФАКТ ПРОДАЖИ ПО РОЗНИЧНОЙ ЦЕНЕ
+            за 365 дней, предшествующих report_date (включительно).
+
+            Тот же источник, что и "Последняя наша розничная цена"
+            (field='retail_price', oper='dt'), но здесь берём ВСЕ
+            строки периода, а не только последнюю.
+            ============================================================
+            */
+            price_rows AS (
+                SELECT
+                    s.nm_id,
+                    s.val AS price,
+                    s.vat_rate,
+                    s.date_from::DATE AS sale_date
+
+                FROM sales.sales_long s
+
+                WHERE
+                    s.field = 'retail_price'
+                    AND s.oper = 'dt'
+                    AND s.date_from::DATE <= $report_date::DATE
+                    AND s.date_from::DATE > (
+                        $report_date::DATE - INTERVAL 365 DAY
+                    )
+            ),
+
+            own_stats AS (
+                SELECT
+                    nm_id,
+
+                    COUNT(*) AS sales_count,
+
+                    AVG(price) AS avg_price
+
+                FROM price_rows
+
+                WHERE
+                    nm_id IN ({nm_in_sql})
+
+                GROUP BY
+                    nm_id
+            ),
+
+            subject_price_rows AS (
+                SELECT
+                    ns.subject_name,
+                    pr.price
+
+                FROM price_rows pr
+
+                JOIN nm_subject ns
+                    ON ns.nm_id = pr.nm_id
+            ),
+
+            subject_stats AS (
+                SELECT
+                    subject_name,
+
+                    AVG(price) AS avg_price,
+
+                    COUNT(*) AS sales_count
+
+                FROM subject_price_rows
+
+                GROUP BY
+                    subject_name
+            ),
+
+            last_vat AS (
+                SELECT
+                    nm_id,
+
+                    LIST(
+                        vat_rate
+                        ORDER BY sale_date
+                    )[-1] AS vat_rate
+
+                FROM price_rows
+
+                WHERE
+                    nm_id IN ({nm_in_sql})
+
+                GROUP BY
+                    nm_id
+            )
+
+            SELECT
+                t.nm_id,
+                ns.subject_name,
+
+                COALESCE(o.sales_count, 0)
+                    AS own_sales_count,
+
+                o.avg_price AS own_avg_price,
+
+                s.avg_price AS subject_avg_price,
+
+                COALESCE(s.sales_count, 0)
+                    AS subject_sales_count,
+
+                lv.vat_rate AS last_vat_rate
+
+            FROM target_nm t
+
+            LEFT JOIN nm_subject ns
+                ON ns.nm_id = t.nm_id
+
+            LEFT JOIN own_stats o
+                ON o.nm_id = t.nm_id
+
+            LEFT JOIN subject_stats s
+                ON s.subject_name = ns.subject_name
+
+            LEFT JOIN last_vat lv
+                ON lv.nm_id = t.nm_id
+            """,
+            params,
+        ).df()
+
+    result = {}
+
+    for _, row in df.iterrows():
+        nm_id = int(row["nm_id"])
+
+        own_count = int(row.get("own_sales_count") or 0)
+        own_avg = row.get("own_avg_price")
+        subject_avg = row.get("subject_avg_price")
+        subject_count = int(row.get("subject_sales_count") or 0)
+
+        own_avg = (
+            float(own_avg)
+            if own_avg is not None and pd.notna(own_avg)
+            else None
+        )
+        subject_avg = (
+            float(subject_avg)
+            if subject_avg is not None and pd.notna(subject_avg)
+            else None
+        )
+
+        if own_count >= 10 and own_avg is not None:
+            potential_price = own_avg
+            price_source = "nm"
+        elif subject_avg is not None:
+            potential_price = subject_avg
+            price_source = "subject"
+        else:
+            potential_price = None
+            price_source = None
+
+        vat_rate = row.get("last_vat_rate")
+        vat_rate = (
+            float(vat_rate)
+            if vat_rate is not None and pd.notna(vat_rate)
+            else None
+        )
+
+        subject_name = row.get("subject_name")
+        subject_name = (
+            str(subject_name)
+            if subject_name is not None and pd.notna(subject_name)
+            else None
+        )
+
+        result[nm_id] = {
+            "subject_name": subject_name,
+            "potential_price": potential_price,
+            "price_source": price_source,
+            "own_sales_count_365d": own_count,
+            "subject_sales_count_365d": subject_count,
+            "vat_rate_pct": vat_rate,
+        }
+
+    return result

@@ -1353,6 +1353,8 @@ from .ids import (
     STOCK_INCIDENT_EXCEL_DOWNLOAD_ID,
     STOCK_INCIDENT_PDF_BTN_ID,
     STOCK_INCIDENT_PDF_DOWNLOAD_ID,
+    STOCK_INCIDENT_COMPENSATION_BTN_ID,
+    STOCK_INCIDENT_COMPENSATION_DOWNLOAD_ID,
 )
 
 from .warehouse_incidents import (
@@ -2539,6 +2541,10 @@ def build_incidents_panel():
                                 id=STOCK_INCIDENT_PDF_DOWNLOAD_ID
                             ),
 
+                            dcc.Download(
+                                id=STOCK_INCIDENT_COMPENSATION_DOWNLOAD_ID
+                            ),
+
                             dmc.Button(
                                 "Остатки для оценки ущерба (Excel)",
                                 id=STOCK_INCIDENT_EXCEL_BTN_ID,
@@ -2566,6 +2572,22 @@ def build_incidents_panel():
                                     width=16,
                                 ),
                                 variant="outline",
+                                color="red",
+                                radius=0,
+                                size="xs",
+                            ),
+
+                            dmc.Button(
+                                "Калькулятор ущерба по Оферте (Excel)",
+                                id=STOCK_INCIDENT_COMPENSATION_BTN_ID,
+                                leftSection=DashIconify(
+                                    icon=(
+                                        "material-symbols:"
+                                        "calculate-outline"
+                                    ),
+                                    width=16,
+                                ),
+                                variant="filled",
                                 color="red",
                                 radius=0,
                                 size="xs",

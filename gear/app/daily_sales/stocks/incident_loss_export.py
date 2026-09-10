@@ -2752,3 +2752,436 @@ def build_incident_cover_letter_pdf(
     )
 
     return buffer.getvalue(), filename
+
+# =============================================================================
+# EXCEL: "Калькулятор ущерба" по формуле п. 11.3.5-11.3.6 Оферты WB
+#
+# Расчёт компенсации по Постановлению Правительства РФ от 25.08.2026
+# N 1074 ("...в порядке, аналогичном порядку определения размера
+# компенсации, предусмотренному пунктами 11.3.5 и 11.3.6 оферты").
+#
+# В отличие от build_incident_loss_excel (оценка по себестоимости,
+# для внутреннего учёта), этот отчёт считает именно ту сумму,
+# которая имеет значение для порога 5% господдержки — Св по
+# формуле Оферты. Реквизиты (К%, НДС, Нац%) выводятся в жёлтые
+# редактируемые ячейки, формулы в соседних столбцах пересчитываются
+# в Excel "вживую" при правке — так же, как в присланном
+# пользователем шаблоне-образце.
+#
+# Входные данные по каждой позиции (events[i]["items"][j]) должны
+# быть ДОПОЛНИТЕЛЬНО обогащены до вызова этой функции (см.
+# get_incident_potential_prices в stocks/data.py и
+# lookup_subject_reference/compute_item_compensation в
+# stocks/incident_compensation.py) следующими ключами:
+#
+#     "subject_name"          — Предмет WB (уже есть в items из
+#                                get_warehouse_incident_stock_items)
+#     "potential_price"       — Ц, руб | None
+#     "commission_pct"        — К%, комиссия WB по Предмету | None
+#     "markup_pct"            — Нац%, наценка по категории | None
+#     "vat_rate_pct"          — ставка НДС товара, % | None
+#     "own_sales_count_365d"  — продаж САМОГО nm_id за 365 дней
+#     "price_source"          — "nm" | "subject" | None
+# =============================================================================
+
+COMPENSATION_HEADERS = [
+    "№",
+    "NM ID",
+    "Товар",
+    "Предмет (категория WB)",
+    "Кол-во, шт",
+    "Продаж за 365 дн",
+    "Источник Ц",
+    "Цена продажи, Ц (руб.)",
+    "Комиссия WB, К%",
+    "Плательщик НДС?",
+    "Ставка НДС, %",
+    "Наценка, Нац%",
+    "НДС (руб.)",
+    "Комиссия К (руб.)",
+    "Ущерб на ед., Св (руб.)",
+    "Ущерб всего (руб.)",
+]
+
+COMPENSATION_COL_WIDTHS = {
+    "A": 5,
+    "B": 12,
+    "C": 34,
+    "D": 22,
+    "E": 11,
+    "F": 13,
+    "G": 12,
+    "H": 16,
+    "I": 13,
+    "J": 13,
+    "K": 12,
+    "L": 12,
+    "M": 14,
+    "N": 16,
+    "O": 16,
+    "P": 16,
+}
+
+# Жёлтая заливка — редактируемые вручную ячейки (как в образце
+# пользователя): цену можно скорректировать, если известна более
+# точная (например, с учётом ограничения "Максимальная цена по
+# Предмету" из п. 11.3.6, которое это приложение не считает), а
+# К%/НДС/Нац% — если автоматический справочник не нашёл значение
+# или продавец считает его неверным.
+FILL_EDITABLE = "FFF9D6"
+
+
+def _editable_fill() -> PatternFill:
+    return PatternFill(fill_type="solid", fgColor=FILL_EDITABLE)
+
+
+def _write_compensation_item_row(
+    ws: Worksheet,
+    *,
+    row: int,
+    idx: int,
+    item: dict,
+    is_vat_payer_default: bool,
+    stripe: bool,
+) -> None:
+    subject_name = item.get("subject_name") or "—"
+
+    qty = item.get("qty") or 0
+
+    own_sales = item.get("own_sales_count_365d")
+    price_source = item.get("price_source")
+
+    source_label = {
+        "nm": "свой NM ID",
+        "subject": "по Предмету (<10 продаж)",
+        None: "нет данных",
+    }.get(price_source, "нет данных")
+
+    values_plain = [
+        idx,
+        item.get("nm_id"),
+        item.get("name") or "",
+        subject_name,
+        qty,
+        own_sales if own_sales is not None else "",
+        source_label,
+    ]
+
+    for offset, value in enumerate(values_plain):
+        col = 1 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.alignment = Alignment(
+            vertical="center",
+            horizontal="center" if col != 3 else "left",
+            wrap_text=(col == 3),
+        )
+
+        if stripe:
+            cell.fill = PatternFill(
+                fill_type="solid", fgColor=FILL_STRIPE
+            )
+
+    # -- редактируемые (жёлтые) входные ячейки: H..L (8..12) ---------
+
+    editable_values = [
+        item.get("potential_price"),
+        item.get("commission_pct"),
+        ("Да" if is_vat_payer_default else "Нет"),
+        item.get("vat_rate_pct"),
+        item.get("markup_pct"),
+    ]
+
+    for offset, value in enumerate(editable_values):
+        col = 8 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.fill = _editable_fill()
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if col in (8, 13, 14, 15, 16):
+            cell.number_format = "#,##0.00"
+        elif col in (9, 11, 12):
+            cell.number_format = "0.00"
+
+    # -- формулы: M..P (13..16), пересчитываются в Excel живьём -------
+
+    h = f"H{row}"
+    i = f"I{row}"
+    j = f"J{row}"
+    k = f"K{row}"
+    l = f"L{row}"
+    e = f"E{row}"
+
+    formulas = {
+        13: f'=IF({j}="Да",{h}*{k}/(100+{k}),0)',
+        14: f"={h}*{i}/100",
+        15: f"=MAX(({h}-M{row}-N{row})*(1-{l}/100),0)",
+        16: f"=O{row}*{e}",
+    }
+
+    for col, formula in formulas.items():
+        cell = ws.cell(row=row, column=col, value=formula)
+        cell.font = Font(name=FONT_NAME, size=9.5, bold=(col == 16), color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.number_format = "#,##0.00"
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if stripe:
+            cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+
+
+def build_incident_compensation_excel(
+    events: list[dict],
+    *,
+    is_vat_payer: bool = True,
+    generated_at: datetime | None = None,
+) -> tuple[bytes, str]:
+    """
+    Строит книгу Excel "Калькулятор ущерба (Оферта WB п.11.3.5-11.3.6)"
+    по всем переданным событиям (по умолчанию вызывающая сторона
+    передаёт ВСЕ БПЛА-происшествия с июля 2026 — один сводный
+    расчёт, т.к. порог господдержки 5% считается по сумме ущерба
+    ПО ВСЕМ происшествиям, а не по одному складу).
+
+    events[i]["items"] должны быть обогащены заранее (см. docstring
+    блока выше). Позиции без Ц/К%/Нац% всё равно попадают в таблицу
+    (жёлтые ячейки — пустые, формулы дадут 0 до ручного заполнения),
+    чтобы ни одна позиция физического остатка не была молча
+    пропущена из расчёта.
+
+    "Доход за 2025 год" (для проверки порога 5% по Постановлению
+    N 1074 — доход, учитываемый при налогообложении, а НЕ просто
+    выручка на WB) оставлен пустой редактируемой ячейкой: это
+    сумма из налоговой декларации, её вносит продавец.
+
+    Возвращает (bytes, filename) — готово для dcc.send_bytes.
+    """
+
+    if generated_at is None:
+        generated_at = datetime.now()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Калькулятор ущерба"
+
+    ncols = len(COMPENSATION_HEADERS)
+
+    _set_col_widths(ws, COMPENSATION_COL_WIDTHS)
+
+    row = _write_title_block(
+        ws,
+        row=1,
+        title="Калькулятор ущерба продавца WB (атаки БПЛА на «РВБ»)",
+        subtitle=(
+            "Формула Св = Ц − НДС − К − (Ц − НДС − К) × Нац% "
+            "(Оферта WB п. 11.3.5-11.3.6; Постановление Правительства РФ "
+            f"от 25.08.2026 N 1074, п. 3). Сформировано {generated_at.strftime('%d.%m.%Y %H:%M')}."
+        ),
+        ncols=ncols,
+    )
+
+    note = (
+        "Жёлтые ячейки (Ц, К%, Плательщик НДС?, Ставка НДС%, Нац%) — "
+        "редактируемые: при изменении формулы столбцов НДС/Комиссия/Ущерб "
+        "пересчитаются автоматически. К% и Нац% подставлены из справочников "
+        "WB автоматически там, где найдено соответствие по «Предмету» — "
+        "если ячейка пустая, справочник не нашёл значение, заполните вручную."
+    )
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    note_cell = ws.cell(row=row, column=1, value=note)
+    note_cell.font = Font(name=FONT_NAME, size=8.5, italic=True, color=MUTED)
+    note_cell.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[row].height = 28
+    row += 2
+
+    total_row_refs: list[int] = []
+
+    for event in events:
+        warehouse_name = event.get("warehouse_name") or "Склад не указан"
+        incident = event.get("incident") or {}
+        incident_title = incident.get("title") or "Происшествие"
+        incident_date = _fmt_ru_date(event.get("date"))
+
+        items = event.get("items") or []
+
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+        header_cell = ws.cell(
+            row=row,
+            column=1,
+            value=f"{warehouse_name} — {incident_title} ({incident_date})",
+        )
+        header_cell.font = Font(name=FONT_NAME, size=11, bold=True, color="FFFFFF")
+        header_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_HEADER)
+        header_cell.alignment = Alignment(vertical="center", horizontal="left")
+        ws.row_dimensions[row].height = 22
+        row += 1
+
+        _write_table_header(ws, row=row, headers=COMPENSATION_HEADERS)
+        row += 1
+
+        if not items:
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+            empty_cell = ws.cell(row=row, column=1, value="Нет позиций физического остатка")
+            empty_cell.font = Font(name=FONT_NAME, size=9.5, italic=True, color=MUTED)
+            empty_cell.alignment = Alignment(horizontal="center")
+            row += 1
+        else:
+            first_item_row = row
+
+            for idx, item in enumerate(items, start=1):
+                _write_compensation_item_row(
+                    ws,
+                    row=row,
+                    idx=idx,
+                    item=item,
+                    is_vat_payer_default=is_vat_payer,
+                    stripe=(idx % 2 == 0),
+                )
+                row += 1
+
+            last_item_row = row - 1
+
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+            subtotal_label = ws.cell(
+                row=row, column=1, value=f"Итого по складу «{warehouse_name}»"
+            )
+            subtotal_label.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+            subtotal_label.alignment = Alignment(horizontal="right", vertical="center")
+
+            subtotal_cell = ws.cell(
+                row=row,
+                column=16,
+                value=f"=SUM(P{first_item_row}:P{last_item_row})",
+            )
+            subtotal_cell.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+            subtotal_cell.number_format = "#,##0.00"
+            subtotal_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_TOTAL)
+            subtotal_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            for col in range(1, ncols + 1):
+                ws.cell(row=row, column=col).border = _thin_border()
+                if col != 16:
+                    ws.cell(row=row, column=col).fill = PatternFill(
+                        fill_type="solid", fgColor=FILL_TOTAL
+                    )
+
+            total_row_refs.append(row)
+            row += 1
+
+        row += 1
+
+    # ------------------------------------------------------------------ #
+    # ИТОГО ПО ВСЕМ ПРОИСШЕСТВИЯМ
+    # ------------------------------------------------------------------ #
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+    grand_label = ws.cell(
+        row=row, column=1, value="ИТОГО сумма ущерба к возмещению, руб."
+    )
+    grand_label.font = Font(name=FONT_NAME, size=12, bold=True, color=TEXT_DARK)
+    grand_label.alignment = Alignment(horizontal="right", vertical="center")
+
+    if total_row_refs:
+        grand_formula = "=" + "+".join(f"P{r}" for r in total_row_refs)
+    else:
+        grand_formula = 0
+
+    grand_cell = ws.cell(row=row, column=16, value=grand_formula)
+    grand_cell.font = Font(name=FONT_NAME, size=12, bold=True, color="FFFFFF")
+    grand_cell.fill = PatternFill(fill_type="solid", fgColor=ACCENT_GREEN)
+    grand_cell.number_format = "#,##0.00"
+    grand_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[row].height = 24
+
+    grand_total_row = row
+    row += 2
+
+    # ------------------------------------------------------------------ #
+    # ПОРОГ ГОСПОДДЕРЖКИ 5% (Постановление N 1074, п. 3)
+    # ------------------------------------------------------------------ #
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+    income_label = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            "Доход за 2025 год, учитываемый при налогообложении "
+            "(из декларации — внести вручную), руб."
+        ),
+    )
+    income_label.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+    income_label.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+
+    income_cell = ws.cell(row=row, column=16, value=None)
+    income_cell.fill = _editable_fill()
+    income_cell.number_format = "#,##0.00"
+    income_cell.border = _thin_border()
+    income_cell.alignment = Alignment(horizontal="center", vertical="center")
+    income_row = row
+    row += 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+    pct_label = ws.cell(row=row, column=1, value="5% от дохода за 2025 год, руб.")
+    pct_label.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+    pct_label.alignment = Alignment(horizontal="right", vertical="center")
+
+    pct_cell = ws.cell(row=row, column=16, value=f"=P{income_row}*0.05")
+    pct_cell.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+    pct_cell.number_format = "#,##0.00"
+    pct_cell.border = _thin_border()
+    pct_cell.alignment = Alignment(horizontal="center", vertical="center")
+    pct_row = row
+    row += 2
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    verdict_cell = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            f'=IF(P{income_row}=0,"Внесите доход за 2025 год выше, чтобы проверить порог 5%",'
+            f'IF(P{grand_total_row}>=P{pct_row},'
+            f'"Ущерб ≥ 5% от дохода за 2025 год — попадаем на господдержку по Постановлению N 1074 '
+            f'(продление налогов на 12 мес., рассрочка)",'
+            f'"Ущерб < 5% от дохода за 2025 год — по 1-й категории (действующие продавцы) на господдержку '
+            f'не попадаем. Проверьте цифры выше — это порог именно по совокупному ущербу с июля 2026 года"))'
+        ),
+    )
+    verdict_cell.font = Font(name=FONT_NAME, size=10.5, bold=True, color=ACCENT_RED)
+    verdict_cell.alignment = Alignment(wrap_text=True, vertical="center")
+    ws.row_dimensions[row].height = 34
+
+    row += 2
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    limitation_cell = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            "Ограничения расчёта: (1) не применяется предусмотренный п. 11.3.6 Оферты "
+            "верхний предел Ц («Максимальная цена по Предмету» — максимальная розничная цена "
+            "ВСЕХ продавцов WB по Предмету), т.к. такие данные недоступны; "
+            "(2) справочник наценок (79 категорий) и справочник комиссий (актуальная таксономия WB) "
+            "не всегда совпадают по названию категории — для несовпавших позиций Нац% оставлен пустым; "
+            "(3) если продавец зарегистрирован после 01.12.2025, порог 5% к нему не применяется "
+            "(2-я категория Постановления N 1074) — учитывайте это отдельно."
+        ),
+    )
+    limitation_cell.font = Font(name=FONT_NAME, size=8, italic=True, color=MUTED)
+    limitation_cell.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[row].height = 48
+
+    ws.freeze_panes = "A5"
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = (
+        f"Калькулятор_ущерба_БПЛА_{generated_at.strftime('%Y-%m-%d')}.xlsx"
+    )
+
+    return buffer.getvalue(), filename
