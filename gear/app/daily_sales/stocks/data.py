@@ -3320,14 +3320,17 @@ def get_incident_potential_prices(nm_ids, report_date):
     sales.sales_long, field='retail_price', oper='dt'. Здесь вместо
     последнего значения берётся среднее по всем продажам в окне.
 
-    Ставка НДС (vat_rate) берётся как последнее известное значение
-    по nm_id на дату не позже report_date. В отличие от Ц, поиск НЕ
-    ограничен окном 365 дней — ставка НДС не усредняется, а является
-    фактом по конкретному товару, поэтому берём самую свежую запись
-    за всю историю (это увеличивает шанс её найти для товаров с
-    редкими продажами). Хранится в процентах (например, 20, 10, 22 —
-    не облагается НДС здесь не кодируется, это выбирается отдельно
-    флагом "Продавец — плательщик НДС?" при расчёте компенсации).
+    Ставка НДС (vat_rate) берётся из карточки товара
+    (cards.product.vat_rate), а не из истории продаж — это
+    характеристика самого товара, доступная независимо от того,
+    продавался ли он вообще и есть ли по нему история цен. Хранится
+    в процентах (например, 20, 10, 22 — не облагается НДС здесь не
+    кодируется, это выбирается отдельно флагом "Продавец —
+    плательщик НДС?" при расчёте компенсации). Значение из карточки
+    дополнительно нормализуется на уровне вызывающего кода
+    (stocks/dashboard_stock/callbacks.py::_normalize_vat_rate):
+    льготная ставка 10% сохраняется как есть, всё остальное
+    (устаревшая 20%, пусто) заменяется на текущую стандартную 22%.
 
     Параметры
     ---------
@@ -3531,41 +3534,24 @@ def get_incident_potential_prices(nm_ids, report_date):
 
             /*
             ============================================================
-            СТАВКА НДС - ПОСЛЕДНЕЕ ИЗВЕСТНОЕ ЗНАЧЕНИЕ ЗА ВСЮ ИСТОРИЮ
-            (не ограничено окном 365 дней, в отличие от Ц: ставка
-            НДС не усредняется, а берётся как факт по товару, поэтому
-            ищем и в более старой истории, чтобы реже оставалась
-            пустой).
+            СТАВКА НДС - берётся из карточки товара (cards.product.
+            vat_rate), а не из истории продаж: это атрибут товара,
+            который не зависит от того, продавался ли он вообще.
             ============================================================
             */
-            vat_rows AS (
+            card_vat AS (
                 SELECT
-                    s.nm_id,
-                    s.vat_rate,
-                    s.date_from::DATE AS sale_date
+                    p.nm_id,
 
-                FROM sales.sales_long s
+                    MAX(p.vat_rate) AS vat_rate
+
+                FROM cards.product p
 
                 WHERE
-                    s.field = 'retail_price'
-                    AND s.oper = 'dt'
-                    AND s.nm_id IN ({nm_in_sql})
-                    AND s.date_from::DATE <= $report_date::DATE
-            ),
-
-            last_vat AS (
-                SELECT
-                    nm_id,
-
-                    LIST(
-                        vat_rate
-                        ORDER BY sale_date
-                    )[-1] AS vat_rate
-
-                FROM vat_rows
+                    p.nm_id IN ({nm_in_sql})
 
                 GROUP BY
-                    nm_id
+                    p.nm_id
             )
 
             SELECT
@@ -3582,7 +3568,7 @@ def get_incident_potential_prices(nm_ids, report_date):
                 COALESCE(s.sales_count, 0)
                     AS subject_sales_count,
 
-                lv.vat_rate AS last_vat_rate
+                cv.vat_rate AS last_vat_rate
 
             FROM target_nm t
 
@@ -3595,8 +3581,8 @@ def get_incident_potential_prices(nm_ids, report_date):
             LEFT JOIN subject_stats s
                 ON s.subject_name = ns.subject_name
 
-            LEFT JOIN last_vat lv
-                ON lv.nm_id = t.nm_id
+            LEFT JOIN card_vat cv
+                ON cv.nm_id = t.nm_id
             """,
             params,
         ).df()
