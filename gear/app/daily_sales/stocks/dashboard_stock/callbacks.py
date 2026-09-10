@@ -119,6 +119,33 @@ from .ids import (
 # продавец меняет её построчно прямо в файле.
 DEFAULT_IS_VAT_PAYER = True
 
+# Действующая стандартная ставка НДС (с 01.01.2026). В истории
+# продаж по некоторым позициям сохранена более старая ставка 20%
+# (до повышения) либо ставка вовсе не записана (нет ни одной
+# продажи в истории) — в обоих случаях для текущего расчёта
+# компенсации берём актуальную стандартную ставку. Единственная
+# ставка, которую НЕ подменяем, — льготная 10% (для товаров
+# соответствующих категорий она фиксируется отдельно и не зависит
+# от повышения общей ставки).
+CURRENT_STANDARD_VAT_RATE_PCT = 22.0
+PREFERENTIAL_VAT_RATE_PCT = 10.0
+
+
+def _normalize_vat_rate(vat_rate_pct):
+    """
+    Приводит ставку НДС к актуальной: 10% (льготная) остаётся как
+    есть, всё остальное (в т.ч. устаревшая историческая 20% и
+    отсутствие данных, None) заменяется на текущую стандартную
+    ставку 22%.
+    """
+
+    if vat_rate_pct is not None and abs(
+        float(vat_rate_pct) - PREFERENTIAL_VAT_RATE_PCT
+    ) < 0.01:
+        return PREFERENTIAL_VAT_RATE_PCT
+
+    return CURRENT_STANDARD_VAT_RATE_PCT
+
 
 def _enrich_items_with_compensation_inputs(events, is_vat_payer):
     """
@@ -183,7 +210,9 @@ def _enrich_items_with_compensation_inputs(events, is_vat_payer):
             )
             item["commission_pct"] = reference.get("commission_pct")
             item["markup_pct"] = reference.get("markup_pct")
-            item["vat_rate_pct"] = price_info.get("vat_rate_pct")
+            item["vat_rate_pct"] = _normalize_vat_rate(
+                price_info.get("vat_rate_pct")
+            )
 
     return events
 
