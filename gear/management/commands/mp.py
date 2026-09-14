@@ -18,6 +18,7 @@ import datetime as dt
 from collections import OrderedDict, defaultdict
 from datetime import date
 from pathlib import Path
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -1817,16 +1818,16 @@ def split_treasury(rows):
 
 
 def _f(value):
-    """Денежное значение для управленческого отчёта: показываем целые рубли."""
+    """Денежное значение для управленческого отчёта: округляем до целых рублей."""
     try:
-        v = float(value or 0)
-    except (TypeError, ValueError):
+        v = Decimal(str(value or 0))
+    except Exception:
         return 0.0
 
-    if abs(v) < 0.5:
+    if abs(v) < Decimal("0.5"):
         return 0.0
 
-    return round(v)
+    return float(v.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 
@@ -2370,14 +2371,6 @@ def fill_raw_table(wb, sheet_name, table_name, columns, rows):
 
 
 def style_pivot_sheet(ws, title):
-    """
-    Приводит лист со сводной к стилю пакета: зелёная кнопка возврата вместо
-    синей ссылки старого шаблона и аккуратный заголовок.
-
-    Первую строку трогаем осторожно: на листе расшифровки там поле фильтра
-    самой сводной таблицы (его Excel перезапишет при обновлении), поэтому
-    заголовок пишем только если строка свободна.
-    """
     c = ws.cell(row=2, column=1)
     c.value = "\u2190  Оглавление"
     c.hyperlink = "#'%s'!A1" % TOC_SHEET_NAME
@@ -2395,7 +2388,6 @@ def style_pivot_sheet(ws, title):
     ws.row_dimensions[1].height = 20
 
     ws.sheet_view.showGridLines = False
-
 
 # =============================================================================
 #  08. СБОРКА ПАКЕТА (вызывается и из команды, и из админки)
@@ -2727,7 +2719,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         for old_name, (new_name, pivot_title) in PIVOT_SHEETS.items():
             if old_name in wb.sheetnames:
                 wb[old_name].title = new_name
-                style_pivot_sheet(wb[new_name], pivot_title)
+         
 
         ws_cover = wb.create_sheet(TOC_SHEET_NAME, 0)
     else:
@@ -2766,6 +2758,9 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     raw_counts = {}
     for tname, (cols, rows) in raw_tables.items():
         raw_counts[tname] = fill_raw_table(wb, tname, tname, cols, rows)
+    for sheet_name, pivot_title in PIVOT_SHEETS.values():
+        if sheet_name in wb.sheetnames:
+            style_pivot_sheet(wb[sheet_name], pivot_title)
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "
