@@ -35,6 +35,9 @@ from .styles.other_income_expenses import style_other_income_expenses_sheet
 from .financial_expenses_data import get_financial_expenses_report
 from .styles.financial_expenses import style_financial_expenses_sheet
 
+from .unit_economics_data import get_unit_economics_report
+from .styles.unit_economics import style_unit_economics_sheet
+
 
 TEMPLATE_PATH = Path("reporting/excel/template.xlsx")
 
@@ -216,6 +219,17 @@ def build_manpack(date_to=None, output_path=None):
     style_financial_expenses_sheet(
         ws_financial_expenses,
         financial_expenses_payload,
+        date_to=date_to,
+    )
+    
+    
+    
+    # 1.8 Юнит-экономика продаж (Кэш / FIFO)
+    unit_econ_payload = get_unit_economics_report(date_to)
+    ws_unit_econ = wb["1.8"]
+    style_unit_economics_sheet(
+        ws_unit_econ,
+        unit_econ_payload,
         date_to=date_to,
     )
     

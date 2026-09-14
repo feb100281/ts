@@ -159,5 +159,51 @@ def export_budget_analysis(request):
     return build_revenue_analysis_pdf_response(budget, report_date_obj)
 
 
+# ============================================================
+# Управленческий пакет (Титул + P&L + Cash Flow + пояснения)
+# Собирается тем же кодом, что и команда `manage.py mp`,
+# см. gear/management/commands/mp.py :: build_management_pack
+# ============================================================
+def export_management_pack(request):
+    """Отдаёт xlsx управленческого пакета за выбранную отчётную дату."""
+    date_str = request.GET.get("report_date")
 
+    if not date_str:
+        return HttpResponseBadRequest("Не передана дата report_date")
 
+    try:
+        report_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return HttpResponseBadRequest("Некорректный формат даты. Ожидается YYYY-MM-DD")
+
+    start_year_raw = request.GET.get("start_year")
+    try:
+        start_year = int(start_year_raw) if start_year_raw else None
+    except ValueError:
+        return HttpResponseBadRequest("Некорректный start_year")
+
+    # импорт внутри view: модуль тянет duckdb-подключение и sql-витрины,
+    # незачем поднимать это при старте админки
+    from gear.management.commands.mp import (
+        build_management_pack,
+        DEFAULT_START_YEAR,
+    )
+
+    temp_dir = Path(tempfile.gettempdir())
+    file_path = temp_dir / f"management_pack_{report_date.strftime('%Y%m%d')}.xlsx"
+
+    try:
+        build_management_pack(
+            report_date,
+            start_year=start_year or DEFAULT_START_YEAR,
+            out_path=file_path,
+        )
+    except ValueError as exc:
+        return HttpResponseBadRequest(str(exc))
+
+    return FileResponse(
+        open(file_path, "rb"),
+        as_attachment=True,
+        filename=file_path.name,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

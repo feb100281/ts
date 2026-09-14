@@ -497,9 +497,11 @@
 
 
 # reporting/excel/pl_data.py
+# reporting/excel/pl_data.py
 from django.db import connection
 import pandas as pd
 
+from .unit_economics_data import get_cash_revenue_daily
 
 MONTH_NAMES_RU = {
     1: "Янв",
@@ -533,6 +535,24 @@ def get_pl_report(date_to=None):
         MTD YYYY...,
         MTD Diff abs,
         MTD Diff rel
+
+    ВЫРУЧКА («Выручка от основной деятельности») ЗДЕСЬ БЕРЁТСЯ НЕ ИЗ
+    БУХГАЛТЕРСКОГО СЧЁТА 410000, А ИЗ ТОГО ЖЕ ИСТОЧНИКА, ЧТО СТРОКА
+    «Продажи до СПП без НДС» на листе 1.8 (Юнит-экономика, кэш-метод):
+    факт. касса по статье ДДС 111000, приведённая к сумме без НДС по
+    дневному НДС-соотношению из построчных данных WB. Источник общий
+    (get_cash_revenue_daily) и считается по дням, поэтому:
+      - месячная сумма на PL всегда равна месячной сумме на 1.8 (это
+        буквально одни и те же дневные числа, просто сгруппированные
+        по-разному);
+      - YTD/MTD (сравнение "с начала года/месяца до такого-то числа" с
+        прошлым годом на ту же календарную дату) остаётся точным день-
+        в-день, а не грубым приближением по целым месяцам.
+    Раньше здесь бралось бухгалтерское начисление (счёт 410000, дата
+    проводки бухгалтера) — оно не совпадало с кассой на 1.8 и вызывало
+    вопросы. Себестоимость и накладные расходы (счета 1.1–1.7, кроме
+    выручки) по-прежнему бухгалтерские (начисление) — это расходы
+    периода, для них кассовый метод не применяется.
     """
 
     if date_to is None:
@@ -542,8 +562,43 @@ def get_pl_report(date_to=None):
 
     date_to = pd.to_datetime(date_to).date()
 
-    q = """
-    WITH current_params AS (
+    # ---------- общая с 1.8 дневная касса (без НДС) по статье ДДС 111000 ----------
+    cash_rev_df = get_cash_revenue_daily(date_to)
+    if not cash_rev_df.empty:
+        cash_rev_rows = list(zip(
+            pd.to_datetime(cash_rev_df["rev_date"]).dt.date.tolist(),
+            cash_rev_df["revenue_vatless"].astype(float).tolist(),
+        ))
+    else:
+        cash_rev_rows = []
+
+    if cash_rev_rows:
+        cash_revenue_values_sql = ",".join(["(%s::date,%s::numeric)"] * len(cash_rev_rows))
+        cash_revenue_params = [v for row in cash_rev_rows for v in row]
+        cash_revenue_cte = f"""
+            cash_revenue_daily(rev_date, revenue_vatless) AS (
+                VALUES {cash_revenue_values_sql}
+            ),
+        """
+        cash_revenue_union = """
+            UNION ALL
+
+            SELECT
+                c.rev_date AS date_from,
+                EXTRACT(YEAR FROM c.rev_date)::int AS year,
+                EXTRACT(MONTH FROM c.rev_date)::int AS month_num,
+                'CASH_REV'::text AS account_code,
+                c.revenue_vatless AS amount
+            FROM cash_revenue_daily c
+        """
+    else:
+        cash_revenue_params = []
+        cash_revenue_cte = ""
+        cash_revenue_union = ""
+
+    q = f"""
+    WITH {cash_revenue_cte}
+    current_params AS (
         SELECT
             %s::date AS max_date,
             EXTRACT(YEAR FROM %s::date)::int AS current_year,
@@ -567,7 +622,6 @@ def get_pl_report(date_to=None):
         FROM public.pl_for_csv p
         WHERE p.date_from <= %s::date
           AND substring(p.account_name from '^\\d+') IN (
-                '410000',
                 '420000',
                 '510000',
                 '520000',
@@ -575,12 +629,13 @@ def get_pl_report(date_to=None):
                 '620000',
                 '630000'
           )
+        {cash_revenue_union}
     ),
 
     fye_pivot AS (
         SELECT
             b.year,
-            COALESCE(SUM(CASE WHEN b.account_code = '410000' THEN b.amount END), 0) AS revenue,
+            COALESCE(SUM(CASE WHEN b.account_code = 'CASH_REV' THEN b.amount END), 0) AS revenue,
             COALESCE(SUM(CASE WHEN b.account_code = '510000' THEN b.amount END), 0) AS cogs_goods,
             COALESCE(SUM(CASE WHEN b.account_code = '520000' THEN b.amount END), 0) AS cogs_real,
             COALESCE(SUM(CASE WHEN b.account_code = '610000' THEN b.amount END), 0) AS overhead,
@@ -589,11 +644,11 @@ def get_pl_report(date_to=None):
             COALESCE(SUM(CASE WHEN b.account_code = '630000' THEN b.amount END), 0) AS fin_expense
         FROM base b
         CROSS JOIN current_params p
-        WHERE 
+        WHERE
             b.year < p.current_year
             OR (
                 b.year = p.current_year
-               
+
             )
         GROUP BY b.year
     ),
@@ -601,7 +656,7 @@ def get_pl_report(date_to=None):
     ytd_pivot AS (
         SELECT
             b.year,
-            COALESCE(SUM(CASE WHEN b.account_code = '410000' THEN b.amount END), 0) AS revenue,
+            COALESCE(SUM(CASE WHEN b.account_code = 'CASH_REV' THEN b.amount END), 0) AS revenue,
             COALESCE(SUM(CASE WHEN b.account_code = '510000' THEN b.amount END), 0) AS cogs_goods,
             COALESCE(SUM(CASE WHEN b.account_code = '520000' THEN b.amount END), 0) AS cogs_real,
             COALESCE(SUM(CASE WHEN b.account_code = '610000' THEN b.amount END), 0) AS overhead,
@@ -628,7 +683,7 @@ def get_pl_report(date_to=None):
     mtd_pivot AS (
         SELECT
             b.year,
-            COALESCE(SUM(CASE WHEN b.account_code = '410000' THEN b.amount END), 0) AS revenue,
+            COALESCE(SUM(CASE WHEN b.account_code = 'CASH_REV' THEN b.amount END), 0) AS revenue,
             COALESCE(SUM(CASE WHEN b.account_code = '510000' THEN b.amount END), 0) AS cogs_goods,
             COALESCE(SUM(CASE WHEN b.account_code = '520000' THEN b.amount END), 0) AS cogs_real,
             COALESCE(SUM(CASE WHEN b.account_code = '610000' THEN b.amount END), 0) AS overhead,
@@ -657,7 +712,7 @@ def get_pl_report(date_to=None):
     SELECT
         b.year,
         b.month_num,
-        COALESCE(SUM(CASE WHEN b.account_code = '410000' THEN b.amount END), 0) AS revenue,
+        COALESCE(SUM(CASE WHEN b.account_code = 'CASH_REV' THEN b.amount END), 0) AS revenue,
         COALESCE(SUM(CASE WHEN b.account_code = '510000' THEN b.amount END), 0) AS cogs_goods,
         COALESCE(SUM(CASE WHEN b.account_code = '520000' THEN b.amount END), 0) AS cogs_real,
         COALESCE(SUM(CASE WHEN b.account_code = '610000' THEN b.amount END), 0) AS overhead,
@@ -666,11 +721,11 @@ def get_pl_report(date_to=None):
         COALESCE(SUM(CASE WHEN b.account_code = '630000' THEN b.amount END), 0) AS fin_expense
     FROM base b
     CROSS JOIN current_params p
-    WHERE 
+    WHERE
         b.year < p.current_year
         OR (
             b.year = p.current_year
-            
+
         )
     GROUP BY b.year, b.month_num
 ),
@@ -951,8 +1006,10 @@ def get_pl_report(date_to=None):
     ) t
     """
 
+    query_params = cash_revenue_params + [date_to, date_to, date_to, date_to]
+
     with connection.cursor() as cur:
-        cur.execute(q, [date_to, date_to, date_to, date_to])
+        cur.execute(q, query_params)
         rows = cur.fetchall()
         columns = [col[0] for col in cur.description]
 

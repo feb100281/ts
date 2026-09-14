@@ -17,6 +17,7 @@ TOC_ITEMS = [
     {"section": "detail", "num": "1.5", "title": "Корпоративные расходы (G&A)", "sheet": "1.5"},
     {"section": "detail", "num": "1.6", "title": "Прочие доходы и расходы", "sheet": "1.6"},
     {"section": "detail", "num": "1.7", "title": "Финансовые расходы", "sheet": "1.7"},
+    {"section": "detail", "num": "1.8", "title": "Юнит-экономика продаж (Кэш / FIFO)", "sheet": "1.8"},
     {"section": "detail", "num": "2.1", "title": "Казначейство (Treasure report)", "sheet": "2.1"},
     {"section": "detail", "num": "2.2", "title": "Обороты по балансу маркетплейсов", "sheet": "2.2"},
     {"section": "detail", "num": "3.1", "title": "Взаиморасчеты", "sheet": "3.1"},

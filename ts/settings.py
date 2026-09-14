@@ -251,6 +251,7 @@ JAZZMIN_SETTINGS = {
         {"name": "Скачать дебиторы/кредиторы CSV", "url": "export_arap_to_date", "new_window": False},
         {"name": "Скачать проверку договоров GL/PL/BS CSV", "url": "export_contracts_gl_check"},
         {"name": "Скачать ManPack", "url": "export_manpack", "new_window": False},
+        {"name": "Управленческий пакет", "url": "export_management_pack", "new_window": False},
         {"name": "Скачать остатки", "url": "export_stocks", "new_window": False},
         {"name": "Контроль выручки", "url": "export_budget_analysis", "new_window": False},
     

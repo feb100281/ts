@@ -75,6 +75,7 @@ document.addEventListener("click", function (event) {
     'Скачать дебиторы/кредиторы CSV': "fa-solid fa-money-bill-transfer",
     'Скачать проверку договоров GL/PL/BS CSV': "fa-solid fa-scale-balanced",
     'Скачать ManPack': "fa-solid fa-file-excel",
+    'Управленческий пакет': "fa-solid fa-file-invoice-dollar",
     'Скачать остатки': "fa-solid fa-boxes", 
     'Контроль выручки': "fa-solid fa-chart-pie",
     
@@ -238,6 +239,10 @@ document.addEventListener("click", function (event) {
       (a) => getLinkLabel(a) === "Скачать ManPack"
     );
 
+    const mp2Link = links.find(
+      (a) => getLinkLabel(a) === "Управленческий пакет"
+    );
+
     const stocksLink = links.find((a) => getLinkLabel(a) === "Скачать остатки");
     const budgetAnalysisLink = links.find((a) => getLinkLabel(a) === "Контроль выручки");
     const budgetAnalysisLi = budgetAnalysisLink ? budgetAnalysisLink.closest(".nav-item") : null;
@@ -245,7 +250,7 @@ document.addEventListener("click", function (event) {
 
 
 
-    if (!glLink && !arapLink && !contractsCheckLink && !manpackLink && !stocksLink && !budgetAnalysisLink) return;
+    if (!glLink && !arapLink && !contractsCheckLink && !manpackLink && !mp2Link && !stocksLink && !budgetAnalysisLink) return;
 
     injectExportMenuStylesOnce();
 
@@ -253,12 +258,13 @@ document.addEventListener("click", function (event) {
     const arapLi = arapLink ? arapLink.closest(".nav-item") : null;
     const contractsCheckLi = contractsCheckLink ? contractsCheckLink.closest(".nav-item") : null;
     const manpackLi = manpackLink ? manpackLink.closest(".nav-item") : null;
+    const mp2Li = mp2Link ? mp2Link.closest(".nav-item") : null;
     const stocksLi = stocksLink ? stocksLink.closest(".nav-item") : null;
 
 
-    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || stocksLi || budgetAnalysisLi;
+    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || mp2Li || stocksLi || budgetAnalysisLi;
 
-    [glLi, arapLi, contractsCheckLi, manpackLi, stocksLi, budgetAnalysisLi ].forEach((li) => {
+    [glLi, arapLi, contractsCheckLi, manpackLi, mp2Li, stocksLi, budgetAnalysisLi ].forEach((li) => {
       if (li) li.remove();
     });
 
@@ -312,6 +318,14 @@ document.addEventListener("click", function (event) {
             label: "Management Pack",
             icon: "fa-solid fa-file-excel",
             className: "jm-manpack-trigger",
+          }
+        : null,
+      mp2Link
+        ? {
+            href: mp2Link.getAttribute("href") || "#",
+            label: "Управленческий пакет (P&L + CF)",
+            icon: "fa-solid fa-file-invoice-dollar",
+            className: "jm-mp2-trigger",
           }
         : null,
       stocksLink
@@ -2164,6 +2178,156 @@ console.log("✅ stocks_export.js loaded");
       el.addEventListener("click", function (e) {
         e.preventDefault();
         backdrop._openBudgetAnalysisModal();
+      });
+    });
+  }
+
+  function boot() {
+    ensureModal();
+    bindTriggers();
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("pjax:end", boot);
+})();
+
+
+
+console.log("✅ management_pack_export.js loaded");
+
+// -------------------------------------------------------------------
+// Управленческий пакет (P&L + Cash Flow + пояснения)
+// Модальное окно выбора отчётной даты. Оформление переиспользует
+// стили окна ManPack (.jm-manpack-*), чтобы оба окна выглядели одинаково.
+// -------------------------------------------------------------------
+(function () {
+  const BASE_URL = "/admin/export/management-pack/";
+
+  function toYmd(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function todayYmd() {
+    return toYmd(new Date());
+  }
+
+  function endOfPrevMonthYmd() {
+    const d = new Date();
+    d.setDate(1);
+    d.setDate(0);
+    return toYmd(d);
+  }
+
+  function ensureModal() {
+    const existing = document.getElementById("jmMp2Backdrop");
+    if (existing) return existing;
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "jmMp2Backdrop";
+    backdrop.className = "jm-manpack-backdrop";
+
+    backdrop.innerHTML = `
+      <div class="jm-manpack-modal" role="dialog" aria-modal="true" aria-labelledby="jmMp2Title">
+        <h3 class="jm-manpack-title" id="jmMp2Title">Управленческий пакет</h3>
+        <div class="jm-manpack-subtitle">
+          P&amp;L, Cash Flow, юнит-экономика и пояснения к ним.
+          Отчётным периодом считается месяц выбранной даты.
+        </div>
+
+        <label class="jm-manpack-label" for="jmMp2Date">Дата отчетности</label>
+        <input type="date" id="jmMp2Date" class="jm-manpack-input" />
+
+        <div class="jm-manpack-quick">
+          <button type="button" class="jm-manpack-quick-btn" id="jmMp2Today">
+            Сегодня
+          </button>
+          <button type="button" class="jm-manpack-quick-btn" id="jmMp2PrevMonthEnd">
+            Конец прошлого месяца
+          </button>
+        </div>
+
+        <div class="jm-manpack-error" id="jmMp2Error">
+          Укажите дату отчетности.
+        </div>
+
+        <div class="jm-manpack-actions">
+          <button type="button" class="jm-manpack-btn" id="jmMp2Cancel">
+            Отмена
+          </button>
+          <button type="button" class="jm-manpack-btn jm-manpack-btn--primary" id="jmMp2Download">
+            Скачать
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    const dateInput = backdrop.querySelector("#jmMp2Date");
+    const errorBox = backdrop.querySelector("#jmMp2Error");
+
+    function open() {
+      errorBox.classList.remove("is-visible");
+      if (!dateInput.value) dateInput.value = todayYmd();
+      backdrop.classList.add("is-open");
+    }
+
+    function close() {
+      backdrop.classList.remove("is-open");
+      errorBox.classList.remove("is-visible");
+    }
+
+    backdrop.querySelector("#jmMp2Today").addEventListener("click", function () {
+      dateInput.value = todayYmd();
+      errorBox.classList.remove("is-visible");
+    });
+
+    backdrop.querySelector("#jmMp2PrevMonthEnd").addEventListener("click", function () {
+      dateInput.value = endOfPrevMonthYmd();
+      errorBox.classList.remove("is-visible");
+    });
+
+    backdrop.querySelector("#jmMp2Cancel").addEventListener("click", close);
+
+    backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) close();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && backdrop.classList.contains("is-open")) close();
+    });
+
+    backdrop.querySelector("#jmMp2Download").addEventListener("click", function () {
+      const reportDate = dateInput.value;
+
+      if (!reportDate) {
+        errorBox.classList.add("is-visible");
+        return;
+      }
+
+      errorBox.classList.remove("is-visible");
+      close();
+      window.location.href = `${BASE_URL}?report_date=${encodeURIComponent(reportDate)}`;
+    });
+
+    backdrop._openMp2Modal = open;
+    backdrop._closeMp2Modal = close;
+
+    return backdrop;
+  }
+
+  function bindTriggers() {
+    const backdrop = ensureModal();
+    document.querySelectorAll(".jm-mp2-trigger").forEach((el) => {
+      if (el.dataset.mp2Bound === "1") return;
+      el.dataset.mp2Bound = "1";
+
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+        backdrop._openMp2Modal();
       });
     });
   }
