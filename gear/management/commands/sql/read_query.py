@@ -1,3 +1,4 @@
+# gear/management/commands/sql/read_query.py
 from pathlib import Path
 
 SQL_DIR = Path(__file__).resolve().parent
@@ -15,5 +16,6 @@ margin = read_sql("margin.txt")
 opex = read_sql("opex.txt")
 cf = read_sql("cf.txt")
 treasury = read_sql("treasury.txt")
+deposits = read_sql("deposits.txt")
 pl_notes = read_sql("pl_notes.txt")
 

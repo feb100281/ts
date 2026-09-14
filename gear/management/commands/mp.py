@@ -1,4 +1,4 @@
-# mp.py
+# gear/management/commands/mp.pymp.py
 # =============================================================================
 #  Управленческий пакет (manpack) в Excel: P&L + Cash Flow + пояснения.
 #
@@ -33,6 +33,7 @@ from .sql.read_query import (
     opex,
     cf,
     treasury,
+    deposits,
     pl_notes,
 )
 
@@ -72,6 +73,7 @@ SURFACE_4 = "E7F1ED"     # светло-зелёный: подзаголовки
 SURFACE_5 = "FAFCFB"     # почти белый с зелёным подтоном
 LINE = "D9D9D9"          # обычная граница
 LINE_STRONG = "BFBFBF"   # граница чуть заметнее
+ZEBRA_ROW = "F7F7F7"
 
 # Смысловые цвета цифр: доходы — тёмно-серым, расходы — между коричневым
 # и тёмно-красным. Знак числа при этом не перекрашивается форматом, цвет
@@ -179,8 +181,8 @@ def pl_layout():
          (SEC_REVENUE, "1.3. Продажи после СПП", 1), 1, FMT_MONEY))
     add(("ratio", "1.5", "Скидка WB (СПП), %",
          ("__spp__", "1.1", -1), 2, FMT_PCT))
-    add(("item", "1.4", "Продажи без НДС (чистая выручка)",
-         (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
+    add(("item", "1.4", "Продажи без НДС до СПП (чистая выручка)",
+        (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
     add(("item", "1.6", "Себестоимость проданного товара",
          (SEC_REVENUE, "1.6. Себестоимость", -1), 1, FMT_MONEY))
     add(("calc", "1.7", "МАРЖА ПРОДАЖ (валовая прибыль)",
@@ -499,17 +501,55 @@ def write(ws, row, col, value, *, font=None, fmt=None, fillc=None,
                                 wrap_text=wrap, indent=indent)
     return c
 
+def apply_zebra(ws, first_row, last_row, first_col, last_col):
+    """
+    Элегантная зебра для табличных строк.
+    Красит только пустые ячейки и не перебивает итоги, шапки и колонки итогов.
+    """
+    zebra = fill(ZEBRA_ROW)
+
+    for row in range(first_row, last_row + 1):
+        if row % 2:
+            continue
+
+        for col in range(first_col, last_col + 1):
+            cell = ws.cell(row=row, column=col)
+
+            # Не перебиваем уже заданные смысловые заливки
+            if cell.fill.fill_type:
+                continue
+
+            cell.fill = zebra
+
+
+def apply_column_dividers(ws, first_row, last_row, first_col, last_col):
+    """
+    Тонкие вертикальные разделители колонок.
+    Сохраняет уже заданные верхние/нижние границы строк.
+    """
+    for row in range(first_row, last_row + 1):
+        for col in range(first_col, last_col):
+            cell = ws.cell(row=row, column=col)
+            old = cell.border
+
+            cell.border = Border(
+                left=old.left,
+                right=_side(LINE),
+                top=old.top,
+                bottom=old.bottom,
+            )
 
 TOC_SHEET_NAME = "Оглавление"
 
 
-def title_band(ws, title, subtitle, ncols, extra=None):
+def title_band(ws, title, subtitle, ncols, extra=None, show_back=True):
     """
     Шапка листа: кнопка возврата, чёрный заголовок и серые подписи на белом
     фоне, снизу — тонкая фирменная линия. Тяжёлых заливок во всю ширину
     намеренно нет: цветом выделяются только шапка таблицы и итоги.
     """
-    back_to_toc(ws)
+    if show_back:
+        back_to_toc(ws)
 
     ws.merge_cells(start_row=2, start_column=COL_CODE, end_row=2, end_column=ncols)
     c = ws.cell(row=2, column=COL_CODE, value=title)
@@ -764,6 +804,28 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
                         SEC_OVERHEAD, SEC_CORP, SEC_FIN}
     EXPENSE_ITEM_CODES = {"1.6", "1.9"}          # себестоимость, комиссия WB
     COST_RATIO_CODES = {"1.5", "1.10"}           # скидка СПП, комиссия WB в %
+    
+    
+    def split_code_from_label(label):
+        if not label:
+            return "", label
+
+        text = str(label).strip()
+        head, sep, tail = text.partition(" ")
+
+        if not sep:
+            return "", label
+
+        clean_head = head.rstrip(".")
+
+        # Ловим оба варианта:
+        # 3.1 Логистика
+        # 3.1. Логистика
+        # 590200 Курсовые разницы
+        if clean_head.replace(".", "").isdigit():
+            return clean_head, tail.strip()
+
+        return "", label
 
     r = hdr + 1
     for kind, code, label, src, level, fmt in plan:
@@ -816,11 +878,22 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
             fnt_label = f_label
             bg, bd = None, B_BOTTOM
 
-        write(ws, r, COL_CODE, code if (code and code[0].isdigit()) else "",
-              font=f_code if not is_grand else f_grand,
-              fillc=bg, border=bd, align="left", indent=1)
-        write(ws, r, COL_LABEL, label, font=fnt_label, fillc=bg, border=bd,
-              align="left", indent=1 if is_total else 2)
+        display_code = code if (code and code[0].isdigit()) else ""
+        display_label = label
+
+        # Для детальных строк типа "3.1. Логистика" переносим код в колонку КОД
+        if not display_code and kind == "item":
+            parsed_code, parsed_label = split_code_from_label(label)
+            if parsed_code:
+                display_code = parsed_code
+                display_label = parsed_label
+
+        write(ws, r, COL_CODE, display_code,
+            font=f_code if not is_grand else f_grand,
+            fillc=bg, border=bd, align="left", indent=1)
+
+        write(ws, r, COL_LABEL, display_label, font=fnt_label, fillc=bg, border=bd,
+            align="left", indent=1 if is_total else 2)
 
         # колонка «НОТА»: ссылка на блок расшифровки этой строки
         note_row = None
@@ -830,8 +903,8 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
             elif kind == "item" and src and not code:
                 note_row = note_anchors.get((src[0], src[1]))
         note_cell = write(ws, r, COL_NOTE, "\u2192" if note_row else None,
-                          font=Font(name=FONT, size=9, bold=True, color=NAVY_3),
-                          fillc=bg, border=bd, align="center")
+                        font=Font(name=FONT, size=14, bold=True, color=NAVY_3),
+                        fillc=bg, border=bd, align="center")
         if note_row:
             note_cell.hyperlink = "#'%s'!C%d" % (NOTES_SHEET_NAME, note_row)
 
@@ -902,6 +975,8 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     ws.column_dimensions["B"].width = 9
     ws.column_dimensions["C"].width = 56
     ws.column_dimensions["D"].width = 7
+    apply_zebra(ws, hdr + 1, r - 1, COL_CODE, ncols)
+    apply_column_dividers(ws, hdr, r - 1, COL_CODE, ncols)
     columns_layout(ws, cols, report_date.year)
     ws.freeze_panes = ws.cell(row=hdr + 1, column=COL_FIRST)
     ws.print_title_rows = "1:%d" % hdr
@@ -1012,8 +1087,8 @@ def build_cf(ws, cf_data, months, opening, report_date, as_of=None):
         "ОТЧЁТ О ДВИЖЕНИИ ДЕНЕЖНЫХ СРЕДСТВ (CASH FLOW)",
         "Управленческая отчётность (management pack) · прямой метод",
         ncols,
-        extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s · "
-              "платежи показаны в скобках"
+        extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s "
+
               % (as_of.strftime("%d.%m.%Y"),
                  month_label(months[0]), month_label(months[-1])),
     )
@@ -1056,10 +1131,8 @@ def build_cf(ws, cf_data, months, opening, report_date, as_of=None):
             write(ws, r, COL_FIRST + i, v, font=font, fmt=fmt,
                   fillc=bgc, border=bd, align="right")
         if outline:
-            # книга открывается свёрнутой до второго уровня: видны виды
-            # деятельности, операции и статьи, подстатьи — по кнопке «+»
             ws.row_dimensions[r].outlineLevel = outline
-            ws.row_dimensions[r].hidden = (outline >= 2)
+            ws.row_dimensions[r].hidden = True
         ws.row_dimensions[r].height = 17
 
     def fill_formula(row, make):
@@ -1159,18 +1232,21 @@ def build_cf(ws, cf_data, months, opening, report_date, as_of=None):
                         put_row(row_cp, "", cp, f_sub, None, B_BOTTOM,
                                 [None] * n_months, indent=6, outline=3)
                         fill_formula(row_cp,
-                                     lambda i, a=first_contract_row, b=r - 1:
-                                     "=SUM(%s%d:%s%d)" % (L(i), a, L(i), b))
+                                    lambda i, a=first_contract_row, b=r - 1:
+                                    "=SUM(%s%d:%s%d)" % (L(i), a, L(i), b))
+                        ws.row_dimensions[row_cp].collapsed = True
                         cp_rows.append(row_cp)
-
                     put_row(row_sub, code_of(sub), name_of(sub), f_sub, None,
                             B_BOTTOM, [None] * n_months, indent=4, outline=2)
                     sum_of_rows(row_sub, cp_rows)
+                    ws.row_dimensions[row_sub].collapsed = True
                     sub_rows.append(row_sub)
 
                 put_row(row_item, code_of(itm), name_of(itm), f_item, None,
                         B_BOTTOM, [None] * n_months, indent=2, outline=1)
+                ws.row_dimensions[row_item].hidden = False
                 sum_of_rows(row_item, sub_rows)
+                ws.row_dimensions[row_item].collapsed = True
                 item_total_rows.append(row_item)
 
             # итог по операции
@@ -1225,7 +1301,9 @@ def build_cf(ws, cf_data, months, opening, report_date, as_of=None):
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 10
     ws.column_dimensions["C"].width = 56
-    ws.column_dimensions["D"].width = 3
+    ws.column_dimensions["D"].hidden = True
+    apply_zebra(ws, hdr + 1, r - 1, COL_CODE, ncols)
+    apply_column_dividers(ws, hdr, r - 1, COL_CODE, ncols)
     columns_layout(ws, cols, report_date.year)
     ws.freeze_panes = ws.cell(row=hdr + 1, column=COL_FIRST)
     ws.print_title_rows = "1:%d" % hdr
@@ -1275,6 +1353,7 @@ def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=Non
         extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s"
               % (as_of.strftime("%d.%m.%Y"),
                  month_label(months[0]), month_label(months[-1])),
+        show_back=False,
     )
 
     for i, w in enumerate([3, 30, 24, 22, 22, 3], start=1):
@@ -1342,15 +1421,21 @@ def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=Non
         ]
 
     f_link = Font(name=FONT, size=10, bold=True, color=NAVY_3)
+
+    first_contents_row = r
     for name, descr in contents:
         c = write(ws, r, 2, "\u203a  " + name, font=f_link,
-                  fillc=SURFACE_4, border=B_BOTTOM, align="left", indent=1)
+                fillc=SURFACE_4, border=B_BOTTOM, align="left", indent=1)
         c.hyperlink = "#'%s'!A1" % name
         c = write(ws, r, 3, descr, font=f_sub, border=B_BOTTOM,
-                  align="left", wrap=True)
+                align="left", wrap=True)
         ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=5)
         ws.row_dimensions[r].height = 28
         r += 1
+
+    last_contents_row = r - 1
+    apply_zebra(ws, first_contents_row, last_contents_row, 2, 5)
+    apply_column_dividers(ws, first_contents_row, last_contents_row, 2, 5)
 
     r += 1
     write(ws, r, 2, "Файл сформирован автоматически · %s"
@@ -1477,7 +1562,7 @@ def build_unit_economics(ws, unit_data, months, report_date, as_of=None):
         "Управленческий учёт · FIFO по дате исходной продажи",
         ncols,
         extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s · "
-              "производные строки — формулы Excel"
+            
               % (as_of.strftime("%d.%m.%Y"),
                  month_label(months[0]), month_label(months[-1])),
     )
@@ -1598,7 +1683,9 @@ def build_unit_economics(ws, unit_data, months, report_date, as_of=None):
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 9
     ws.column_dimensions["C"].width = 66
-    ws.column_dimensions["D"].width = 3
+    ws.column_dimensions["D"].hidden = True
+    apply_zebra(ws, hdr + 1, r - 1, COL_CODE, ncols)
+    apply_column_dividers(ws, hdr, r - 1, COL_CODE, ncols)
     columns_layout(ws, cols, report_date.year)
     ws.freeze_panes = ws.cell(row=hdr + 1, column=COL_FIRST)
     ws.print_title_rows = "1:%d" % hdr
@@ -1730,15 +1817,20 @@ def split_treasury(rows):
 
 
 def _f(value):
-    """Число из витрины, округлённое до копеек: иначе в остатках вылезают
-    хвосты двоичной арифметики вроде -7,3E-11 вместо нуля."""
+    """Денежное значение для управленческого отчёта: показываем целые рубли."""
     try:
-        return round(float(value or 0), 2)
+        v = float(value or 0)
     except (TypeError, ValueError):
         return 0.0
 
+    if abs(v) < 0.5:
+        return 0.0
 
-def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None):
+    return round(v)
+
+
+
+def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balance=0.0):
     as_of = as_of or report_date
     """
     bank_rows — строки витрины treasury с block='BANK'
@@ -1748,6 +1840,15 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None):
     """
     sheet_setup(ws, landscape=False)
     ncols = 8
+    
+    def status_rank(row):
+        status = str(row[3] or "").lower()
+        return 0 if "действ" in status else 1
+
+    bank_rows = sorted(
+        bank_rows,
+        key=lambda row: (status_rank(row), -abs(_f(row[6])), str(row[1] or "")),
+    )
 
     title_band(
         ws,
@@ -1792,9 +1893,12 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None):
          "На балансе площадки, ещё не выведено"),
         ("Деньги в пути (ДВП)", transit,
          "Выведены с WB, но ещё не пришли на расчётный счёт"),
-        ("Бессрочные депозиты", 0.0,
-         "Размещены под проценты: на счёте их нет, но это наши деньги"),
+        # ("Банковские депозиты", _f(deposit_balance),
+        #     "Справочно: размещены под проценты, в итог денежных средств не включаются"),
     ]
+    
+
+    
     first_sum_row = r
     for lbl, v, hint in summary:
         write(ws, r, 2, lbl, font=f_label, border=B_BOTTOM,
@@ -1811,14 +1915,30 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None):
 
     write(ws, r, 2, "ИТОГО ДЕНЕЖНЫХ СРЕДСТВ", font=f_label_b, fillc=TOTAL_ROW,
           border=B_GRAND, align="left", indent=1)
-    write(ws, r, 3, "=SUM(C%d:C%d)" % (first_sum_row, r - 1),
-          font=f_bold_num, fmt=FMT_MONEY, fillc=TOTAL_ROW, border=B_GRAND,
-          align="right")
+    write(ws, r, 3, "=SUM(C%d:C%d)" % (first_sum_row, first_sum_row + 2),
+      font=f_bold_num, fmt=FMT_MONEY, fillc=TOTAL_ROW, border=B_GRAND,
+      align="right")
     for cc in range(4, ncols + 1):
         ws.cell(row=r, column=cc).fill = fill(TOTAL_ROW)
         ws.cell(row=r, column=cc).border = B_GRAND
     ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
     ws.row_dimensions[r].height = 20
+    r += 2
+    
+    
+    r = section(r, "СПРАВОЧНО")
+
+    write(ws, r, 2, "Банковские депозиты", font=f_label, border=B_BOTTOM,
+        align="left", indent=1)
+    write(ws, r, 3, _f(deposit_balance), font=f_income, fmt=FMT_MONEY,
+        border=B_BOTTOM, align="right")
+    write(ws, r, 4, "Размещены под проценты; не включаются в итог денежных средств",
+        font=f_note, border=B_BOTTOM, align="left", indent=1)
+    ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
+    for cc in range(5, ncols + 1):
+        ws.cell(row=r, column=cc).border = B_BOTTOM
+    ws.row_dimensions[r].height = 17
+
     r += 2
 
     # -------------------------------------------- расшифровка по счетам
@@ -1841,8 +1961,12 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None):
                   align="left", indent=1)
             write(ws, r, 3, row[2] or "", font=f_label, border=B_BOTTOM,
                   align="center")
-            write(ws, r, 4, row[3] or "", font=f_label, border=B_BOTTOM,
-                  align="center")
+            status = row[3] or ""
+            if "закрыт" in str(status).lower():
+                status = "Закрыт  🔒"
+
+            write(ws, r, 4, status, font=f_label, border=B_BOTTOM,
+                align="center")
             write(ws, r, 5, _f(row[4]), font=f_income, fmt=FMT_MONEY,
                   border=B_BOTTOM, align="right")
             write(ws, r, 6, _f(row[5]), font=f_expense, fmt=FMT_MONEY,
@@ -1912,16 +2036,11 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None):
 
     r += 1
     note = ("Первые две строки — накопительные итоги за всё время работы с "
-            "площадкой, их разница и даёт конечный баланс. Деньги в пути — "
-            "суммы, уже выведенные с баланса WB, но ещё не дошедшие до "
-            "расчётного счёта; в отчёте о движении денежных средств они "
-            "появятся в момент фактического зачисления. Бессрочные депозиты — "
-            "средства, размещённые под проценты: на расчётном счёте их нет, "
-            "но это деньги компании, поэтому они входят в общий итог.")
+            "площадкой, их разница и даёт конечный баланс. ")
     write(ws, r, 2, note, font=f_note, align="left", wrap=True, indent=1)
     ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=ncols)
     ws.row_dimensions[r].height = 44
-
+    apply_zebra(ws, 8, r - 1, 2, ncols)
     ws.freeze_panes = ws.cell(row=7, column=1)
     return r
 
@@ -1971,7 +2090,7 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
     title_band(
         ws,
         "РАСШИФРОВКИ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
-        "Статья → контрагент → договор · те же цифры, что в P&L",
+        "Статья → контрагент → договор",
         ncols,
         extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s · "
               "уровни ниже третьего раскрываются кнопкой «+» слева"
@@ -1981,6 +2100,8 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
 
     hdr_year, hdr = 6, 7
     columns_header(ws, cols, hdr_year, hdr, report_date.year)
+    
+
 
     f_band = Font(name=FONT, size=10, bold=True, color=TEXT)
     f_item = Font(name=FONT, size=10, bold=True, color=TEXT)
@@ -1992,12 +2113,33 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
 
     anchors = {}
     r = hdr + 1
+    
+    
+    def split_code_from_label(label):
+        if not label:
+            return "", label
+
+        text = str(label).strip()
+        head, sep, tail = text.partition(" ")
+
+        if not sep:
+            return "", label
+
+        clean_head = head.rstrip(".")
+
+        if clean_head.replace(".", "").isdigit():
+            return clean_head, tail.strip()
+
+        return "", label
 
     def money_row(row, label, values_by_month, *, font, num_font, bg, bd,
                   indent, outline):
-        write(ws, row, COL_CODE, "", font=f_lvl, fillc=bg, border=bd)
-        write(ws, row, COL_LABEL, label, font=font, fillc=bg, border=bd,
-              align="left", indent=indent)
+        display_code, display_label = split_code_from_label(label)
+
+        write(ws, row, COL_CODE, display_code, font=f_lvl, fillc=bg, border=bd,
+            align="left", indent=1)
+        write(ws, row, COL_LABEL, display_label, font=font, fillc=bg, border=bd,
+            align="left", indent=indent)
         for i in range(len(cols)):
             v = period_formula(cols, i, row,
                                lambda m: values_by_month.get(m))
@@ -2011,9 +2153,13 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
 
     def sum_row(row, label, first, last, *, font, num_font, bg, bd,
                 indent, outline):
-        write(ws, row, COL_CODE, "", font=f_lvl, fillc=bg, border=bd)
-        write(ws, row, COL_LABEL, label, font=font, fillc=bg, border=bd,
-              align="left", indent=indent)
+        display_code, display_label = split_code_from_label(label)
+
+        write(ws, row, COL_CODE, display_code, font=f_lvl, fillc=bg, border=bd,
+            align="left", indent=1)
+        write(ws, row, COL_LABEL, display_label, font=font, fillc=bg, border=bd,
+            align="left", indent=indent)
+        
         for i in range(len(cols)):
             cl = L(i)
             v = "=SUM(%s%d:%s%d)" % (cl, first, cl, last) if last >= first else 0
@@ -2101,9 +2247,11 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
         r += 2
 
     ws.column_dimensions["A"].width = 3
-    ws.column_dimensions["B"].width = 4
+    ws.column_dimensions["B"].width = 12
     ws.column_dimensions["C"].width = 62
-    ws.column_dimensions[get_column_letter(COL_NOTE)].width = 3
+    ws.column_dimensions[get_column_letter(COL_NOTE)].hidden = True
+    apply_zebra(ws, hdr + 1, r - 1, COL_CODE, ncols)
+    apply_column_dividers(ws, hdr, r - 1, COL_CODE, ncols)
     columns_layout(ws, cols, report_date.year)
     ws.freeze_panes = ws.cell(row=hdr + 1, column=COL_FIRST)
     ws.print_title_rows = "1:%d" % hdr
@@ -2294,13 +2442,17 @@ def fetch_pack_data(con, date_from):
     con.execute(treasury, parameters={"date_from": date_from})
     treasury_rows = con.execute("SELECT * FROM treasury").fetchall()
 
+    con.execute(deposits, parameters={"date_from": date_from})
+    deposit_row = con.execute("SELECT balance FROM deposits").fetchone()
+    deposit_balance = float(deposit_row[0] or 0) if deposit_row else 0.0
+
     con.execute(pl_notes, parameters={"date_from": date_from})
     note_rows = con.execute("SELECT * FROM pl_notes").fetchall()
 
     raw_tables = fetch_raw_tables(con, date_from)
 
     return (pl_rows, cf_rows, unit_rows, treasury_rows,
-            note_rows, raw_tables)
+        deposit_balance, note_rows, raw_tables)
 
 
 # Данные листа «Юнит-экономика». Считаются по тем же витринам, что и P&L,
@@ -2502,7 +2654,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     with get_duckdb_conn_with_opt(ro=True) as con:
         (pl_rows, cf_rows, unit_rows, treasury_rows,
-         note_rows, raw_tables) = fetch_pack_data(con, date_from)
+        deposit_balance, note_rows, raw_tables) = fetch_pack_data(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -2567,10 +2719,16 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     # пакет строится без листов сводных, остальное не страдает
     if SKELETON_PATH.exists():
         wb = load_workbook(SKELETON_PATH)
+
+        # Удаляем старое оглавление из шаблона, если оно там осталось
+        if TOC_SHEET_NAME in wb.sheetnames:
+            del wb[TOC_SHEET_NAME]
+
         for old_name, (new_name, pivot_title) in PIVOT_SHEETS.items():
             if old_name in wb.sheetnames:
                 wb[old_name].title = new_name
                 style_pivot_sheet(wb[new_name], pivot_title)
+
         ws_cover = wb.create_sheet(TOC_SHEET_NAME, 0)
     else:
         wb = Workbook()
@@ -2595,7 +2753,15 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_cf(ws_cf, cf_data, months, opening, report_date, as_of=date_from)
 
     bank_rows, wb_row = split_treasury(treasury_rows)
-    build_treasury(ws_cash, bank_rows, wb_row, report_date, as_of=date_from)
+
+    build_treasury(
+    ws_cash,
+    bank_rows,
+    wb_row,
+    report_date,
+    as_of=date_from,
+    deposit_balance=deposit_balance,
+)
 
     raw_counts = {}
     for tname, (cols, rows) in raw_tables.items():

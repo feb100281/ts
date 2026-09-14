@@ -23,9 +23,9 @@ WITH ba AS (
             ELSE 'Закрыт'
         END AS status,
 
-        SUM(t."Поступления") AS inflow,
-        SUM(t."Расход") AS outflow,
-        SUM(t."Обороты") AS balance
+        ROUND(SUM(t."Поступления"), 2) AS inflow,
+        ROUND(SUM(t."Расход"), 2) AS outflow,
+        ROUND(SUM(t."Поступления") - SUM(t."Расход"), 2) AS balance
 
     FROM pg.ba_balance_csv t
 
@@ -45,8 +45,8 @@ WITH ba AS (
 wb_agg AS (
 
     SELECT
-        SUM("К перечислению продавцу") AS payable,
-        SUM("Вывод средств") AS withdrawn
+        ROUND(SUM("К перечислению продавцу"), 2) AS payable,
+        ROUND(SUM("Вывод средств"), 2) AS withdrawn
 
     FROM pg.wb_balance_for_csv
 
@@ -59,9 +59,9 @@ wb_last AS (
 
     SELECT
         date_from,
-        "Конечный баланс без ДВП " AS balance_no_transit,
-        "Деньги в пути (ДВП)" AS transit,
-        "Конечный баланс" AS balance
+        ROUND("Конечный баланс без ДВП ", 2) AS balance_no_transit,
+        ROUND("Деньги в пути (ДВП)", 2) AS transit,
+        ROUND("Конечный баланс", 2) AS balance
 
     FROM pg.wb_balance_for_csv
 
@@ -106,6 +106,6 @@ CROSS JOIN wb_last l
 
 ORDER BY
     block,
-    balance DESC,
-    status
+    status,
+    balance DESC
 ;
