@@ -13,8 +13,6 @@ from .admin_exports import (
     export_contracts_gl_check,
     export_manpack,
     export_management_pack,
-    export_cf_csv,
-    export_pl_csv,
     api_budgets,                   
     export_budget_analysis,        
 )
@@ -39,8 +37,6 @@ urlpatterns = [
     path("admin/export/stocks-map/", admin.site.admin_view(export_stocks_map), name="export_stocks_map"),
     path("admin/export/manpack/", admin.site.admin_view(export_manpack), name="export_manpack"),
     path("admin/export/management-pack/", admin.site.admin_view(export_management_pack), name="export_management_pack"),
-    path("admin/export/management-pack/cf-csv/", admin.site.admin_view(export_cf_csv), name="export_cf_csv"),
-    path("admin/export/management-pack/pl-csv/", admin.site.admin_view(export_pl_csv), name="export_pl_csv"),
     path("admin/api/budgets/", admin.site.admin_view(api_budgets), name="api_budgets"),
     path("admin/export/budget-analysis/", admin.site.admin_view(export_budget_analysis), name="export_budget_analysis"),
     path("reports/", include("reports.urls")),

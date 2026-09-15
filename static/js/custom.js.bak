@@ -2202,8 +2202,6 @@ console.log("✅ management_pack_export.js loaded");
 // -------------------------------------------------------------------
 (function () {
   const BASE_URL = "/admin/export/management-pack/";
-  const CF_CSV_URL = "/admin/export/management-pack/cf-csv/";
-  const PL_CSV_URL = "/admin/export/management-pack/pl-csv/";
 
   function toYmd(dateObj) {
     const y = dateObj.getFullYear();
@@ -2248,16 +2246,6 @@ console.log("✅ management_pack_export.js loaded");
           </button>
           <button type="button" class="jm-manpack-quick-btn" id="jmMp2PrevMonthEnd">
             Конец прошлого месяца
-          </button>
-        </div>
-
-        <label class="jm-manpack-label" for="jmMp2Date">Выгрузки в csv, разделитель &laquo;|&raquo;</label>
-        <div class="jm-manpack-quick">
-          <button type="button" class="jm-manpack-quick-btn" id="jmMp2CsvCf">
-            Cash Flow, csv
-          </button>
-          <button type="button" class="jm-manpack-quick-btn" id="jmMp2CsvPl">
-            P&amp;L, csv
           </button>
         </div>
 
@@ -2312,7 +2300,7 @@ console.log("✅ management_pack_export.js loaded");
       if (e.key === "Escape" && backdrop.classList.contains("is-open")) close();
     });
 
-    function download(baseUrl) {
+    backdrop.querySelector("#jmMp2Download").addEventListener("click", function () {
       const reportDate = dateInput.value;
 
       if (!reportDate) {
@@ -2322,19 +2310,7 @@ console.log("✅ management_pack_export.js loaded");
 
       errorBox.classList.remove("is-visible");
       close();
-      window.location.href = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}`;
-    }
-
-    backdrop.querySelector("#jmMp2Download").addEventListener("click", function () {
-      download(BASE_URL);
-    });
-
-    backdrop.querySelector("#jmMp2CsvCf").addEventListener("click", function () {
-      download(CF_CSV_URL);
-    });
-
-    backdrop.querySelector("#jmMp2CsvPl").addEventListener("click", function () {
-      download(PL_CSV_URL);
+      window.location.href = `${BASE_URL}?report_date=${encodeURIComponent(reportDate)}`;
     });
 
     backdrop._openMp2Modal = open;

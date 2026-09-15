@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import csv
 import datetime as dt
 from collections import OrderedDict, defaultdict
 from datetime import date
@@ -2277,6 +2276,105 @@ NOTES_PL_SHEET = [
 
 
 # =============================================================================
+#  07C. СВОДНЫЕ ТАБЛИЦЫ (нативные пивоты Excel)
+#
+#      Пакет собирается поверх готового скелета assets/pivot_skeleton.xlsx:
+#      в нём лежит лист-источник raw_cf с «умной таблицей» и лист со
+#      сводной, построенной на этой таблице.
+#      Команда только наполняет источники свежими данными и раздвигает
+#      диапазоны таблиц — сводные пересчитываются самим Excel при открытии
+#      файла (refreshOnLoad). Никаких макросов и VBA не используется.
+# =============================================================================
+
+SKELETON_PATH = Path(__file__).resolve().parent / "assets" / "pivot_skeleton.xlsx"
+
+# Сводная по P&L из пакета убрана: она строилась на бухгалтерской витрине
+# и не сходилась с управленческим P&L. Вместо неё — лист «Расшифровки P&L»
+# со ссылками из колонки «НОТА».
+PIVOT_SHEETS = {
+    "CF": ("Сводная CF", "СВОДНАЯ: ДВИЖЕНИЕ ДЕНЕЖНЫХ СРЕДСТВ"),
+}
+
+RAW_TABLE_SQL = {
+    "raw_cf": "SELECT * FROM pg.cf_to_csv WHERE date_from <= $date_from",
+}
+
+
+def fetch_raw_tables(con, date_from):
+    """Сырые витрины под сводные: {имя таблицы: (колонки, строки)}."""
+    out = {}
+    for name, sql in RAW_TABLE_SQL.items():
+        cur = con.execute(sql, parameters={"date_from": date_from})
+        cols = [d[0] for d in cur.description]
+        out[name] = (cols, cur.fetchall())
+    return out
+
+
+def _cell_value(v):
+    """Приводит значение из БД к типу, который принимает openpyxl."""
+    if v is None or isinstance(v, (int, float, str, bool)):
+        return v
+    if isinstance(v, dt.datetime):
+        return v.replace(tzinfo=None)
+    if isinstance(v, date):
+        return v
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def fill_raw_table(wb, sheet_name, table_name, columns, rows):
+    """Наполняет лист-источник и раздвигает диапазон «умной таблицы»."""
+    if sheet_name not in wb.sheetnames:
+        return 0
+    ws = wb[sheet_name]
+
+    if ws.max_row > 1:
+        ws.delete_rows(2, ws.max_row)
+
+    for j, name in enumerate(columns, start=1):
+        ws.cell(row=1, column=j, value=name)
+
+    for i, row in enumerate(rows, start=2):
+        for j, v in enumerate(row, start=1):
+            ws.cell(row=i, column=j, value=_cell_value(v))
+
+    last_row = max(2, 1 + len(rows))
+    ref = "A1:%s%d" % (get_column_letter(len(columns)), last_row)
+    tbl = ws.tables.get(table_name)
+    if tbl is not None:
+        tbl.ref = ref
+        if tbl.autoFilter is not None:
+            tbl.autoFilter.ref = ref
+
+    for pivots in (getattr(w, "_pivots", []) for w in wb.worksheets):
+        for pt in pivots:
+            pt.cache.refreshOnLoad = True
+
+    return len(rows)
+
+
+def style_pivot_sheet(ws, title):
+    c = ws.cell(row=2, column=1)
+    c.value = "\u2190  Оглавление"
+    c.hyperlink = "#'%s'!A1" % TOC_SHEET_NAME
+    c.font = Font(name=FONT, size=9, bold=True, color=NAVY_3)
+    c.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    c.fill = fill(SURFACE_4)
+    c.border = Border(bottom=_side(LINE))
+    ws.row_dimensions[2].height = 16
+
+    head = ws.cell(row=1, column=1)
+    if ws.cell(row=1, column=2).value is None:
+        head.value = title
+    head.font = Font(name=FONT, size=12, bold=True, color=TEXT)
+    head.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 20
+
+    ws.sheet_view.showGridLines = False
+
+# =============================================================================
 #  08. СБОРКА ПАКЕТА (вызывается и из команды, и из админки)
 # =============================================================================
 
@@ -2342,8 +2440,10 @@ def fetch_pack_data(con, date_from):
     con.execute(pl_notes, parameters={"date_from": date_from})
     note_rows = con.execute("SELECT * FROM pl_notes").fetchall()
 
+    raw_tables = fetch_raw_tables(con, date_from)
+
     return (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows)
+        deposit_balance, note_rows, raw_tables)
 
 
 # Данные листа «Юнит-экономика». Считаются по тем же витринам, что и P&L,
@@ -2460,6 +2560,17 @@ def notes_sources(date_from, start_year, months):
             "считает количество продаж и возвратов по таблице base и "
             "приводит удержания площадки к суммам без НДС.",
         ]),
+        ("Сводная таблица по Cash Flow", [
+            "Лист «Сводная CF» — обычная сводная таблица Excel на "
+            "листе-источнике raw_cf. Никаких макросов и VBA в файле нет.",
+            "Источник наполняется при формировании пакета, а сама сводная "
+            "обновляется автоматически при открытии файла. Строки свёрнуты до "
+            "третьего уровня; ниже раскрываются подстатьи, контрагенты и "
+            "договоры.",
+            "Поля сводной можно менять как угодно — на остальные листы пакета "
+            "это не влияет: они считаются независимо, источник raw_cf "
+            "используется только сводной.",
+        ]),
         ("Расшифровки P&L вместо сводной по P&L", [
             "Прежняя сводная по P&L строилась на бухгалтерской витрине и не "
             "сходилась с управленческим отчётом о прибылях и убытках, поэтому "
@@ -2534,7 +2645,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     with get_duckdb_conn_with_opt(ro=True) as con:
         (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows) = fetch_pack_data(con, date_from)
+        deposit_balance, note_rows, raw_tables) = fetch_pack_data(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -2595,11 +2706,25 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     opening = round(sum(v for k, v in cf_data.items() if k[0] < first), 2)
 
     # ------------------------------------------------------------- excel
-    # книга собирается с нуля: сводных таблиц и листов с сырыми строками
-    # в пакете больше нет, эти данные выгружаются отдельными csv из админки
-    wb = Workbook()
-    ws_cover = wb.active
-    ws_cover.title = TOC_SHEET_NAME
+    # книга собирается поверх скелета со сводными; если его нет —
+    # пакет строится без листов сводных, остальное не страдает
+    if SKELETON_PATH.exists():
+        wb = load_workbook(SKELETON_PATH)
+
+        # Удаляем старое оглавление из шаблона, если оно там осталось
+        if TOC_SHEET_NAME in wb.sheetnames:
+            del wb[TOC_SHEET_NAME]
+
+        for old_name, (new_name, pivot_title) in PIVOT_SHEETS.items():
+            if old_name in wb.sheetnames:
+                wb[old_name].title = new_name
+         
+
+        ws_cover = wb.create_sheet(TOC_SHEET_NAME, 0)
+    else:
+        wb = Workbook()
+        ws_cover = wb.active
+        ws_cover.title = TOC_SHEET_NAME
     ws_pl = wb.create_sheet("P&L")
     ws_notes_pl = wb.create_sheet(NOTES_SHEET_NAME)
     ws_unit = wb.create_sheet("Юнит-экономика")
@@ -2628,6 +2753,13 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     as_of=date_from,
     deposit_balance=deposit_balance,
 )
+
+    raw_counts = {}
+    for tname, (cols, rows) in raw_tables.items():
+        raw_counts[tname] = fill_raw_table(wb, tname, tname, cols, rows)
+    for sheet_name, pivot_title in PIVOT_SHEETS.values():
+        if sheet_name in wb.sheetnames:
+            style_pivot_sheet(wb[sheet_name], pivot_title)
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "
@@ -2672,6 +2804,9 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                       "по видам деятельности"),
         ("Остатки ДС", "Банковские счета, деньги в пути, баланс WB "
                        "и депозиты с расшифровкой по счетам"),
+        ("Сводная CF", "Сводная таблица Excel по движению денежных средств: "
+                       "разрез по видам деятельности, статьям, контрагентам "
+                       "и договорам"),
         ("Пояснения P&L", "Методика расчёта каждого раздела и промежуточного итога"),
         ("Пояснения Юнит-экономика", "Как считается каждый показатель "
                                      "и почему он не равен кассе"),
@@ -2683,19 +2818,19 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                 contents=contents, as_of=date_from)
 
     # Ни один лист не должен быть «выделен» кроме первого: иначе Excel
-    # открывает книгу в режиме группового редактирования, и правка на одном
-    # листе молча уходит сразу на все выделенные.
+    # открывает книгу в режиме группового редактирования и сводные
+    # таблицы в нём не работают («Cannot edit a PivotTable in group edit mode»).
     for sheet in wb.worksheets:
         for view in sheet.views.sheetView:
             view.tabSelected = False
     wb.active = 0
 
-    # порядок листов: отчёты, затем пояснения
+    # порядок листов: отчёты, сводные, пояснения, сырые данные
     order = [TOC_SHEET_NAME, "P&L", NOTES_SHEET_NAME, "Юнит-экономика",
-             "Cash Flow", "Остатки ДС",
+             "Cash Flow", "Остатки ДС", "Сводная CF",
              "Пояснения P&L", "Пояснения Расшифровки",
              "Пояснения Юнит-экономика", "Пояснения Cash Flow",
-             "Источники данных"]
+             "Источники данных", "raw_cf"]
     ordered = [wb[n] for n in order if n in wb.sheetnames]
     ordered += [ws for ws in wb.worksheets if ws not in ordered]
     wb._sheets = ordered
@@ -2715,60 +2850,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 # =============================================================================
 #  09. КОМАНДА
 # =============================================================================
-
-# =============================================================================
-#  09. ВЫГРУЗКА ВИТРИН В CSV
-#
-#      Сводных таблиц в пакете больше нет. Вместо них из админки выгружаются
-#      те же витрины, на которых они строились, — и сводную можно собрать
-#      у себя как удобно. Разделитель — вертикальная черта, кодировка
-#      utf-8 с BOM (Excel открывает такой файл без вопросов).
-# =============================================================================
-
-CSV_DELIMITER = "|"
-
-CSV_SOURCES = {
-    "cf": (
-        "cash_flow",
-        "SELECT * FROM pg.cf_to_csv WHERE date_from <= $date_from "
-        "ORDER BY date_from",
-    ),
-    "pl": (
-        "pl",
-        "SELECT * FROM pg.pl_for_csv WHERE date_from <= $date_from "
-        "ORDER BY date_from",
-    ),
-}
-
-
-def export_raw_csv(kind, date_from, out_path=None):
-    """Выгружает витрину «cf» или «pl» в csv. Возвращает (путь, число строк)."""
-    if kind not in CSV_SOURCES:
-        raise ValueError("Неизвестная выгрузка: %s" % kind)
-
-    if isinstance(date_from, str):
-        date_from = date.fromisoformat(date_from)
-
-    prefix, sql = CSV_SOURCES[kind]
-
-    with get_duckdb_conn_with_opt(ro=True) as con:
-        cur = con.execute(sql, parameters={"date_from": date_from})
-        columns = [d[0] for d in cur.description]
-        rows = cur.fetchall()
-
-    path = Path(out_path) if out_path else Path(
-        "%s_%s.csv" % (prefix, date_from.isoformat()))
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    with path.open("w", encoding="utf-8-sig", newline="") as fh:
-        writer = csv.writer(fh, delimiter=CSV_DELIMITER,
-                            quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
-        writer.writerow(columns)
-        for row in rows:
-            writer.writerow(["" if v is None else v for v in row])
-
-    return path, len(rows)
-
 
 class Command(BaseCommand):
     help = "Формирует управленческий пакет (P&L + Cash Flow + пояснения) в Excel."
