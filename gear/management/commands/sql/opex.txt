@@ -11,8 +11,10 @@ WITH base AS (
 
     FROM wb_costs
 
-    WHERE account != 'Other income / loss'
-    and account != 'WB Deduction'
+    -- данные обрезаются по дате отчёта, как в cash flow и в расшифровках
+    WHERE date_from::DATE <= $date_from
+      AND account != 'Other income / loss'
+      AND account != 'WB Deduction'
 
     GROUP BY
         me,
@@ -32,7 +34,8 @@ WITH base AS (
 
     FROM wb_costs
 
-    WHERE account = 'Other income / loss'
+    WHERE date_from::DATE <= $date_from
+      AND account = 'Other income / loss'
 
     GROUP BY
         me,
@@ -51,7 +54,8 @@ WITH base AS (
 
     FROM wb_costs
 
-    WHERE account = 'WB Deduction'
+    WHERE date_from::DATE <= $date_from
+      AND account = 'WB Deduction'
 
     GROUP BY
         me,
