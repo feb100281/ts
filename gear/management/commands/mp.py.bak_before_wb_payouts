@@ -38,7 +38,6 @@ from .sql.read_query import (
     treasury,
     deposits,
     pl_notes,
-    wb_payouts,
 )
 
 try:
@@ -2010,21 +2009,17 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
         head += " · выгрузка площадки на %s" % wb_as_of.strftime("%d.%m.%Y")
     r = section(r, head)
 
-    f_link = Font(name=FONT, size=9, bold=True, color=NAVY_3)
-
-    # последний элемент — подпись-ссылка на лист с расшифровкой выводов
     wb_lines = [
         ("К перечислению продавцу, всего",
-         _f(wb_row[4]) if wb_row else 0.0, f_income, False, None),
+         _f(wb_row[4]) if wb_row else 0.0, f_income, False),
         ("Выведено средств, всего",
-         _f(wb_row[5]) if wb_row else 0.0, f_expense, False,
-         "\u2192  поступления от площадки на расчётный счёт по датам"),
+         _f(wb_row[5]) if wb_row else 0.0, f_expense, False),
         ("Конечный баланс без денег в пути",
-         _f(wb_row[8]) if wb_row else 0.0, f_label, False, None),
-        ("Деньги в пути (ДВП)", transit, f_label, False, None),
-        ("Конечный баланс WB", wb_balance, f_bold_num, True, None),
+         _f(wb_row[8]) if wb_row else 0.0, f_label, False),
+        ("Деньги в пути (ДВП)", transit, f_label, False),
+        ("Конечный баланс WB", wb_balance, f_bold_num, True),
     ]
-    for lbl, v, fnt, is_last, link in wb_lines:
+    for lbl, v, fnt, is_last in wb_lines:
         write(ws, r, 2, lbl, font=f_label_b if is_last else f_label,
               fillc=TOTAL_ROW if is_last else None,
               border=B_TOTAL if is_last else B_BOTTOM, align="left", indent=1)
@@ -2036,10 +2031,6 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
             if is_last:
                 cell.fill = fill(TOTAL_ROW)
             cell.border = B_TOTAL if is_last else B_BOTTOM
-        if link:
-            c = write(ws, r, 4, link, font=f_link, border=B_BOTTOM,
-                      align="left", indent=1)
-            c.hyperlink = "#'%s'!A1" % PAYOUTS_SHEET_NAME
         ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
         ws.row_dimensions[r].height = 17
         r += 1
@@ -2052,276 +2043,6 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
     ws.row_dimensions[r].height = 44
     apply_zebra(ws, 8, r - 1, 2, ncols)
     ws.freeze_panes = ws.cell(row=7, column=1)
-    return r
-
-
-# =============================================================================
-#  07C. ЛИСТ «ПОСТУПЛЕНИЯ ОТ WB»
-#
-#      Зачисления от площадки на расчётный счёт: дата, сумма, плательщик.
-#      На листе только факты учёта, ничего не достраивается и не
-#      сопоставляется с выводами площадки.
-#
-#      Данные — витрина wb_payouts (sql/wb_payouts.txt): поступления из
-#      движения денежных средств по статье выручки от маркетплейса,
-#      плюс итог списаний с баланса WB для строки сводки «Разница».
-# =============================================================================
-
-PAYOUTS_SHEET_NAME = "Поступления от WB"
-
-FMT_DATE = "DD.MM.YYYY"
-
-
-def split_payouts(payout_rows):
-    """Делит витрину wb_payouts на списания с баланса WB и поступления."""
-    outs, ins = [], []
-    for side, dt, amount, cp_name in payout_rows:
-        dt = dt if isinstance(dt, date) else date.fromisoformat(str(dt))
-        value = round(abs(float(amount or 0)), 2)
-        if not value:
-            continue
-        row = {"dt": dt, "amount": value, "cp_name": (cp_name or "").strip()}
-        (outs if side == "OUT" else ins).append(row)
-    outs.sort(key=lambda x: x["dt"])
-    ins.sort(key=lambda x: x["dt"])
-    return outs, ins
-
-
-PAYOUT_MATCH_DAYS = 15      # окно поиска поступления после вывода
-PAYOUT_MATCH_EPS = 1.0      # допуск по сумме, рублей
-
-
-def match_wb_payouts(outs, ins):
-    """Сопоставляет вывод с баланса WB и поступление на расчётный счёт.
-
-    Проход первый — по совпадению суммы: поступление ищется в окне
-    PAYOUT_MATCH_DAYS дней после вывода, берётся самое раннее подходящее.
-    Проход второй — остаток по порядку: деньги приходят в той же
-    последовательности, в которой выводились.
-
-    Нужно только для того, чтобы у каждой суммы вывода была дата, которой
-    деньги реально пришли на расчётный счёт. Пара без поступления
-    (kind = transit) на лист не попадает: это деньги в пути.
-    """
-    used = [False] * len(ins)
-    pairs = []
-
-    def take(i, out, kind):
-        used[i] = True
-        inc = ins[i]
-        pairs.append({
-            "out_dt": out["dt"], "out_amount": out["amount"],
-            "in_dt": inc["dt"], "in_amount": inc["amount"],
-            "cp_name": inc["cp_name"],
-            "days": (inc["dt"] - out["dt"]).days,
-            "kind": kind,
-        })
-
-    rest = []
-    for out in outs:
-        hit = None
-        for i, inc in enumerate(ins):
-            if inc["dt"] < out["dt"]:
-                continue
-            if (inc["dt"] - out["dt"]).days > PAYOUT_MATCH_DAYS:
-                break
-            if used[i]:
-                continue
-            if abs(inc["amount"] - out["amount"]) <= PAYOUT_MATCH_EPS:
-                hit = i
-                break
-        if hit is None:
-            rest.append(out)
-        else:
-            take(hit, out, "exact")
-
-    for out in rest:
-        hit = None
-        for i, inc in enumerate(ins):
-            if not used[i] and inc["dt"] >= out["dt"]:
-                hit = i
-                break
-        if hit is None:
-            pairs.append({
-                "out_dt": out["dt"], "out_amount": out["amount"],
-                "in_dt": None, "in_amount": 0.0, "cp_name": "",
-                "days": None, "kind": "transit",
-            })
-        else:
-            take(hit, out, "order")
-
-    pairs.sort(key=lambda p: (p["out_dt"], p["in_dt"] or date.max))
-    return pairs
-
-
-def build_wb_payouts(ws, receipts, withdrawn_total, report_date, as_of=None):
-    """Лист «Поступления от WB»: зачисления от площадки на расчётный счёт.
-
-    receipts — строки поступлений (дата, сумма, контрагент) из витрины
-    движения денежных средств. Ничего не сопоставляется и не достраивается:
-    на листе только то, что реально прошло по расчётному счёту.
-    """
-    as_of = as_of or report_date
-
-    sheet_setup(ws, landscape=False)
-    ncols = 6
-
-    title_band(
-        ws,
-        "ПОСТУПЛЕНИЯ ОТ МАРКЕТПЛЕЙСА",
-        "Поступления от площадки на расчётный счёт: даты и суммы",
-        ncols,
-        extra="Российский рубль (RUB) · нарастающим итогом за всё время "
-              "работы с площадкой по %s · месяцы раскрываются кнопкой «+» "
-              "слева" % as_of.strftime("%d.%m.%Y"),
-    )
-
-    for i, w in enumerate([3, 34, 22, 40, 22, 4], start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-
-    f_section = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
-    f_label = Font(name=FONT, size=10, color=TEXT)
-    f_label_b = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_month = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_date = Font(name=FONT, size=9, color=TEXT_2)
-    f_income = Font(name=FONT, size=9, color=INCOME)
-    f_income_b = Font(name=FONT, size=10, bold=True, color=INCOME)
-    f_bold_num = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_note = Font(name=FONT, size=8, color=MUTED)
-
-    def section(r, text):
-        write(ws, r, 2, text, font=f_section, align="left", border=B_SECTION)
-        for cc in range(3, ncols + 1):
-            ws.cell(row=r, column=cc).border = B_SECTION
-        ws.row_dimensions[r].height = 18
-        return r + 1
-
-    total_in = round(sum(x["amount"] for x in receipts), 2)
-
-    # ------------------------------------------------------------- сводка
-    r = 7
-    r = section(r, "СВОДКА")
-
-    summary = [
-        ("Поступило на расчётный счёт", total_in, f_income_b,
-         "Поступления от площадки за всё время работы, %d %s"
-         % (len(receipts),
-            "поступление" if len(receipts) == 1 else "поступлений")),
-        ("Списано с баланса WB, всего", withdrawn_total, f_label_b,
-         "Та же строка «Выведено средств, всего» на листе «Остатки ДС»"),
-        ("Разница", round(withdrawn_total - total_in, 2), f_bold_num,
-         "Списано площадкой, но на счёт ещё не зачислено — деньги в пути"),
-    ]
-    first_sum_row = r
-    for lbl, value, fnt, hint in summary:
-        write(ws, r, 2, lbl, font=f_label, border=B_BOTTOM,
-              align="left", indent=1)
-        write(ws, r, 3, value, font=fnt, fmt=FMT_MONEY,
-              border=B_BOTTOM, align="right")
-        write(ws, r, 4, hint, font=f_note, border=B_BOTTOM, align="left")
-        ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
-        for cc in range(5, ncols + 1):
-            ws.cell(row=r, column=cc).border = B_BOTTOM
-        ws.row_dimensions[r].height = 17
-        r += 1
-
-    r += 1
-
-    # ------------------------------------------ расшифровка по поступлениям
-    r = section(r, "РАСШИФРОВКА ПО ДАТАМ ПОСТУПЛЕНИЯ")
-
-    headers = [
-        (2, "Дата поступления на счёт", "left"),
-        (3, "Сумма поступления", "right"),
-        (4, "Плательщик", "left"),
-    ]
-    for col, text, align in headers:
-        write(ws, r, col, text, font=f_hdr, fillc=NAVY, align=align,
-              indent=1 if align == "left" else 0, wrap=True)
-    for cc in (5, ncols):
-        ws.cell(row=r, column=cc).fill = fill(NAVY)
-    ws.row_dimensions[r].height = 22
-    hdr_row = r
-    r += 1
-
-    months = OrderedDict()
-    for x in sorted(receipts, key=lambda x: x["dt"]):
-        months.setdefault((x["dt"].year, x["dt"].month), []).append(x)
-
-    month_rows = []
-    for (year, month), group in months.items():
-        month_row = r
-        r += 1
-        first_detail = r
-
-        for x in group:
-            write(ws, r, 2, x["dt"], font=f_date, fmt=FMT_DATE,
-                  border=B_BOTTOM, align="left", indent=1)
-            write(ws, r, 3, x["amount"], font=f_income, fmt=FMT_MONEY,
-                  border=B_BOTTOM, align="right")
-            write(ws, r, 4, x["cp_name"] or "Маркетплейс", font=f_date,
-                  border=B_BOTTOM, align="left", indent=1)
-            for cc in (5, ncols):
-                ws.cell(row=r, column=cc).border = B_BOTTOM
-            ws.row_dimensions[r].outlineLevel = 1
-            ws.row_dimensions[r].hidden = True
-            ws.row_dimensions[r].height = 16
-            r += 1
-
-        last_detail = r - 1
-        write(ws, month_row, 2, "%s %d" % (MONTHS_RU[month - 1], year),
-              font=f_month, fillc=SURFACE_2, border=B_BOTTOM_STRONG,
-              align="left", indent=1)
-        write(ws, month_row, 3, "=SUM(C%d:C%d)" % (first_detail, last_detail),
-              font=f_income_b, fmt=FMT_MONEY, fillc=SURFACE_2,
-              border=B_BOTTOM_STRONG, align="right")
-        write(ws, month_row, 4, "поступлений: %d" % len(group), font=f_note,
-              fillc=SURFACE_2, border=B_BOTTOM_STRONG, align="left", indent=1)
-        for cc in (5, ncols):
-            ws.cell(row=month_row, column=cc).fill = fill(SURFACE_2)
-            ws.cell(row=month_row, column=cc).border = B_BOTTOM_STRONG
-        ws.row_dimensions[month_row].height = 18
-        month_rows.append(month_row)
-
-    # итог — сумма только строк месяцев: складывать диапазон нельзя,
-    # внутри него лежат и месячные итоги, и сами поступления
-    write(ws, r, 2, "ИТОГО ЗА ВСЁ ВРЕМЯ", font=f_label_b, fillc=TOTAL_ROW,
-          border=B_TOTAL, align="left", indent=1)
-    formula = ("=" + "+".join("C%d" % rr for rr in month_rows)
-               if month_rows else 0)
-    write(ws, r, 3, formula, font=f_income_b, fmt=FMT_MONEY, fillc=TOTAL_ROW,
-          border=B_TOTAL, align="right")
-    write(ws, r, 4, "поступлений всего: %d" % len(receipts), font=f_note,
-          fillc=TOTAL_ROW, border=B_TOTAL, align="left", indent=1)
-    for cc in (5, ncols):
-        ws.cell(row=r, column=cc).fill = fill(TOTAL_ROW)
-        ws.cell(row=r, column=cc).border = B_TOTAL
-    ws.row_dimensions[r].height = 20
-    total_row = r
-    r += 2
-
-    # сводка ссылается на итог расшифровки — цифры не разъезжаются
-    ws.cell(row=first_sum_row, column=3).value = "=C%d" % total_row
-
-    note = (
-        "Что на листе. Каждая строка — поступление от маркетплейса на "
-        "расчётный счёт: дата, сумма и плательщик, всё по данным учёта. "
-        "Месяцы свёрнуты, в строке месяца — сумма за месяц и количество "
-        "поступлений; раскрываются кнопкой «+» слева.\n"
-        "Почему итог меньше, чем «Выведено средств, всего» на листе "
-        "«Остатки ДС». Между списанием с баланса площадки и поступлением на "
-        "счёт проходит один-три рабочих дня, поэтому на отчётную дату часть "
-        "выведенного ещё не дошла. Эта разница показана в сводке и совпадает "
-        "с деньгами в пути."
-    )
-    write(ws, r, 2, note, font=f_note, align="left", wrap=True, indent=1)
-    ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=ncols)
-    ws.row_dimensions[r].height = 58
-
-    ws.freeze_panes = ws.cell(row=hdr_row + 1, column=1)
-    ws.print_title_rows = "1:%d" % hdr_row
-    ws.sheet_properties.outlinePr.summaryBelow = False
     return r
 
 
@@ -2545,7 +2266,6 @@ def fetch_pack_data(con, date_from):
     treasury = read_sql("treasury.txt")
     deposits = read_sql("deposits.txt")
     pl_notes = read_sql("pl_notes.txt")
-    wb_payouts = read_sql("wb_payouts.txt")
 
     con.execute(base)
     con.execute(base_stocks)
@@ -2590,11 +2310,8 @@ def fetch_pack_data(con, date_from):
     con.execute(pl_notes, parameters={"date_from": date_from})
     note_rows = con.execute("SELECT * FROM pl_notes").fetchall()
 
-    con.execute(wb_payouts, parameters={"date_from": date_from})
-    payout_rows = con.execute("SELECT * FROM wb_payouts").fetchall()
-
     return (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows, payout_rows)
+        deposit_balance, note_rows)
 
 
 # Данные листа «Юнит-экономика». Считаются по тем же витринам, что и P&L,
@@ -2709,7 +2426,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     with get_duckdb_conn_with_opt(ro=True) as con:
         (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows, payout_rows) = fetch_pack_data(con, date_from)
+        deposit_balance, note_rows) = fetch_pack_data(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -2780,7 +2497,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_unit = wb.create_sheet("Юнит-экономика")
     ws_cf = wb.create_sheet("Cash Flow")
     ws_cash = wb.create_sheet("Остатки ДС")
-    ws_payouts = wb.create_sheet(PAYOUTS_SHEET_NAME)
     ws_npl = wb.create_sheet("Пояснения P&L")
     ws_nunit = wb.create_sheet("Пояснения Юнит-экономика")
     ws_ncf = wb.create_sheet("Пояснения Cash Flow")
@@ -2802,18 +2518,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     as_of=date_from,
     deposit_balance=deposit_balance,
 )
-
-    outs, ins = split_payouts(payout_rows)
-    # сумма берётся из баланса площадки (там она верная), а дата — та,
-    # которой деньги пришли на расчётный счёт; выводы без поступления
-    # на лист не попадают, они и есть деньги в пути
-    payout_receipts = [
-        {"dt": p["in_dt"], "amount": p["out_amount"], "cp_name": p["cp_name"]}
-        for p in match_wb_payouts(outs, ins) if p["in_dt"] is not None
-    ]
-    build_wb_payouts(ws_payouts, payout_receipts,
-                     round(sum(x["amount"] for x in outs), 2),
-                     report_date, as_of=date_from)
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "
@@ -2852,8 +2556,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                       "по видам деятельности"),
         ("Остатки ДС", "Банковские счета, деньги в пути, баланс WB "
                        "и депозиты с расшифровкой по счетам"),
-        (PAYOUTS_SHEET_NAME, "Поступления от площадки на расчётный счёт: "
-                             "даты, суммы и количество по месяцам"),
         ("Пояснения P&L", "Методика расчёта каждого раздела и промежуточного итога"),
         ("Пояснения Юнит-экономика", "Как считается каждый показатель "
                                      "и почему он не равен кассе"),
@@ -2873,7 +2575,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     # порядок листов: отчёты, затем пояснения
     order = [TOC_SHEET_NAME, "P&L", NOTES_SHEET_NAME, "Юнит-экономика",
-             "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
+             "Cash Flow", "Остатки ДС",
              "Пояснения P&L", "Пояснения Юнит-экономика",
              "Пояснения Cash Flow"]
     ordered = [wb[n] for n in order if n in wb.sheetnames]

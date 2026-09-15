@@ -18,4 +18,5 @@ cf = read_sql("cf.txt")
 treasury = read_sql("treasury.txt")
 deposits = read_sql("deposits.txt")
 pl_notes = read_sql("pl_notes.txt")
+wb_payouts = read_sql("wb_payouts.txt")
 

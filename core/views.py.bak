@@ -2,14 +2,10 @@
 import subprocess
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.decorators import permission_required
 from django.shortcuts import redirect
 
 
-# staff_member_required пускает любого сотрудника админки, поэтому запуск
-# ETL закрыт отдельным правом (gear.Exports → «Выгрузка: главная книга»).
 @staff_member_required
-@permission_required("gear.export_gl", raise_exception=True)
 def run_gl_etl(request):
     try:
         result = subprocess.run(
