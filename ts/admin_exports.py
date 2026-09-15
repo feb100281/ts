@@ -238,10 +238,12 @@ def _export_manpack_csv(request, kind, prefix):
     except ValueError as exc:
         return HttpResponseBadRequest(str(exc))
 
+    # имя файла постоянное (cash_flow.csv, pl.csv): он подключается
+    # источником к сводной, и от выгрузки к выгрузке не должен меняться
     return FileResponse(
         open(file_path, "rb"),
         as_attachment=True,
-        filename=file_path.name,
+        filename=f"{prefix}.csv",
         content_type="text/csv; charset=utf-8",
     )
 

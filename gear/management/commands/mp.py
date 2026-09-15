@@ -2741,6 +2741,23 @@ CSV_SOURCES = {
 }
 
 
+def _csv_value(v):
+    """Приводит значение к одной строке, пригодной для файла с «|».
+
+    В описаниях проводок встречаются переносы строк, сама вертикальная
+    черта и кавычки. Любой из этих символов разрывает запись при импорте:
+    остаток строки уезжает в следующую и текст оказывается в колонке
+    с датой. Поэтому чистим их здесь, до записи.
+    """
+    if v is None:
+        return ""
+    if not isinstance(v, str):
+        return v
+    text = v.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    text = text.replace(CSV_DELIMITER, "/").replace('"', "'")
+    return " ".join(text.split())
+
+
 def export_raw_csv(kind, date_from, out_path=None):
     """Выгружает витрину «cf» или «pl» в csv. Возвращает (путь, число строк)."""
     if kind not in CSV_SOURCES:
@@ -2765,7 +2782,7 @@ def export_raw_csv(kind, date_from, out_path=None):
                             quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
         writer.writerow(columns)
         for row in rows:
-            writer.writerow(["" if v is None else v for v in row])
+            writer.writerow([_csv_value(v) for v in row])
 
     return path, len(rows)
 
