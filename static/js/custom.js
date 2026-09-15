@@ -2193,7 +2193,7 @@ console.log("✅ stocks_export.js loaded");
 
 
 
-console.log("✅ management_pack_export.js loaded");
+console.log("✅ management_pack_export.js loaded — csv v2");
 
 // -------------------------------------------------------------------
 // Управленческий пакет (P&L + Cash Flow + пояснения)
