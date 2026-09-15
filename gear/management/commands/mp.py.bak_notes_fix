@@ -2153,35 +2153,29 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
             ws.row_dimensions[row].hidden = (outline >= 2)
         ws.row_dimensions[row].height = 16
 
-    def agg(node):
-        """Суммы по месяцам для узла дерева.
+    def sum_row(row, label, first, last, *, font, num_font, bg, bd,
+                indent, outline):
+        display_code, display_label = split_code_from_label(label)
 
-        Лист — это уже готовый словарь {месяц: сумма}; ветка — словарь
-        подузлов. Всё складывается здесь, в python, поэтому в ячейках
-        уровней стоят числа, а не формулы по диапазону строк: диапазон
-        захватывал бы промежуточные итоги контрагентов и договоров и
-        задваивал суммы.
-        """
-        if not isinstance(node, OrderedDict):
-            return node
-        out = {}
-        for child in node.values():
-            for m, v in agg(child).items():
-                out[m] = out.get(m, 0.0) + v
-        return out
+        write(ws, row, COL_CODE, display_code, font=f_lvl, fillc=bg, border=bd,
+            align="left", indent=1)
+        write(ws, row, COL_LABEL, display_label, font=font, fillc=bg, border=bd,
+            align="left", indent=indent)
+        
+        for i in range(len(cols)):
+            cl = L(i)
+            v = "=SUM(%s%d:%s%d)" % (cl, first, cl, last) if last >= first else 0
+            fillv = bg if bg else (SURFACE_3 if cols[i][0] != "month" else None)
+            write(ws, row, COL_FIRST + i, v, font=num_font, fmt=FMT_MONEY,
+                  fillc=fillv, border=bd, align="right")
+        if outline:
+            ws.row_dimensions[row].outlineLevel = outline
+            ws.row_dimensions[row].hidden = (outline >= 2)
+        ws.row_dimensions[row].height = 16
 
     def collapse(node):
-        """Именованные подуровни текущего узла.
-
-        Пустой ключ «» означает, что детализации на этом уровне нет.
-        Если кроме него ничего нет — уровень схлопывается в родителя.
-        Если он соседствует с именованными — показываем его отдельной
-        строкой, иначе его сумма выпала бы из итога.
-        """
-        named = [(k, v) for k, v in node.items() if k]
-        if named and "" in node:
-            named.append(("Без детализации", node[""]))
-        return named
+        """Свернуть уровень, если он пустой («» — значит данных нет)."""
+        return [(k, v) for k, v in node.items() if k]
 
     for section in sorted(tree):
         ws.merge_cells(start_row=r, start_column=COL_CODE,
@@ -2194,39 +2188,61 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
         anchors[(section, None)] = r
         r += 1
 
+        item_rows = []
         for item, lvl1_node in tree[section].items():
             item_row = r
             anchors[(section, item)] = item_row
-            money_row(item_row, item, agg(lvl1_node), font=f_item,
-                      num_font=f_num_bold, bg=SURFACE_2, bd=B_BOTTOM_STRONG,
-                      indent=1, outline=0)
             r += 1
+            first_child = r
 
             for lvl1, lvl2_node in lvl1_node.items():
-                money_row(r, lvl1 or "Без детализации", agg(lvl2_node),
-                          font=f_lvl, num_font=f_num, bg=None,
-                          bd=B_BOTTOM, indent=3, outline=1)
+                lvl1_row = r
                 r += 1
+                first_lvl2 = r
 
                 for lvl2, lvl3_node in collapse(lvl2_node):
-                    money_row(r, lvl2, agg(lvl3_node), font=f_lvl_deep,
-                              num_font=f_num, bg=None, bd=B_BOTTOM,
-                              indent=5, outline=2)
+                    lvl2_row = r
                     r += 1
+                    first_lvl3 = r
 
                     for lvl3, vals in collapse(lvl3_node):
                         money_row(r, lvl3, vals, font=f_lvl_deep, num_font=f_num,
                                   bg=None, bd=B_BOTTOM, indent=7, outline=3)
                         r += 1
 
+                    if r > first_lvl3:
+                        sum_row(lvl2_row, lvl2, first_lvl3, r - 1,
+                                font=f_lvl_deep, num_font=f_num, bg=None,
+                                bd=B_BOTTOM, indent=5, outline=2)
+                    else:
+                        money_row(lvl2_row, lvl2, lvl3_node.get("", {}),
+                                  font=f_lvl_deep, num_font=f_num, bg=None,
+                                  bd=B_BOTTOM, indent=5, outline=2)
+
+                if r > first_lvl2:
+                    sum_row(lvl1_row, lvl1 or "Без детализации",
+                            first_lvl2, r - 1, font=f_lvl, num_font=f_num,
+                            bg=None, bd=B_BOTTOM, indent=3, outline=1)
+                else:
+                    vals = lvl2_node.get("", {}).get("", {})
+                    money_row(lvl1_row, lvl1 or "Без детализации", vals,
+                              font=f_lvl, num_font=f_num, bg=None,
+                              bd=B_BOTTOM, indent=3, outline=1)
+
+            sum_row(item_row, item, first_child, r - 1, font=f_item,
+                    num_font=f_num_bold, bg=SURFACE_2, bd=B_BOTTOM_STRONG,
+                    indent=1, outline=0)
+            item_rows.append(item_row)
+
         # итог раздела — сумма его статей
         write(ws, r, COL_CODE, "", font=f_total, fillc=TOTAL_ROW, border=B_TOTAL)
         write(ws, r, COL_LABEL, "ИТОГО %s" % section.split(". ", 1)[-1],
               font=f_total, fillc=TOTAL_ROW, border=B_TOTAL,
               align="left", indent=1)
-        section_vals = agg(tree[section])
         for i in range(len(cols)):
-            v = period_formula(cols, i, r, lambda m: section_vals.get(m))
+            cl = L(i)
+            v = ("=" + "+".join("%s%d" % (cl, rr) for rr in item_rows)
+                 if item_rows else 0)
             write(ws, r, COL_FIRST + i, v, font=f_total, fmt=FMT_MONEY,
                   fillc=TOTAL_ROW, border=B_TOTAL, align="right")
         ws.row_dimensions[r].height = 18

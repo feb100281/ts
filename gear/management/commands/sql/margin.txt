@@ -63,6 +63,10 @@ cash_consideration AS (
 
     FROM sales.sales_long
 
+    -- обрезаем по дате отчёта, как и month_margins_wb выше: без этого
+    -- строки 1.2 и 2.2 («по отчету WB») всегда показывали полный месяц
+    WHERE date_from::DATE <= $date_from
+
     GROUP BY me
 ),
 
