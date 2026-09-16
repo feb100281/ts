@@ -1,7 +1,14 @@
+# treasury/models.py
 from django.db import models
 from corporate.models import BankAccount,Owners, CfItems
 from contracts.models import Contracts
 from counterparties.models import Counterparty
+from django.core.exceptions import ValidationError
+from django.utils.safestring import mark_safe
+
+from decimal import Decimal
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from django.core.exceptions import ValidationError
 
 from utils.bsparsers.bsparser import get_bs_details
@@ -79,6 +86,10 @@ class CfData(models.Model):
     date = models.DateField("Дата платежа",blank=True,null=True)
     dt = models.DecimalField("Дт",max_digits=12,decimal_places=2,null=True,blank=True)
     cr = models.DecimalField("Кр",max_digits=12,decimal_places=2,null=True,blank=True)
+    
+    source_dt = models.DecimalField("Исходный Дт", max_digits=12, decimal_places=2, null=True, blank=True)
+    source_cr = models.DecimalField("Исходный Кр", max_digits=12, decimal_places=2, null=True, blank=True)
+    
     tax_id = models.CharField("ИНН",max_length=250,null=True,blank=True)
     temp = models.TextField("Назначение",null=True,blank=True)
     cp_bs_name = models.CharField("Имя в выписке",max_length=250,null=True,blank=True)
@@ -94,6 +105,39 @@ class CfData(models.Model):
     ba = models.ForeignKey(BankAccount,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Расчетный счет")
     
     
+    def save(self, *args, **kwargs):
+        if self.source_dt is None:
+            self.source_dt = self.dt
+        if self.source_cr is None:
+            self.source_cr = self.cr
+        super().save(*args, **kwargs)
+        
+    
+    def recalc_from_splits(self):
+        agg = self.splits.aggregate(
+            dt_sum=Coalesce(Sum("dt"), Decimal("0.00")),
+            cr_sum=Coalesce(Sum("cr"), Decimal("0.00")),
+        )
+
+        split_dt = agg["dt_sum"] or Decimal("0.00")
+        split_cr = agg["cr_sum"] or Decimal("0.00")
+
+        source_dt = self.source_dt if self.source_dt is not None else (self.dt or Decimal("0.00"))
+        source_cr = self.source_cr if self.source_cr is not None else (self.cr or Decimal("0.00"))
+
+        new_dt = source_dt - split_dt
+        new_cr = source_cr - split_cr
+
+        if new_dt < 0:
+            raise ValidationError("Сумма сплитов по Дт больше исходной суммы.")
+        if new_cr < 0:
+            raise ValidationError("Сумма сплитов по Кт больше исходной суммы.")
+
+        self.dt = new_dt
+        self.cr = new_cr
+        super(CfData, self).save(update_fields=["dt", "cr"])
+    
+    
     class Meta:
         verbose_name = "CF документ"
         verbose_name_plural = "CF документы"        
@@ -107,20 +151,95 @@ class CfData(models.Model):
     def __str__(self):
         return f"{self.doc_type} № {self.doc_numner} от {self.doc_date} (на сумму {self.dt - self.cr})"
     
+# class CfSplits(models.Model):
+#     # transaction = models.ForeignKey(CfData,on_delete=models.CASCADE,verbose_name='Транскация')
+    
+#     transaction = models.ForeignKey(
+#         CfData,
+#         on_delete=models.CASCADE,
+#         verbose_name='Транскация',
+#         related_name='splits'
+#     )
+#     dt = models.DecimalField("Дт",max_digits=12,decimal_places=2,null=True,blank=True)
+#     cr = models.DecimalField("Кр",max_digits=12,decimal_places=2,null=True,blank=True)
+#     temp = models.TextField("Назначение",null=True,blank=True)
+#     vat_rate = models.DecimalField("НДС",max_digits=6,decimal_places=2,null=True,blank=True)
+#     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Договор")
+#     cfitem = models.ForeignKey(CfItems,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Статья CF" )
+#     class Meta:
+#         verbose_name = mark_safe("🧩<b>Сплит оплат</b>")
+#         verbose_name_plural = mark_safe("🧩<b>Сплит оплат</b>")
+    
+#     def __str__(self):
+#         return f"{self.transaction}"
+
+
 class CfSplits(models.Model):
-    transaction = models.ForeignKey(CfData,on_delete=models.CASCADE,verbose_name='Транскация')
+    transaction = models.ForeignKey(
+        CfData,
+        on_delete=models.CASCADE,
+        verbose_name='Транскация',
+        related_name='splits'
+    )
     dt = models.DecimalField("Дт",max_digits=12,decimal_places=2,null=True,blank=True)
     cr = models.DecimalField("Кр",max_digits=12,decimal_places=2,null=True,blank=True)
     temp = models.TextField("Назначение",null=True,blank=True)
     vat_rate = models.DecimalField("НДС",max_digits=6,decimal_places=2,null=True,blank=True)
     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Договор")
     cfitem = models.ForeignKey(CfItems,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Статья CF" )
+
     class Meta:
-        verbose_name = "Сплит"
-        verbose_name_plural = "Сплиты оплат"   
-    
+        verbose_name = mark_safe("🧩<b>Сплит оплат</b>")
+        verbose_name_plural = mark_safe("🧩<b>Сплит оплат</b>")
+
     def __str__(self):
         return f"{self.transaction}"
+
+    def clean(self):
+        super().clean()
+
+        dt = self.dt or Decimal("0.00")
+        cr = self.cr or Decimal("0.00")
+
+        if dt > 0 and cr > 0:
+            raise ValidationError("Нельзя одновременно заполнить и Дт, и Кт.")
+
+        if dt <= 0 and cr <= 0:
+            raise ValidationError("Нужно заполнить либо Дт, либо Кт.")
+
+        if not self.transaction_id:
+            return
+
+        qs = CfSplits.objects.filter(transaction_id=self.transaction_id)
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+
+        agg = qs.aggregate(
+            dt_sum=Coalesce(Sum("dt"), Decimal("0.00")),
+            cr_sum=Coalesce(Sum("cr"), Decimal("0.00")),
+        )
+
+        future_dt = (agg["dt_sum"] or Decimal("0.00")) + dt
+        future_cr = (agg["cr_sum"] or Decimal("0.00")) + cr
+
+        source_dt = self.transaction.source_dt if self.transaction.source_dt is not None else (self.transaction.dt or Decimal("0.00"))
+        source_cr = self.transaction.source_cr if self.transaction.source_cr is not None else (self.transaction.cr or Decimal("0.00"))
+
+        if future_dt > source_dt:
+            raise ValidationError("Сумма всех сплитов по Дт больше исходной суммы операции.")
+
+        if future_cr > source_cr:
+            raise ValidationError("Сумма всех сплитов по Кт больше исходной суммы операции.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+        self.transaction.recalc_from_splits()
+
+    def delete(self, *args, **kwargs):
+        transaction = self.transaction
+        super().delete(*args, **kwargs)
+        transaction.recalc_from_splits()
     
 class ContractsRexex(models.Model):
     cp = models.ForeignKey(Counterparty,on_delete=models.CASCADE,verbose_name='Контрагент')

@@ -1,0 +1,103 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+
+<div style="max-width: 600px; margin: 40px auto;">
+    <div style="background: #f8fafc; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);">
+        
+        <div style="padding: 24px 28px 0 28px;">
+            <h2 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: #1e293b;">
+                📊 Анализ по артиклям
+            </h2>
+            <p style="margin: 8px 0 0 0; font-size: 0.875rem; color: #64748b;">
+                Загрузите Excel файл с артиклями (колонка "Article" или "Артикул") для получения:
+            </p>
+            <ul style="margin-top: 12px; font-size: 0.8125rem; color: #475569;">
+                <li>📋 Детальной информации по каждой позиции</li>
+                <li>📊 Сводной статистики (мин/макс/средняя/медиана цены)</li>
+                <li>💰 Общей стоимости и количества по каждому артиклю</li>
+                <li>🏷️ Информации о УПД, размерах, себестоимости</li>
+            </ul>
+        </div>
+        
+        <div style="padding: 20px 28px 28px 28px;">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                {% for field in form %}
+                <div style="margin-bottom: 18px;">
+                    <label for="{{ field.id_for_label }}" style="display: block; margin-bottom: 6px; font-size: 0.8125rem; font-weight: 500; color: #334155;">
+                        {{ field.label }}
+                        {% if field.field.required %}
+                        <span style="color: #ef4444;">*</span>
+                        {% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}
+                    <p style="margin: 5px 0 0 0; font-size: 0.7rem; color: #94a3b8;">{{ field.help_text }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                
+                <div style="display: flex; gap: 12px; margin-top: 28px; padding-top: 8px;">
+                    <button type="submit" style="background: #1e293b; color: white; padding: 8px 20px; border: none; border-radius: 6px; font-size: 0.8125rem; font-weight: 500; cursor: pointer;">
+                        🚀 Выполнить анализ
+                    </button>
+                    <a href="{% url 'admin:cards_upddocument_changelist' %}" style="color: #64748b; text-decoration: none; font-size: 0.8125rem; padding: 8px 16px; border-radius: 6px;">
+                        Отмена
+                    </a>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Пример файла -->
+        <div style="padding: 0 28px 28px 28px; border-top: 1px solid #e2e8f0;">
+            <p style="font-size: 0.7rem; color: #94a3b8; margin: 16px 0 0 0;">
+                💡 <strong>Пример содержимого файла:</strong>
+            </p>
+            <pre style="background: #f1f5f9; padding: 8px 12px; border-radius: 6px; font-size: 0.7rem; margin-top: 8px; overflow-x: auto;">
+Article
+WB-12345
+WB-67890
+ТОВ-001
+            </pre>
+        </div>
+        
+    </div>
+</div>
+
+<style>
+    form input[type="file"],
+    form input[type="text"],
+    form input[type="number"],
+    form select,
+    form textarea {
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 0.8125rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #ffffff;
+        box-sizing: border-box;
+    }
+    
+    form input:focus,
+    form select:focus,
+    form textarea:focus {
+        outline: none;
+        border-color: #1e293b;
+        box-shadow: 0 0 0 3px rgba(30, 41, 59, 0.1);
+    }
+    
+    button:hover {
+        background: #0f172a !important;
+        cursor: pointer;
+    }
+    
+    a:hover {
+        background: #e2e8f0;
+        text-decoration: none;
+        color: #1e293b;
+    }
+</style>
+
+{% endblock %}

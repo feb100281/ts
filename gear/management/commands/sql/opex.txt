@@ -1,0 +1,485 @@
+CREATE OR REPLACE TEMP TABLE opex AS
+
+WITH base AS (
+
+    SELECT 
+        me,
+        YEAR(me) AS year,
+        '3. РАСХОДЫ НА РЕАЛИЗАЦИЮ' AS section,
+        account AS item,
+        SUM((dt - cr) / 100) AS value
+
+    FROM wb_costs
+
+    -- данные обрезаются по дате отчёта, как в cash flow и в расшифровках
+    WHERE date_from::DATE <= $date_from
+      AND account != 'Other income / loss'
+      AND account != 'WB Deduction'
+
+    GROUP BY
+        me,
+        YEAR(me),
+        account
+
+
+    UNION ALL
+
+
+    SELECT 
+        me,
+        YEAR(me) AS year,
+        '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ' AS section,
+        cost_item AS item,
+        SUM((dt - cr) / 100) AS value
+
+    FROM wb_costs
+
+    WHERE date_from::DATE <= $date_from
+      AND account = 'Other income / loss'
+
+    GROUP BY
+        me,
+        YEAR(me),
+        cost_item
+
+     UNION ALL
+
+
+    SELECT 
+        me,
+        YEAR(me) AS year,
+        '4. ПРОДВИЖЕНИЕ WB' AS section,
+        cost_item AS item,
+        SUM((dt - cr) / 100) AS value
+
+    FROM wb_costs
+
+    WHERE date_from::DATE <= $date_from
+      AND account = 'WB Deduction'
+
+    GROUP BY
+        me,
+        YEAR(me),
+        cost_item
+),
+
+calc AS (
+
+    SELECT
+        me,
+        year,
+        section,
+        item,
+        value,
+
+        SUM(value) OVER (
+            PARTITION BY year, section, item
+            ORDER BY me
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS ytd,
+
+        LAG(value) OVER (
+            PARTITION BY section, item
+            ORDER BY me
+        ) AS prev_value
+
+    FROM base
+),
+wb_done as (
+SELECT
+    me,
+    year,
+    section,
+    item,
+
+    value,
+
+    
+
+    prev_value,
+
+    value - prev_value AS mom,
+
+    ROUND(
+        (value - prev_value)
+        / NULLIF(prev_value, 0)
+        * 100,
+        2
+    ) AS mom_prc,
+    ytd
+
+FROM calc
+
+ORDER BY
+    me DESC,
+    section,
+    item
+),
+
+overheads as (
+SELECT
+        last_day(p.date_from)::date as me,
+        EXTRACT(YEAR FROM p.date_from)::int AS year,
+        EXTRACT(MONTH FROM p.date_from)::int AS month_num,
+        COALESCE(NULLIF(TRIM(p.cost_item_group), ''), 'Без группы') AS cost_item_group,
+        COALESCE(NULLIF(TRIM(p.cost_item), ''), '') AS cost_item,
+        COALESCE(NULLIF(TRIM(p.cp_name), ''), 'Без контрагента') AS cp_name,
+        SUM(p.amount)::numeric AS amount
+    FROM pg.public.pl_for_csv p
+    WHERE p.date_from <= $date_from
+      AND STARTS_WITH(p.account_name, '610000')
+      and not STARTS_WITH(p.cost_item, '540101')
+      -- AND substring(p.account_name from '^\\d+') = '610000'
+    GROUP BY
+        last_day(p.date_from)::date,
+        EXTRACT(YEAR FROM p.date_from)::int,
+        EXTRACT(MONTH FROM p.date_from)::int,
+        COALESCE(NULLIF(TRIM(p.cost_item_group), ''), 'Без группы'),
+        COALESCE(NULLIF(TRIM(p.cost_item), ''), ''),
+        COALESCE(NULLIF(TRIM(p.cp_name), ''), 'Без контрагента')
+    ORDER BY 1, 2, 3, 4, 5
+
+),
+base_overhead AS (
+    SELECT
+        me,
+        year,
+        '6. НАКЛАДНЫЕ РАСХОДЫ' AS section,
+        cost_item_group AS item,
+        SUM(amount) AS value
+    FROM overheads
+    GROUP BY
+        me,
+        year,
+        cost_item_group
+),
+
+overhead_calc AS (
+    SELECT
+        me,
+        year,
+        section,
+        item,
+        value,
+
+        SUM(value) OVER (
+            PARTITION BY year, section, item
+            ORDER BY me
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS ytd,
+
+        LAG(value) OVER (
+            PARTITION BY section, item
+            ORDER BY me
+        ) AS prev_value
+
+    FROM base_overhead
+),
+
+overheads_fin as (
+
+SELECT
+    me,
+    year,
+    section,
+    item,
+    value,
+    
+    prev_value,
+
+    value - prev_value AS mom,
+
+    ROUND(
+        (value - prev_value)
+        / NULLIF(prev_value, 0)
+        * 100,
+        2
+    ) AS mom_prc,
+    ytd
+
+FROM overhead_calc
+
+ORDER BY
+    me DESC,
+    section,
+    item
+),
+
+base_corporate AS (
+    SELECT
+        LAST_DAY(p.date_from)::date AS me,
+        EXTRACT(YEAR FROM p.date_from)::int AS year,
+
+        '7. КОРПОРАТИВНЫЕ РАСХОДЫ' AS section,
+
+        COALESCE(
+            NULLIF(TRIM(p.cost_item_group), ''),
+            'Без группы'
+        ) AS item,
+
+        SUM(p.amount)::numeric AS value
+
+    FROM pg.public.pl_for_csv p
+
+    WHERE p.date_from <= $date_from
+      AND STARTS_WITH(p.account_name, '620000')
+
+    GROUP BY
+        LAST_DAY(p.date_from)::date,
+        EXTRACT(YEAR FROM p.date_from)::int,
+        COALESCE(
+            NULLIF(TRIM(p.cost_item_group), ''),
+            'Без группы'
+        )
+),
+
+corporate_calc AS (
+    SELECT
+        me,
+        year,
+        section,
+        item,
+        value,
+
+        -- С начала года
+        SUM(value) OVER (
+            PARTITION BY year, section, item
+            ORDER BY me
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS ytd,
+
+        -- Предыдущий месяц
+        LAG(value) OVER (
+            PARTITION BY section, item
+            ORDER BY me
+        ) AS prev_value
+
+    FROM base_corporate
+),
+
+gna_final as (
+
+SELECT
+    me,
+    year,
+    section,
+    item,
+
+    value,
+
+    
+
+    prev_value,
+
+    -- Изменение к предыдущему месяцу
+    value - prev_value AS mom,
+
+    -- Изменение к предыдущему месяцу, %
+    ROUND(
+        (value - prev_value)
+        / NULLIF(prev_value, 0)
+        * 100,
+        2
+    ) AS mom_prc,
+    ytd
+
+FROM corporate_calc
+
+ORDER BY
+    me DESC,
+    section,
+    item
+),
+
+base_other AS (
+    SELECT
+        LAST_DAY(p.date_from)::date AS me,
+        EXTRACT(YEAR FROM p.date_from)::int AS year,
+
+        '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ' AS section,
+
+        COALESCE(
+            NULLIF(TRIM(p.cost_item_group), ''),
+            'Без группы'
+        ) AS item,
+
+        SUM(p.amount)::numeric AS value
+
+    FROM pg.public.pl_for_csv p
+
+    WHERE p.date_from <= $date_from
+      AND STARTS_WITH(p.account_name, '420000')
+      AND NOT STARTS_WITH(p.cost_item_group, '590100')
+
+    GROUP BY
+        LAST_DAY(p.date_from)::date,
+        EXTRACT(YEAR FROM p.date_from)::int,
+        COALESCE(
+            NULLIF(TRIM(p.cost_item_group), ''),
+            'Без группы'
+        )
+),
+
+other_calc AS (
+    SELECT
+        me,
+        year,
+        section,
+        item,
+        value,
+
+        -- С начала года
+        SUM(value) OVER (
+            PARTITION BY year, section, item
+            ORDER BY me
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS ytd,
+
+        -- Предыдущий месяц
+        LAG(value) OVER (
+            PARTITION BY section, item
+            ORDER BY me
+        ) AS prev_value
+
+    FROM base_other
+),
+
+others_final as (
+
+SELECT
+    me,
+    year,
+    section,
+    item,
+    value,
+    
+    prev_value,
+
+    -- Изменение к предыдущему месяцу
+    value - prev_value AS mom,
+
+    -- Изменение к предыдущему месяцу, %
+    ROUND(
+        (value - prev_value)
+        / NULLIF(prev_value, 0)
+        * 100,
+        2
+    ) AS mom_prc,
+    ytd
+
+FROM other_calc
+
+ORDER BY
+    me DESC,
+    section,
+    item
+
+),
+base_financial AS (
+    SELECT
+        LAST_DAY(p.date_from)::date AS me,
+        EXTRACT(YEAR FROM p.date_from)::int AS year,
+
+        '8. ФИНАНСОВЫЕ РАСХОДЫ' AS section,
+
+        COALESCE(
+            NULLIF(TRIM(p.cost_item), ''),
+            'Без группы'
+        ) AS item,
+
+        SUM(p.amount)::numeric AS value
+
+    FROM pg.public.pl_for_csv p
+
+    WHERE p.date_from <= $date_from
+      AND STARTS_WITH(p.account_name, '630000')
+
+    GROUP BY
+        LAST_DAY(p.date_from)::date,
+        EXTRACT(YEAR FROM p.date_from)::int,
+        COALESCE(
+            NULLIF(TRIM(p.cost_item), ''),
+            'Без группы'
+        )
+),
+
+financial_calc AS (
+    SELECT
+        me,
+        year,
+        section,
+        item,
+        value,
+
+        -- С начала года
+        SUM(value) OVER (
+            PARTITION BY year, section, item
+            ORDER BY me
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS ytd,
+
+        -- Предыдущий месяц
+        LAG(value) OVER (
+            PARTITION BY section, item
+            ORDER BY me
+        ) AS prev_value
+
+    FROM base_financial
+),
+finance_final as (
+
+SELECT
+    me,
+    year,
+    section,
+    item,
+    value,
+    
+    prev_value,
+
+    -- Изменение к предыдущему месяцу
+    value - prev_value AS mom,
+
+    -- Изменение к предыдущему месяцу, %
+    ROUND(
+        (value - prev_value)
+        / NULLIF(prev_value, 0)
+        * 100,
+        2
+    ) AS mom_prc,
+    ytd
+
+FROM financial_calc
+
+ORDER BY
+    me DESC,
+    section,
+    item
+)
+select 
+*
+from wb_done
+
+union all
+select 
+*
+from overheads_fin
+
+union all
+select 
+*
+from gna_final
+
+
+union all
+select 
+*
+from others_final
+
+
+union all
+select 
+*
+from finance_final
+
+order by me desc, section, item

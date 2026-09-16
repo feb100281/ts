@@ -1,0 +1,15 @@
+WB_FIELDS = {   
+"ppvz_for_pay":"К перечислению",
+"acceptance":"Приемка",
+"retail_amount":"Цена WB",
+"additional_payment":"Корректировки",
+"storage_fee":"Хранение",
+"cashback_amount":"Участие в ПЛ",
+"payment_schedule":"Изменение СП",
+"comission":"Комиссия WB",
+"retail_price":"Розничная цена",
+"deduction":"Удержания, маркетинг",
+"penalty":"Штрафы",
+"cashback_commission_change":"Сумма баллов по ПЛ",
+"delivery_rub":"Логистика",
+}

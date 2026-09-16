@@ -1,7 +1,25 @@
+# contracts/admin.py
 from django.contrib import admin
 from django.contrib.admin import RelatedOnlyFieldListFilter
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from django import forms
+import json
+import os
+from datetime import date
+from django.urls import reverse
+
+from corporate.models import COA, CfItems
+
+from contracts.accruals.registry import ACCRUAL_REGISTRY
+from django.template.response import TemplateResponse
+from django.shortcuts import get_object_or_404
+
+from contracts.accruals.service import preview_accruals
+
+# from grossbook.models import Settlements
+
 
 from .models import (
     Contracts,
@@ -10,96 +28,678 @@ from .models import (
     ContractItems,
     ContractFiles,
     CfItemAuto,
-    
+    AccountingMethod,
 )
+from .models import AccuralFn
 
-# class CfItemAutoInline(admin.TabularInline):
-#     model = CfItemAuto
-#     extra = 0
+from jsoneditor.forms import JSONEditor
+
+from django.db import models
+
+
+def get_current_condition(obj):
+    # если conditions уже prefetched — это будет обычный список в памяти
+    conds = list(getattr(obj, "conditions", []).all())
+    if not conds:
+        return None
+
+    # date_start=None считаем самым старым
+    conds.sort(
+        key=lambda c: (c.date_start is not None, c.date_start, c.id), reverse=True
+    )
+    return conds[0]
+
+
+class HasAccrualFunctionFilter(admin.SimpleListFilter):
+    title = "Функция начисления"
+    parameter_name = "has_accrual_fn"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "Есть функция"),
+            ("no", "Нет функции"),
+        )
+
+    def queryset(self, request, queryset):
+        val = self.value()
+
+        if val == "yes":
+            return queryset.filter(conditions__isnull=False).distinct()
+
+        if val == "no":
+            return queryset.filter(conditions__isnull=True)
+
+        return queryset
+
+
+class HasFilesFilter(admin.SimpleListFilter):
+    title = "Файлы"
+    parameter_name = "has_files"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "Есть файлы"),
+            ("no", "Нет файлов"),
+        )
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if val == "yes":
+            return queryset.filter(files__isnull=False).distinct()
+        if val == "no":
+            return queryset.filter(files__isnull=True)
+        return queryset
+
+
+class AccountingMethodFilter(admin.SimpleListFilter):
+    title = "Метод учёта"
+    parameter_name = "acc_method"
+
+    def lookups(self, request, model_admin):
+        qs = AccountingMethod.objects.filter(is_active=True).order_by("name")
+        return [(str(x.pk), f"{x.icon or ''} {x.name}".strip()) for x in qs]
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if not val:
+            return queryset
+        return queryset.filter(
+            Q(conditions__accounting_method_id=val) |
+            Q(conditions__fn__accounting_method_id=val)
+        ).distinct()
+
+
+class PayTimingFilter(admin.SimpleListFilter):
+    title = "Тип оплаты"
+    parameter_name = "pay_timing"
+
+    def lookups(self, request, model_admin):
+        return [("prepay", "Предоплата"), ("postpay", "Постоплата")]
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if not val:
+            return queryset
+        return queryset.filter(conditions__pay_timing=val).distinct()
+
+
+def build_params_template(fn: str) -> dict:
+    schema = ACCRUAL_REGISTRY.get(fn) or {}
+    defaults = schema.get("defaults") or {}
+    fields = schema.get("fields") or []
+
+    tmpl = {}
+    for f in fields:
+        key = f.get("key")
+        if key:
+            tmpl[key] = defaults.get(key, "")
+
+    # добавим defaults, которых нет в fields
+    for k, v in defaults.items():
+        tmpl.setdefault(k, v)
+
+    return tmpl
+
+
+class ConditionsInlineForm(forms.ModelForm):
+    params_editor = forms.CharField(
+        label="Параметры начисления (JSON)",
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 7,
+                "style": "width: 95%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;",
+                "placeholder": '{\n  "amount": "",\n  "vat_mode": "included"\n}',
+            }
+        ),
+        help_text="Заполняется по выбранной функции начисления.",
+    )
+
+    class Meta:
+        model = Conditions
+        fields = "__all__"
+        
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # =============================================================
+        # СКРЫТЫЕ СЛУЖЕБНЫЕ ПОЛЯ
+        # Поля остаются в форме и базе, но пользователь их не видит.
+        # =============================================================
+
+        hidden_fields = (
+                "accounting_method",
+                "params",
+                "params_editor",
+                "accrual_fn",
+                "pay_rule",
+                "pay_timing",
+                "pay_day",
+                "pay_offset_months",
+                "penalty_rate_day",
+            )
+
+        for field_name in hidden_fields:
+            if field_name in self.fields:
+                self.fields[field_name].widget = (
+                    forms.HiddenInput()
+                )
+
+        self.fields["params"].required = False
+        self.fields["params_editor"].required = False
+
+        inst = getattr(
+            self,
+            "instance",
+            None,
+        )
+
+        params = (
+            (inst.params or {})
+            if inst
+            else {}
+        )
+
+        if params:
+            self.initial["params_editor"] = json.dumps(
+                params,
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+        else:
+            self.initial["params_editor"] = ""
+
+        if self.is_bound:
+            pe_key = self.add_prefix(
+                "params_editor"
+            )
+
+            fn_key = self.add_prefix(
+                "accrual_fn"
+            )
+
+            current = (
+                self.data.get(pe_key)
+                or ""
+            ).strip()
+
+            if current == "":
+                fn = (
+                    self.data.get(fn_key)
+                    or getattr(
+                        self.instance,
+                        "accrual_fn",
+                        None,
+                    )
+                    or "fixed_payments"
+                )
+
+                # Сохраняем существующие параметры.
+                # Новый шаблон создаём только тогда,
+                # когда параметров ещё действительно нет.
+                existing_params = (
+                    self.instance.params
+                    if (
+                        self.instance
+                        and self.instance.pk
+                        and self.instance.params
+                    )
+                    else build_params_template(fn)
+                )
+
+                qd = self.data.copy()
+
+                qd[pe_key] = json.dumps(
+                    existing_params,
+                    ensure_ascii=False,
+                    indent=2,
+                    default=str,
+                )
+
+                self.data = qd
+
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+
+    #     # params храним скрыто, редактируем через params_editor
+    #     self.fields["params"].widget = forms.HiddenInput()
+    #     self.fields["params"].required = False
+
+        inst = getattr(self, "instance", None)
+        params = (inst.params or {}) if inst else {}
+
+        # показываем текущие params
+        if params:
+            self.initial["params_editor"] = json.dumps(
+                params, ensure_ascii=False, indent=2, default=str
+            )
+        else:
+            self.initial["params_editor"] = ""
+
+        # ✅ КЛЮЧЕВОЕ: если форма уже отправлена (POST) и params_editor пустой —
+        # подставим шаблон по выбранной функции, чтобы он был виден даже при ошибке сохранения
+        if self.is_bound:
+            pe_key = self.add_prefix("params_editor")
+            fn_key = self.add_prefix("accrual_fn")
+
+            current = (self.data.get(pe_key) or "").strip()
+            if current == "":
+                fn = (self.data.get(fn_key) or "").strip() or "fixed_payments"
+                tmpl = build_params_template(fn)
+
+                qd = self.data.copy()  # QueryDict -> mutable copy
+                qd[pe_key] = json.dumps(tmpl, ensure_ascii=False, indent=2, default=str)
+                self.data = qd
+
+    def clean(self):
+        cleaned = super().clean()
+        raw = (cleaned.get("params_editor") or "").strip()
+
+        # 1) если JSON ввели руками — парсим
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception as e:
+                raise forms.ValidationError(
+                    {"params_editor": f"Некорректный JSON: {e}"}
+                )
+            if not isinstance(parsed, dict):
+                raise forms.ValidationError(
+                    {"params_editor": "JSON должен быть объектом { ... }"}
+                )
+            cleaned["params"] = parsed
+
+        # 2) если JSON пустой — генерим шаблон по accrual_fn
+        else:
+            fn = (
+                cleaned.get("accrual_fn")
+                or getattr(self.instance, "accrual_fn", None)
+                or "fixed_payments"
+            )
+            cleaned["params"] = build_params_template(fn)
+
+        # # 3) CASH BASED: принудительно ставим функцию, НО params не затираем
+        # acc = cleaned.get("accounting_method")
+        # if acc:
+        #     name = (acc.name or "").lower()
+        #     code = (getattr(acc, "code", "") or "").lower()
+
+        #     if "cash" in name or "cash" in code:
+        #         cleaned["accrual_fn"] = "by_bank_statement"
+
+        #         params = cleaned.get("params") or {}
+        #         if not isinstance(params, dict):
+        #             params = {}
+
+        #         params.setdefault("vat_rate", "0")
+        #         cleaned["params"] = params
+
+        # return cleaned
+
+    def save(self, commit=True):
+        inst = super().save(commit=False)
+        inst.params = self.cleaned_data.get("params") or {}
+        if commit:
+            inst.save()
+            self.save_m2m()
+        return inst
+
 
 class CfItemAutoInline(admin.StackedInline):
     model = CfItemAuto
     extra = 0
     fields = ("regex", "defaultcfdt", "defaultcfcr")
     # template = "admin/contracts/inlines/cfitemauto_stacked_inline.html"  # <-- УБРАТЬ
-    verbose_name = "⚙️ Автоматизация"
-    verbose_name_plural = "⚙️ Автоматизация"
+    verbose_name = mark_safe("⚙️ <b>Автоматизация</b>")
+    verbose_name_plural = mark_safe("⚙️ <b>Автоматизация</b>")
 
 
-    
-    
+class ContractItemsInlineForm(forms.ModelForm):
+    class Meta:
+        model = ContractItems
+        fields = "__all__"
+        widgets = {
+            "item": forms.Textarea(attrs={"rows": 2, "style": "width: 70%;"}),
+        }
 
-class ContractItemsInline(admin.TabularInline):
+
+class ContractItemsInline(admin.StackedInline):
     model = ContractItems
+    form = ContractItemsInlineForm
     extra = 0
     fields = ("item",)
-    verbose_name = "🧾 Предмет"
-    verbose_name_plural = "🧾 Предмет"
-    fields = ("item",)
+    verbose_name = mark_safe("<b>🧾 Предмет</b>")
+    verbose_name_plural = mark_safe("🧾 <b>Предмет</b>")
+
+## ТУТ ДОБАВИЛ И УБРАЛ - кладет админку
+# class SettlementsInlineForm(admin.TabularInline):
+#     model = Settlements
+#     fk_name = 'contract'
+#     extra = 0
+#     can_delete = False
+#     show_change_link = False
+
+#     def has_add_permission(self, request, obj=None):
+#         return False
+
+#     def get_readonly_fields(self, request, obj=None):
+#         return [f.name for f in self.model._meta.fields]
+    
+
+# class ConditionsInline(admin.StackedInline):
+#     model = Conditions
+#     form = ConditionsInlineForm
+#     extra = 0
+#     show_change_link = True
+#     formfield_overrides = {models.JSONField: {"widget": JSONEditor}}
+#     # autocomplete_fields = ("accounting_method", "tax")
+#     template = "admin/contracts/inlines/conditions_stacked_inline.html"
+
+#     fieldsets = (
+#         (
+#             "Начисление",
+#             {
+#                 "fields": (
+#                     "accounting_method",
+#                     "accrual_fn",
+#                     "date_start",
+#                     "date_finish",
+#                     "vat_mode",
+#                     "params_editor",
+#                 )
+#             },
+#         ),
+#         (
+#             "Оплата",
+#             {
+#                 "fields": (
+#                     ("pay_rule", "pay_timing"),
+#                     ("pay_day", "pay_offset_months"),
+#                 )
+#             },
+#         ),
+#         ("Неустойка", {"fields": ("penalty_rate_day",)}),
+#         ("Доп. параметры", {"classes": ("collapse",), "fields": ("params",)}),
+#         (
+#             "Новые поля. параметры",
+#             {
+#                 "classes": ("collapse",),
+#                 "fields": (
+#                     "fn",
+#                     "param_json",
+#                     "vat_json",
+#                     "acc_bs",
+#                     "subconto_bs",
+#                     "acc_pl",
+#                 ),
+#             },
+#         ),
+#     )
+#     verbose_name = mark_safe("<b>✅ Условие</b>")
+#     verbose_name_plural = mark_safe("✅<b>Условия</b>")
+
+#     class Meta:
+#         model = Conditions
+#         fields = "__all__"
+#         widgets = {
+#             "param_json": JSONEditor,
+#             "vat_json": JSONEditor,
+#         }
+
+
+
+class ConditionsInline(admin.StackedInline):
+    model = Conditions
+    form = ConditionsInlineForm
+
+    extra = 0
     show_change_link = True
 
-class ConditionsInline(admin.TabularInline):
-    model = Conditions
-    extra = 1
-    verbose_name = "✅ Условие"
-    verbose_name_plural = "✅ Условия"
+    formfield_overrides = {
+        models.JSONField: {
+            "widget": JSONEditor,
+        },
+    }
+
+    template = (
+        "admin/contracts/inlines/"
+        "conditions_stacked_inline.html"
+    )
+
+    fieldsets = (
+    (
+        "Начисление",
+        {
+            "fields": (
+                # Все скрытые служебные поля
+                "accounting_method",
+                "accrual_fn",
+                "params_editor",
+                "params",
+                "pay_rule",
+                "pay_timing",
+                "pay_day",
+                "pay_offset_months",
+                "penalty_rate_day",
+
+                # Видимые поля
+                "date_start",
+                "date_finish",
+                "vat_mode",
+            ),
+        },
+    ),
+
+    (
+        "Новые поля. параметры",
+        {
+            "classes": (
+                "collapse",
+            ),
+
+            "fields": (
+                "fn",
+                "param_json",
+                "vat_json",
+                "acc_bs",
+                "subconto_bs",
+                "acc_pl",
+            ),
+        },
+    ),
+)
+
+    verbose_name = mark_safe(
+        "<b>✅ Условие</b>"
+    )
+
+    verbose_name_plural = mark_safe(
+        "✅ <b>Условия</b>"
+    )
+
+    class Meta:
+        model = Conditions
+        fields = "__all__"
+
+        widgets = {
+            "param_json": JSONEditor,
+            "vat_json": JSONEditor,
+        }
 
 
-
-class ContractFilesInline(admin.TabularInline):
+class ContractFilesInline(admin.StackedInline):
     model = ContractFiles
     extra = 0
-    verbose_name = "📎 Файл"
-    verbose_name_plural = "📎 Файлы"
     show_change_link = True
+    template = "admin/contracts/inlines/contractfiles_stacked_inline.html"
+
+    verbose_name = mark_safe("<b>📎 Файл</b>")
+    verbose_name_plural = mark_safe("<b>📎 Файлы</b>")
+
+    fields = (
+        "doc_type",
+        "doc_date",
+        "doc_number",
+        "amount",
+        "document",
+        "file",
+    )
+    readonly_fields = ("document",)
+
+    def document(self, obj):
+        if not obj or not obj.file:
+            return "—"
+        name = os.path.basename(obj.file.name)
+        return format_html(
+            '<a href="{}" target="_blank" style="font-weight:800;">📄 {}</a>',
+            obj.file.url,
+            name,
+        )
+
+    document.short_description = "Текущий документ"
 
 
+from django.db.models import Q
 
+def get_missing_distribution_queryset(queryset, mode=None):
+    if mode == "any":
+        return queryset.filter(
+            Q(bs_id__isnull=True) |
+            Q(pl_id__isnull=True) |
+            Q(subconto_pl_id__isnull=True)
+        )
 
+    if mode == "bs":
+        return queryset.filter(bs_id__isnull=True)
 
+    if mode == "pl":
+        return queryset.filter(pl_id__isnull=True)
 
+    if mode == "subconto_pl":
+        return queryset.filter(subconto_pl_id__isnull=True)
 
+    if mode == "all":
+        return queryset.filter(
+            bs_id__isnull=True,
+            pl_id__isnull=True,
+            subconto_pl_id__isnull=True,
+        )
 
+    return queryset
+
+class MissingDistributionFilter(admin.SimpleListFilter):
+    title = "Распределения"
+    parameter_name = "missing_distribution"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("any", "Не заполнено хотя бы одно"),
+            ("bs", "Не заполнен Счет ST"),
+            ("pl", "Не заполнен Счет PL"),
+            ("subconto_pl", "Не заполнено Субконто PL"),
+            ("all", "Не заполнены все три"),
+        )
+
+    def queryset(self, request, queryset):
+        return get_missing_distribution_queryset(queryset, self.value())
 
 
 @admin.register(Contracts)
 class ContractsAdmin(admin.ModelAdmin):
-    inlines = (ContractFilesInline, ContractItemsInline, ConditionsInline,CfItemAutoInline)
+    inlines = (
+        ContractFilesInline,
+        ContractItemsInline,
+        ConditionsInline,
+        CfItemAutoInline,
+    )
 
-    list_display = ("cp_logo", "cp_with_inn", "title", "number_with_id", "date_short", "amendment", "cf_defaults")
-    list_display_links = ("cp_with_inn", "number_with_id",)   
-    list_select_related = ("title", "cp",  "cp__gr", "owner", "manager", "pid",)
+    list_display = (
+        "cp_logo",
+        "cp_with_inn",
+        "title",
+        "number_with_id",
+        "date_short",
+        "files_badge",
+        "method_icon",
+        "contract_end_date",
+        # "amendment",
+        "payment_type",
+        "reconciliation_button",
+        "cf_defaults",
+    )
+    list_display_links = (
+        "cp_with_inn",
+        "number_with_id",
+    )
+    list_select_related = (
+        "title",
+        "cp",
+        "cp__gr",
+        "owner",
+        "manager",
+        "pid",
+    )
 
     search_fields = ("number", "cp__name", "title__title", "regex")
     search_help_text = "Поиск: номер, контрагент, тип, RegEx"
 
-    list_filter = ( ("cp", RelatedOnlyFieldListFilter), 'title', "owner",  "manager", "is_signed")
+    list_filter = (
+        ("cp", RelatedOnlyFieldListFilter),
+        "title",
+        "owner",
+        #    "is_signed",
+        HasFilesFilter,
+        AccountingMethodFilter,
+        PayTimingFilter,
+        HasAccrualFunctionFilter,
+        MissingDistributionFilter,
+    )
     date_hierarchy = "date"
     ordering = ("cp__name", "-date", "number")
     preserve_filters = True
-    autocomplete_fields = ("title", "cp", "manager", )
-    
+    autocomplete_fields = (
+        "title",
+        "cp",
+        "manager",
+    )
+
     list_per_page = 25
-    
+
     change_list_template = "admin/contracts/contracts/change_list.html"
     change_form_template = "admin/contracts/contracts/change_form.html"
 
     fieldsets = (
         (
-            format_html('📄 Карточка'),
+            mark_safe("📄 <b>Карточка</b>"),
             {
-                "fields": ("title", "number", "date", "cp", "owner", "manager", "is_signed","regex",)
+                "fields": (
+                    "title",
+                    "number",
+                    "date",
+                    "cp",
+                    "owner",
+                    "currency",
+                    "manager",
+                    "is_signed",
+                    "regex",
+                    
+                )
             },
         ),
-        # (
-        #     format_html('⚙️ Автоматизация'),
-        #     {
-        #         "fields": ("regex", "defaultcf", "defaultcfcr"),
-        #         "classes": ("collapse",),
-        #     },
-        # ),
         (
-            format_html('🔗 Связи'),
+            mark_safe("📄 <b>Распределения</b>"),
+            {"fields":(
+                "bs",
+                "st",
+                "subconto_bs",
+                "pl",
+                "subconto_pl")
+                
+            }
+        ),
+        (
+            mark_safe("🔗 <b>Связи</b>"),
             {
                 "fields": ("pid",),
                 "classes": ("collapse",),
@@ -107,25 +707,143 @@ class ContractsAdmin(admin.ModelAdmin):
         ),
     )
 
-
-    
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        qs = qs.select_related("title", "cp", "cp__gr", "owner", "manager", "pid").annotate(
-            _files_count=Count("files", distinct=True),
-            _amendments_count=Count("amendments", distinct=True),
-        ).prefetch_related(
-            Prefetch(
-                "cfitemauto_set",
-                queryset=CfItemAuto.objects.select_related("defaultcfdt", "defaultcfcr"),
-                to_attr="_cf_auto",
+
+        qs = (
+            qs.select_related("title", "cp", "cp__gr", "owner", "manager", "pid")
+            .annotate(
+                _files_count=Count("files", distinct=True),
+                _amendments_count=Count("amendments", distinct=True),
+            )
+            .prefetch_related(
+                Prefetch(
+                    "cfitemauto_set",
+                    queryset=CfItemAuto.objects.select_related(
+                        "defaultcfdt", "defaultcfcr"
+                    ),
+                    to_attr="_cf_auto",
+                ),
+                "conditions",
+                "conditions__accounting_method",
+                "conditions__fn",
+                "conditions__fn__accounting_method",
             )
         )
+
         return qs
 
     
-
     
+    
+    
+    def get_urls(self):
+        from django.urls import path
+        
+        urls = super().get_urls()
+        custom_urls = [
+            path('loans-report/', self.loans_report, name='contracts-loans-report'),
+        ]
+        return custom_urls + urls
+    
+    
+
+    def loans_report(self, request):
+        """
+        Эндпоинт для генерации отчёта по договорам займа и кредитным договорам.
+        """
+        import json
+        from django.http import JsonResponse, HttpResponse
+        from django.core.files.base import ContentFile
+        from django.core.files.storage import default_storage
+        from django.conf import settings
+        import os
+        from datetime import datetime
+        
+        # Импортируем наш генератор отчета
+        from loans_report import LoansReportGenerator
+        
+        if request.method == 'POST':
+            try:
+                data = json.loads(request.body)
+                report_date = data.get('report_date')
+                
+                if not report_date:
+                    return JsonResponse({'error': 'Не указана дата отчёта'}, status=400)
+                
+                # Генерируем отчет
+                generator = LoansReportGenerator()
+                excel_data = generator.generate(report_date)
+                
+                # Формируем имя файла
+                date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"loans_report_{report_date}_{date_str}.xlsx"
+                
+                # Создаем HTTP ответ с файлом
+                response = HttpResponse(
+                    excel_data.getvalue(),
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                
+                return response
+                
+            except ValueError as e:
+                return JsonResponse({'error': str(e)}, status=400)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'error': f'Ошибка при генерации отчёта: {str(e)}'}, status=500)
+        
+        return JsonResponse({'error': 'Метод не поддерживается'}, status=405)
+    
+    
+    @admin.display(description="Файлы", ordering="_files_count")
+    def files_badge(self, obj):
+        n = getattr(obj, "_files_count", 0) or 0
+
+        if n == 0:
+            return format_html('<span style="color:#94a3b8;">—</span>')
+
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:4px;'
+            "padding:3px 8px;border-radius:2px;"
+            "background:rgba(14,165,233,.12);"
+            'color:#075985;font-weight:800;">'
+            "📎 {}"
+            "</span>",
+            n,
+        )
+
+    @admin.display(description="Метод")
+    def method_icon(self, obj):
+        cond = get_current_condition(obj)
+        m = cond.resolved_accounting_method if cond else None
+        if not m:
+            return "—"
+
+        icon = (m.icon or "").strip() or "🧩"
+        return format_html(
+            '<span style="font-size:18px; line-height:1;">{}</span>',
+            icon
+        )
+        
+    @admin.display(description="Окончание")
+    def contract_end_date(self, obj):
+        cond = get_current_condition(obj)
+        if not cond:
+            return "—"
+        if not cond.date_finish:
+            return format_html('<span style="color:#94a3b8;">∞</span>')
+        return cond.date_finish.strftime("%d.%m.%Y")
+
+    @admin.display(description="Оплата")
+    def payment_type(self, obj):
+        cond = get_current_condition(obj)
+        if not cond:
+            return "—"
+        return "Предоплата" if cond.pay_timing == "prepay" else "Постоплата"
+
     @admin.display(description="№ договора", ordering="number")
     def number_with_id(self, obj):
         number = obj.number or "без номера"
@@ -135,8 +853,6 @@ class ContractsAdmin(admin.ModelAdmin):
             obj.id,
         )
 
-
-    
     @admin.display(description="Контрагент", ordering="cp__name")
     def cp_with_inn(self, obj):
         cp = obj.cp
@@ -148,26 +864,34 @@ class ContractsAdmin(admin.ModelAdmin):
             cp.name,
             cp.tax_id,
         )
-    
-    @admin.display(description="Дата договора", ordering="date")
+
+    @admin.display(description="Дата", ordering="date")
     def date_short(self, obj):
         if not obj.date:
             return "—"
 
         months = {
-            1: "янв", 2: "фев", 3: "мар", 4: "апр",
-            5: "май", 6: "июн", 7: "июл", 8: "авг",
-            9: "сент", 10: "окт", 11: "ноя", 12: "дек",
+            1: "янв",
+            2: "фев",
+            3: "мар",
+            4: "апр",
+            5: "май",
+            6: "июн",
+            7: "июл",
+            8: "авг",
+            9: "сент",
+            10: "окт",
+            11: "ноя",
+            12: "дек",
         }
 
         d = obj.date
         return f"{d.day} {months[d.month]} {d.year}"
-    
-    
+
     @admin.display(description="CF по умолч.", ordering=None)
     def cf_defaults(self, obj):
         # берём первую запись автоматизации (обычно она одна на договор)
-        auto = (getattr(obj, "_cf_auto", None) or [])
+        auto = getattr(obj, "_cf_auto", None) or []
         auto = auto[0] if auto else None
 
         dt = getattr(auto, "defaultcfdt", None) if auto else None
@@ -181,32 +905,46 @@ class ContractsAdmin(admin.ModelAdmin):
             '<div style="font-size:11px; line-height:1.25; color:#94a3b8;">'
             '<div><span style="font-weight:700; color:#cbd5e1;">Дт:</span> {}</div>'
             '<div><span style="font-weight:700; color:#cbd5e1;">Кт:</span> {}</div>'
-            '</div>',
+            "</div>",
             dt_txt,
             cr_txt,
         )
-  
+
+    
     
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         field = super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+        # Связанный договор для допсоглашения
         if db_field.name == "pid":
             obj_id = request.resolver_match.kwargs.get("object_id")
             if obj_id:
                 try:
                     obj = Contracts.objects.select_related("cp").get(pk=obj_id)
                     field.queryset = Contracts.objects.filter(cp=obj.cp).order_by("-date")
-                    # если хочешь выбирать только “основные” договоры:
-                    # field.queryset = field.queryset.filter(pid__isnull=True)
                 except Contracts.DoesNotExist:
                     field.queryset = Contracts.objects.none()
             else:
-                # форма создания: пока cp не выбран — скрываем варианты
                 field.queryset = Contracts.objects.none()
 
+        # Счет ST -> только счета, начинающиеся на 7
+        elif db_field.name == "bs":
+            field.queryset = COA.objects.filter(code__startswith="7").order_by("code")
+
+        # Счет PL -> только счета, начинающиеся на 4, 5 или 6
+        elif db_field.name == "pl":
+            field.queryset = COA.objects.filter(
+                Q(code__startswith="4") |
+                Q(code__startswith="5") |
+                Q(code__startswith="6")
+            ).order_by("code")
+
+        # Субконто PL -> только статьи ДС, начинающиеся на 5
+        elif db_field.name == "subconto_pl":
+            field.queryset = CfItems.objects.filter(code__startswith="5").order_by("code")
+
         return field
-        
-    
+
     @admin.display(description="Лого")
     def cp_logo(self, obj):
         cp = getattr(obj, "cp", None)
@@ -227,10 +965,8 @@ class ContractsAdmin(admin.ModelAdmin):
         inner = "font-family:NotoManu;font-size:20px;line-height:1;"
 
         return format_html(
-            '<span style="{}"><span style="{}">{}</span></span>',
-            outer, inner, glyph
+            '<span style="{}"><span style="{}">{}</span></span>', outer, inner, glyph
         )
-
 
     @admin.display(description="Доп.согл.", ordering="_amendments_count")
     def amendment(self, obj):
@@ -238,9 +974,9 @@ class ContractsAdmin(admin.ModelAdmin):
         if obj.pid_id:
             return format_html(
                 '<span style="display:inline-flex;align-items:center;justify-content:center;'
-                'padding:4px 10px;border-radius:999px;'
-                'font-size:11px;font-weight:900;'
-                'background:rgba(148,163,184,.16);color:#475569;'
+                "padding:4px 10px;border-radius:999px;"
+                "font-size:11px;font-weight:900;"
+                "background:rgba(148,163,184,.16);color:#475569;"
                 'border:1px solid rgba(148,163,184,.28);">доп.согл.</span>'
             )
 
@@ -250,33 +986,184 @@ class ContractsAdmin(admin.ModelAdmin):
 
         return format_html(
             '<span style="display:inline-flex;align-items:center;justify-content:center;'
-            'min-width:34px;padding:4px 10px;border-radius:999px;'
-            'font-size:11px;font-weight:900;'
-            'background:rgba(14,165,233,.10);color:#075985;'
+            "min-width:34px;padding:4px 10px;border-radius:999px;"
+            "font-size:11px;font-weight:900;"
+            "background:rgba(14,165,233,.10);color:#075985;"
             'border:1px solid rgba(14,165,233,.18);">+{} док.</span>',
-            n
+            n,
         )
-
 
     @admin.display(description="Файлы", ordering="_files_count")
     def files_count(self, obj):
         return getattr(obj, "_files_count", 0) or 0
-    
-    
-    
+
+    @admin.display(description="Сверка")
+    def reconciliation_button(self, obj):
+        url = reverse("contracts:contract_reconciliation_preview", args=[obj.id])
+
+        return format_html(
+            '<a href="{}" target="_blank" '
+            'style="display:inline-flex;align-items:center;justify-content:center;'
+            "padding:5px 10px;border-radius:2px;"
+            "background:rgba(37,99,235,.10);"
+            "color:#1d4ed8;font-weight:800;text-decoration:none;"
+            'border:1px solid rgba(37,99,235,.18);">📘</a>',
+            url,
+        )
+
+    def render_change_form(
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        context["accrual_registry_json"] = json.dumps(
+            ACCRUAL_REGISTRY, ensure_ascii=False, default=str
+        )
+        return super().render_change_form(request, context, add, change, form_url, obj)
+
     class Media:
-        css = {"all": ("fonts/glyphs.css", "css/admin_overrides.css",  )}
-      
-    
-    
-    
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",
+            )
+        }
+        js = ("js/conditions_inline_collapse.js", )
+        
 
 
 
-    
+#####-----ФУНКЦИИ-----#####
+
+@admin.register(AccuralFn)
+class AccuralFnAdmin(admin.ModelAdmin):
+    change_list_template = "admin/contracts/accuralfn/change_list.html"
+    change_form_template = "admin/contracts/accuralfn/change_form.html"
+
+    list_display = (
+        "name_badge",
+        "accounting_method_badge",
+        "python_path_short",
+        "server_path_short",
+        "template_size",
+        # "description_short",
+    )
+    list_display_links = ("name_badge",)
+    list_filter = ("accounting_method",)
+    search_fields = (
+        "name",
+        "python_path",
+        "server_path",
+        "description",
+        "accounting_method__name",
+    )
+    ordering = ("name",)
+    list_per_page = 25
+    preserve_filters = True
+
+    autocomplete_fields = ("accounting_method",)
+
+    fieldsets = (
+        (
+            mark_safe("⚙️ <b>Карточка функции</b>"),
+            {
+                "fields": (
+                    "name",
+                    "accounting_method",
+                    "description",
+                )
+            },
+        ),
+        (
+            mark_safe("🧠 <b>Пути к функциям</b>"),
+            {
+                "fields": (
+                    "python_path",
+                    "server_path",
+                )
+            },
+        ),
+        (
+            mark_safe("🧩 <b>Шаблон параметров</b>"),
+            {
+                "fields": ("condition_template",),
+            },
+        ),
+    )
+
+    formfield_overrides = {
+        models.JSONField: {"widget": JSONEditor},
+    }
+
+    @admin.display(description="Функция", ordering="name")
+    def name_badge(self, obj):
+        return format_html(
+            '<div style="display:flex;flex-direction:column;gap:2px;">'
+            '<span style="font-weight:800;color:#0f172a;">⚙️ {}</span>'
+            '<span style="font-size:11px;color:#94a3b8;">id: {}</span>'
+            "</div>",
+            obj.name,
+            obj.id,
+        )
+
+    @admin.display(description="Метод учёта", ordering="accounting_method__name")
+    def accounting_method_badge(self, obj):
+        m = obj.accounting_method
+        if not m:
+            return format_html('<span style="color:#94a3b8;">—</span>')
+
+        icon = (m.icon or "").strip() or "🧩"
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:6px;'
+            "padding:4px 10px;border-radius:2px;"
+            "background:rgba(14,165,233,.10);"
+            'color:#075985;font-weight:800;">'
+            "{} {}"
+            "</span>",
+            icon,
+            m.name,
+        )
+
+    @admin.display(description="Python path", ordering="python_path")
+    def python_path_short(self, obj):
+        value = obj.python_path or "—"
+        return format_html(
+            '<code style="font-size:12px;color:#334155;">{}</code>',
+            value,
+        )
+
+    @admin.display(description="Server path", ordering="server_path")
+    def server_path_short(self, obj):
+        value = obj.server_path or "—"
+        return format_html(
+            '<code style="font-size:12px;color:#334155;">{}</code>',
+            value,
+        )
+
+    @admin.display(description="Параметры")
+    def template_size(self, obj):
+        data = obj.condition_template or {}
+        if not isinstance(data, dict) or not data:
+            return format_html('<span style="color:#94a3b8;">пусто</span>')
+
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;justify-content:center;'
+            "min-width:34px;padding:4px 10px;border-radius:2px;"
+            "font-size:12px;font-weight:800;"
+            "background:rgba(16,185,129,.10);color:#047857;"
+            'border:1px solid rgba(16,185,129,.18);">{}</span>',
+            len(data),
+        )
 
 
 
+    class Media:
+        css = {
+            "all": (
+                "fonts/glyphs.css",
+                "css/admin_overrides.css",
+            )
+        }
+        
+        
 
 
 @admin.register(ContractsTitle)
@@ -299,25 +1186,37 @@ class ContractsTitleAdmin(admin.ModelAdmin):
         if n == 0:
             return admin.utils.format_html(
                 '<span style="display:inline-flex;align-items:center;justify-content:center;'
-                'min-width:34px;padding:4px 10px;border-radius:6px;'
-                'font-size:12px;font-weight:800;'
-                'background:rgba(148,163,184,.16);color:#475569;'
+                "min-width:34px;padding:4px 10px;border-radius:6px;"
+                "font-size:12px;font-weight:800;"
+                "background:rgba(148,163,184,.16);color:#475569;"
                 'border:1px solid rgba(148,163,184,.28);">0</span>'
             )
         return admin.utils.format_html(
             '<span style="display:inline-flex;align-items:center;justify-content:center;'
-            'min-width:34px;padding:4px 10px;border-radius:6px;'
-            'font-size:12px;font-weight:800;'
-            'background:rgba(29,78,216,.10);color:#1e3a8a;'
+            "min-width:34px;padding:4px 10px;border-radius:6px;"
+            "font-size:12px;font-weight:800;"
+            "background:rgba(29,78,216,.10);color:#1e3a8a;"
             'border:1px solid rgba(29,78,216,.18);">{}</span>',
             n,
         )
-    
-    
+
     class Media:
         css = {
             "all": (
                 "fonts/glyphs.css",
-                "css/admin_overrides.css",  
+                "css/admin_overrides.css",
             )
         }
+
+
+@admin.register(AccountingMethod)
+class AccountingMethodAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active", "icon")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+    ordering = ("name",)
+    list_per_page = 50
+
+    fields = ("name", "icon", "is_active")
+    def get_model_perms(self, request):
+        return {}

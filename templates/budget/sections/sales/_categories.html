@@ -1,0 +1,316 @@
+<div id="section-sales-categories"></div>
+<div class="page-break"></div>
+
+<!-- Раздел I.5: Анализ продаж по категориям -->
+<div class="section-header">
+    <span class="section-number">I.5</span>
+    <div class="section-title-with-num">Анализ продаж по категориям</div>
+</div>
+
+{% if category_rows %}
+<div class="small-note">
+    Период анализа: {{ top_period_from }} — {{ top_period_to }}
+</div>
+
+{% if category_summary %}
+<div class="insight-box">
+    <strong>Вывод:</strong><br>
+    {{ category_summary.headline }}
+
+    {% if category_summary.executive_points %}
+    <div style="margin-top: 14px;">
+        <strong>Ключевые факты:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for point in category_summary.executive_points %}
+            <li style="margin-bottom: 6px;">{{ point }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if category_summary.strengths %}
+    <div style="margin-top: 12px;">
+        <strong>Что работает:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for item in category_summary.strengths %}
+            <li style="margin-bottom: 6px;">{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if category_summary.risks %}
+    <div style="margin-top: 12px;">
+        <strong>Что требует внимания:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for item in category_summary.risks %}
+            <li style="margin-bottom: 6px;">{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if category_summary.actions %}
+    <div style="margin-top: 12px;">
+        <strong>Что делать:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for item in category_summary.actions %}
+            <li style="margin-bottom: 6px;">{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="small-note" style="margin-top: 12px;">
+        {{ category_summary.note }}
+    </div>
+</div>
+{% endif %}
+
+
+
+<!-- Подраздел I.5.1: Ключевые категории по чистой выручке -->
+ <div class="page-break"></div>
+<div class="subsection-header">
+    <span class="subsection-number">I.5.1</span>
+    <div class="subsection-title">Ключевые категории по чистой выручке</div>
+</div>
+
+{% if category_revenue_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_revenue_chart_base64 }}" alt="Категории по чистой выручке">
+</div>
+<div class="small-note">
+    График: показывает, какие категории реально формируют результат.
+    Цвет отражает уровень возвратов: зеленый — ниже среднего, золотой — средний уровень, бордовый — повышенный.
+</div>
+{% endif %}
+
+
+
+
+<!-- Подраздел I.5.2: Ключевые метрики по категориям -->
+<div class="subsection-header">
+    <span class="subsection-number">I.5.2</span>
+    <div class="subsection-title">Ключевые метрики по категориям</div>
+</div>
+
+<div class="metrics-grid">
+    <div class="metric-card">
+        <div class="metric-label">Лидер по чистой выручке</div>
+        <div class="metric-value">{{ category_summary.top1_category }}</div>
+        <div class="metric-sub">доля {{ category_summary.top1_share_pct }}%</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Концентрация топ-3</div>
+        <div class="metric-value">{{ category_summary.top3_share_pct }}%</div>
+        <div class="metric-sub">чистой выручки</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Средняя возвратность</div>
+        <div class="metric-value">{{ category_summary.avg_return_rate }}%</div>
+        <div class="metric-sub">по топ-категориям</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Доминирующий слой</div>
+        <div class="metric-value">{{ category_summary.dominant_segment }}</div>
+        <div class="metric-sub">внутри категорий</div>
+    </div>
+</div>
+
+
+
+
+
+<!-- Подраздел I.5.3: Сводная таблица по категориям -->
+<div class="subsection-header">
+    <span class="subsection-number">I.5.3</span>
+    <div class="subsection-title">Сводная таблица по категориям</div>
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:18%;">Категория</th>
+            <th style="width:12%;">Продажи, руб.</th>
+            <th style="width:11%;">Возвраты, руб.</th>
+            <th style="width:12%;">Чистая выручка</th>
+            <th style="width:8%;">Продажи, шт.</th>
+            <th style="width:8%;">Возвраты, шт.</th>
+            <th style="width:7%;">Net, шт.</th>
+            <th style="width:8%;">Возвраты, %</th>
+            <th style="width:8%;">Доля</th>
+            <th style="width:8%;">Ср. цена SKU</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in category_rows %}
+        <tr>
+            <td class="left">{{ row.subject_name }}</td>
+            <td class="right">{{ row.sales_amount_fmt }}</td>
+            <td class="right negative">{{ row.returns_amount_fmt }}</td>
+            <td class="right">{{ row.net_amount_fmt }}</td>
+            <td class="right">{{ row.sales_qty_fmt }}</td>
+            <td class="right">{{ row.returns_qty_fmt }}</td>
+            <td class="right">{{ row.net_qty_fmt }}</td>
+            <td class="center">{{ row.return_rate_pct }}%</td>
+            <td class="center">{{ row.revenue_share_pct }}%</td>
+            <td class="right">{{ row.avg_sku_price_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+
+<!-- Подраздел I.5.4: Влияние возвратов на категории -->
+ <div class="page-break"></div>
+<div class="subsection-header">
+    <span class="subsection-number">I.5.4</span>
+    <div class="subsection-title">Влияние возвратов на итог категории</div>
+</div>
+
+{% if category_gross_net_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_gross_net_chart_base64 }}" alt="Продажи и чистая выручка по категориям">
+</div>
+<div class="small-note">
+    График показывает разницу между валовыми продажами и чистой выручкой.
+    Чем больше разрыв между столбцами, тем сильнее возвраты снижают итоговый результат категории.
+</div>
+{% endif %}
+
+
+
+
+{% comment %} <!-- Подраздел I.5.4: Матрица риска категорий -->
+<div class="subsection-header">
+    <span class="subsection-number">I.5.4</span>
+    <div class="subsection-title">Матрица риска категорий</div>
+</div>
+
+{% if category_risk_matrix_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_risk_matrix_chart_base64 }}" alt="Матрица риска категорий">
+</div>
+<div class="small-note">
+    По оси X показана доля категории в продажах, по оси Y — возвратность.
+    Верхний правый сектор выделяет категории, которые одновременно значимы по выручке и требуют приоритетного контроля.
+</div>
+{% endif %} {% endcomment %}
+
+<!-- Подраздел I.5.5: Ценовая архитектура категорий -->
+ <div class="page-break"></div>
+<div class="subsection-header">
+    <span class="subsection-number">I.5.5</span>
+    <div class="subsection-title">Ценовая архитектура категорий</div>
+</div>
+
+{% if category_segment_structure_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_segment_structure_chart_base64 }}" alt="Структура категорий по ценовым сегментам">
+</div>
+<div class="small-note">
+    График показывает, какой ценовой слой внутри категории является основным драйвером продаж.
+    Справа от каждой категории указан доминирующий сегмент и его фактический ценовой диапазон.
+</div>
+{% endif %}
+
+{% if category_summary and category_summary.dominant_segment_examples %}
+<div class="insight-box" style="margin-top: 14px;">
+    <strong>Основной драйвер продаж внутри ключевых категорий:</strong>
+    {% for item in category_summary.dominant_segment_examples %}
+    <div style="margin-top: 8px;">
+        <strong>{{ item.subject_name }}</strong>
+        — {{ item.price_segment }}
+        ({{ item.share_pct }}% продаж внутри категории; диапазон: {{ item.price_range }})
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+
+
+<!-- Подраздел I.5.6: Ценовой коридор внутри категорий -->
+ <div class="page-break"></div>
+<div class="subsection-header">
+    <span class="subsection-number">I.5.6</span>
+    <div class="subsection-title">Ценовой коридор внутри категорий</div>
+</div>
+
+{% if price_stats_by_category %}
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:24%;">Категория</th>
+            <th style="width:12%;">SKU</th>
+            <th style="width:16%;">Мин. цена SKU</th>
+            <th style="width:16%;">Медиана</th>
+            <th style="width:16%;">Средняя</th>
+            <th style="width:16%;">Макс. цена SKU</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in price_stats_by_category %}
+        <tr>
+            <td class="left">{{ row.subject_name }}</td>
+            <td class="right">{{ row.sku_count }}</td>
+            <td class="right">{{ row.min_sku_price_fmt }}</td>
+            <td class="right">{{ row.median_sku_price_fmt }}</td>
+            <td class="right">{{ row.avg_sku_price_fmt }}</td>
+            <td class="right">{{ row.max_sku_price_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="small-note">
+    Таблица показывает фактический диапазон цен SKU внутри каждой категории за последние 90 дней.
+</div>
+{% endif %}
+
+<!-- Подраздел I.5.8: Внутренняя ценовая архитектура -->
+<div class="subsection-header">
+    <span class="subsection-number">I.5.8</span>
+    <div class="subsection-title">Внутренняя ценовая архитектура категорий</div>
+</div>
+
+{% if segment_rows %}
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:20%;">Категория</th>
+            <th style="width:9%;">Сегмент</th>
+            <th style="width:16%;">Ценовой коридор</th>
+            <th style="width:11%;">Продажи, руб.</th>
+            <th style="width:11%;">Net, руб.</th>
+            <th style="width:7%;">SKU</th>
+            <th style="width:9%;">Возвраты, %</th>
+            <th style="width:9%;">Доля в категории</th>
+            <th style="width:8%;">Ср. цена</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in segment_rows %}
+        <tr>
+            <td class="left">{{ row.subject_name }}</td>
+            <td class="center">{{ row.price_segment }}</td>
+            <td class="right">{{ row.segment_price_range_fmt }}</td>
+            <td class="right">{{ row.sales_amount_fmt }}</td>
+            <td class="right">{{ row.net_amount_fmt }}</td>
+            <td class="right">{{ row.sku_count_fmt }}</td>
+            <td class="center">{{ row.return_rate_pct }}%</td>
+            <td class="center">{{ row.category_sales_share_pct }}%</td>
+            <td class="right">{{ row.avg_sku_price_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="small-note">
+    Low / Medium / High — это нижний, средний и верхний ценовые слои внутри конкретной категории.
+    Для каждого слоя показан его фактический ценовой диапазон и вклад в продажи категории.
+</div>
+{% endif %}
+
+{% endif %}

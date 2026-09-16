@@ -1,0 +1,1045 @@
+<div id="section-sales"></div>
+<div class="section-title section-title-roman">I. Операционные показатели продаж</div>
+
+<div class="sales-summary-box">
+    {{ sales_block.narrative }}
+</div>
+
+<table class="kpi-grid">
+    <tr>
+        <td>
+            <div class="kpi-label">MTD Оборот</div>
+            <div class="kpi-main">{{ sales_block.mtd.sales_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.sales_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">MTD Возвраты</div>
+            <div class="kpi-main">{{ sales_block.mtd.returns_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.returns_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">MTD Чистая выручка</div>
+            <div class="kpi-main">{{ sales_block.mtd.net_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.mtd.net_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">Средняя цена продажи</div>
+            <div class="kpi-main">{{ sales_block.mtd.avg_price }} руб./шт.</div>
+            <div class="kpi-sub">по продажам текущего месяца</div>
+        </td>
+    </tr>
+</table>
+
+<div class="section-title">Сравнение показателей</div>
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:34%;">Показатель</th>
+            <th style="width:18%;">Текущее значение</th>
+            <th style="width:14%;">Δ</th>
+            <th style="width:34%;">База сравнения</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="left">Чистая выручка MTD к аналогичному периоду прошлого месяца</td>
+            <td class="right">{{ sales_block.mtd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.vs_prev_month_class }}">
+                {{ sales_block.compare.vs_prev_month_pct }}
+            </td>
+            <td class="center">{{ sales_block.compare.prev_month_period }}</td>
+        </tr>
+        <tr>
+            <td class="left">Чистая выручка MTD к аналогичному периоду прошлого года</td>
+            <td class="right">{{ sales_block.mtd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.vs_ly_class }}">
+                {{ sales_block.compare.vs_ly_pct }}
+            </td>
+            <td class="center">{{ sales_block.compare.ly_period }}</td>
+        </tr>
+        <tr>
+            <td class="left">Чистая выручка YTD к аналогичному периоду прошлого года</td>
+            <td class="right">{{ sales_block.ytd.net_amount }} руб.</td>
+            <td class="center {{ sales_block.compare.ytd_vs_ly_class }}">
+                {{ sales_block.compare.ytd_vs_ly_pct }}
+            </td>
+            <td class="center">С начала года к аналогичному периоду прошлого года</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="section-title">Показатели с начала года (YTD)</div>
+<table class="kpi-grid">
+    <tr>
+        <td>
+            <div class="kpi-label">YTD Оборот</div>
+            <div class="kpi-main">{{ sales_block.ytd.sales_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.sales_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Возвраты</div>
+            <div class="kpi-main">{{ sales_block.ytd.returns_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.returns_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Чистая выручка</div>
+            <div class="kpi-main">{{ sales_block.ytd.net_amount }} руб.</div>
+            <div class="kpi-sub">{{ sales_block.ytd.net_qty }} шт.</div>
+        </td>
+        <td>
+            <div class="kpi-label">YTD Средняя цена продажи</div>
+            <div class="kpi-main">{{ sales_block.ytd.avg_price }} руб./шт.</div>
+            <div class="kpi-sub">по продажам с начала года</div>
+        </td>
+    </tr>
+</table>
+
+{% if sales_chart_base64 %}
+<div class="section-title">Динамика чистой выручки и средней цены продаж</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ sales_chart_base64 }}" alt="Динамика продаж">
+</div>
+<div class="small-note">
+    Столбцы отражают чистую выручку, линия — среднюю цену продажи за 1 шт.
+    Подписи Δ показывают изменение чистой выручки относительно предыдущего месяца.
+</div>
+{% endif %}
+
+
+<div class="page-break"></div>
+{% if sales_block.driver_rows %}
+<div class="section-title">Таблица драйверов изменения выручки</div>
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:16%;">Период</th>
+            <th style="width:16%;">Δ количества</th>
+            <th style="width:16%;">Δ средней цены</th>
+            <th style="width:16%;">Δ чистой выручки</th>
+            <th style="width:18%;">Изменение, руб.</th>
+            <th style="width:18%;">Ключевой драйвер</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in sales_block.driver_rows %}
+        <tr>
+            <td class="left">{{ row.month_label }}</td>
+            <td class="center">{{ row.delta_qty_pct_fmt }}</td>
+            <td class="center">{{ row.delta_price_pct_fmt }}</td>
+            <td class="center">{{ row.delta_net_pct_fmt }}</td>
+            <td class="right">{{ row.delta_net_abs_fmt }}</td>
+            <td class="center {{ row.driver_class }}">{{ row.driver }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="small-note">
+    Таблица показывает, за счет какого фактора в каждом месяце в большей степени менялась чистая выручка:
+    объема продаж, средней цены или смешанного эффекта.
+</div>
+{% endif %}
+
+{% if revenue_waterfall_base64 %}
+<div class="section-title">Waterfall изменения чистой выручки</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ revenue_waterfall_base64 }}" alt="Waterfall выручки">
+</div>
+<div class="small-note">
+    График показывает вклад основных факторов в изменение чистой выручки последнего месяца
+    относительно предыдущего: объема продаж, средней цены и возвратов.
+</div>
+{% endif %}
+
+
+<div class="page-break"></div>
+{% if qty_price_daily_chart_base64 %}
+<div class="section-title">Дневная корреляция количества продаж и цены</div>
+<div class="chart-box chart-box-narrow">
+    <img src="data:image/png;base64,{{ qty_price_daily_chart_base64 }}" alt="Дневная корреляция">
+</div>
+
+{% if daily_correlation %}
+<div class="insight-box">
+    <strong>Комментарий по дневной корреляции:</strong><br>
+    Коэффициент: {{ daily_correlation.value }}.<br>
+    {{ daily_correlation.comment }}<br><br>
+    <span class="muted">{{ daily_correlation.note }}</span>
+</div>
+{% endif %}
+{% endif %}
+
+{% if sales_correlations %}
+<div class="section-title">Анализ взаимосвязи показателей</div>
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:24%;">Пара показателей</th>
+            <th style="width:11%;">Корреляция</th>
+            <th style="width:18%;">Характер связи</th>
+            <th style="width:47%;">Практическая интерпретация</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="left">Средняя цена ↔ чистая выручка</td>
+            <td class="center {{ sales_correlations.price_revenue.class }}">
+                {{ sales_correlations.price_revenue.value }}
+            </td>
+            <td class="left {{ sales_correlations.price_revenue.class }}">
+                {{ sales_correlations.price_revenue.text }}
+            </td>
+            <td class="left">
+                {{ sales_correlations.price_revenue.meaning }}
+            </td>
+        </tr>
+        <tr>
+            <td class="left">Количество продаж ↔ средняя цена</td>
+            <td class="center {{ sales_correlations.qty_price.class }}">
+                {{ sales_correlations.qty_price.value }}
+            </td>
+            <td class="left {{ sales_correlations.qty_price.class }}">
+                {{ sales_correlations.qty_price.text }}
+            </td>
+            <td class="left">
+                {{ sales_correlations.qty_price.meaning }}
+            </td>
+        </tr>
+        <tr>
+            <td class="left">Количество продаж ↔ чистая выручка</td>
+            <td class="center {{ sales_correlations.qty_revenue.class }}">
+                {{ sales_correlations.qty_revenue.value }}
+            </td>
+            <td class="left {{ sales_correlations.qty_revenue.class }}">
+                {{ sales_correlations.qty_revenue.text }}
+            </td>
+            <td class="left">
+                {{ sales_correlations.qty_revenue.meaning }}
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="insight-box">
+    <strong>Вывод по блоку корреляции:</strong><br>
+    {{ sales_correlations.driver_comment }}
+</div>
+{% endif %}
+
+{% if qty_price_combo_chart_base64 %}
+<div class="section-title">Динамика количества продаж и средней цены</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ qty_price_combo_chart_base64 }}" alt="Динамика количества и цены">
+</div>
+<div class="small-note">
+    Столбцы отражают количество продаж, линия — среднюю цену продажи за 1 шт.
+    Подписи Δ показывают изменение количества продаж относительно предыдущего месяца.
+</div>
+
+{% if qty_price_auto_comment %}
+<div class="insight-box">
+    <strong>Комментарий:</strong><br>
+    {{ qty_price_auto_comment }}
+</div>
+{% endif %}
+{% endif %}
+
+{% if qty_price_chart_base64 %}
+<div class="section-title">Диаграмма зависимости количества и цены</div>
+<div class="chart-box chart-box-narrow">
+    <img src="data:image/png;base64,{{ qty_price_chart_base64 }}" alt="Связь количества и цены">
+</div>
+<div class="small-note">
+    Диаграмма рассеяния показывает, как меняется средняя цена продажи при изменении объема продаж по месяцам.
+    Отрицательное значение коэффициента корреляции означает, что при росте количества продаж средняя цена в среднем
+    имела тенденцию к снижению; положительное — что оба показателя чаще росли одновременно.
+</div>
+{% endif %}
+
+<!-- МЕСЯЧНАЯ ДИНАМИКА -->
+<div class="section-title">Динамики за последние 12 месяцев</div>
+<table class="data compact months-table">
+    <thead>
+        <tr>
+            <th style="width:12%;">Период</th>
+            <th style="width:18%;">Чистая выручка</th>
+            <th style="width:13%;">Оборот</th>
+            <th style="width:13%;">Возвраты</th>
+            <th style="width:9%;">Продажи, шт.</th>
+            <th style="width:9%;">Возвраты, шт.</th>
+            <th style="width:8%;">Net, шт.</th>
+            <th style="width:12%;">Цена/шт</th>
+            <th style="width:6%;">Тренд</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in sales_block.months_12 %}
+        <tr>
+            <td class="left nowrap">{{ row.month_label }}</td>
+
+            <td class="bar-cell">
+                <div class="bar-wrap">
+                    <div class="bar-fill bar-net" style="width: {{ row.net_bar_pct }}%;"></div>
+                    <div class="bar-text">{{ row.net_amount_fmt }}</div>
+                </div>
+            </td>
+
+            <td class="right">{{ row.sales_amount_fmt }}</td>
+            <td class="right negative">{{ row.returns_amount_fmt }}</td>
+            <td class="right">{{ row.sales_qty_fmt }}</td>
+            <td class="right">{{ row.returns_qty_fmt }}</td>
+            <td class="right">{{ row.net_qty_fmt }}</td>
+            <td class="right nowrap">{{ row.avg_price_fmt }}</td>
+            <td class="center {{ row.net_trend_class }}">{{ row.net_trend }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+{% if monthly_comment %}
+<div class="insight-box">
+    <strong>Комментарий по месячной динамике:</strong><br>
+    Изменение к предыдущему закрытому месяцу: {{ monthly_comment.value }}.<br>
+    {{ monthly_comment.comment }}<br><br>
+
+    {% if monthly_comment.top_categories %}
+        <strong>Лидирующие категории месяца:</strong>
+        <ul>
+            {% for row in monthly_comment.top_categories %}
+                <li>{{ row.subject_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if monthly_comment.top_products %}
+        <strong>Лидирующие товары месяца:</strong>
+        <ul>
+            {% for row in monthly_comment.top_products %}
+                <li>{{ row.product_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <span class="muted">{{ monthly_comment.note }}</span>
+
+    {% if monthly_comment.open_month_note %}
+        <br><br>
+        <span class="muted">{{ monthly_comment.open_month_note }}</span>
+    {% endif %}
+</div>
+{% endif %}
+
+
+
+
+<!-- НЕДЕЛЬНАЯ ДИНАМИКА -->
+<div class="page-break"></div>
+{% if weekly_trends %}
+<div class="section-title">Недельная динамика продаж</div>
+<div class="small-note">
+    Период анализа: последние 12 недель, агрегировано по неделям.
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:28%;">Период</th>
+            <th style="width:18%;">Чистая выручка</th>
+            <th style="width:16%;">Оборот</th>
+            <th style="width:16%;">Возвраты</th>
+            <th style="width:11%;">Продажи, шт.</th>
+            <th style="width:11%;">Возвраты, шт.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in weekly_trends %}
+        <tr>
+            <td class="left nowrap">{{ row.week_label }}</td>
+
+            <td class="bar-cell">
+                <div class="bar-wrap">
+                    <div class="bar-fill bar-net" style="width: {{ row.net_fill_pct }}%;"></div>
+                    <div class="bar-text">{{ row.net_amount_fmt }}</div>
+                </div>
+            </td>
+
+            <td class="right">{{ row.sales_amount_fmt }}</td>
+            <td class="right negative">{{ row.returns_amount_fmt }}</td>
+            <td class="right">{{ row.sales_qty_fmt }}</td>
+            <td class="right">{{ row.returns_qty_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+{% if weekly_comment %}
+<div class="insight-box">
+    <strong>Комментарий по недельной динамике:</strong><br>
+    Изменение к предыдущей закрытой неделе: {{ weekly_comment.value }}.<br>
+    {{ weekly_comment.comment }}<br><br>
+
+    {% if weekly_comment.top_categories %}
+        <strong>Лидирующие категории недели:</strong>
+        <ul>
+            {% for row in weekly_comment.top_categories %}
+                <li>{{ row.subject_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if weekly_comment.top_products %}
+        <strong>Лидирующие товары недели:</strong>
+        <ul>
+            {% for row in weekly_comment.top_products %}
+                <li>{{ row.product_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <span class="muted">{{ weekly_comment.note }}</span>
+
+    {% if weekly_comment.open_week_note %}
+        <br><br>
+        <span class="muted">{{ weekly_comment.open_week_note }}</span>
+    {% endif %}
+</div>
+{% endif %}
+
+
+<div class="page-break"></div>
+{% if weekly_trends_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ weekly_trends_chart_base64 }}" alt="Недельная динамика чистой выручки">
+</div>
+<div class="small-note">
+    График отражает динамику чистой выручки по неделям за последние 12 недель.
+    Пунктирная линия показывает среднее значение за анализируемый период.
+</div>
+{% endif %}
+
+{% if weekly_qty_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ weekly_qty_chart_base64 }}" alt="Недельная динамика количества продаж">
+</div>
+<div class="small-note">
+    График отражает динамику количества продаж по неделям за последние 12 недель.
+    Пунктирная линия показывает среднее значение за анализируемый период.
+</div>
+{% endif %}
+
+{% if weekly_avg_price_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ weekly_avg_price_chart_base64 }}" alt="Недельная динамика средней цены продажи">
+</div>
+<div class="small-note">
+    График отражает динамику средней цены продажи за единицу по неделям за последние 12 недель.
+    Пунктирная линия показывает среднее значение за анализируемый период.
+</div>
+{% endif %}
+
+{% endif %}
+
+
+
+
+<!-- ТОП 5 -->
+<div class="page-break"></div>
+<div class="section-title">🏆 Топ-5 товаров по продажам</div>
+<div class="small-note">
+    Период анализа: {{ top_period_from }} — {{ top_period_to }}
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th>Артикул WB</th>
+            <th>Артикул поставщика</th>
+            <th>Название товара WB</th>
+            <th>Бренд</th>
+            <th>В продаже с</th>
+            <th>Продажи, руб.</th>
+            <th>Кол-во, шт.</th>
+            <th>Доля в выручке</th>
+            <th>Фото</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in top_products %}
+        <tr>
+            <td class="left nowrap">{{ product.nm_id_str }}</td>
+            <td class="left">{{ product.sa_name|truncatechars:25 }}</td>
+            <td class="left">{{ product.product_name|truncatechars:40 }}</td>
+            <td class="left">{{ product.brand|truncatechars:20 }}</td>
+            <td class="center">{{ product.first_sale_date_fmt }}</td>
+            <td class="right">{{ product.sales_amount_fmt }}</td>
+            <td class="right">{{ product.sales_qty_fmt }}</td>
+            <td class="center">{{ product.revenue_share_pct }}%</td>
+            <td class="center">
+                {% if product.photo_url %}
+                    <a href="{{ product.photo_url }}" target="_blank" rel="noopener noreferrer">Фото</a>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+<div class="section-title">⚠️ Топ-5 товаров по возвратам</div>
+<div class="small-note">
+    Период анализа: {{ top_period_from }} — {{ top_period_to }}
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th>Артикул WB</th>
+            {% comment %} <th>Артикул поставщика</th> {% endcomment %}
+            <th>Название товара WB</th>
+            <th>Бренд</th>
+            <th>В продаже с</th>
+            <th>Возвраты, руб.</th>
+            <th>Кол-во, шт.</th>
+            <th>Доля возвратов, %</th>
+            <th>Фото</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in top_returns %}
+        <tr>
+            <td class="left nowrap">{{ product.nm_id_str }}</td>
+            {% comment %} <td class="left">{{ product.sa_name|truncatechars:25 }}</td> {% endcomment %}
+            <td class="left">{{ product.product_name|truncatechars:40 }}</td>
+            <td class="left">{{ product.brand|truncatechars:20 }}</td>
+            <td class="center">{{ product.first_sale_date_fmt }}</td>
+            <td class="right negative">{{ product.returns_amount_fmt }}</td>
+            <td class="right">{{ product.returns_qty_fmt }}</td>
+            <td class="center negative">{{ product.return_rate_pct }}%</td>
+            <td class="center">
+                {% if product.photo_url %}
+                    <a href="{{ product.photo_url }}" target="_blank" rel="noopener noreferrer">Фото</a>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+{% if old_skus %}
+<div class="section-title">Товары с длинным жизненным циклом</div>
+<div class="small-note">
+    Товары, которые находятся в продаже с 2023 года и ранее, и продолжают формировать продажи.
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th>Артикул WB</th>
+            {% comment %} <th>Артикул поставщика</th> {% endcomment %}
+            <th>Название товара WB</th>
+            <th>Бренд</th>
+            <th>Категория</th>
+            <th>В продаже с</th>
+            <th>Продажи за период, руб.</th>
+            <th>Кол-во, шт.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in old_skus %}
+        <tr>
+            <td class="left nowrap">{{ product.nm_id_str }}</td>
+            {% comment %} <td class="left">{{ product.sa_name|truncatechars:25 }}</td> {% endcomment %}
+            <td class="left">{{ product.product_name|truncatechars:40 }}</td>
+            <td class="left">{{ product.brand|truncatechars:20 }}</td>
+            <td class="left">{{ product.subject_name|truncatechars:20 }}</td>
+            <td class="center">{{ product.first_sale_date_fmt }}</td>
+            <td class="right">{{ product.sales_amount_90d_fmt }}</td>
+            <td class="right">{{ product.sales_qty_90d_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+
+<!-- Продажи по категориям -->
+<div class="page-break"></div>
+{% if category_rows %}
+<div class="section-title">Анализ продаж по категориям</div>
+
+<div class="small-note">
+    Период анализа: {{ top_period_from }} — {{ top_period_to }}
+</div>
+
+{% if category_summary %}
+<div class="insight-box">
+    <strong>Управленческий вывод:</strong><br>
+    {{ category_summary.headline }}
+
+    {% if category_summary.kpi_cards %}
+    <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+        {% for card in category_summary.kpi_cards %}
+        <div style="
+            flex: 1 1 180px;
+            border: 1px solid #BFBFBF;
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #F7F7F5;
+        ">
+            <div style="font-size: 11px; color: #666666;">{{ card.title }}</div>
+            <div style="font-size: 18px; font-weight: 700; color: #1F1F1F; margin-top: 4px;">
+                {{ card.value }}
+            </div>
+            <div style="font-size: 11px; color: #666666; margin-top: 4px;">
+                {{ card.subtitle }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if category_summary.executive_points %}
+    <div style="margin-top: 14px;">
+        <strong>Ключевые факты:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for point in category_summary.executive_points %}
+            <li style="margin-bottom: 6px;">{{ point }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if category_summary.strengths %}
+    <div style="margin-top: 12px;">
+        <strong>Что работает:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for item in category_summary.strengths %}
+            <li style="margin-bottom: 6px;">{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if category_summary.risks %}
+    <div style="margin-top: 12px;">
+        <strong>Что требует внимания:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for item in category_summary.risks %}
+            <li style="margin-bottom: 6px;">{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if category_summary.actions %}
+    <div style="margin-top: 12px;">
+        <strong>Что делать:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for item in category_summary.actions %}
+            <li style="margin-bottom: 6px;">{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="small-note" style="margin-top: 12px;">
+        {{ category_summary.note }}
+    </div>
+</div>
+{% endif %}
+
+{% if category_revenue_chart_base64 %}
+<div class="subsection-title">Ключевые категории по чистой выручке</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_revenue_chart_base64 }}" alt="Категории по чистой выручке">
+</div>
+<div class="small-note">
+    Основной управленческий график: показывает, какие категории реально формируют результат.
+    Цвет отражает уровень возвратов: зеленый — ниже среднего, золотой — средний уровень, бордовый — повышенный.
+</div>
+{% endif %}
+
+
+
+{% if category_gross_net_chart_base64 %}
+<div class="subsection-title">Как возвраты влияют на итог категории</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_gross_net_chart_base64 }}" alt="Продажи и чистая выручка по категориям">
+</div>
+<div class="small-note">
+    График показывает разницу между валовыми продажами и чистой выручкой.
+    Чем больше разрыв между столбцами, тем сильнее возвраты снижают итоговый результат категории.
+</div>
+{% endif %}
+
+
+
+{% if category_risk_matrix_chart_base64 %}
+<div class="subsection-title">Матрица категорий: доля в продажах и возвратность</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_risk_matrix_chart_base64 }}" alt="Матрица риска категорий">
+</div>
+<div class="small-note">
+    По оси X показана доля категории в продажах, по оси Y — возвратность.
+    Верхний правый сектор выделяет категории, которые одновременно значимы по выручке и требуют приоритетного контроля.
+</div>
+{% endif %}
+
+{% if category_segment_structure_chart_base64 %}
+<div class="subsection-title">Какие ценовые слои формируют продажи внутри категорий</div>
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ category_segment_structure_chart_base64 }}" alt="Структура категорий по ценовым сегментам">
+</div>
+<div class="small-note">
+    График показывает, какой ценовой слой внутри категории является основным драйвером продаж.
+    Справа от каждой категории указан доминирующий сегмент и его фактический ценовой диапазон.
+</div>
+{% endif %}
+
+{% if category_summary and category_summary.dominant_segment_examples %}
+<div class="insight-box" style="margin-top: 14px;">
+    <strong>Основной драйвер продаж внутри ключевых категорий:</strong>
+    {% for item in category_summary.dominant_segment_examples %}
+    <div style="margin-top: 8px;">
+        <strong>{{ item.subject_name }}</strong>
+        — {{ item.price_segment }}
+        ({{ item.share_pct }}% продаж внутри категории; диапазон: {{ item.price_range }})
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="subsection-title">Сводная таблица по категориям</div>
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:18%;">Категория</th>
+            <th style="width:12%;">Продажи, руб.</th>
+            <th style="width:11%;">Возвраты, руб.</th>
+            <th style="width:12%;">Чистая выручка</th>
+            <th style="width:8%;">Продажи, шт.</th>
+            <th style="width:8%;">Возвраты, шт.</th>
+            <th style="width:7%;">Net, шт.</th>
+            <th style="width:8%;">Возвраты, %</th>
+            <th style="width:8%;">Доля</th>
+            <th style="width:8%;">Ср. цена SKU</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in category_rows %}
+        <tr>
+            <td class="left">{{ row.subject_name }}</td>
+            <td class="right">{{ row.sales_amount_fmt }}</td>
+            <td class="right negative">{{ row.returns_amount_fmt }}</td>
+            <td class="right">{{ row.net_amount_fmt }}</td>
+            <td class="right">{{ row.sales_qty_fmt }}</td>
+            <td class="right">{{ row.returns_qty_fmt }}</td>
+            <td class="right">{{ row.net_qty_fmt }}</td>
+            <td class="center">{{ row.return_rate_pct }}%</td>
+            <td class="center">{{ row.revenue_share_pct }}%</td>
+            <td class="right">{{ row.avg_sku_price_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if price_stats_by_category %}
+<div class="subsection-title">Ценовой коридор внутри категорий</div>
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:24%;">Категория</th>
+            <th style="width:12%;">SKU</th>
+            <th style="width:16%;">Мин. цена SKU</th>
+            <th style="width:16%;">Медиана</th>
+            <th style="width:16%;">Средняя</th>
+            <th style="width:16%;">Макс. цена SKU</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in price_stats_by_category %}
+        <tr>
+            <td class="left">{{ row.subject_name }}</td>
+            <td class="right">{{ row.sku_count }}</td>
+            <td class="right">{{ row.min_sku_price_fmt }}</td>
+            <td class="right">{{ row.median_sku_price_fmt }}</td>
+            <td class="right">{{ row.avg_sku_price_fmt }}</td>
+            <td class="right">{{ row.max_sku_price_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="small-note">
+    Таблица показывает фактический диапазон цен SKU внутри каждой категории за последние 90 дней.
+</div>
+{% endif %}
+
+{% if segment_rows %}
+<div class="subsection-title">Внутренняя ценовая архитектура категорий</div>
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:20%;">Категория</th>
+            <th style="width:9%;">Сегмент</th>
+            <th style="width:16%;">Ценовой коридор</th>
+            <th style="width:11%;">Продажи, руб.</th>
+            <th style="width:11%;">Net, руб.</th>
+            <th style="width:7%;">SKU</th>
+            <th style="width:9%;">Возвраты, %</th>
+            <th style="width:9%;">Доля в категории</th>
+            <th style="width:8%;">Ср. цена</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in segment_rows %}
+        <tr>
+            <td class="left">{{ row.subject_name }}</td>
+            <td class="center">{{ row.price_segment }}</td>
+            <td class="right">{{ row.segment_price_range_fmt }}</td>
+            <td class="right">{{ row.sales_amount_fmt }}</td>
+            <td class="right">{{ row.net_amount_fmt }}</td>
+            <td class="right">{{ row.sku_count_fmt }}</td>
+            <td class="center">{{ row.return_rate_pct }}%</td>
+            <td class="center">{{ row.category_sales_share_pct }}%</td>
+            <td class="right">{{ row.avg_sku_price_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="small-note">
+    Low / Medium / High — это нижний, средний и верхний ценовые слои внутри конкретной категории.
+    Для каждого слоя показан его фактический ценовой диапазон и вклад в продажи категории.
+</div>
+{% endif %}
+
+{% endif %}
+
+
+
+<!--  Риски по сертификатам -->
+
+<div class="page-break"></div>
+<div id="section-certificates"></div>
+
+{% if certificate_risks %}
+<div class="section-title">Риски по сертификатам и декларациям</div>
+
+{% if certificate_comment %}
+<div class="insight-box">
+    <strong>Комментарий по рискам сертификации:</strong><br>
+    {{ certificate_comment.comment }}<br><br>
+
+    <span class="muted">{{ certificate_comment.note }}</span>
+
+    {% if certificate_comment.top_risk %}
+        <br><br>
+        <strong>Ключевые позиции под риском:</strong>
+        <ul>
+            {% for row in certificate_comment.top_risk %}
+                <li>{{ row.product_name }} — {{ row.sales_amount_90d_fmt }} руб. ({{ row.sales_qty_90d_fmt }} шт.; {{ row.risk_level }})</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <div class="small-note" style="margin-top: 10px;">
+        Подробная номенклатурная расшифровка приведена в
+        <a href="#appendix-a-certificates" class="toc-link">Приложении A</a>.
+    </div>
+</div>
+{% endif %}
+
+
+{% if certificate_risk_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ certificate_risk_chart_base64 }}" alt="Риски по сертификатам">
+</div>
+<div class="small-note">
+    График показывает приоритетные SKU с риском истечения сертификатов, ранжированные по объему продаж за последние 90 дней.
+    В подписи к каждому SKU указаны продажи в рублях и количество продаж в штуках.
+</div>
+{% endif %}
+
+
+<div class="page-break"></div>
+{% if certificate_category_comment %}
+<div class="insight-box">
+    <strong>Комментарий по категориям:</strong><br>
+    {{ certificate_category_comment.comment }}
+</div>
+{% endif %}
+
+{% if certificate_category_risk_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ certificate_category_risk_chart_base64 }}" alt="Риски по категориям">
+</div>
+<div class="small-note">
+    График показывает концентрацию сертификационного риска по товарным категориям с учетом объема продаж за последние 90 дней.
+</div>
+{% endif %}
+
+{% endif %}
+
+
+
+
+<!--  География продаж -->
+<div class="page-break"></div>
+
+{% if sales_by_country %}
+<div class="section-title">География продаж</div>
+
+
+
+{% if country_comment %}
+<div class="insight-box">
+    <strong>Комментарий по географии продаж:</strong><br>
+    {{ country_comment.comment }}<br><br>
+    <span class="muted">{{ country_comment.note }}</span>
+
+    {% if country_comment.country_insights %}
+        <br><br>
+        <strong>Структура продаж по ключевым странам:</strong>
+        {% for item in country_comment.country_insights %}
+            <div style="margin-top: 10px;">
+                <strong>
+                    {% if item.emoji_flag %}{{ item.emoji_flag }} {% endif %}{{ item.country_name }}
+                </strong>
+                — {{ item.net_amount_fmt }} руб. ({{ item.share_pct }}%)
+
+                {% if item.top_categories %}
+                    <div class="muted" style="margin-top: 4px;">
+                        Топ-категории:
+                        {% for row in item.top_categories %}
+                            {{ row.subject_name }} ({{ row.net_amount_fmt }} руб.){% if not forloop.last %}; {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {% if item.top_products %}
+                    <div class="muted" style="margin-top: 2px;">
+                        Топ-товары:
+                        {% for row in item.top_products %}
+                            {{ row.product_name }} ({{ row.net_amount_fmt }} руб.){% if not forloop.last %}; {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% endif %}
+</div>
+{% endif %}
+
+
+<!-- график географии -->
+{% if sales_country_map_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ sales_country_map_base64 }}" alt="Карта продаж по странам">
+</div>
+<div class="small-note">
+    На карте страны выделены по объему продаж за последние 90 дней.
+    Подписи показывают
+    {% if True %}долю в выручке{% endif %}.
+</div>
+{% endif %}
+
+<!-- таблица географии -->
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:38%;">Страна</th>
+            <th style="width:20%;">Продажи, руб.</th>
+            <th style="width:18%;">Возвраты, руб.</th>
+            <th style="width:12%;">Возвраты, %</th>
+            <th style="width:12%;">Доля, %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for country in sales_by_country %}
+        <tr>
+            <td class="left">
+                {% if country.emoji_flag %}
+                    {{ country.emoji_flag }} {{ country.country_name }}
+                {% else %}
+                    {{ country.country_name|default:"Не указана" }}
+                {% endif %}
+            </td>
+            <td class="right">{{ country.sales_amount_fmt }}</td>
+            <td class="right negative">{{ country.returns_amount_fmt }}</td>
+            <td class="center">{{ country.return_rate_amount_pct }}%</td>
+            <td class="center">{{ country.share_pct }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+
+
+
+<!-- приложение по рискам -->
+
+<div class="page-break"></div>
+<div id="appendix-a-certificates"></div>
+
+<div class="appendix-page keep-together">
+    <div class="section-title">Приложение A. Детализация рисков по сертификатам и декларациям</div>
+
+    <div class="small-note">
+        В приложении представлена полная выборка товаров, по которым срок действия сертификата/декларации
+        истекает в ближайшие 180 дней либо уже истек. Для приоритизации указан объем продаж за последние 90 дней.
+        <a href="#section-certificates" class="toc-link">Вернуться к основному разделу</a>.
+    </div>
+
+    <table class="data compact">
+        <thead>
+            <tr>
+                <th style="width:12%;">Артикул WB</th>
+                <th style="width:22%;">Название товара WB</th>
+                <th style="width:12%;">Срок действия до</th>
+                <th style="width:12%;">Дней до окончания</th>
+                <th style="width:12%;">Уровень риска</th>
+                <th style="width:12%;">Продажи 90д, руб.</th>
+                <th style="width:10%;">Продажи 90д, шт.</th>
+                <th style="width:8%;">Фото</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in certificate_risks %}
+            <tr>
+                <td class="left">{{ row.nm_id_str }}</td>
+                <td class="left">{{ row.product_name }}</td>
+                <td class="center">{{ row.cert_expiry_raw }}</td>
+                <td class="center">{{ row.days_to_expiry }}</td>
+                <td class="center {{ row.risk_class }}">{{ row.risk_level }}</td>
+                <td class="right">{{ row.sales_amount_90d_fmt }}</td>
+                <td class="right">{{ row.sales_qty_90d_fmt }}</td>
+                <td class="center">
+                    {% if row.photo_url %}
+                        <a href="{{ row.photo_url }}" target="_blank">Фото</a>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+
+
+
+{% endif %}
+
+
+
+
+<div class="page-break"></div>

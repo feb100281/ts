@@ -1,0 +1,188 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Начисления_{{ start_date|date:"Y-m" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{% static 'contracts/accruals_report_print.css' %}">
+</head>
+<body>
+  <div class="accruals-page-wrap">
+    <div class="accruals-sheet">
+
+      <div class="accruals-toolbar no-print">
+        <a href="/admin/contracts/contract/" class="accruals-btn accruals-btn--light">
+          ← К списку договоров
+        </a>
+
+        <button type="button" class="accruals-btn accruals-btn--dark" onclick="window.print()">
+          Печать / PDF
+        </button>
+      </div>
+
+      <header class="accruals-header">
+        <div class="accruals-header-top">
+          <div class="accruals-kicker">Финансовый отчет</div>
+          <div class="accruals-badge">Начисления</div>
+        </div>
+
+        <h1 class="accruals-title">Начисления за {{ month_label }}</h1>
+
+        <div class="accruals-period-box">
+          <div class="accruals-period-title">
+            Период расчета: {{ start_date|date:"d.m.Y" }} — {{ end_date|date:"d.m.Y" }}
+          </div>
+          <div class="accruals-period-sub">
+            Отчет сформирован по условиям договоров, действующим в выбранном периоде.
+          </div>
+        </div>
+      </header>
+
+      <section class="accruals-filter no-print">
+        <form method="get" class="accruals-filter-form">
+          <div class="accruals-field">
+            <label class="accruals-label">Месяц начисления</label>
+            <input
+              type="month"
+              name="month"
+              value="{{ selected_month }}"
+              class="accruals-input"
+            >
+          </div>
+
+          <button type="submit" class="accruals-btn accruals-btn--dark">
+            Показать
+          </button>
+        </form>
+      </section>
+
+      <section class="accruals-section">
+        <div class="accruals-section-head">
+          <div>
+            <h2>Сводная информация</h2>
+            <div class="accruals-section-subtitle">
+              Ключевые показатели по начислениям за выбранный месяц.
+            </div>
+          </div>
+        </div>
+
+        <div class="accruals-summary-list">
+          <div class="accruals-summary-row">
+            <div class="accruals-summary-key">Отчетный месяц</div>
+            <div class="accruals-summary-val">{{ month_label }}</div>
+          </div>
+
+          <div class="accruals-summary-row">
+            <div class="accruals-summary-key">Период</div>
+            <div class="accruals-summary-val">
+              {{ start_date|date:"d.m.Y" }} — {{ end_date|date:"d.m.Y" }}
+            </div>
+          </div>
+
+          <div class="accruals-summary-row">
+            <div class="accruals-summary-key">Количество строк</div>
+            <div class="accruals-summary-val">{{ rows|length }}</div>
+          </div>
+
+          <div class="accruals-summary-row">
+            <div class="accruals-summary-key">Количество договоров по методу Accrual</div>
+            <div class="accruals-summary-val">
+              {{ accrual_count|default:"—" }}
+              {{ accrual_count_label|default:"договоров" }}
+            </div>
+          </div>
+
+          <div class="accruals-summary-row">
+            <div class="accruals-summary-key">Сумма по методу Accrual</div>
+            <div class="accruals-summary-val accruals-money">
+              {{ accrual_total|default:"—" }}
+            </div>
+          </div>
+
+          <div class="accruals-summary-row total">
+            <div class="accruals-summary-key">Итого начислено</div>
+            <div class="accruals-summary-val accruals-summary-val--strong accruals-money">
+              {{ total }}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="accruals-section">
+        <div class="accruals-section-head">
+          <div>
+            <h2>Детализация начислений</h2>
+            <div class="accruals-section-subtitle">
+              Постатейная информация по начислениям за отчетный период.
+            </div>
+          </div>
+        </div>
+
+        {% if rows %}
+          <div class="accruals-table-wrap">
+            <table class="accruals-table">
+              <thead>
+                <tr>
+                  <th class="col-contragent">Контрагент</th>
+                  <th class="col-contract">Договор</th>
+                  <th class="col-type">Тип договора</th>
+                  <th class="col-method">Метод</th>
+                  <th class="col-amount">Начислено</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rows %}
+                <tr>
+                  <td>
+                    <div class="cell-main">{{ r.contragent }}</div>
+                  </td>
+
+                  <td>
+                    <div class="cell-main">{{ r.contract_number }}</div>
+                    {% if r.condition_id %}
+                      <div class="cell-sub">Condition ID: {{ r.condition_id }}</div>
+                    {% endif %}
+                  </td>
+
+                  <td>
+                    <div class="cell-main">{{ r.contract_title }}</div>
+                  </td>
+
+                  <td>
+                    {% if r.method == "Accural" or r.method == "Accrual" %}
+                      <span class="method-pill method-pill--accrual">{{ r.method }}</span>
+                    {% else %}
+                      <span class="method-pill method-pill--cash">{{ r.method }}</span>
+                    {% endif %}
+                  </td>
+
+                  <td class="money-cell">
+                    {{ r.amount }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" class="tfoot-label">Итого:</td>
+                  <td class="money-cell money-cell--strong">{{ total }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        {% else %}
+          <div class="accruals-empty-box">
+            За выбранный период начисления не найдены.
+          </div>
+        {% endif %}
+      </section>
+
+      <footer class="accruals-footer">
+        Печатная форма для внутреннего использования.
+      </footer>
+
+    </div>
+  </div>
+</body>
+</html>

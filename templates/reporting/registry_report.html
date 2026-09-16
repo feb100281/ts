@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} – {{ company }}</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/upd_issues/registry.css">
+</head>
+<body>
+    <div class="header">
+        <div class="title">{{ title }}</div>
+        <div class="subtitle">{{ company }}</div>
+        <div class="date">Сформировано: {{ report_date }} в {{ report_time }}</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>№ п/п</th>
+                <th style="text-align: left;">Контрагент</th>
+                <th>Номер УПД</th>
+                <th>Дата УПД</th>
+                <th>ID УПД</th>
+                <th style="text-align: right;">Сумма с НДС</th>
+                <th style="text-align: right;">Кол-во товаров</th>
+                <th style="text-align: right;">Кол-во строк</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documents %}
+            <tr>
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td class="text-left">{{ doc.counterparty }}</td>
+                <td class="text-center">{{ doc.number }}</td>
+                <td class="text-center">{{ doc.date }}</td>
+                <td class="text-center">{{ doc.id }}</td>
+                <td class="text-right">{{ doc.amount|floatformat:2 }} ₽</td>
+                <td class="text-right">{{ doc.qty|floatformat:0 }}</td>
+                <td class="text-right">{{ doc.lines }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="footer-row">
+                <td colspan="5" class="text-center bold">ИТОГО:</td>
+                <td class="text-right bold">{{ total_sum|floatformat:2 }} ₽</td>
+                <td class="text-right bold">{{ total_qty|floatformat:0 }}</td>
+                <td class="text-right bold">{{ total_lines }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Всего документов: {{ total_count }} • Сгенерировано автоматически
+    </div>
+</body>
+</html>

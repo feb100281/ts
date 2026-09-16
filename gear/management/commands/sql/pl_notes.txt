@@ -1,0 +1,114 @@
+-- ============================================================
+-- РАСШИФРОВКИ К P&L («ноты»)
+--
+-- Каждая строка P&L раскрывается на три уровня вниз:
+--   уровень 1 — статья затрат внутри группы,
+--   уровень 2 — контрагент,
+--   уровень 3 — договор.
+--
+-- Разделы 3-5 по удержаниям маркетплейса раскрываются настолько,
+-- насколько позволяет витрина площадки (контрагент там всегда WB),
+-- разделы 5-8 — по бухгалтерской витрине pl_for_csv.
+--
+-- Названия разделов и статей (section, item) совпадают с opex, иначе
+-- ссылка из P&L не попадёт в нужный блок расшифровки.
+-- ============================================================
+
+CREATE OR REPLACE TEMP TABLE pl_notes AS
+
+WITH wb AS (
+
+    SELECT
+        me,
+
+        CASE
+            WHEN account = 'Other income / loss' THEN '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ'
+            WHEN account = 'WB Deduction' THEN '4. ПРОДВИЖЕНИЕ WB'
+            ELSE '3. РАСХОДЫ НА РЕАЛИЗАЦИЮ'
+        END AS section,
+
+        CASE
+            WHEN account IN ('Other income / loss', 'WB Deduction') THEN cost_item
+            ELSE account
+        END AS item,
+
+        CASE
+            WHEN account IN ('Other income / loss', 'WB Deduction') THEN 'Маркетплейс WB'
+            ELSE cost_item
+        END AS lvl1,
+
+        '' AS lvl2,
+        '' AS lvl3,
+
+        SUM((dt - cr) / 100)::DOUBLE AS amount
+
+    FROM wb_costs
+
+    WHERE date_from::DATE <= $date_from
+
+    GROUP BY 1, 2, 3, 4
+),
+
+
+gl AS (
+
+    SELECT
+        LAST_DAY(p.date_from)::DATE AS me,
+
+        CASE
+            WHEN STARTS_WITH(p.account_name, '420000') THEN '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ'
+            WHEN STARTS_WITH(p.account_name, '610000') THEN '6. НАКЛАДНЫЕ РАСХОДЫ'
+            WHEN STARTS_WITH(p.account_name, '620000') THEN '7. КОРПОРАТИВНЫЕ РАСХОДЫ'
+            ELSE '8. ФИНАНСОВЫЕ РАСХОДЫ'
+        END AS section,
+
+        -- статья P&L: у разделов 5-7 это группа статей, у раздела 8 — статья
+        CASE
+            WHEN STARTS_WITH(p.account_name, '630000')
+                THEN COALESCE(NULLIF(TRIM(p.cost_item), ''), 'Без группы')
+            ELSE COALESCE(NULLIF(TRIM(p.cost_item_group), ''), 'Без группы')
+        END AS item,
+
+        CASE
+            WHEN STARTS_WITH(p.account_name, '630000')
+                THEN COALESCE(NULLIF(TRIM(p.cp_name), ''), 'Без контрагента')
+            ELSE COALESCE(NULLIF(TRIM(p.cost_item), ''), 'Без статьи')
+        END AS lvl1,
+
+        CASE
+            WHEN STARTS_WITH(p.account_name, '630000')
+                THEN COALESCE(NULLIF(TRIM(p.contract_name), ''), 'Без договора')
+            ELSE COALESCE(NULLIF(TRIM(p.cp_name), ''), 'Без контрагента')
+        END AS lvl2,
+
+        CASE
+            WHEN STARTS_WITH(p.account_name, '630000') THEN ''
+            ELSE COALESCE(NULLIF(TRIM(p.contract_name), ''), 'Без договора')
+        END AS lvl3,
+
+        SUM(p.amount)::DOUBLE AS amount
+
+    FROM pg.public.pl_for_csv p
+
+    WHERE p.date_from <= $date_from
+      AND (
+            STARTS_WITH(p.account_name, '420000')
+         OR STARTS_WITH(p.account_name, '610000')
+         OR STARTS_WITH(p.account_name, '620000')
+         OR STARTS_WITH(p.account_name, '630000')
+      )
+      -- те же исключения, что и в opex, иначе расшифровка не сойдётся с P&L
+      AND NOT (STARTS_WITH(p.account_name, '420000')
+               AND STARTS_WITH(COALESCE(p.cost_item_group, ''), '590100'))
+      AND NOT (STARTS_WITH(p.account_name, '610000')
+               AND STARTS_WITH(COALESCE(p.cost_item, ''), '540101'))
+
+    GROUP BY 1, 2, 3, 4, 5, 6
+)
+
+
+SELECT section, item, lvl1, lvl2, lvl3, me, amount FROM wb
+UNION ALL
+SELECT section, item, lvl1, lvl2, lvl3, me, amount FROM gl
+ORDER BY section, item, lvl1, lvl2, lvl3, me
+;

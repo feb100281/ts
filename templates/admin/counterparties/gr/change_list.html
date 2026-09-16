@@ -20,7 +20,7 @@
       <div style="
           width:40px;
           height:40px;
-          border-radius:6px;
+          border-radius:2px;
           background:#111827;
           color:#e5e7eb;
           display:flex;
@@ -55,7 +55,7 @@
           <span style="
               font-size:11px;
               padding:2px 8px;
-              border-radius:6px;
+              border-radius:2px;
               background:#eef2ff;
               color:#4338ca;
               font-weight:600;
@@ -63,7 +63,7 @@
             Всего групп: {{ cl.result_count }}
           </span>
 
-          <!-- Подсказка -->
+          {% comment %} <!-- Подсказка -->
           <span style="
               font-size:11px;
               padding:2px 8px;
@@ -73,7 +73,7 @@
               font-weight:500;
           ">
             Используются для сегментации контрагентов
-          </span>
+          </span> {% endcomment %}
         </div>
       </div>
     </div>
@@ -85,7 +85,7 @@
     <div style="
         min-width:220px;
         max-width:280px;
-        border-radius:14px;
+        border-radius:2px;
         background:rgba(248,250,252,0.9);
         box-shadow:0 18px 40px rgba(15,23,42,0.16);
         padding:10px 12px 12px;
@@ -115,7 +115,7 @@
              style="
                font-size:13px;
                padding:4px 10px;
-               border-radius:6px;
+               border-radius:2px;
                display:inline-flex;
                align-items:center;
                gap:6px;

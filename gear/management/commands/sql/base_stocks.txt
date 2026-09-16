@@ -1,0 +1,107 @@
+CREATE OR REPLACE TEMP TABLE stocks_daily AS
+
+WITH wb AS (
+    SELECT
+        t.date_from::DATE AS stock_date,
+        t.nm_id,
+
+        SUM(
+            COALESCE(t.quantity, 0)
+        ) AS warehouse_quantity,
+
+        SUM(
+            COALESCE(t.in_way_from_client, 0)
+            + COALESCE(t.in_way_to_client, 0)
+        ) AS in_transit_quantity
+
+    FROM stocks.unpacked_stocks t
+
+    GROUP BY
+        t.date_from::DATE,
+        t.nm_id
+),
+
+fbs AS (
+    SELECT
+        t.date_from::DATE AS stock_date,
+        t.nm_id,
+
+        SUM(
+            COALESCE(t.quantity, 0)
+        ) AS fbs_quantity
+
+    FROM stocks.unpacked_fbs_stocks t
+
+    WHERE t.nm_id IS NOT NULL
+
+    GROUP BY
+        t.date_from::DATE,
+        t.nm_id
+),
+
+combined AS (
+    SELECT
+        COALESCE(
+            wb.stock_date,
+            fbs.stock_date
+        ) AS stock_date,
+
+        COALESCE(
+            wb.nm_id,
+            fbs.nm_id
+        ) AS nm_id,
+
+        COALESCE(
+            wb.warehouse_quantity,
+            0
+        ) AS warehouse_quantity,
+
+        COALESCE(
+            fbs.fbs_quantity,
+            0
+        ) AS fbs_quantity,
+
+        COALESCE(
+            wb.in_transit_quantity,
+            0
+        ) AS in_transit_quantity
+
+    FROM wb
+
+    FULL OUTER JOIN fbs
+        ON wb.stock_date = fbs.stock_date
+        AND wb.nm_id = fbs.nm_id
+)
+
+SELECT
+    t.stock_date,
+
+    t.nm_id,
+    t.nm_id AS usk,
+
+    UPPER(w.brand) AS brand,
+    w.subject_id,
+    w.subject_name,
+    w.title,
+    COALESCE(
+        w.gender,
+        'Не указан'
+    ) AS gender,
+
+    (
+        t.warehouse_quantity
+        + t.fbs_quantity
+        + t.in_transit_quantity
+    ) AS stock_quantity,
+
+    t.warehouse_quantity,
+
+    t.fbs_quantity,
+
+    t.in_transit_quantity
+
+FROM combined t
+
+LEFT JOIN inventories.wb_product w
+    ON w.card_id = t.nm_id
+;

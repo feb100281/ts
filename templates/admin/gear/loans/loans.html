@@ -1,0 +1,31 @@
+{% extends "admin/change_list.html" %}
+
+{% block content %}
+<div style="padding: 24px;">
+    <h2>Кредиты и займы</h2>
+
+    <p style="margin-bottom: 16px;">
+        Чтобы приложение открылось - нажмите кнопку ниже.
+    </p>
+
+    <a
+        href="/apps/app/loans_app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="button"
+        style="padding: 10px 16px;"
+    >
+        Открыть приложение
+    </a>
+</div>
+
+<script>
+    window.addEventListener("load", function () {
+        window.open(
+            "/apps/app/loans_app/",
+            "_blank",
+            "noopener,noreferrer"
+        );
+    });
+</script>
+{% endblock %}
