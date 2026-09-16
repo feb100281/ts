@@ -310,3 +310,37 @@ def export_cf_csv(request):
 def export_pl_csv(request):
     """Витрина P&L на отчётную дату, csv с «|»."""
     return _export_manpack_csv(request, "pl", "pl")
+
+
+def export_pivots(request):
+    """Книга со сводными таблицами по Cash Flow и P&L на отчётную дату."""
+    date_str = request.GET.get("report_date")
+
+    if not date_str:
+        return HttpResponseBadRequest("Не передана дата report_date")
+
+    try:
+        report_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return HttpResponseBadRequest("Некорректный формат даты. Ожидается YYYY-MM-DD")
+
+    # импорт внутри view: модуль тянет duckdb-подключение и sql-витрины
+    from gear.management.commands.mp import build_pivots_workbook
+
+    temp_dir = Path(tempfile.gettempdir())
+    file_path = temp_dir / f"pivots_{report_date.strftime('%Y%m%d')}.xlsx"
+
+    def build():
+        build_pivots_workbook(report_date, out_path=file_path)
+
+        return FileResponse(
+            open(file_path, "rb"),
+            as_attachment=True,
+            filename=file_path.name,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    try:
+        return run_export(build)
+    except ValueError as exc:
+        return HttpResponseBadRequest(str(exc))

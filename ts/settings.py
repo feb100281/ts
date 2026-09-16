@@ -41,7 +41,18 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'fallback_secret_key')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = ['127.0.0.1','localhost','62.109.2.166']
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+
+# Django 4+ сверяет Origin/Referer POST-запроса с этим списком. За nginx с
+# https без него формы админки отваливаются с ошибкой проверки CSRF.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "https://www.ts-bias.ru,https://ts-bias.ru",
+    ).split(",")
+    if o.strip()
+]
 
 
 

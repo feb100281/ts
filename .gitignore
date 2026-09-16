@@ -1,6 +1,9 @@
 .env
 /.tmp/
 *.xlsx
+# ...кроме скелетов сводных: это исходники отчёта, а не выгрузки —
+# без них кнопки в админке не работают
+!gear/management/commands/assets/*.xlsx
 /media/
 /venv/
 /.venv/

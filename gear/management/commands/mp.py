@@ -2950,6 +2950,318 @@ def export_raw_csv(kind, date_from, out_path=None):
     return path, len(rows)
 
 
+# =============================================================================
+#  10. КНИГА СО СВОДНЫМИ (нативные сводные таблицы Excel)
+#
+#      Отдельный файл: два листа со сводными — по движению денежных средств
+#      и по P&L — и два листа-источника с сырыми строками витрин.
+#
+#      Команда только наполняет источники и раздвигает диапазоны «умных
+#      таблиц»; сами сводные Excel пересчитывает при открытии файла
+#      (refreshOnLoad). Макросов и VBA нет.
+#
+#      Раскладка задана в скелете assets/pivots_skeleton.xlsx и собирается
+#      скриптом assets/build_pivots_skeleton.py — руками в Excel скелет
+#      править нельзя, Excel переписывает его по-своему.
+# =============================================================================
+
+PIVOTS_SKELETON = Path(__file__).resolve().parent / "assets" / "pivots_skeleton.xlsx"
+
+PIVOT_SOURCES = {
+    "raw_cf": "SELECT * FROM pg.cf_to_csv WHERE date_from <= $date_from "
+              "ORDER BY date_from",
+    "raw_pl": "SELECT * FROM pg.pl_for_csv WHERE date_from <= $date_from "
+              "ORDER BY date_from",
+}
+
+
+def _pivot_cell(value):
+    """Приводит значение из витрины к типу, который принимает openpyxl."""
+    if value is None or isinstance(value, (int, float, str, bool)):
+        return value
+    if isinstance(value, dt.datetime):
+        return value.replace(tzinfo=None)
+    if isinstance(value, date):
+        return value
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def fill_pivot_source(ws, table_name, columns, rows):
+    """Наполняет лист-источник и раздвигает диапазон «умной таблицы».
+
+    Колонки раскладываются по заголовкам, которые уже лежат в скелете:
+    поля сводной привязаны к позициям, и менять порядок нельзя, даже
+    если витрина однажды вернёт колонки в другом порядке.
+    """
+    header = [ws.cell(row=1, column=i).value
+              for i in range(1, ws.max_column + 1)]
+    header = [h for h in header if h]
+    if not header:
+        header = list(columns)
+
+    order = []
+    for name in header:
+        order.append(columns.index(name) if name in columns else None)
+
+    if ws.max_row > 1:
+        ws.delete_rows(2, ws.max_row)
+
+    for i, row in enumerate(rows, start=2):
+        for j, src in enumerate(order, start=1):
+            if src is None:
+                continue
+            ws.cell(row=i, column=j, value=_pivot_cell(row[src]))
+
+    last_row = max(2, 1 + len(rows))
+    ref = "A1:%s%d" % (get_column_letter(len(header)), last_row)
+
+    table = ws.tables.get(table_name)
+    if table is not None:
+        table.ref = ref
+        if table.autoFilter is not None:
+            table.autoFilter.ref = ref
+
+    return len(rows)
+
+
+PIVOT_LAYOUT = {
+    "xl/pivotTables/pivotTable1.xml": {
+        "cache": "xl/pivotCache/pivotCacheDefinition1.xml",
+        "source": "raw_cf",
+        "rows": ["activity", "operation", "item", "subitem",
+                 "cp_name", "contract_name"],
+    },
+    "xl/pivotTables/pivotTable2.xml": {
+        "cache": "xl/pivotCache/pivotCacheDefinition2.xml",
+        "source": "raw_pl",
+        "rows": ["parent_account_name", "account_name", "cost_item_group",
+                 "cost_item", "cp_name", "contract_name"],
+    },
+}
+
+# сколько верхних уровней открыто при открытии файла
+PIVOT_OPEN_LEVELS = 2
+
+
+def sync_pivot_items(path, data):
+    """Переписывает справочники значений сводных под фактические данные.
+
+    Зачем. Уровень сводной свёрнут, если у КАЖДОГО его элемента стоит
+    признак «не раскрывать». Признак живёт у конкретного значения, а не у
+    поля целиком, поэтому значение, которого не было в справочнике,
+    Excel после обновления показывает раскрытым. Появилась новая статья
+    или контрагент — и ветка открывается сама.
+
+    Поэтому перед выдачей файла складываем в справочники ровно те
+    значения, которые лежат в источнике, и всем уровням ниже
+    PIVOT_OPEN_LEVELS проставляем «свёрнуто».
+    """
+    import xml.etree.ElementTree as ET
+    import shutil
+    import tempfile
+    import zipfile
+
+    ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    ET.register_namespace("", ns)
+    tag = lambda name: "{%s}%s" % (ns, name)
+
+    def distinct(columns, rows, name):
+        if name not in columns:
+            return [], False
+        i = columns.index(name)
+        seen, blank = set(), False
+        for row in rows:
+            value = row[i]
+            text = "" if value is None else str(value).strip()
+            if text:
+                seen.add(text)
+            else:
+                blank = True
+        return sorted(seen), blank
+
+    src = zipfile.ZipFile(path)
+    parts = {}
+
+    for table_part, cfg in PIVOT_LAYOUT.items():
+        if table_part not in src.namelist() or cfg["source"] not in data:
+            continue
+
+        columns, rows = data[cfg["source"]]
+        cache = ET.fromstring(src.read(cfg["cache"]))
+        table = ET.fromstring(src.read(table_part))
+
+        cache_fields = list(cache.find(tag("cacheFields")))
+        pivot_fields = list(table.find(tag("pivotFields")))
+        names = [f.get("name") for f in cache_fields]
+
+        for level, name in enumerate(cfg["rows"]):
+            if name not in names:
+                continue
+            index = names.index(name)
+            values, blank = distinct(columns, rows, name)
+            if not values and not blank:
+                continue
+
+            collapsed = level >= PIVOT_OPEN_LEVELS
+
+            shared = ET.SubElement(cache_fields[index], tag("sharedItems"))
+            cache_fields[index].remove(shared)
+            shared = ET.Element(tag("sharedItems"))
+            shared.set("count", str(len(values) + (1 if blank else 0)))
+            if blank:
+                shared.set("containsBlank", "1")
+            for value in values:
+                ET.SubElement(shared, tag("s")).set("v", value)
+            if blank:
+                ET.SubElement(shared, tag("m"))
+
+            old = cache_fields[index].find(tag("sharedItems"))
+            if old is not None:
+                cache_fields[index].remove(old)
+            cache_fields[index].insert(0, shared)
+
+            items = ET.Element(tag("items"))
+            total = len(values) + (1 if blank else 0)
+            items.set("count", str(total + 1))
+            for i in range(total):
+                item = ET.SubElement(items, tag("item"))
+                item.set("x", str(i))
+                if collapsed:
+                    item.set("sd", "0")
+            default = ET.SubElement(items, tag("item"))
+            default.set("t", "default")
+            if collapsed:
+                default.set("sd", "0")
+
+            old = pivot_fields[index].find(tag("items"))
+            if old is not None:
+                pivot_fields[index].remove(old)
+            pivot_fields[index].append(items)
+
+        parts[cfg["cache"]] = ET.tostring(cache, encoding="UTF-8",
+                                          xml_declaration=True)
+        parts[table_part] = ET.tostring(table, encoding="UTF-8",
+                                        xml_declaration=True)
+
+    if not parts:
+        src.close()
+        return 0
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    tmp.close()
+
+    out = zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED)
+    for info in src.infolist():
+        out.writestr(info, parts.get(info.filename) or src.read(info.filename))
+    out.close()
+    src.close()
+
+    shutil.move(tmp.name, path)
+    return len(parts) // 2
+
+
+PIVOT_NUMBER_FORMAT = ('<numFmt numFmtId="171" '
+                       'formatCode="#,##0;(#,##0);&quot;–&quot;"/>')
+
+
+def restore_pivot_number_format(path):
+    """Возвращает в файл формат чисел сводных.
+
+    Формат 171 («в скобках, разделители тысяч») нужен только сводным, ни
+    одна обычная ячейка на него не ссылается — и openpyxl при сохранении
+    выбрасывает его из styles.xml как неиспользуемый. Тогда Excel показывает
+    суммы как есть, без разделителей и со знаком минус. Возвращаем запись
+    прямо в сохранённый файл.
+    """
+    import re
+    import shutil
+    import tempfile
+    import zipfile
+
+    src = zipfile.ZipFile(path)
+    styles = src.read("xl/styles.xml").decode("utf-8")
+
+    if 'numFmtId="171"' in styles:
+        src.close()
+        return False
+
+    if "<numFmts" in styles:
+        styles = re.sub(
+            r'<numFmts count="(\d+)">',
+            lambda m: ('<numFmts count="%d">' % (int(m.group(1)) + 1)
+                       + PIVOT_NUMBER_FORMAT),
+            styles, count=1)
+    else:
+        styles = styles.replace(
+            "<fonts",
+            '<numFmts count="1">%s</numFmts><fonts' % PIVOT_NUMBER_FORMAT, 1)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    tmp.close()
+
+    out = zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED)
+    for info in src.infolist():
+        data = (styles.encode("utf-8") if info.filename == "xl/styles.xml"
+                else src.read(info.filename))
+        out.writestr(info, data)
+    out.close()
+    src.close()
+
+    shutil.move(tmp.name, path)
+    return True
+
+
+def build_pivots_workbook(date_from, out_path=None):
+    """Собирает книгу со сводными на отчётную дату."""
+    if isinstance(date_from, str):
+        date_from = date.fromisoformat(date_from)
+
+    if not PIVOTS_SKELETON.exists():
+        raise ValueError(
+            "Не найден скелет сводных: %s. Соберите его скриптом "
+            "assets/build_pivots_skeleton.py" % PIVOTS_SKELETON.name)
+
+    data = {}
+    with get_duckdb_conn_with_opt(ro=True) as con:
+        for name, sql in PIVOT_SOURCES.items():
+            cur = con.execute(sql, parameters={"date_from": date_from})
+            data[name] = ([d[0] for d in cur.description], cur.fetchall())
+
+    wb = load_workbook(PIVOTS_SKELETON)
+
+    counts = {}
+    for name, (columns, rows) in data.items():
+        if name in wb.sheetnames:
+            counts[name] = fill_pivot_source(wb[name], name, columns, rows)
+
+    # сводные обновятся сами при открытии файла
+    for sheet in wb.worksheets:
+        for pivot in getattr(sheet, "_pivots", []):
+            pivot.cache.refreshOnLoad = True
+        for view in sheet.views.sheetView:
+            view.tabSelected = False
+    wb.active = 0
+
+    # порядок листов: сначала обе сводные, источники — в конец
+    order = ["Сводная CF", "Сводная P&L", "raw_cf", "raw_pl"]
+    ordered = [wb[n] for n in order if n in wb.sheetnames]
+    ordered += [ws for ws in wb.worksheets if ws not in ordered]
+    wb._sheets = ordered
+
+    path = Path(out_path) if out_path else Path(
+        "pivots_%s.xlsx" % date_from.isoformat())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+
+    restore_pivot_number_format(path)
+    sync_pivot_items(path, data)
+
+    return path, counts
+
+
 class Command(BaseCommand):
     help = "Формирует управленческий пакет (P&L + Cash Flow + пояснения) в Excel."
 

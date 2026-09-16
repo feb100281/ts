@@ -17,6 +17,7 @@ from .admin_exports import (
     export_management_pack,
     export_cf_csv,
     export_pl_csv,
+    export_pivots,
     api_budgets,                   
     export_budget_analysis,        
 )
@@ -55,6 +56,7 @@ urlpatterns = [
     path("admin/export/management-pack/", export_view(export_management_pack, "export_management_pack"), name="export_management_pack"),
     path("admin/export/management-pack/cf-csv/", export_view(export_cf_csv, "export_management_pack"), name="export_cf_csv"),
     path("admin/export/management-pack/pl-csv/", export_view(export_pl_csv, "export_management_pack"), name="export_pl_csv"),
+    path("admin/export/management-pack/pivots/", export_view(export_pivots, "export_management_pack"), name="export_pivots"),
     path("admin/api/budgets/", export_view(api_budgets, "export_budget_analysis"), name="api_budgets"),
     path("admin/export/budget-analysis/", export_view(export_budget_analysis, "export_budget_analysis"), name="export_budget_analysis"),
     path("reports/", include("reports.urls")),
