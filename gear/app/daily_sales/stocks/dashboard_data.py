@@ -57,7 +57,7 @@ def get_effective_stock_date(
             21.07.2026
     """
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             SELECT
@@ -90,7 +90,7 @@ def get_stock_dashboard_summary(
     report_date,
 ) -> dict:
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             SELECT
@@ -221,7 +221,7 @@ def get_stock_regions(
     report_date,
 ) -> pd.DataFrame:
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         df = con.execute(
             """
             SELECT
@@ -354,7 +354,7 @@ def get_stock_warehouses(
     # Данные из DuckDB
     # =========================================================================
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         df = con.execute(
             """
             SELECT
@@ -755,7 +755,7 @@ def get_warehouse_options(
     report_date,
 ) -> list[str]:
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(
             """
             SELECT DISTINCT
@@ -802,7 +802,7 @@ def get_region_options(
     report_date,
 ) -> list[str]:
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(
             """
             SELECT DISTINCT
@@ -888,7 +888,7 @@ def get_warehouse_products(
         or []
     )
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         df = con.execute(
             """
             WITH
@@ -1372,7 +1372,7 @@ def get_warehouse_incident_snapshot(
             "no_management_cost_nm_count": 0,
         }
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             WITH

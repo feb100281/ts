@@ -60,7 +60,7 @@ def get_budget_version():
 #     return row[0] if row and row[0] else None
 
 def get_last_fact_date(date_from):
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             SELECT MAX(date_from)::date
@@ -140,7 +140,7 @@ def get_monthly_plan_full_year(version_id, year):
 
 
 def get_monthly_fact(date_from, report_date):
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(
             """
             SELECT
@@ -189,7 +189,7 @@ def get_monthly_fact(date_from, report_date):
 
 
 def get_fact_for_period(date_start, date_end):
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             SELECT
@@ -273,7 +273,7 @@ def get_daily_fact(year, month, up_to_day=None):
         ORDER BY date_from::date
     """
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(sql, params).fetchall()
 
     result = []
@@ -945,7 +945,7 @@ def get_daily_fact_for_period(date_start, date_end):
     за произвольный период.
     """
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(
             """
             SELECT

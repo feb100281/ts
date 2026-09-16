@@ -8,7 +8,7 @@ from conns import get_duckdb_conn_with_opt
 
 
 def get_last_sales_date() -> date | None:
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             SELECT MAX(date_from)::DATE
@@ -128,7 +128,7 @@ def get_sales_metrics(start_date: date, end_date: date) -> dict:
     start_date = normalize_date(start_date)
     end_date = normalize_date(end_date)
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             SELECT
@@ -187,7 +187,7 @@ def get_daily_metrics(start_date: date, end_date: date) -> list[dict]:
     start_date = normalize_date(start_date)
     end_date = normalize_date(end_date)
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(
             """
             SELECT
@@ -413,7 +413,7 @@ def get_entity_analysis(
         compare_start, compare_end,
     ]
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(sql, params).fetchall()
 
     result = []
@@ -477,7 +477,7 @@ def get_entity_analysis(
 def get_latest_stock_date(report_date: date) -> date | None:
     report_date = normalize_date(report_date)
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         row = con.execute(
             """
             SELECT MAX(date_from)::DATE
@@ -657,7 +657,7 @@ def get_product_analysis(
         stock_date,
     ]
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(sql, params).fetchall()
 
     result = []

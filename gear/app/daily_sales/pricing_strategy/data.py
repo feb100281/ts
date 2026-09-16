@@ -52,7 +52,7 @@ def get_latest_stock_dates(
         report_date
     )
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
 
         wb = con.execute(
             """
@@ -211,7 +211,7 @@ def get_stock_products(
         )
     )
 
-    with get_duckdb_conn_with_opt() as con:
+    with get_duckdb_conn_with_opt(ro=True) as con:
 
         frame = con.execute(
             f"""

@@ -1,5 +1,7 @@
 # ts/admin_exports.py
 import csv
+import logging
+import time
 from django.db import connection
 from django.http import HttpResponse
 
@@ -13,6 +15,52 @@ from reporting.excel.engine import build_manpack
 import json
 from django.views.decorators.http import require_http_methods
 from budget.reporting.pdf.revenue_exporter import build_revenue_analysis_pdf_response
+
+
+
+# ---------------------------------------------------------------------------
+#  Аналитическая база занята
+#
+#  DuckDB пускает к файлу либо одного писателя, либо сколько угодно
+#  читателей. Пока ETL пишет в базу, подключиться нельзя вообще — ни на
+#  чтение, ни на запись. Блокировка держится недолго, поэтому пробуем
+#  несколько раз, а потом отдаём понятное сообщение вместо трейсбека.
+# ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+DUCKDB_BUSY_MESSAGE = (
+    "Аналитическая база сейчас занята: идёт обновление данных.\n"
+    "Попробуйте скачать отчёт через несколько минут."
+)
+
+
+def _duckdb_is_busy(exc):
+    text = str(exc)
+    return "Could not set lock" in text or "Conflicting lock" in text
+
+
+def run_export(build, attempts=3, pause=2.0):
+    """Собирает выгрузку, переживая короткую блокировку базы."""
+    last = None
+
+    for attempt in range(attempts):
+        try:
+            return build()
+        except Exception as exc:
+            if not _duckdb_is_busy(exc):
+                raise
+            last = exc
+            if attempt < attempts - 1:
+                time.sleep(pause)
+
+    logger.warning("Выгрузка не собрана, база занята: %s", last)
+
+    return HttpResponse(
+        DUCKDB_BUSY_MESSAGE,
+        status=503,
+        content_type="text/plain; charset=utf-8",
+    )
 
 
 def export_sql_to_csv(request, sql: str, filename_prefix: str):
@@ -73,16 +121,17 @@ def export_manpack(request):
     temp_dir = Path(tempfile.gettempdir())
     file_path = temp_dir / f"manpack_{report_date.strftime('%Y%m%d')}.xlsx"
 
-    # генерация
-    build_manpack(date_to=report_date, output_path=file_path)
+    def build():
+        build_manpack(date_to=report_date, output_path=file_path)
 
-    # отдача файла
-    return FileResponse(
-        open(file_path, "rb"),
-        as_attachment=True,
-        filename=file_path.name,
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+        return FileResponse(
+            open(file_path, "rb"),
+            as_attachment=True,
+            filename=file_path.name,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    return run_export(build)
     
     
 
@@ -192,21 +241,23 @@ def export_management_pack(request):
     temp_dir = Path(tempfile.gettempdir())
     file_path = temp_dir / f"management_pack_{report_date.strftime('%Y%m%d')}.xlsx"
 
-    try:
+    def build():
         build_management_pack(
             report_date,
             start_year=start_year or DEFAULT_START_YEAR,
             out_path=file_path,
         )
+        return FileResponse(
+            open(file_path, "rb"),
+            as_attachment=True,
+            filename=file_path.name,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    try:
+        return run_export(build)
     except ValueError as exc:
         return HttpResponseBadRequest(str(exc))
-
-    return FileResponse(
-        open(file_path, "rb"),
-        as_attachment=True,
-        filename=file_path.name,
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -233,19 +284,22 @@ def _export_manpack_csv(request, kind, prefix):
     temp_dir = Path(tempfile.gettempdir())
     file_path = temp_dir / f"{prefix}_{report_date.strftime('%Y%m%d')}.csv"
 
-    try:
+    def build():
         export_raw_csv(kind, report_date, out_path=file_path)
+
+        # имя файла постоянное (cash_flow.csv, pl.csv): он подключается
+        # источником к сводной и от выгрузки к выгрузке не меняется
+        return FileResponse(
+            open(file_path, "rb"),
+            as_attachment=True,
+            filename=f"{prefix}.csv",
+            content_type="text/csv; charset=utf-8",
+        )
+
+    try:
+        return run_export(build)
     except ValueError as exc:
         return HttpResponseBadRequest(str(exc))
-
-    # имя файла постоянное (cash_flow.csv, pl.csv): он подключается
-    # источником к сводной, и от выгрузки к выгрузке не должен меняться
-    return FileResponse(
-        open(file_path, "rb"),
-        as_attachment=True,
-        filename=f"{prefix}.csv",
-        content_type="text/csv; charset=utf-8",
-    )
 
 
 def export_cf_csv(request):
