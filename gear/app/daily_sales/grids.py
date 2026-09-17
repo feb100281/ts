@@ -2060,15 +2060,23 @@ def grid_date(
     cat_list=None,
     brand_list=None,
     gender_list=None,
+    df=None,
 ):
-    with DashboardData() as dashboard:
-        df = dashboard.get_dayly_sales_grid_data(
-            start,
-            end,
-            cat_list,
-            brand_list,
-            gender_list,
-        )
+    # df приходит готовым из render_tab — тот же набор данных, что
+    # у блока показателей. Сборка временных таблиц base/stocks_daily/
+    # wb_costs занимает основное время рендера, делать её второй раз
+    # на один и тот же период смысла нет.
+    if df is None:
+        with DashboardData() as dashboard:
+            df = dashboard.get_dayly_sales_grid_data(
+                start,
+                end,
+                cat_list,
+                brand_list,
+                gender_list,
+            )
+    else:
+        df = df.copy()
 
     if df.empty:
         return empty_df_banner()

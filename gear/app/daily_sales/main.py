@@ -6,9 +6,11 @@ import locale
 import pandas as pd
 import dash_mantine_components as dmc
 from dash import dcc, Input, Output, State, ALL
+from dash.exceptions import PreventUpdate
 from .methodology import methodology_modal, register_methodology_callbacks
 
 from .data import get_last_update, filters_by_brand
+from ..data.base import DashboardData
 from .filters import WbFilters
 from .grids import grid_date, day_details, period_details
 from .ui import export_panel_main, export_panel_details
@@ -300,12 +302,39 @@ class MainWindow:
             brand_list,
             gender_list,
         ):
+            # --------------------------------------------------
+            # РАЗБОР ПЕРИОДА
+            #
+            # date_range у DatePickerInput type="range" может быть:
+            #   None / []               — период не выбран;
+            #   ["2026-09-01", None]    — выбрана только первая дата,
+            #                             пользователь ещё в календаре;
+            #   ["2026-09-01", "2026-09-10"] — период выбран.
+            #
+            # Раньше второй случай проходил как «период выбран»
+            # (len == 2), end уезжал в None и подменялся на
+            # сегодняшнюю дату — цифры считались не за то, что
+            # видно в фильтре.
+            # --------------------------------------------------
+            period_selected = False
+
+            start = date(2024, 1, 1)
+            end = date.today()
+
             if date_range and len(date_range) == 2:
-                start = date_range[0]
-                end = date_range[1]
-            else:
-                start = date(2024, 1, 1)
-                end = date.today()
+                picked_start = date_range[0]
+                picked_end = date_range[1]
+
+                if picked_start and picked_end:
+                    start = picked_start
+                    end = picked_end
+                    period_selected = True
+
+                elif picked_start or picked_end:
+                    # Выбрана одна дата из двух. Пересчитывать всю
+                    # историю в этот момент бессмысленно и долго,
+                    # поэтому ждём вторую дату.
+                    raise PreventUpdate
 
             if tab_value == "1":
                 stat_container = StatWindow(
@@ -332,6 +361,21 @@ class MainWindow:
             #         gender_list=gender_list,
             #     )
 
+            # Данные собираем ОДИН раз за рендер и передаём и в блок
+            # показателей, и в таблицу. Раньше каждая из этих функций
+            # открывала свой DashboardData, а он при входе заново
+            # создаёт временные таблицы base / stocks_daily / wb_costs
+            # по всей истории — то есть вся тяжёлая работа делалась
+            # дважды на одно изменение фильтра.
+            with DashboardData() as dashboard:
+                sales_df = dashboard.get_dayly_sales_grid_data(
+                    start,
+                    end,
+                    cat_list,
+                    brand_list,
+                    gender_list,
+                )
+
             return [
                 get_sales_summary(
                     start,
@@ -339,6 +383,8 @@ class MainWindow:
                     cat_list,
                     brand_list,
                     gender_list,
+                    df=sales_df,
+                    period_selected=period_selected,
                 ),
                 export_panel_main(),
                 grid_date(
@@ -347,6 +393,7 @@ class MainWindow:
                     cat_list,
                     brand_list,
                     gender_list,
+                    df=sales_df,
                 ),
             ]
         @app.callback(

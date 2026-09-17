@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pandas as pd
 import dash_mantine_components as dmc
 from dash import html
@@ -943,21 +945,203 @@ def _quality_control_block(
 # ОСНОВНОЙ SUMMARY
 # ============================================================
 
+# ============================================================
+# ПОЛОСКА ПРИМЕНЁННЫХ ФИЛЬТРОВ
+# ============================================================
+
+def _fmt_date(value):
+    """Приводит дату к виду 01.09.2026, что бы ни пришло из фильтра."""
+    if value is None or value == "":
+        return None
+
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value[:10]).date()
+        except ValueError:
+            return value
+
+    if isinstance(value, datetime):
+        value = value.date()
+
+    try:
+        return value.strftime("%d.%m.%Y")
+    except AttributeError:
+        return str(value)
+
+
+def _filter_chip(label, value, color, background_color):
+    return html.Div(
+        style={
+            "display": "flex",
+            "alignItems": "baseline",
+            "gap": "6px",
+            "padding": "3px 10px",
+            "borderRadius": "4px",
+            "backgroundColor": background_color,
+            "border": f"1px solid {color}33",
+            "whiteSpace": "nowrap",
+        },
+        children=[
+            dmc.Text(
+                label,
+                size="10px",
+                c=MUTED_TEXT_COLOR,
+                fw=600,
+                tt="uppercase",
+                lh=1.2,
+            ),
+            dmc.Text(
+                value,
+                size="12px",
+                c=color,
+                fw=700,
+                lh=1.2,
+            ),
+        ],
+    )
+
+
+def _selection_label(values, all_text):
+    """«Все» либо перечисление выбранных значений."""
+    if not values:
+        return all_text, False
+
+    if not isinstance(values, (list, tuple, set)):
+        values = [values]
+
+    values = [str(v) for v in values if v not in (None, "")]
+
+    if not values:
+        return all_text, False
+
+    if len(values) <= 3:
+        return ", ".join(values), True
+
+    return f"выбрано: {len(values)}", True
+
+
+def _applied_filters_strip(
+    start,
+    end,
+    cat_list,
+    brand_list,
+    gender_list,
+    days_count,
+    period_selected=True,
+):
+    """
+    Показывает, за какой период и с какими фильтрами
+    посчитаны цифры ниже.
+
+    Нужна потому, что при пустом периоде дашборд считает
+    всю историю, и по самим цифрам это неочевидно.
+    """
+    start_text = _fmt_date(start)
+    end_text = _fmt_date(end)
+
+    has_dates = bool(start_text and end_text)
+
+    if period_selected and has_dates:
+        period_value = f"{start_text} – {end_text}"
+        period_color = BLUE
+        period_bg = BLUE_BG
+    elif has_dates:
+        # Период в фильтре не задан: считается вся доступная история.
+        period_value = f"{start_text} – {end_text} · вся история"
+        period_color = ORANGE
+        period_bg = ORANGE_BG
+    else:
+        period_value = "не выбран — показана вся история"
+        period_color = ORANGE
+        period_bg = ORANGE_BG
+
+    brand_text, brand_on = _selection_label(brand_list, "все")
+    cat_text, cat_on = _selection_label(cat_list, "все")
+    gender_text, gender_on = _selection_label(gender_list, "любой")
+
+    chips = [
+        _filter_chip("Период", period_value, period_color, period_bg),
+        _filter_chip("Дней с продажами", str(days_count), TEAL, TEAL_BG),
+        _filter_chip(
+            "Бренд",
+            brand_text,
+            VIOLET if brand_on else GRAY,
+            VIOLET_BG if brand_on else GRAY_BG,
+        ),
+        _filter_chip(
+            "Категория",
+            cat_text,
+            CYAN if cat_on else GRAY,
+            CYAN_BG if cat_on else GRAY_BG,
+        ),
+        _filter_chip(
+            "Пол",
+            gender_text,
+            GREEN if gender_on else GRAY,
+            GREEN_BG if gender_on else GRAY_BG,
+        ),
+    ]
+
+    return html.Div(
+        style={
+            "display": "flex",
+            "flexWrap": "wrap",
+            "alignItems": "center",
+            "gap": "8px",
+            "padding": "8px 10px",
+            "marginBottom": "10px",
+            "borderRadius": "4px",
+            "backgroundColor": PAGE_BACKGROUND,
+            "border": f"1px solid {BLOCK_BORDER}",
+        },
+        children=[
+            dmc.Group(
+                gap=6,
+                children=[
+                    DashIconify(
+                        icon="solar:filter-check-linear",
+                        width=15,
+                        height=15,
+                        color=MUTED_TEXT_COLOR,
+                    ),
+                    dmc.Text(
+                        "Посчитано по",
+                        size="10px",
+                        c=MUTED_TEXT_COLOR,
+                        fw=700,
+                        tt="uppercase",
+                    ),
+                ],
+            ),
+            *chips,
+        ],
+    )
+
+
 def get_sales_summary(
     start,
     end,
     cat_list=None,
     brand_list=None,
     gender_list=None,
+    df=None,
+    period_selected=True,
 ):
-    with DashboardData() as d:
-        df = d.get_dayly_sales_grid_data(
-            start,
-            end,
-            cat_list,
-            brand_list,
-            gender_list,
-        )
+    # df приходит готовым из render_tab: один и тот же набор данных
+    # нужен и этому блоку, и таблице ниже, а его сборка — самая
+    # дорогая операция на странице. Пересчитываем только если
+    # функцию вызвали напрямую, без данных.
+    if df is None:
+        with DashboardData() as d:
+            df = d.get_dayly_sales_grid_data(
+                start,
+                end,
+                cat_list,
+                brand_list,
+                gender_list,
+            )
+    else:
+        df = df.copy()
 
     if df.empty:
         return empty_df_banner()
@@ -1247,6 +1431,16 @@ def get_sales_summary(
                     "padding": "12px",
                 },
                 children=[
+                    _applied_filters_strip(
+                        start,
+                        end,
+                        cat_list,
+                        brand_list,
+                        gender_list,
+                        days_count,
+                        period_selected,
+                    ),
+
                     # =========================================
                     # ВЕРХНИЕ KPI
                     # =========================================
@@ -1298,7 +1492,7 @@ def get_sales_summary(
                             _kpi_card(
                                 title="Продажи, шт.",
                                 value=_num(qty),
-                                note=f"Дней в выборке: {days_count}",
+                                note=f"Дней с продажами: {days_count}",
                                 icon="solar:cart-large-linear",
                                 color=TEAL,
                                 background_color=TEAL_BG,
