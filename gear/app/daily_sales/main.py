@@ -49,7 +49,6 @@ from .fbs_orders import (
     FBS_TAB_VALUE,
     fbs_orders_layout,
     register_fbs_export_callbacks,
-    register_fbs_reload_callback,
     register_fbs_search_callback,
 )
 
@@ -612,7 +611,6 @@ class MainWindow:
             brand_multy_id=FILTERS.brand_multy_id,
             gender_multy_id=FILTERS.gender_multy_id,
         )
-        register_fbs_reload_callback(app)
         register_fbs_search_callback(app)
         # register_pricing_strategy_callbacks(app)
 

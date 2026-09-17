@@ -21,7 +21,6 @@ from .config import (
     FBS_EXPORT_BTN_ID,
     FBS_EXPORT_DOWNLOAD_ID,
     FBS_EXPORT_LOADING_ID,
-    FBS_RELOAD_BTN_ID,
 )
 from .data import FbsData, FbsSourceMissing, collect_fbs_analysis
 from .excel import make_fbs_excel
@@ -148,32 +147,6 @@ def register_fbs_search_callback(app):
         options = Patch()
         options["quickFilterText"] = value or ""
         return options
-
-
-def register_fbs_reload_callback(app):
-    """
-    Кнопка «Обновить» перезагружает страницу.
-
-    Намеренно не дёргает API Wildberries: полная выгрузка
-    заказов идёт минутами, пишет в ту же базу, из которой
-    читает сайт, и висящий колбэк упёрся бы в таймаут
-    gunicorn — воркер убивают, страница остаётся в старом
-    состоянии. Поэтому кнопка только перечитывает то, что
-    уже загружено, а сама загрузка живёт в расписании.
-    """
-    app.clientside_callback(
-        """
-        function (n_clicks) {
-            if (n_clicks) {
-                window.location.reload();
-            }
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output(FBS_RELOAD_BTN_ID, "n_clicks"),
-        Input(FBS_RELOAD_BTN_ID, "n_clicks"),
-        prevent_initial_call=True,
-    )
 
 
 def register_fbs_export_callbacks(

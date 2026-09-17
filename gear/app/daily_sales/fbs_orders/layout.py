@@ -30,7 +30,6 @@ from .charts import (
 from .config import (
     FBS_EXPORT_BTN_ID,
     FBS_EXPORT_LOADING_ID,
-    FBS_RELOAD_BTN_ID,
     SLA_LIMIT_HOURS,
     SUPPLIER_STATUS_NAMES,
     WB_STATUS_NAMES,
@@ -683,32 +682,6 @@ def _toolbar(as_of, amount_source):
             dmc.Group(
                 gap=8,
                 children=[
-                    dmc.Tooltip(
-                        label=(
-                            "Перечитать последнюю выгрузку. "
-                            "Заказы из Wildberries тянет "
-                            "загрузка по расписанию, кнопка "
-                            "их не скачивает"
-                        ),
-                        position="top",
-                        withArrow=True,
-                        multiline=True,
-                        w=260,
-                        openDelay=300,
-                        children=dmc.Button(
-                            "Обновить",
-                            id=FBS_RELOAD_BTN_ID,
-                            n_clicks=0,
-                            size="sm",
-                            radius="sm",
-                            variant="default",
-                            leftSection=DashIconify(
-                                icon="solar:refresh-linear",
-                                width=16,
-                                height=16,
-                            ),
-                        ),
-                    ),
                     excel_action_icon(
                         button_id=FBS_EXPORT_BTN_ID,
                         tooltip="Скачать анализ заказов в Excel",

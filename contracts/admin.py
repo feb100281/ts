@@ -9,6 +9,8 @@ import json
 import os
 from datetime import date
 from django.urls import reverse
+from django.http import HttpResponse
+from django.utils.text import slugify
 
 from corporate.models import COA, CfItems
 
@@ -31,6 +33,7 @@ from .models import (
     AccountingMethod,
 )
 from .models import AccuralFn
+from .excel_export import make_contracts_excel
 
 from jsoneditor.forms import JSONEditor
 
@@ -668,6 +671,47 @@ class ContractsAdmin(admin.ModelAdmin):
 
     change_list_template = "admin/contracts/contracts/change_list.html"
     change_form_template = "admin/contracts/contracts/change_form.html"
+
+    actions = ("export_to_excel",)
+
+    @admin.action(
+        description="Выгрузить в Excel: контрагент, тип, номер, дата"
+    )
+    def export_to_excel(self, request, queryset):
+        """
+        Печатает выбранные договоры в Excel.
+
+        Сортировка берётся та же, что в списке — контрагент,
+        затем дата и номер: файл должен совпадать с тем, что
+        человек видит на экране, иначе его придётся сверять
+        построчно.
+        """
+        contracts = (
+            queryset
+            .select_related("cp", "title")
+            .order_by("cp__name", "-date", "number")
+        )
+
+        count = contracts.count()
+
+        content = make_contracts_excel(
+            contracts,
+            subtitle=f"Выбрано договоров: {count}",
+        )
+
+        response = HttpResponse(
+            content,
+            content_type=(
+                "application/vnd.openxmlformats-officedocument"
+                ".spreadsheetml.sheet"
+            ),
+        )
+
+        response["Content-Disposition"] = (
+            'attachment; filename="contracts.xlsx"'
+        )
+
+        return response
 
     fieldsets = (
         (
