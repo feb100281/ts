@@ -216,7 +216,7 @@ def get_stocks_export_data(report_date):
     - NM ID и Chrt ID в Excel переносятся в конец.
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             WITH
@@ -1185,7 +1185,7 @@ stocks_by_nm AS (
 
 
 def get_stocks_summary_stats(report_date):
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
 
         # ============================================================
         # WB + ТОВАРЫ В ПУТИ
@@ -1487,7 +1487,7 @@ def get_stocks_summary_stats(report_date):
 
 
 def get_stocks_by_warehouse_extended(report_date):
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             SELECT
@@ -1878,7 +1878,7 @@ def get_stocks_by_warehouse_products(report_date):
     "Все товары".
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             WITH
@@ -3022,7 +3022,7 @@ def get_stock_dimension_distributions(
             name
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         result = con.execute(
             query,
             params,
@@ -3380,7 +3380,7 @@ def get_incident_potential_prices(nm_ids, report_date):
 
     nm_in_sql = ", ".join(placeholders)
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             f"""
             WITH

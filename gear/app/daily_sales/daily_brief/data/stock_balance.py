@@ -59,7 +59,7 @@ def _get_brand_stock_structure(
     report_date: str,
 ) -> pd.DataFrame:
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             WITH
@@ -329,7 +329,7 @@ def _get_fbs_categories(
     report_date: str,
 ) -> pd.DataFrame:
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             WITH
@@ -452,7 +452,7 @@ def _get_fbs_stats(
     report_date: str,
 ) -> dict:
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         row = con.execute(
             """
             WITH
@@ -621,7 +621,7 @@ def _get_full_stock_costs(
     report_date: str,
 ) -> dict:
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         row = con.execute(
             """
             WITH
@@ -899,7 +899,7 @@ def _get_full_stock_health(
     report_date: str,
 ) -> dict:
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         rows = con.execute(
             """
             WITH

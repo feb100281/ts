@@ -159,7 +159,7 @@ def _fetch_upd_info(nm_ids):
             ud.date
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         raw = con.execute(query, clean_ids).df()
 
     if raw.empty:

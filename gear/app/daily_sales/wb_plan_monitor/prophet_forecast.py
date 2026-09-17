@@ -54,7 +54,7 @@ def get_daily_sales(date_start: date, date_end: date) -> pd.DataFrame:
     if date_start > date_end:
         raise ValueError("Дата начала больше даты окончания.")
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             SELECT

@@ -144,7 +144,7 @@ class DashboardData:
     """
 
     def __enter__(self) -> "DashboardData":
-        self.con = get_duckdb_conn_with_opt(ro=True)
+        self.con = get_duckdb_conn_with_opt()
 
         self._init_base()
         self._init_stocks()

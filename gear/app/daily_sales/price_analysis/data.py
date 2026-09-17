@@ -9,7 +9,7 @@ from conns import get_duckdb_conn_with_opt
 def get_price_analysis_data() -> pd.DataFrame:
     """Возвращает анализ бухгалтерской и управленческой себестоимости по NM ID."""
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             WITH products AS (
@@ -251,7 +251,7 @@ def get_price_history_data() -> pd.DataFrame:
     - интерактивного графика истории цен.
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             WITH products AS (

@@ -73,7 +73,7 @@ def get_price_analysis_data(
     # Запрос
     # -----------------------------------------------------------------
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             f"""
             WITH products AS (
@@ -567,7 +567,7 @@ def get_price_history_data() -> pd.DataFrame:
     позднее в filter_history_data().
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         df = con.execute(
             """
             WITH products AS (
@@ -702,7 +702,7 @@ def get_min_upd_date() -> date:
     в базе данных.
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         result = con.execute(
             """
             SELECT

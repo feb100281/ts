@@ -49,7 +49,7 @@ def get_stock_health_data(
         поэтому переводится в рубли делением на 100.
     """
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt() as con:
         rows = con.execute(
             """
             WITH
