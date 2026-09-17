@@ -81,9 +81,16 @@ python manage.py duck_etl
 7) python manage.py stocks_etl (Распарсиваем остатки по складам) 
 8) python manage.py fbs_stocks_etl (Распарсиваем остатки FBS) 
 9) python manage.py fbs_orders_etl (Распарсиваем заказы FBS) 
-9) python manage.py inventories
+10) python manage.py fbs_dicts_etl (Справочники складов FBS: названия вместо номеров)
+11) python manage.py inventories
 
 (прям сейчас снять остатки напрмире по fbs python utils/load_fbs_stocks.py или заказы python utils/load_fbs_orders.py)
+
+Про шаг 10: справочники складов скачивает сам load_fbs_orders.py на шаге 11
+(fbs_warehouses.parquet и fbs_offices.parquet), а эта команда кладёт их в DuckDB.
+Склады меняются редко, но команда отрабатывает за секунду — проще запускать
+всегда, чем вспоминать, не добавился ли новый склад. Без неё вкладка «Заказы FBS»
+работает, просто показывает номера складов вместо названий.
 
 
 📥 ОБНОВЛЯТЬ КАРТЫ

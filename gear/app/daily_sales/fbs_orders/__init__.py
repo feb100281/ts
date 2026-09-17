@@ -5,7 +5,12 @@ from .config import (
     FBS_EXPORT_DOWNLOAD_ID,
     FBS_TAB_VALUE,
 )
-from .export import build_fbs_excel, register_fbs_export_callbacks
+from .export import (
+    build_fbs_excel,
+    register_fbs_export_callbacks,
+    register_fbs_reload_callback,
+    register_fbs_search_callback,
+)
 from .layout import fbs_orders_layout
 
 __all__ = [
@@ -14,4 +19,6 @@ __all__ = [
     "build_fbs_excel",
     "fbs_orders_layout",
     "register_fbs_export_callbacks",
+    "register_fbs_reload_callback",
+    "register_fbs_search_callback",
 ]

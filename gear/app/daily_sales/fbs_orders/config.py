@@ -18,6 +18,7 @@ FBS_TAB_VALUE = "5"
 FBS_EXPORT_BTN_ID = "fbs-orders-export-btn"
 FBS_EXPORT_DOWNLOAD_ID = "fbs-orders-export-download"
 FBS_EXPORT_LOADING_ID = "fbs-orders-export-loading"
+FBS_RELOAD_BTN_ID = "fbs-orders-reload-btn"
 
 
 # ============================================================

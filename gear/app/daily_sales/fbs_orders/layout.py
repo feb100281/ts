@@ -30,6 +30,7 @@ from .charts import (
 from .config import (
     FBS_EXPORT_BTN_ID,
     FBS_EXPORT_LOADING_ID,
+    FBS_RELOAD_BTN_ID,
     SLA_LIMIT_HOURS,
     SUPPLIER_STATUS_NAMES,
     WB_STATUS_NAMES,
@@ -52,6 +53,11 @@ SURFACE = "#FFFFFF"
 PAGE_BG = "#F8FAFC"
 HAIRLINE = "#E6E8EB"
 HAIRLINE_SOFT = "#EFF1F3"
+
+# Типы id для таблиц и полей поиска: один общий колбэк
+# обслуживает все таблицы вкладки.
+GRID_TYPE = "fbs-grid"
+SEARCH_TYPE = "fbs-grid-search"
 
 GRAPH_CONFIG = {
     "displayModeBar": False,
@@ -358,6 +364,9 @@ def _grid(
     totals_field=None,
     filters=True,
     page_size=25,
+    auto_height=False,
+    search=False,
+    search_placeholder="Поиск по таблице",
 ):
     if df is None or df.empty:
         return _card(
@@ -397,15 +406,14 @@ def _grid(
     if pinned:
         grid_options["pinnedBottomRowData"] = pinned
 
-    return html.Div(
-        style={
-            "border": f"1px solid {HAIRLINE}",
-            "borderRadius": "8px",
-            "overflow": "hidden",
-            "backgroundColor": SURFACE,
-        },
-        children=dag.AgGrid(
-            id=grid_id,
+    if auto_height:
+        # Небольшая таблица занимает ровно свою высоту:
+        # ни пустого места снизу, ни строки, срезанной
+        # закреплённым итогом.
+        grid_options["domLayout"] = "autoHeight"
+
+    grid = dag.AgGrid(
+            id={"type": GRID_TYPE, "index": grid_id},
             rowData=prepared.to_dict(orient="records"),
             columnDefs=grid_columns,
             dangerously_allow_code=True,
@@ -416,11 +424,23 @@ def _grid(
                 "editable": False,
                 "suppressMenu": not filters,
                 "suppressHeaderMenuButton": not filters,
+                # AG Grid угадывает тип колонки по первой строке
+                # данных. Из-за этого слово «ИТОГО» в числовой
+                # колонке показывалось как «Invalid Number».
+                # Отключаем угадывание — значения выводятся
+                # как есть, форматированием управляем сами.
+                "cellDataType": False,
+                "minWidth": 110,
                 "cellStyle": {
                     "fontSize": "13px",
                     "lineHeight": "1.3",
                 },
             },
+            # Колонки растягиваются на всю ширину таблицы
+            # и пересчитываются при изменении размера окна —
+            # иначе справа остаётся пустое поле.
+            columnSize="responsiveSizeToFit",
+            columnSizeOptions={"defaultMinWidth": 110},
             dashGridOptions=grid_options,
             getRowStyle={
                 "styleConditions": [
@@ -434,9 +454,48 @@ def _grid(
                     }
                 ]
             },
-            style={"height": height, "width": "100%"},
+            style=(
+                {"width": "100%"}
+                if auto_height
+                else {"height": height, "width": "100%"}
+            ),
             className="ag-theme-alpine",
-        ),
+        )
+
+    box = html.Div(
+        style={
+            "border": f"1px solid {HAIRLINE}",
+            "borderRadius": "8px",
+            "overflow": "hidden",
+            "backgroundColor": SURFACE,
+        },
+        children=grid,
+    )
+
+    if not search:
+        return box
+
+    # Одно поле на таблицу вместо набора кнопок: ищет сразу
+    # по всем колонкам, поэтому годится и для артикула, и для
+    # номера заказа, и для названия поставки.
+    return html.Div(
+        children=[
+            dmc.TextInput(
+                id={"type": SEARCH_TYPE, "index": grid_id},
+                placeholder=search_placeholder,
+                size="sm",
+                radius="sm",
+                mb=8,
+                w=340,
+                debounce=250,
+                leftSection=DashIconify(
+                    icon="solar:magnifer-linear",
+                    width=15,
+                    height=15,
+                ),
+            ),
+            box,
+        ]
     )
 
 
@@ -624,6 +683,32 @@ def _toolbar(as_of, amount_source):
             dmc.Group(
                 gap=8,
                 children=[
+                    dmc.Tooltip(
+                        label=(
+                            "Перечитать последнюю выгрузку. "
+                            "Заказы из Wildberries тянет "
+                            "загрузка по расписанию, кнопка "
+                            "их не скачивает"
+                        ),
+                        position="top",
+                        withArrow=True,
+                        multiline=True,
+                        w=260,
+                        openDelay=300,
+                        children=dmc.Button(
+                            "Обновить",
+                            id=FBS_RELOAD_BTN_ID,
+                            n_clicks=0,
+                            size="sm",
+                            radius="sm",
+                            variant="default",
+                            leftSection=DashIconify(
+                                icon="solar:refresh-linear",
+                                width=16,
+                                height=16,
+                            ),
+                        ),
+                    ),
                     excel_action_icon(
                         button_id=FBS_EXPORT_BTN_ID,
                         tooltip="Скачать анализ заказов в Excel",
@@ -846,9 +931,9 @@ def fbs_orders_layout(
                         payload["buckets_in_work"],
                         BUCKET_COLUMNS,
                         "fbs-buckets-grid",
-                        height="330px",
                         totals_field="time_group",
                         filters=False,
+                        auto_height=True,
                     ),
                     dmc.Space(h=16),
                     dmc.Text(
@@ -864,6 +949,10 @@ def fbs_orders_layout(
                         "fbs-overdue-grid",
                         height="380px",
                         totals_field="order_id",
+                        search=True,
+                        search_placeholder=(
+                            "Заказ, артикул, склад, поставка"
+                        ),
                     ),
                 ],
             ),
@@ -881,6 +970,8 @@ def fbs_orders_layout(
                         "fbs-logistics-grid",
                         height="420px",
                         totals_field="warehouse",
+                        search=True,
+                        search_placeholder="Склад или пункт назначения",
                     ),
                 ],
             ),
@@ -906,6 +997,8 @@ def fbs_orders_layout(
                     "fbs-supplies-grid",
                     height="420px",
                     totals_field="supply_id",
+                    search=True,
+                    search_placeholder="Номер или название поставки",
                 ),
             ),
 
@@ -918,6 +1011,8 @@ def fbs_orders_layout(
                     "fbs-products-grid",
                     height="420px",
                     totals_field="article",
+                    search=True,
+                    search_placeholder="Артикул, название, категория",
                 ),
             ),
 
@@ -928,9 +1023,9 @@ def fbs_orders_layout(
                     statuses,
                     STATUS_COLUMNS,
                     "fbs-statuses-grid",
-                    height="360px",
                     totals_field="supplier_status_name",
                     filters=False,
+                    auto_height=True,
                 ),
             ),
         ]
