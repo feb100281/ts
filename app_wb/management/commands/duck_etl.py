@@ -591,6 +591,13 @@ class Command(BaseCommand):
                 self.stdout.write("Запускаем write off ETL")
 
                 call_command("wo")
+
+                # inv_gl_final надо пересобрать после загрузки новых продаж,
+                # иначе таб «Данные» в daily_sales остаётся на старых данных.
+                # Делает это только команда inventories — у wo структура старая,
+                # без колонки oper.
+                self.stdout.write("Пересобираем inventories.inv_gl_final")
+                call_command("inventories")
                 self.stdout.write(
                     self.style.SUCCESS("Готово")
                 )

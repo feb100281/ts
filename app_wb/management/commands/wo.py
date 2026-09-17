@@ -265,21 +265,21 @@ class Command(BaseCommand):
                 con.execute(MAKE_SALES_GL)
                 con.execute(MAKE_WRITE_OFF)                
                 con.execute(MAKE_GL_MAIN)
-                con.execute(MAKE_FINAL_GL)
-                
-                con.execute("""
-                    DROP TABLE IF EXISTS pg.gl.inv_gl_final
-                """)
 
-                con.execute("""
-                    CREATE TABLE pg.gl.inv_gl_final AS
-                    SELECT *
-                    FROM inventories.inv_gl_final
-                """)
-                    
-                
+                # ВАЖНО: эта команда больше НЕ создаёт inventories.inv_gl_final.
+                # Её версия MAKE_FINAL_GL — старая: в ней нет колонки oper
+                # (и item_id), а все дашборды и витрины работают с новой
+                # структурой. Единственный владелец inv_gl_final —
+                # app_wb/management/commands/inventories.py.
+                # con.execute(MAKE_FINAL_GL)
+                # con.execute("DROP TABLE IF EXISTS pg.gl.inv_gl_final")
+                # con.execute(
+                #     "CREATE TABLE pg.gl.inv_gl_final AS "
+                #     "SELECT * FROM inventories.inv_gl_final"
+                # )
+
                 self.stdout.write(
-                    self.style.SUCCESS("Основные таблицы inventorie.gl_main, inventorie.write_off и inventorie.inv_gl_final созданы")                    
+                    self.style.SUCCESS("Таблицы inventories.gl_main и inventories.write_off созданы")                    
                 )
                
         
