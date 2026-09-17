@@ -44,6 +44,12 @@ from .daily_brief import (
     daily_brief_controls,
     register_daily_brief_callbacks,
 )
+from .fbs_orders import (
+    FBS_EXPORT_DOWNLOAD_ID,
+    FBS_TAB_VALUE,
+    fbs_orders_layout,
+    register_fbs_export_callbacks,
+)
 
 
 
@@ -141,6 +147,10 @@ class MainWindow:
                                     {
                                         "label": "Остатки",
                                         "value": "3",
+                                    },
+                                    {
+                                        "label": "Заказы FBS",
+                                        "value": FBS_TAB_VALUE,
                                     },
                                     # {
                                     #     "label": "Цены",
@@ -283,6 +293,10 @@ class MainWindow:
                 dcc.Download(
                     id=QUALITY_CONTROL_EXPORT_DOWNLOAD_ID,
                 ),
+
+                dcc.Download(
+                    id=FBS_EXPORT_DOWNLOAD_ID,
+                ),
             ],
         )
 
@@ -344,6 +358,16 @@ class MainWindow:
                     gender_list,
                 )
                 return stat_container.layout()
+
+            if tab_value == FBS_TAB_VALUE:
+                return fbs_orders_layout(
+                    start=start,
+                    end=end,
+                    cat_list=cat_list,
+                    brand_list=brand_list,
+                    gender_list=gender_list,
+                    period_selected=period_selected,
+                )
 
             if tab_value == "3":
                 return STOCKS_DASHBOARD.layout(
@@ -579,6 +603,13 @@ class MainWindow:
         register_stock_dashboard_callbacks(app)
         register_daily_brief_callbacks(app)
         register_pricing_strategy_callbacks(app,FILTERS,)
+        register_fbs_export_callbacks(
+            app,
+            date_picker_id=FILTERS.date_picker_id,
+            cat_multy_id=FILTERS.cat_multy_id,
+            brand_multy_id=FILTERS.brand_multy_id,
+            gender_multy_id=FILTERS.gender_multy_id,
+        )
         # register_pricing_strategy_callbacks(app)
 
 
