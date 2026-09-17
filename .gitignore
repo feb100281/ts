@@ -31,3 +31,6 @@ Thumbs.db
 *.tmp
 *.zst
 **/pricing_strategy/_cache/
+
+# Логи запусков по расписанию
+logs/
