@@ -15,7 +15,7 @@ from io import BytesIO
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.chart import BarChart, LineChart, Reference, Series
+from openpyxl.chart import LineChart, Reference
 from openpyxl.chart.axis import ChartLines
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
@@ -248,6 +248,7 @@ def _write_table(
     highlight=None,
     autofilter=True,
     freeze=True,
+    freeze_columns=1,
 ):
     """
     Пишет таблицу и возвращает номер строки после неё.
@@ -416,7 +417,13 @@ def _write_table(
         )
 
     if freeze:
-        ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+        # Замораживаем и шапку, и первый столбец: на широких
+        # листах при прокрутке вправо иначе непонятно, к какому
+        # заказу или складу относится строка.
+        ws.freeze_panes = ws.cell(
+            row=header_row + 1,
+            column=freeze_columns + 1,
+        )
 
     return row_index + 2
 
@@ -513,92 +520,6 @@ def _style_axes(chart):
 
     chart.x_axis.delete = False
     chart.y_axis.delete = False
-
-
-def _add_bucket_chart(ws, anchor_cell, header_row, row_count, title):
-    """Столбики: количество заказов по корзинам времени."""
-    if row_count <= 0:
-        return
-
-    chart = BarChart()
-    chart.type = "bar"
-    chart.style = None
-    chart.title = title
-    chart.height = 8.5
-    chart.width = 20
-    chart.gapWidth = 60
-    chart.legend = None
-
-    data = Reference(
-        ws,
-        min_col=2,
-        min_row=header_row,
-        max_row=header_row + row_count,
-    )
-    categories = Reference(
-        ws,
-        min_col=1,
-        min_row=header_row + 1,
-        max_row=header_row + row_count,
-    )
-
-    chart.add_data(data, titles_from_data=True)
-    chart.set_categories(categories)
-
-    series = chart.series[0]
-    series.graphicalProperties = GraphicalProperties(solidFill=CHART_BLUE)
-    series.graphicalProperties.line.noFill = True
-
-    _style_axes(chart)
-
-    ws.add_chart(chart, anchor_cell)
-
-
-def _add_ranked_chart(
-    ws,
-    anchor_cell,
-    header_row,
-    row_count,
-    value_col,
-    category_col,
-    title,
-):
-    """Столбики по произвольной паре «категория — значение»."""
-    if row_count <= 0:
-        return
-
-    chart = BarChart()
-    chart.type = "bar"
-    chart.style = None
-    chart.title = title
-    chart.height = 9.5
-    chart.width = 20
-    chart.gapWidth = 60
-    chart.legend = None
-
-    data = Reference(
-        ws,
-        min_col=value_col,
-        min_row=header_row,
-        max_row=header_row + row_count,
-    )
-    categories = Reference(
-        ws,
-        min_col=category_col,
-        min_row=header_row + 1,
-        max_row=header_row + row_count,
-    )
-
-    chart.add_data(data, titles_from_data=True)
-    chart.set_categories(categories)
-
-    series = chart.series[0]
-    series.graphicalProperties = GraphicalProperties(solidFill=CHART_BLUE)
-    series.graphicalProperties.line.noFill = True
-
-    _style_axes(chart)
-
-    ws.add_chart(chart, anchor_cell)
 
 
 def _add_daily_chart(ws, anchor_cell, header_row, row_count, title):
@@ -1148,9 +1069,6 @@ def make_fbs_excel(payload: dict, meta: dict, raw_df=None) -> bytes:
     cell.font = FONT_TITLE
     row += 1
 
-    bucket_header_row = row
-    bucket_rows = 0 if buckets_in_work is None else len(buckets_in_work)
-
     row = _write_table(
         sheet,
         buckets_in_work,
@@ -1160,13 +1078,7 @@ def make_fbs_excel(payload: dict, meta: dict, raw_df=None) -> bytes:
         freeze=False,
     )
 
-    _add_bucket_chart(
-        sheet,
-        f"H{bucket_header_row}",
-        bucket_header_row,
-        bucket_rows,
-        "Заказы по времени в работе",
-    )
+
 
     cell = sheet.cell(
         row=row,
@@ -1254,11 +1166,6 @@ def make_fbs_excel(payload: dict, meta: dict, raw_df=None) -> bytes:
         width=len(LOGISTICS_COLUMNS),
     )
 
-    logistics_header_row = row
-    logistics_rows = (
-        0 if payload["logistics"] is None else len(payload["logistics"])
-    )
-
     _write_table(
         sheet,
         payload["logistics"],
@@ -1268,18 +1175,6 @@ def make_fbs_excel(payload: dict, meta: dict, raw_df=None) -> bytes:
         highlight=_logistics_highlight,
     )
 
-    # Столбики строятся по колонке «Заказов» (D) и подписываются
-    # пунктом выдачи (B): склад один и тот же, различает направление
-    # именно пункт.
-    _add_ranked_chart(
-        sheet,
-        f"K{logistics_header_row}",
-        logistics_header_row,
-        min(logistics_rows, 15),
-        value_col=4,
-        category_col=2,
-        title="Заказы по направлениям",
-    )
 
     # ---------------------------------------------------------
     # Поставки
