@@ -44,6 +44,10 @@ from .daily_brief import (
     daily_brief_controls,
     register_daily_brief_callbacks,
 )
+from .commercial_review import (
+    commercial_review_controls,
+    register_commercial_review_callbacks,
+)
 from .fbs_orders import (
     FBS_EXPORT_DOWNLOAD_ID,
     FBS_TAB_VALUE,
@@ -265,6 +269,7 @@ class MainWindow:
                                     children=[
                                         pricing_strategy_controls(),
                                         daily_brief_controls(),
+                                        commercial_review_controls(),
                                     ],
                                 ),
                             ],
@@ -603,6 +608,7 @@ class MainWindow:
         register_price_analysis_export_callbacks(app)
         register_stock_dashboard_callbacks(app)
         register_daily_brief_callbacks(app)
+        register_commercial_review_callbacks(app)
         register_pricing_strategy_callbacks(app,FILTERS,)
         register_fbs_export_callbacks(
             app,

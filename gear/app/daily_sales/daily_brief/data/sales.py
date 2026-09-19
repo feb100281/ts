@@ -1630,6 +1630,25 @@ def get_sales_data(
                 "returns_amount": number(
                     source.get("returns_amount")
                 ),
+
+                # Количество и средняя цена нужны, чтобы
+                # раскладывать изменение выручки на факторы
+                # в этом же контуре. Без них разложение
+                # пришлось бы считать по другой витрине,
+                # и недельные итоги перестали бы сходиться
+                # с календарём и карточками.
+                "sales_transactions": number(
+                    source.get("sales_transactions")
+                ),
+                "returns_transactions": number(
+                    source.get("returns_transactions")
+                ),
+                "qty": number(
+                    source.get("qty")
+                ),
+                "avg_price": number(
+                    source.get("avg_price")
+                ),
             }
         )
 

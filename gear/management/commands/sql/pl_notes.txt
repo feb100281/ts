@@ -40,7 +40,20 @@ WITH wb AS (
         '' AS lvl2,
         '' AS lvl3,
 
-        SUM((dt - cr) / 100)::DOUBLE AS amount
+        -- Разделы 3 и 4 — БЕЗ НДС, раздел 5 остаётся С НДС.
+        -- Ровно то же правило, что в opex.txt: расшифровка обязана
+        -- сходиться со строкой P&L, которую она расшифровывает.
+        -- При правке менять оба файла.
+        SUM(
+            CASE
+                WHEN account = 'Other income / loss'
+                    THEN (dt - cr) / 100
+                ELSE (dt - cr)
+                     / (100 + COALESCE(vat_rate, 20))
+                     * 100
+                     / 100
+            END
+        )::DOUBLE AS amount
 
     FROM wb_costs
 

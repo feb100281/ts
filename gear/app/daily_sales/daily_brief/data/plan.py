@@ -50,6 +50,7 @@ MONTHS_SHORT = {
 def _extract_month_plan(
     monthly_plan: Any,
     month_number: int,
+    year: int | None = None,
 ) -> float:
     """
     Получает план конкретного месяца из monthly_plan.
@@ -96,7 +97,13 @@ def _extract_month_plan(
         monthly_plan,
         dict,
     ):
+        # ВАЖНО:
+        # get_monthly_plan_full_year() отдаёт ключи вида "2026-09".
+        # Раньше их тут не искали, и план года получался нулевым,
+        # хотя план месяца считался правильно — он берётся
+        # по этому же ключу в build_current_month_analysis().
         possible_keys = (
+            f"{year}-{month_number:02d}" if year else None,
             month_number,
             str(month_number),
             f"{month_number:02d}",
@@ -107,7 +114,7 @@ def _extract_month_plan(
         )
 
         for key in possible_keys:
-            if key not in monthly_plan:
+            if key is None or key not in monthly_plan:
                 continue
 
             raw_value = monthly_plan.get(
@@ -268,6 +275,7 @@ def _build_monthly_plan_fact_rows(
         plan_amount = _extract_month_plan(
             monthly_plan,
             month_number,
+            report_date.year,
         )
 
         # ---------------------------------------------------------------------
