@@ -7,7 +7,19 @@ WITH base AS (
         YEAR(me) AS year,
         '3. РАСХОДЫ НА РЕАЛИЗАЦИЮ' AS section,
         account AS item,
-        SUM((dt - cr) / 100) AS value
+
+        -- БЕЗ НДС. dt и cr приходят из sales_long как есть, то есть
+        -- с НДС и в копейках. Выручка в P&L (1.4) и комиссия (1.9)
+        -- уже очищены от НДС, поэтому расходы тоже должны быть
+        -- очищены — иначе валовая прибыль считается вычитанием
+        -- «грязных» расходов из «чистой» выручки.
+        -- Та же формула в UNIT_ECONOMICS_SQL (wb_costs_vatless):
+        -- при правке менять оба места.
+        SUM(
+            (dt - cr)
+            / (100 + COALESCE(vat_rate, 20))
+            * 100
+        ) / 100 AS value
 
     FROM wb_costs
 
@@ -50,7 +62,14 @@ WITH base AS (
         YEAR(me) AS year,
         '4. ПРОДВИЖЕНИЕ WB' AS section,
         cost_item AS item,
-        SUM((dt - cr) / 100) AS value
+
+        -- БЕЗ НДС, по тем же соображениям, что и раздел 3.
+        -- Та же формула в UNIT_ECONOMICS_SQL (promo_vatless).
+        SUM(
+            (dt - cr)
+            / (100 + COALESCE(vat_rate, 20))
+            * 100
+        ) / 100 AS value
 
     FROM wb_costs
 
