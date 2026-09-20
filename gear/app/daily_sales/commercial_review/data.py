@@ -49,7 +49,15 @@ def build_fbs_slice(report_date: date, window_days=FBS_WINDOW_DAYS):
         return collect_fbs_analysis(
             start=report_date - timedelta(days=window_days - 1),
             end=report_date,
-            as_of_date=report_date,
+            # ВРЕМЕННЫЙ ОТКАТ: as_of_date=report_date должен был
+            # показывать снимок FBS на дату отчёта, но на практике
+            # для дат в прошлом отдаёт снимок месячной давности
+            # (см. переписку -- расхождение между источниками
+            # orders.unpacked_fbs_orders / orders.fbs_orders_history
+            # не подтвердилось так, как ожидалось). Пока не
+            # разобрались, что реально хранится в этих источниках,
+            # раздел FBS снова всегда показывает ЖИВОЕ состояние
+            # (как было до этой попытки) -- это надёжно работало.
         )
 
     except Exception:

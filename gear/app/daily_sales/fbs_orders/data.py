@@ -91,6 +91,52 @@ def _pick_source(con, candidates) -> str | None:
     return None
 
 
+def _pick_source_for_date(con, candidates, as_of_date: date):
+    """
+    Выбирает источник для ИСТОРИЧЕСКОГО среза (as_of_date задан).
+
+    Простое "первый существующий" (как в _pick_source) здесь не
+    годится: часто в списке источников есть и "текущий" вид
+    (обновляется целиком при каждой синхронизации, старых
+    snapshot_date почти не хранит), и архивный (копит снимок за
+    снимком). Если всегда брать первый существующий, отчёт за
+    прошлую дату может случайно выбрать источник, где ближайший
+    снимок "снизу" на самом деле на месяц старше, чем нужно, хотя
+    у другого источника из списка есть снимок почти впритык к
+    запрошенной дате.
+
+    Поэтому здесь смотрим у каждого существующего источника
+    ближайший снимок не позже as_of_date и берём тот источник,
+    где этот снимок оказался ближе всего к запрошенной дате.
+    Если ни у одного источника такого снимка нет вообще —
+    откатываемся на обычный "первый существующий", чтобы
+    поведение осталось предсказуемым (пустой fbs_base, а не
+    падение).
+    """
+    best_source = None
+    best_date = None
+
+    for name in candidates:
+        if not _table_exists(con, name):
+            continue
+
+        row = con.execute(
+            f"""
+            SELECT MAX(snapshot_date)
+            FROM {name}
+            WHERE snapshot_date <= DATE '{as_of_date.isoformat()}'
+            """
+        ).fetchone()
+
+        found = row[0] if row else None
+
+        if found is not None and (best_date is None or found > best_date):
+            best_date = found
+            best_source = name
+
+    return best_source if best_source is not None else _pick_source(con, candidates)
+
+
 def _bucket_sql(column: str) -> tuple[str, str]:
     """
     Собирает CASE-выражения для корзины часов и её порядка.
@@ -166,8 +212,16 @@ class FbsData:
     def __enter__(self) -> "FbsData":
         self.con = get_duckdb_conn_with_opt(with_pg=False)
 
-        self.orders_source = _pick_source(self.con, ORDERS_SOURCES)
-        self.supplies_source = _pick_source(self.con, SUPPLIES_SOURCES)
+        if self._as_of_date is None:
+            self.orders_source = _pick_source(self.con, ORDERS_SOURCES)
+            self.supplies_source = _pick_source(self.con, SUPPLIES_SOURCES)
+        else:
+            self.orders_source = _pick_source_for_date(
+                self.con, ORDERS_SOURCES, self._as_of_date
+            )
+            self.supplies_source = _pick_source_for_date(
+                self.con, SUPPLIES_SOURCES, self._as_of_date
+            )
 
         if self.orders_source is None:
             self.con.close()
