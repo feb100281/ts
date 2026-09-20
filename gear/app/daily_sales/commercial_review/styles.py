@@ -378,6 +378,7 @@ p {{ margin: 0 0 7px; }}
 
 .kpi-grid.three {{ grid-template-columns: repeat(3, 1fr); }}
 .kpi-grid.two {{ grid-template-columns: repeat(2, 1fr); }}
+.kpi-grid.five {{ grid-template-columns: repeat(5, 1fr); }}
 
 .kpi {{
     border: 1px solid {C.LINE_SOFT};
@@ -853,6 +854,8 @@ table.tbl.wide tbody td {{
     border-bottom: 1px solid {C.LINE_SOFT};
     padding: 6px 0 5px;
     font-size: 10.8px;
+    text-decoration: none;
+    color: {C.INK};
 }}
 
 .toc-num {{
@@ -877,6 +880,22 @@ table.tbl.wide tbody td {{
     font-weight: 700;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+}}
+
+/* Номер страницы подтягивается из PDF по якорю ссылки —
+   его не нужно вычислять руками и он не разъедется с версткой.
+   Если движок рендера не понимает target-counter, колонка
+   просто остаётся пустой: на кликабельность оглавления
+   это не влияет. */
+.toc-row::after {{
+    content: target-counter(attr(href), page);
+    color: {C.INK_2};
+    font-weight: 700;
+    font-family: {C.SERIF};
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+    padding-left: 9px;
 }}
 
 /* Легенда цветов состояния. */

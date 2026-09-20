@@ -68,6 +68,11 @@ def register_commercial_review_callbacks(app):
             content = build_commercial_review_pdf(payload, fbs=fbs)
 
         except Exception as error:
+            import traceback
+            from pathlib import Path
+            Path(__file__).with_name("_last_error.log").write_text(
+                traceback.format_exc(), encoding="utf-8"
+            )
             return no_update, dmc.Alert(
                 str(error),
                 title="Отчёт собрать не удалось",

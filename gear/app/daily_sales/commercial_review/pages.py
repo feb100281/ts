@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from . import charts, config as C
 from .analysis import decompose_revenue
 from .blocks import (
@@ -97,6 +99,45 @@ def _state(value, good_when_up=True):
     return "good" if (rising == good_when_up) else "bad"
 
 
+def _stock_asof(balance):
+    """
+    Дата, на которую фактически показаны остатки, коротко —
+    для хвоста примечания или карточки.
+
+    Остатки снимаются не мгновенно: если снимка за нужный день
+    ещё нет, отчёт по умолчанию берёт последний известный. Это
+    нормальная логика, но её нужно называть прямо, а не оставлять
+    читателя гадать, свежие ли цифры перед ним.
+    """
+    effective = as_date(balance.get("report_date"))
+    if effective is None:
+        return ""
+
+    if balance.get("used_previous_snapshot"):
+        return (
+            f"остатки на {date_short(effective)} — "
+            f"это последний снятый снимок"
+        )
+
+    return f"остатки на {date_short(effective)}"
+
+
+def _fbs_asof(fbs):
+    """Момент, на который актуален срез заказов FBS."""
+    as_of = (fbs or {}).get("as_of")
+    if not isinstance(as_of, datetime):
+        return ""
+    return f"заказы по состоянию на {as_of.strftime('%d.%m %H:%M')}"
+
+
+def _fbs_is_stale(fbs):
+    as_of = (fbs or {}).get("as_of")
+    if not isinstance(as_of, datetime):
+        return False
+    now = datetime.now(as_of.tzinfo) if as_of.tzinfo else datetime.now()
+    return (now - as_of) > timedelta(hours=C.FBS_STALE_HOURS)
+
+
 def _no_findings_note(subject):
     return callout(
         "",
@@ -105,6 +146,54 @@ def _no_findings_note(subject):
         f"отдельного решения не требует.",
         plain=True,
     )
+
+
+def _weekday_pattern(rows, days=90):
+    """
+    Средняя выручка по дням недели за последние N дней.
+
+    Строится из тех же daily_price_rows, что и график динамики —
+    отдельного запроса не требует. Нужна, чтобы количественно
+    ответить на вопрос "почему в выходные провал", а не оставлять
+    это утверждением на глаз по столбикам.
+    """
+    data = []
+    for row in rows or []:
+        d = as_date(row.get("date_from"))
+        v = num(row.get("net_amount"))
+        if d is None:
+            continue
+        data.append((d, v or 0.0))
+
+    if len(data) < 14:
+        return []
+
+    data.sort(key=lambda item: item[0])
+    data = data[-days:]
+
+    overall_avg = sum(v for _, v in data) / len(data)
+    if not overall_avg:
+        return []
+
+    buckets = {i: [] for i in range(7)}
+    for d, v in data:
+        buckets[d.weekday()].append(v)
+
+    out = []
+    for i in range(7):
+        values = buckets[i]
+        if not values:
+            continue
+        avg = sum(values) / len(values)
+        out.append({
+            "weekday": WEEKDAY_RU_FULL[i],
+            "avg": avg,
+            "delta_pct": 100.0 * (avg - overall_avg) / overall_avg,
+            "days": len(values),
+            "_alert": avg < overall_avg * 0.7,
+        })
+
+    return out
 
 
 # ============================================================
@@ -168,6 +257,7 @@ def cover(payload, findings, headline_text) -> str:
                 else ""
             ),
             "flat",
+            escape(_stock_asof(balance)),
         ),
     ]
 
@@ -281,17 +371,19 @@ def contents(payload) -> str:
          "ожидаемый итог против плана по месяцам"),
         ("11", "Финансовый результат",
          "куда уходят 100 ₽ и как шла рентабельность неделя за неделей"),
-        ("12", "Запасы: структура и стоимость",
+        ("12", "Анализ расходов WB",
+         "логистика, хранение, штрафы и продвижение по неделям — где скачок"),
+        ("13", "Запасы: структура и стоимость",
          "где лежит товар, сколько он стоит в двух контурах"),
-        ("13", "Запасы: зона риска",
-         "что не продаётся и сколько в этом заморожено денег"),
-        ("14", "Заказы FBS: сборка и сроки",
+        ("14", "Запасы: зона риска",
+         "что залежалось, что просто новое и сколько денег в этом заморожено"),
+        ("15", "Заказы FBS: сборка и сроки",
          "сколько заказов приходит по дням и что висит на сборке"),
-        ("15", "Заказы FBS: склады, поставки, товары",
+        ("16", "Заказы FBS: склады, поставки, товары",
          "откуда и куда отправляем, что именно заказывают"),
-        ("16", "Выводы и рекомендации",
+        ("17", "Выводы и рекомендации",
          "полный список: что произошло, почему, что делать"),
-        ("17", "Методика",
+        ("18", "Методика",
          "как считаются показатели и чего в отчёте нет"),
     ]
 
@@ -461,6 +553,28 @@ def revenue_dynamics_page(payload) -> str:
         else ""
     )
 
+    weekday_rows = _weekday_pattern(daily_rows, days=90)
+
+    weekday_table = table(
+        [
+            {"key": "weekday", "label": "День недели"},
+            {"key": "avg", "label": "Средняя выручка, ₽", "num": True,
+             "fmt": money_exact},
+            {"key": "delta_pct", "label": "К среднему по неделе",
+             "num": True, "fmt": lambda v: signed_pct(v)},
+            {"key": "days", "label": "Дней в выборке", "num": True,
+             "fmt": fmt_qty},
+        ],
+        weekday_rows,
+        caption="Выручка по дням недели",
+        note=(
+            "За последние 90 дней. Красным — дни заметно ниже "
+            "среднего: если провал по выходным устойчивый, "
+            "с ним можно планировать акции и поставки, а не "
+            "удивляться ему каждую неделю."
+        ),
+    ) if weekday_rows else ""
+
     body = (
         kpi_grid(cards)
         + revenue_calendar(
@@ -490,6 +604,7 @@ def revenue_dynamics_page(payload) -> str:
             ytd_note,
             "В данных нет сопоставимого периода прошлого года",
         )
+        + weekday_table
     )
 
     return page(
@@ -1623,7 +1738,236 @@ def finance_page(payload, findings) -> str:
 
 
 # ============================================================
-# 12. ЗАПАСЫ: СТРУКТУРА И ПОКРЫТИЕ
+# 12. АНАЛИЗ РАСХОДОВ WB
+# ============================================================
+
+def wb_expenses_page(payload) -> str:
+    expenses = _node(payload, "wb_expenses")
+
+    if not expenses.get("available"):
+        return page(
+            "12",
+            "Расходы WB",
+            "Анализ расходов WB",
+            "",
+            callout(
+                "",
+                "<b>Разрез расходов WB по неделям не собрался.</b> "
+                "Показатель считается отдельным запросом к тем же "
+                "проводкам, что и раздел «Финансовый результат» — "
+                "если сумма расходов WB там есть, а здесь пусто, "
+                "дело не в данных, а в этом конкретном разрезе.",
+                plain=True,
+            ),
+        )
+
+    weeks = expenses.get("weeks") or []
+    closed_weeks = [w for w in weeks if w.get("is_closed")]
+    current_week = next((w for w in weeks if not w.get("is_closed")), None)
+    categories = expenses.get("categories") or []
+    total_spike = expenses.get("total_spike")
+    category_spikes = expenses.get("category_spikes") or []
+
+    period_label = (
+        f"{escape(date_short(expenses.get('date_from')))}–"
+        f"{escape(date_short(expenses.get('date_to')))}"
+    )
+
+    grand_total = num(expenses.get("grand_total")) or 0
+    grand_total_all = num(expenses.get("grand_total_all")) or grand_total
+    avg_week = grand_total / len(closed_weeks) if closed_weeks else 0
+
+    top_category = categories[0] if categories else None
+    top_category_amount = (
+        sum(w["by_category"].get(top_category, 0.0) for w in weeks)
+        if top_category else 0.0
+    )
+
+    cards = [
+        kpi(
+            "Расходы WB, закрытые недели",
+            money(grand_total),
+            f"{len(closed_weeks)} " + plural(
+                len(closed_weeks), "неделя", "недели", "недель"
+            ),
+            "flat",
+            period_label,
+        ),
+        kpi(
+            "В среднем за неделю",
+            money(avg_week),
+            "",
+            "flat",
+            "ориентир, с которым сравниваются остальные недели",
+        ),
+        kpi(
+            "Крупнейшая статья",
+            escape(top_category) if top_category else "—",
+            (
+                pct(100.0 * top_category_amount / grand_total_all)
+                if top_category and grand_total_all
+                else ""
+            ),
+            "flat",
+            "доля от расходов WB за всё окно, включая текущую неделю",
+        ),
+        kpi(
+            "Недель с всплеском",
+            fmt_qty(len({s["label"] for s in category_spikes} | (
+                {total_spike["label"]} if total_spike else set()
+            ))),
+            "",
+            "bad" if (total_spike or category_spikes) else "good",
+            f"выше среднего по остальным закрытым неделям в "
+            f"{C.WB_EXPENSES_SPIKE_RATIO:.2f}".replace(".", ",") + " раза и больше",
+        ),
+    ]
+
+    chart_note_parts = []
+    if total_spike:
+        chart_note_parts.append(
+            f"<b>Неделя {escape(total_spike['label'])} — пик общих "
+            f"расходов WB:</b> {money(total_spike['value'])} против "
+            f"{money(total_spike['baseline'])} в среднем по остальным "
+            f"закрытым неделям окна — в "
+            f"{total_spike['ratio']:.1f}".replace(".", ",")
+            + " раза больше."
+        )
+    if category_spikes:
+        top = category_spikes[0]
+        chart_note_parts.append(
+            f"Больше всего вырос(ла) статья «{escape(top['category'])}»: "
+            f"неделя {escape(top['label'])} дала {money(top['value'])} "
+            f"против обычных {money(top['baseline'])}."
+        )
+    if not chart_note_parts:
+        chart_note_parts.append(
+            "Явных всплесков среди закрытых недель нет — расходы WB "
+            "идут ровно от недели к неделе."
+        )
+    if current_week:
+        chart_note_parts.append(
+            f"<span class=\"muted\">Текущая неделя "
+            f"({escape(current_week['label'])}) ещё не закрыта — "
+            f"в ней пока {fmt_qty(current_week.get('days_covered'))} "
+            f"{plural(current_week.get('days_covered') or 0, 'день', 'дня', 'дней')} "
+            f"вместо семи, сравнивать её с полными неделями рано.</span>"
+        )
+
+    chart_note = " ".join(chart_note_parts)
+
+    # ---- таблица по неделям и статьям: то, ради чего страница ----
+    week_table_columns = [{"key": "label", "label": "Неделя"}]
+    for cat in categories:
+        week_table_columns.append({
+            "key": cat,
+            "label": cat,
+            "num": True,
+            "fmt": money_exact,
+        })
+    week_table_columns.append(
+        {"key": "total", "label": "Итого, ₽", "num": True, "fmt": money_exact}
+    )
+    week_table_columns.append({"key": "status", "label": "Статус"})
+
+    week_table_rows = []
+    for w in weeks:
+        row = {"label": w["label"], "total": w["total"]}
+        for cat in categories:
+            row[cat] = w["by_category"].get(cat, 0.0)
+        if w.get("is_closed"):
+            row["status"] = "закрыта"
+        else:
+            days = w.get("days_covered") or 0
+            row["status"] = (
+                f"текущая, {fmt_qty(days)} "
+                f"{plural(days, 'день', 'дня', 'дней')}"
+            )
+            row["_alert"] = False
+        week_table_rows.append(row)
+
+    weekly_table = table(
+        week_table_columns,
+        week_table_rows,
+        total={
+            "label": "Итого по закрытым",
+            **{cat: sum(w["by_category"].get(cat, 0.0) for w in closed_weeks)
+               for cat in categories},
+            "total": grand_total,
+            "status": "",
+        },
+        caption="Расходы WB по неделям и статьям",
+        note=(
+            "Текущая (незакрытая) неделя не входит в «Итого по "
+            "закрытым» и не участвует в поиске всплесков — в ней "
+            "физически меньше дней, сравнение было бы нечестным."
+        ),
+    ) if weeks else ""
+
+    spike_table = ""
+    if category_spikes:
+        spike_table = table(
+            [
+                {"key": "category", "label": "Статья"},
+                {"key": "label", "label": "Неделя-пик"},
+                {"key": "value", "label": "Расход за неделю, ₽",
+                 "num": True, "fmt": money_exact},
+                {"key": "baseline", "label": "Обычно за неделю, ₽",
+                 "num": True, "fmt": money_exact},
+                {"key": "ratio_pct", "label": "Во сколько раз больше",
+                 "num": True, "fmt": lambda v: f"{v:.1f}".replace(".", ",") + " ×"},
+            ],
+            [
+                {**s, "ratio_pct": s["ratio"], "_alert": True}
+                for s in category_spikes
+            ],
+            caption="По каким статьям были всплески",
+            note=(
+                "Показаны только статьи заметного веса — на копеечных "
+                "статьях любое отклонение выглядит как всплеск, "
+                "хотя в деньгах это шум."
+            ),
+        )
+
+    body = (
+        kpi_grid(cards)
+        + weekly_table
+        + figure(
+            "Расходы WB по неделям и статьям",
+            charts.wb_expenses_weekly(weeks, categories, total_spike),
+            f"{period_label}, ₽ без НДС",
+            chart_note,
+            "Недостаточно недель для графика",
+        )
+        + spike_table
+        + callout(
+            "Как считается",
+            (
+                "Логистика, хранение, приёмка, штрафы, программа "
+                "лояльности и продвижение/услуги WB — из тех же "
+                "проводок WB, что и строка «Расходы WB» в разделе "
+                "«Финансовый результат», без НДС. Отличие — здесь "
+                "это разложено по неделям и статьям, а не показано "
+                "одной суммой. Комиссия WB и себестоимость сюда "
+                "не входят — они уже учтены в марже на предыдущей "
+                "странице."
+            ),
+            plain=True,
+        )
+    )
+
+    return page(
+        "12",
+        "Расходы WB",
+        "Анализ расходов WB",
+        f"Логистика, хранение, штрафы и продвижение по неделям — "
+        f"и где случился скачок.",
+        body,
+    )
+
+
+# ============================================================
+# 13. ЗАПАСЫ: СТРУКТУРА И ПОКРЫТИЕ
 # ============================================================
 
 def stocks_page(payload) -> str:
@@ -1632,7 +1976,7 @@ def stocks_page(payload) -> str:
 
     if not balance.get("available"):
         return page(
-            "12",
+            "13",
             "Запасы",
             "Запасы: структура и покрытие",
             "",
@@ -1651,7 +1995,8 @@ def stocks_page(payload) -> str:
             "flat",
             (
                 f"{fmt_qty(balance.get('products'))} товаров, "
-                f"{fmt_qty(balance.get('brands_count'))} брендов"
+                f"{fmt_qty(balance.get('brands_count'))} брендов "
+                f"— {escape(_stock_asof(balance))}"
             ),
         ),
         kpi(
@@ -1717,6 +2062,23 @@ def stocks_page(payload) -> str:
                 else ""
             )
             for row in brands
+        ],
+        axis_label="Запас, шт.",
+    )
+
+    categories_overall = balance.get("categories") or []
+
+    category_chart = charts.hbar(
+        [row.get("category") or "Без категории" for row in categories_overall],
+        [num(row.get("total_qty")) or 0 for row in categories_overall],
+        value_labels=[
+            f"{charts._short(num(row.get('total_qty')))} шт."
+            + (
+                f" · {fmt_qty(row.get('products'))} товаров"
+                if row.get("products") is not None
+                else ""
+            )
+            for row in categories_overall
         ],
         axis_label="Запас, шт.",
     )
@@ -1886,10 +2248,17 @@ def stocks_page(payload) -> str:
             "",
             "Нет разбивки запаса по брендам",
         )
+        + figure(
+            "Запас по категориям",
+            category_chart,
+            "Штуки на складах WB, своём складе и в пути",
+            "",
+            "Нет разбивки запаса по категориям",
+        )
     )
 
     return page(
-        "12",
+        "13",
         "Запасы",
         "Запасы: структура и стоимость",
         "Три вопроса: хватит ли товара, сколько он стоит "
@@ -1899,7 +2268,7 @@ def stocks_page(payload) -> str:
 
 
 # ============================================================
-# 13. ЗАПАСЫ: ЗОНА РИСКА
+# 14. ЗАПАСЫ: ЗОНА РИСКА
 # ============================================================
 
 def stock_risk_page(payload, findings) -> str:
@@ -1908,7 +2277,7 @@ def stock_risk_page(payload, findings) -> str:
 
     if not health.get("available"):
         return page(
-            "13",
+            "14",
             "Запасы",
             "Запасы: зона риска",
             "",
@@ -1919,22 +2288,56 @@ def stock_risk_page(payload, findings) -> str:
             ),
         )
 
-    cards = [
-        kpi(
-            "Плохо или совсем не продаётся",
-            pct(health.get("risk_share_pct")),
-            money(health.get("risk_management_value")),
-            (
-                "bad"
-                if (num(health.get("risk_share_pct")) or 0)
-                >= C.STOCK_RISK_ALERT_PCT
-                else "good"
+    arrival_reliable = bool(health.get("arrival_data_reliable"))
+
+    if arrival_reliable:
+        risk_cards = [
+            kpi(
+                "Залежалось (не новое)",
+                pct(health.get("risk_stale_share_pct")),
+                money(health.get("risk_stale_management_value")),
+                (
+                    "bad"
+                    if (num(health.get("risk_stale_share_pct")) or 0)
+                    >= C.STOCK_RISK_ALERT_PCT
+                    else "good"
+                ),
+                (
+                    f"{fmt_qty(health.get('risk_stale_qty'))} шт. "
+                    f"по {fmt_qty(health.get('risk_stale_products'))} товарам"
+                ),
             ),
-            (
-                f"{fmt_qty(health.get('risk_qty'))} шт. "
-                f"по {fmt_qty(health.get('risk_products'))} товарам"
+            kpi(
+                "Новые поставки без продаж",
+                pct(health.get("risk_new_share_pct")),
+                money(health.get("risk_new_management_value")),
+                "flat",
+                (
+                    f"{fmt_qty(health.get('risk_new_qty'))} шт., "
+                    f"на складе < {health.get('new_arrival_window_days')} дн."
+                ),
             ),
-        ),
+        ]
+    else:
+        risk_cards = [
+            kpi(
+                "Плохо или совсем не продаётся",
+                pct(health.get("risk_share_pct")),
+                money(health.get("risk_management_value")),
+                (
+                    "bad"
+                    if (num(health.get("risk_share_pct")) or 0)
+                    >= C.STOCK_RISK_ALERT_PCT
+                    else "good"
+                ),
+                (
+                    f"{fmt_qty(health.get('risk_qty'))} шт. "
+                    f"по {fmt_qty(health.get('risk_products'))} товарам"
+                ),
+            ),
+        ]
+
+    cards = risk_cards + [
         kpi(
             "Покрытие больше 90 дней",
             pct(health.get("slow_share_pct")),
@@ -2007,31 +2410,61 @@ def stock_risk_page(payload, findings) -> str:
 
     no_cost = num(balance.get("no_management_cost_qty"))
 
-    caveat = callout(
-        "Что здесь важно понимать",
-        (
-            "«Не продавалось за 30 дней» не всегда значит «списывать». "
-            "Сезонный товар в межсезонье выглядит точно так же. "
-            "Но решение всё равно нужно принять по каждой позиции: "
-            "уценка, вывоз, списание или сознательное ожидание "
-            "сезона — потому что хранение оплачивается в любом "
-            "из этих случаев."
-            + (
-                f" У {fmt_qty(no_cost)} "
-                f"{plural(no_cost or 0, 'единицы', 'единиц', 'единиц')} "
-                f"запаса нет управленческой себестоимости, "
-                f"их стоимость в расчёте занижена."
-                if no_cost
-                else ""
-            )
-        ),
-        plain=True,
-    )
+    if arrival_reliable:
+        caveat = callout(
+            "Что здесь важно понимать",
+            (
+                "Запас разделён на два разных случая. «Залежалось» — "
+                "товар, который лежит на складе дольше "
+                f"{health.get('new_arrival_window_days')} дней и всё равно "
+                "не продаётся: по нему решение нужно принимать сейчас — "
+                "уценка, вывоз, списание или сознательное ожидание сезона, "
+                "потому что хранение оплачивается в любом случае. "
+                "«Новые поставки без продаж» — товар, который завезли "
+                "недавно и который просто ещё не успел начать продаваться; "
+                "торопиться с ним не нужно, но стоит последить за динамикой."
+                + (
+                    f" У {fmt_qty(no_cost)} "
+                    f"{plural(no_cost or 0, 'единицы', 'единиц', 'единиц')} "
+                    f"запаса нет управленческой себестоимости, "
+                    f"их стоимость в расчёте занижена."
+                    if no_cost
+                    else ""
+                )
+            ),
+            plain=True,
+        )
+    else:
+        caveat = callout(
+            "Что здесь важно понимать",
+            (
+                "«Не продавалось за 30 дней» не всегда значит «списывать». "
+                "Сезонный товар в межсезонье выглядит точно так же. Отдельно "
+                "сюда попадают и новые поставки, которые просто ещё не "
+                "успели начать продаваться — короткой истории остатков "
+                "пока не хватает, чтобы уверенно их отделить (нужно "
+                f"{health.get('new_arrival_window_days')} дн. истории, "
+                f"есть {health.get('history_days', 0)}). "
+                "Поэтому решение всё равно нужно принять по каждой позиции: "
+                "уценка, вывоз, списание или сознательное ожидание "
+                "сезона — потому что хранение оплачивается в любом "
+                "из этих случаев."
+                + (
+                    f" У {fmt_qty(no_cost)} "
+                    f"{plural(no_cost or 0, 'единицы', 'единиц', 'единиц')} "
+                    f"запаса нет управленческой себестоимости, "
+                    f"их стоимость в расчёте занижена."
+                    if no_cost
+                    else ""
+                )
+            ),
+            plain=True,
+        )
 
     stock_findings = _scope(findings, "stocks", limit=4)
 
     body = (
-        kpi_grid(cards)
+        kpi_grid(cards, cols=(5 if arrival_reliable else 4))
         + bucket_table
         + caveat
         + (_cards(stock_findings) if stock_findings
@@ -2039,11 +2472,11 @@ def stock_risk_page(payload, findings) -> str:
     )
 
     return page(
-        "13",
+        "14",
         "Запасы",
         "Запасы: зона риска",
         "Сколько денег лежит в товаре, который не двигается, "
-        "и что с этим делать.",
+        "и что с этим делать. Остатки на " + _stock_asof(balance) + ".",
         body,
     )
 
@@ -2093,6 +2526,11 @@ WEEKDAY_RU_SHORT = {
     4: "пт", 5: "сб", 6: "вс",
 }
 
+WEEKDAY_RU_FULL = {
+    0: "Понедельник", 1: "Вторник", 2: "Среда", 3: "Четверг",
+    4: "Пятница", 5: "Суббота", 6: "Воскресенье",
+}
+
 
 def _fbs_recent_days(daily, days=7):
     """Последние N дней приёма заказов, свежие сверху не нужны."""
@@ -2112,7 +2550,7 @@ def _fbs_recent_days(daily, days=7):
 def fbs_assembly_page(fbs) -> str:
     if not fbs:
         return _fbs_unavailable(
-            "14",
+            "15",
             "Срез заказов не загрузился, поэтому раздел пуст.",
         )
 
@@ -2125,6 +2563,8 @@ def fbs_assembly_page(fbs) -> str:
 
     overdue_share = 100.0 * overdue / in_work if in_work else 0.0
     avg_check = amount / total if total else 0.0
+
+    is_stale = _fbs_is_stale(fbs)
 
     cards = [
         kpi(
@@ -2153,13 +2593,21 @@ def fbs_assembly_page(fbs) -> str:
             fmt_qty(overdue) + " шт.",
             pct(overdue_share) + " от сборки",
             (
-                "bad"
-                if overdue_share >= C.FBS_OVERDUE_ALERT_PCT
-                else ("good" if not overdue else "flat")
+                "flat"
+                if is_stale
+                else (
+                    "bad"
+                    if overdue_share >= C.FBS_OVERDUE_ALERT_PCT
+                    else ("good" if not overdue else "flat")
+                )
             ),
             (
-                f"самый старый "
-                f"{fmt_hours(kpi_data.get('max_age_in_work'))}"
+                "данные не обновлялись — цифра ненадёжна"
+                if is_stale
+                else (
+                    f"самый старый "
+                    f"{fmt_hours(kpi_data.get('max_age_in_work'))}"
+                )
             ),
         ),
         kpi(
@@ -2190,7 +2638,16 @@ def fbs_assembly_page(fbs) -> str:
         ),
     ]
 
-    if overdue and in_work:
+    if is_stale:
+        assembly_note = (
+            f"<b>Срез не обновлялся больше {C.FBS_STALE_HOURS} ч</b> "
+            f"(последние данные — "
+            f"{escape(date_short(fbs.get('as_of')))}). Цифра по "
+            f"просрочке выше нужна для полноты картины, но опираться "
+            f"на неё сейчас не стоит — как только пройдёт "
+            f"синхронизация, она может сильно измениться."
+        )
+    elif overdue and in_work:
         assembly_note = (
             f"<b>Просрочено {fmt_qty(overdue)} "
             f"{plural(overdue, 'заказ', 'заказа', 'заказов')} — "
@@ -2353,8 +2810,22 @@ def fbs_assembly_page(fbs) -> str:
              "во вторник — разные новости.",
     ) if recent_days else ""
 
+    stale_banner = callout(
+        "Данные могли устареть",
+        (
+            f"Срез заказов FBS не обновлялся больше "
+            f"{C.FBS_STALE_HOURS} часов (последнее обновление — "
+            f"{escape(date_short(fbs.get('as_of')))}). Показатели "
+            f"по просрочке и сборке ниже приведены для полноты "
+            f"картины, но не стоит делать по ним выводы, пока не "
+            f"пройдёт синхронизация."
+        ),
+        plain=True,
+    ) if is_stale else ""
+
     body = (
-        kpi_grid(cards)
+        stale_banner
+        + kpi_grid(cards)
         + "<h3>Сколько заказов приходит</h3>"
         + days_table
         + figure(
@@ -2379,7 +2850,7 @@ def fbs_assembly_page(fbs) -> str:
     )
 
     return page(
-        "14",
+        "15",
         "Заказы FBS",
         "Заказы FBS: сборка и сроки",
         (
@@ -2387,6 +2858,12 @@ def fbs_assembly_page(fbs) -> str:
             f"{escape(date_short(fbs.get('as_of')))}. "
             f"Заказ считается просроченным, если ждёт сборки "
             f"дольше {C.FBS_SLA_HOURS} часов."
+            + (
+                " Внимание: срез не обновлялся дольше нормы, "
+                "смотрите на цифры просрочки с поправкой на это."
+                if is_stale
+                else ""
+            )
         ),
         body,
     )
@@ -2581,7 +3058,7 @@ def fbs_logistics_page(fbs, findings) -> str:
     )
 
     return page(
-        "15",
+        "16",
         "Заказы FBS",
         "Заказы FBS: склады, поставки и товары",
         "Откуда отправляем, как быстро закрываются поставки "
@@ -2591,13 +3068,13 @@ def fbs_logistics_page(fbs, findings) -> str:
 
 
 # ============================================================
-# 16. ВЫВОДЫ И РЕКОМЕНДАЦИИ
+# 17. ВЫВОДЫ И РЕКОМЕНДАЦИИ
 # ============================================================
 
 def findings_page(payload, findings) -> str:
     if not findings:
         return page(
-            "16",
+            "17",
             "Выводы",
             "Выводы и рекомендации",
             "",
@@ -2651,7 +3128,7 @@ def findings_page(payload, findings) -> str:
         )
 
     return page(
-        "16",
+        "17",
         "Выводы",
         "Выводы и рекомендации",
         "Полный список: что произошло, почему и что делать. "
@@ -2663,7 +3140,7 @@ def findings_page(payload, findings) -> str:
 
 
 # ============================================================
-# 17. МЕТОДИКА
+# 18. МЕТОДИКА
 # ============================================================
 
 def methodology_page(payload, fbs) -> str:
@@ -2800,7 +3277,7 @@ def methodology_page(payload, fbs) -> str:
     )
 
     return page(
-        "17",
+        "18",
         "Методика",
         "Методика",
         "Чтобы к цифрам не возвращаться с вопросом «а как это "
@@ -3046,7 +3523,8 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
                      "num": True, "fmt": money_exact},
                     {"key": "margin_man_pct", "label": "Маржинальность",
                      "num": True, "fmt": lambda v: pct(v)},
-                    {"key": "margin_base", "label": "Она же за 90 дней",
+                    {"key": "margin_base",
+                     "label": f"Она же за {fmt_days(mix.get('days'))}",
                      "num": True, "fmt": lambda v: pct(v)},
                     {"key": "margin_delta", "label": "Разница",
                      "num": True, "fmt": lambda v: pp(v)},
@@ -3070,11 +3548,12 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
                 note=(
                     "Колонка «разница» показывает, стала "
                     "маржинальность за неделю выше или ниже "
-                    "своего обычного уровня за 90 дней. Неделя "
-                    "короткая, поэтому одна крупная поставка "
+                    "своего обычного уровня за "
+                    f"{fmt_days(mix.get('days'))} ({period_label}). "
+                    "Неделя короткая, поэтому одна крупная поставка "
                     "или возврат двигают её сильно — решения "
-                    "принимайте по 90 дням, а неделю используйте "
-                    "как сигнал, что что-то изменилось."
+                    "принимайте по общему периоду, а неделю "
+                    "используйте как сигнал, что что-то изменилось."
                 ),
             )
         )
@@ -3100,7 +3579,8 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
         + figure(
             f"{subject}: выручка и маржинальность",
             charts.revenue_vs_margin(rows),
-            f"Топ-12 по выручке за {fmt_days(mix.get('days'))}",
+            f"Топ-12 по выручке за {fmt_days(mix.get('days'))} "
+            f"({period_label})",
             chart_note,
             "Нет данных для разреза",
         )
@@ -3138,6 +3618,7 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
             ),
         ),
         landscape=True,
+        anchor=False,
     )
 
     return main + wide

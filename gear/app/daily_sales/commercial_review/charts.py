@@ -1061,6 +1061,58 @@ def price_and_discount(rows, days=60, width=FULL_W, height=2.45):
             fontweight="bold",
         )
 
+    # Скидка отдельно: конец периода, максимум и минимум.
+    # Без этого разницу между линиями нужно было бы прикидывать
+    # на глаз по заливке -- а её как раз спрашивают чаще всего.
+    discount = [s - b for s, b in zip(seller, buyer)]
+    end_discount = discount[-1]
+    max_i = max(range(len(discount)), key=lambda i: discount[i])
+    min_i = min(range(len(discount)), key=lambda i: discount[i])
+
+    ax.annotate(
+        f"скидка {_short(end_discount)}",
+        xy=(x[-1], (seller[-1] + buyer[-1]) / 2),
+        xytext=(-34, -3),
+        textcoords="offset points",
+        ha="right",
+        va="center",
+        fontsize=6.6,
+        color=C.MUTED,
+    )
+
+    # Максимум и минимум не подписываем, когда они совпадают
+    # с концом периода -- подпись уже стоит рядом, вторая
+    # только наложится на первую.
+    for i, tag, color in (
+        (max_i, "макс.", C.SERIES_2),
+        (min_i, "мин.", C.NAVY),
+    ):
+        if i in (len(discount) - 1, 0):
+            continue
+
+        mid_y = (seller[i] + buyer[i]) / 2
+        above = i == max_i
+
+        ax.plot(
+            [x[i]], [mid_y],
+            marker="o", markersize=3.2,
+            color=color, linewidth=0,
+            zorder=5,
+        )
+        ax.annotate(
+            f"{tag} скидка {_short(discount[i])}",
+            xy=(x[i], mid_y),
+            xytext=(0, 9 if above else -11),
+            textcoords="offset points",
+            ha="center",
+            va="bottom" if above else "top",
+            fontsize=6.6,
+            fontweight="bold",
+            color=color,
+        )
+
+    ax.margins(y=0.14)
+
     keep = _thin(labels, 12)
     ax.set_xticks([x[i] for i in keep])
     ax.set_xticklabels([labels[i] for i in keep])
@@ -1650,3 +1702,99 @@ def revenue_vs_margin(rows, limit=12, width=FULL_W, height=None):
     ax_right.axvline(0, color=C.AXIS, linewidth=0.8)
 
     return _render(fig)
+
+
+# ============================================================
+# РАСХОДЫ WB ПО НЕДЕЛЯМ
+# ============================================================
+
+#: Свой набор цветов на 6 статей: заёмных из палитры данных
+#: не хватает (там всего три серии), поэтому берём весь
+#: фирменный набор -- он проверен на различимость.
+EXPENSE_PALETTE = [
+    C.SERIES_1, C.SERIES_2, C.SERIES_3,
+    C.WARNING, C.NAVY_2, C.MUTED,
+]
+
+
+def wb_expenses_weekly(weeks, categories, total_spike=None,
+                        width=FULL_W, height=2.7):
+    """
+    Расходы WB по неделям, с разбивкой по статьям.
+
+    Столбик — сумма за неделю, цвет внутри — статья. Если среди
+    недель есть явный всплеск (см. _find_spike в data.py),
+    отмечаем его подписью прямо над столбиком, а не оставляем
+    искать глазами.
+    """
+    if not weeks or not categories:
+        return None
+
+    labels = [w["label"] for w in weeks]
+    x = list(range(len(weeks)))
+
+    fig, ax = _fig(width, height)
+
+    bottoms = [0.0] * len(weeks)
+    for i, cat in enumerate(categories):
+        values = [w["by_category"].get(cat, 0.0) for w in weeks]
+        color = EXPENSE_PALETTE[i % len(EXPENSE_PALETTE)]
+
+        ax.bar(
+            x, values,
+            bottom=bottoms,
+            width=0.6,
+            color=color,
+            label=cat,
+            linewidth=0,
+        )
+        bottoms = [b + v for b, v in zip(bottoms, values)]
+
+    totals = [w["total"] for w in weeks]
+    for i, total in enumerate(totals):
+        ax.annotate(
+            _short(total),
+            xy=(x[i], totals[i]),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            fontsize=7.0,
+            fontweight="bold",
+            color=C.INK,
+        )
+
+    if total_spike:
+        spike_i = next(
+            (i for i, l in enumerate(labels) if l == total_spike["label"]),
+            None,
+        )
+        if spike_i is not None:
+            ax.annotate(
+                f"пик: {_pct_label(100 * (total_spike['ratio'] - 1), 0)} "
+                f"к среднему по остальным неделям",
+                xy=(x[spike_i], totals[spike_i]),
+                xytext=(0, 17),
+                textcoords="offset points",
+                ha="center",
+                fontsize=7.0,
+                fontweight="bold",
+                color=C.CRITICAL,
+                arrowprops=dict(
+                    arrowstyle="-",
+                    color=C.CRITICAL,
+                    linewidth=0.8,
+                    shrinkA=0, shrinkB=2,
+                ),
+            )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlim(-0.6, len(weeks) - 0.4)
+
+    ax.yaxis.set_major_formatter(_money_formatter())
+    ax.set_ylabel("Расходы WB, ₽")
+    _headroom(ax, 1.28)
+    _legend(ax, ncol=3, y=1.1)
+
+    return _render(fig)
+

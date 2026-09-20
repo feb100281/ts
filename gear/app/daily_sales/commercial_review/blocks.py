@@ -29,6 +29,7 @@ def page(
     body="",
     source="",
     landscape=False,
+    anchor=True,
 ) -> str:
     """
     Обычная страница отчёта.
@@ -55,8 +56,12 @@ def page(
 
     klass = "page page-landscape" if landscape else "page"
 
+    id_attr = (
+        f' id="section-{escape(number)}"' if number and anchor else ""
+    )
+
     return f"""
-    <section class="{klass}">
+    <section class="{klass}"{id_attr}>
         <div class="chapter">{chapter_mark}</div>
         <div class="head">
             <div class="head-rule">
@@ -113,7 +118,7 @@ def kpi(label, value, delta="", delta_state="", note="") -> str:
 
 
 def kpi_grid(cards, cols=4) -> str:
-    klass = {4: "", 3: " three", 2: " two"}.get(cols, "")
+    klass = {4: "", 3: " three", 2: " two", 5: " five"}.get(cols, "")
     return f'<div class="kpi-grid{klass}">{"".join(cards)}</div>'
 
 
@@ -365,16 +370,24 @@ def bullet_bar(
 
 
 def toc(rows) -> str:
-    """rows — (номер раздела, название, что внутри)."""
+    """
+    rows -- (номер раздела, название, что внутри).
+
+    Каждая строка -- ссылка на якорь страницы (id="section-NN",
+    его ставит page()), поэтому в PDF по оглавлению можно
+    кликать. Номер страницы справа подтягивается из PDF через
+    target-counter -- поддерживать его руками не нужно.
+    """
     items = []
 
     for number, name, what in rows:
+        anchor = f"#section-{escape(number)}"
         items.append(
-            f'<div class="toc-row">'
+            f'<a class="toc-row" href="{anchor}">'
             f'<span class="toc-num">{escape(number)}</span>'
             f'<span class="toc-name">{escape(name)}</span>'
             f'<span class="toc-what">{escape(what)}</span>'
-            f"</div>"
+            f"</a>"
         )
 
     return f'<div class="toc">{"".join(items)}</div>'

@@ -25,6 +25,15 @@ from ..helpers import (
 
 SALES_WINDOW_DAYS = 30
 
+#: Товар моложе этого возраста (считая от первого дня, когда
+#: по нему вообще видели остаток на складе) не считается
+#: залежавшимся, даже если ещё ни разу не продавался -- ему
+#: могло не хватить времени дойти до покупателя. Используется
+#: только чтобы РАЗДЕЛИТЬ зону риска на "новое" и "старое":
+#: сама зона риска (90+ дней покрытия или отсутствие продаж)
+#: считается как считалась.
+NEW_ARRIVAL_WINDOW_DAYS = 30
+
 
 # =============================================================================
 # ОБЩИЕ ФУНКЦИИ
@@ -316,6 +325,224 @@ def _get_brand_stock_structure(
         / safe_total
         * 100
     ).fillna(0)
+
+    return df
+
+
+# =============================================================================
+# КАТЕГОРИИ -- ВЕСЬ ТОВАРНЫЙ КОНТУР
+# =============================================================================
+#
+# То же самое, что _get_brand_stock_structure, но в разрезе
+# категории, а не бренда. Нужна отдельно от _get_fbs_categories:
+# та считает только собственный склад, а здесь -- весь контур
+# (WB + FBS + путь), как и в разрезе по брендам.
+
+
+def _get_category_stock_structure(
+    report_date: str,
+) -> pd.DataFrame:
+
+    with get_duckdb_conn_with_opt() as con:
+        df = con.execute(
+            """
+            WITH
+
+            wb AS (
+                SELECT
+                    nm_id,
+
+                    SUM(
+                        COALESCE(
+                            quantity,
+                            0
+                        )
+                    ) AS wb_qty,
+
+                    SUM(
+                        COALESCE(
+                            in_way_to_client,
+                            0
+                        )
+                        +
+                        COALESCE(
+                            in_way_from_client,
+                            0
+                        )
+                    ) AS transit_qty
+
+                FROM stocks.unpacked_stocks
+
+                WHERE
+                    date_from::DATE
+                        = $report_date::DATE
+
+                    AND nm_id IS NOT NULL
+
+                GROUP BY
+                    nm_id
+            ),
+
+            fbs AS (
+                SELECT
+                    nm_id,
+
+                    SUM(
+                        COALESCE(
+                            quantity,
+                            0
+                        )
+                    ) AS fbs_qty
+
+                FROM stocks.unpacked_fbs_stocks
+
+                WHERE
+                    date_from::DATE
+                        = $report_date::DATE
+
+                    AND nm_id IS NOT NULL
+
+                GROUP BY
+                    nm_id
+            ),
+
+            stock AS (
+                SELECT
+                    COALESCE(
+                        wb.nm_id,
+                        fbs.nm_id
+                    ) AS nm_id,
+
+                    COALESCE(
+                        wb.wb_qty,
+                        0
+                    ) AS wb_qty,
+
+                    COALESCE(
+                        fbs.fbs_qty,
+                        0
+                    ) AS fbs_qty,
+
+                    COALESCE(
+                        wb.transit_qty,
+                        0
+                    ) AS transit_qty
+
+                FROM wb
+
+                FULL OUTER JOIN fbs
+                    ON wb.nm_id = fbs.nm_id
+            ),
+
+            products AS (
+                SELECT
+                    nm_id,
+
+                    COALESCE(
+                        MAX(subject_name),
+                        'Категория не указана'
+                    ) AS category
+
+                FROM cards.product
+
+                GROUP BY
+                    nm_id
+            )
+
+            SELECT
+                COALESCE(
+                    p.category,
+                    'Категория не указана'
+                ) AS category,
+
+                SUM(
+                    s.wb_qty
+                ) AS wb_qty,
+
+                SUM(
+                    s.fbs_qty
+                ) AS fbs_qty,
+
+                SUM(
+                    s.transit_qty
+                ) AS transit_qty,
+
+                SUM(
+                    s.wb_qty
+                    +
+                    s.fbs_qty
+                    +
+                    s.transit_qty
+                ) AS total_qty,
+
+                COUNT(
+                    DISTINCT CASE
+                        WHEN (
+                            s.wb_qty
+                            +
+                            s.fbs_qty
+                            +
+                            s.transit_qty
+                        ) > 0
+                        THEN s.nm_id
+                    END
+                ) AS products
+
+            FROM stock s
+
+            LEFT JOIN products p
+                ON p.nm_id = s.nm_id
+
+            WHERE
+                (
+                    s.wb_qty
+                    +
+                    s.fbs_qty
+                    +
+                    s.transit_qty
+                ) > 0
+
+            GROUP BY
+                COALESCE(
+                    p.category,
+                    'Категория не указана'
+                )
+
+            ORDER BY
+                total_qty DESC,
+                category
+            """,
+            {
+                "report_date": report_date,
+            },
+        ).df()
+
+    if df.empty:
+        return df
+
+    numeric_columns = [
+        "wb_qty",
+        "fbs_qty",
+        "transit_qty",
+        "total_qty",
+        "products",
+    ]
+
+    for column in numeric_columns:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce",
+        ).fillna(0)
+
+    total = number(
+        df["total_qty"].sum()
+    )
+
+    df["share_pct"] = (
+        df["total_qty"] / total * 100
+        if total > 0
+        else 0.0
+    )
 
     return df
 
@@ -1161,6 +1388,71 @@ def _get_full_stock_health(
 
             /*
             ================================================================
+            ПЕРВЫЙ ДЕНЬ, КОГДА ПО NM ID ВООБЩЕ ВИДЕЛИ ОСТАТОК
+            ================================================================
+
+            Нужно, чтобы отличить новый товар (который просто
+            ещё не успел продаться) от залежавшегося. Дата
+            прихода как отдельная сущность в контуре не хранится,
+            поэтому берём самый ранний день в истории остатков,
+            где по nm_id было хоть что-то на складе.
+            */
+
+            first_seen AS (
+                SELECT
+                    nm_id,
+                    MIN(stock_date) AS first_seen_date
+
+                FROM (
+                    SELECT
+                        nm_id,
+                        date_from::DATE AS stock_date
+                    FROM stocks.unpacked_stocks
+                    WHERE nm_id IS NOT NULL
+                      AND COALESCE(quantity, 0) > 0
+
+                    UNION ALL
+
+                    SELECT
+                        nm_id,
+                        date_from::DATE AS stock_date
+                    FROM stocks.unpacked_fbs_stocks
+                    WHERE nm_id IS NOT NULL
+                      AND COALESCE(quantity, 0) > 0
+                ) seen
+
+                GROUP BY
+                    nm_id
+            ),
+
+
+            /*
+            ================================================================
+            ГЛУБИНА ИСТОРИИ ОСТАТКОВ
+            ================================================================
+
+            Если сама история остатков короче, чем окно "новый
+            товар", first_seen_date ничего не докажет: старый
+            товар будет неотличим от нового просто потому, что
+            снимков раньше этой даты нет. В таком случае деление
+            на новое/старое честно помечается как ненадёжное.
+            */
+
+            history_span AS (
+                SELECT
+                    MIN(stock_date) AS earliest_date
+                FROM (
+                    SELECT date_from::DATE AS stock_date
+                    FROM stocks.unpacked_stocks
+                    UNION ALL
+                    SELECT date_from::DATE AS stock_date
+                    FROM stocks.unpacked_fbs_stocks
+                ) history
+            ),
+
+
+            /*
+            ================================================================
             БАЗА
             ================================================================
             */
@@ -1210,7 +1502,21 @@ def _get_full_stock_health(
                             0
                         )
                         / 100.0
-                    ) AS management_value
+                    ) AS management_value,
+
+                    fs.first_seen_date,
+
+                    date_diff(
+                        'day',
+                        fs.first_seen_date,
+                        $report_date::DATE
+                    ) AS days_since_first_seen,
+
+                    date_diff(
+                        'day',
+                        hs.earliest_date,
+                        $report_date::DATE
+                    ) AS history_days
 
                 FROM stocks s
 
@@ -1219,6 +1525,11 @@ def _get_full_stock_health(
 
                 LEFT JOIN costs c
                     ON c.nm_id = s.nm_id
+
+                LEFT JOIN first_seen fs
+                    ON fs.nm_id = s.nm_id
+
+                CROSS JOIN history_span hs
 
                 WHERE
                     s.total_qty > 0
@@ -1234,6 +1545,8 @@ def _get_full_stock_health(
                 sales_qty_30d,
                 coverage_days,
                 management_value,
+                days_since_first_seen,
+                history_days,
 
                 CASE
                     WHEN sales_qty_30d <= 0
@@ -1453,6 +1766,61 @@ def _get_full_stock_health(
         ].nunique()
     )
 
+    # -------------------------------------------------------------------
+    # НОВОЕ VS ЗАЛЕЖАВШЕЕСЯ ВНУТРИ ЗОНЫ РИСКА
+    #
+    # "Не продавалось 90 дней" и "приехало неделю назад" --
+    # в остатках выглядят одинаково, а решения по ним разные:
+    # по первому нужна уценка или списание, по второму -- просто
+    # подождать. Делим по факту истории остатков, а не по вере
+    # на слово, поэтому сначала проверяем, что самой истории
+    # хватает, чтобы это деление вообще что-то доказывало.
+    # -------------------------------------------------------------------
+
+    history_days_value = (
+        float(rows["history_days"].max())
+        if "history_days" in rows and not rows["history_days"].isna().all()
+        else None
+    )
+
+    arrival_data_reliable = (
+        history_days_value is not None
+        and history_days_value >= NEW_ARRIVAL_WINDOW_DAYS
+    )
+
+    if arrival_data_reliable:
+        # Без даты первого появления (первая продажа была
+        # раньше, чем есть история остатков) считаем товар
+        # старым: недостаток данных не должен маскировать
+        # реально залежавшийся товар под новый.
+        is_new_arrival = (
+            risk_rows["days_since_first_seen"].notna()
+            & (risk_rows["days_since_first_seen"] < NEW_ARRIVAL_WINDOW_DAYS)
+        )
+    else:
+        is_new_arrival = pd.Series(False, index=risk_rows.index)
+
+    risk_new_rows = risk_rows[is_new_arrival]
+    risk_stale_rows = risk_rows[~is_new_arrival]
+
+    risk_new_qty = float(risk_new_rows["total_qty"].sum())
+    risk_new_management_value = float(
+        risk_new_rows["management_value"].sum()
+    )
+    risk_new_products = int(risk_new_rows["nm_id"].nunique())
+    risk_new_share_pct = (
+        risk_new_qty / total_qty * 100 if total_qty > 0 else 0
+    )
+
+    risk_stale_qty = float(risk_stale_rows["total_qty"].sum())
+    risk_stale_management_value = float(
+        risk_stale_rows["management_value"].sum()
+    )
+    risk_stale_products = int(risk_stale_rows["nm_id"].nunique())
+    risk_stale_share_pct = (
+        risk_stale_qty / total_qty * 100 if total_qty > 0 else 0
+    )
+
     # =========================================================================
     # 90+
     # =========================================================================
@@ -1563,6 +1931,24 @@ def _get_full_stock_health(
         "no_sales_share_pct": (
             no_sales_share_pct
         ),
+
+        # -----------------------------------------------------------
+        # НОВОЕ VS ЗАЛЕЖАВШЕЕСЯ (только внутри зоны риска)
+        # -----------------------------------------------------------
+
+        "new_arrival_window_days": NEW_ARRIVAL_WINDOW_DAYS,
+        "arrival_data_reliable": arrival_data_reliable,
+        "history_days": history_days_value,
+
+        "risk_new_qty": risk_new_qty,
+        "risk_new_share_pct": risk_new_share_pct,
+        "risk_new_management_value": risk_new_management_value,
+        "risk_new_products": risk_new_products,
+
+        "risk_stale_qty": risk_stale_qty,
+        "risk_stale_share_pct": risk_stale_share_pct,
+        "risk_stale_management_value": risk_stale_management_value,
+        "risk_stale_products": risk_stale_products,
     }
 
 
@@ -1680,6 +2066,12 @@ def get_stock_balance_data(
 
     brand_df = (
         _get_brand_stock_structure(
+            effective_date_string
+        )
+    )
+
+    category_df = (
+        _get_category_stock_structure(
             effective_date_string
         )
     )
@@ -1814,6 +2206,11 @@ def get_stock_balance_data(
 
         "brands": dataframe_records(
             brand_df,
+            limit=9,
+        ),
+
+        "categories": dataframe_records(
+            category_df,
             limit=9,
         ),
 

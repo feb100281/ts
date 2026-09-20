@@ -98,6 +98,8 @@ def build_commercial_review_html(payload: dict, fbs=None) -> str:
          pages.forecast_page, (payload,)),
         ("Финансовый результат", "Финансовый результат",
          pages.finance_page, (payload, findings)),
+        ("Анализ расходов WB", "Расходы WB",
+         pages.wb_expenses_page, (payload,)),
         ("Запасы: структура и покрытие", "Запасы",
          pages.stocks_page, (payload,)),
         ("Запасы: зона риска", "Запасы",

@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from . import config as C
 from .formats import (
@@ -848,7 +848,87 @@ def _stock_findings(payload):
         risk_value = num(health.get("risk_management_value"))
         coverage = num(health.get("coverage_days"))
 
-        if risk_share is not None and risk_share >= C.STOCK_RISK_ALERT_PCT:
+        arrival_reliable = bool(health.get("arrival_data_reliable"))
+        risk_stale_share = num(health.get("risk_stale_share_pct"))
+        risk_new_share = num(health.get("risk_new_share_pct"))
+
+        if (
+            arrival_reliable
+            and risk_stale_share is not None
+        ):
+            # Данных о дате прихода достаточно, чтобы не путать
+            # новый товар с залежавшимся -- пишем вывод именно
+            # про залежавшееся, а не про всю зону риска разом.
+            if risk_stale_share >= C.STOCK_RISK_ALERT_PCT:
+                out.append(Finding(
+                    severity="serious" if risk_stale_share >= 45 else "warning",
+                    scope="stocks",
+                    title=(
+                        f"{pct(risk_stale_share)} запаса залежалось "
+                        f"и продаётся плохо или не продаётся"
+                    ),
+                    metric=money(health.get("risk_stale_management_value")),
+                    fact=(
+                        f"В залежавшемся товаре лежит "
+                        f"{money(health.get('risk_stale_management_value'))} "
+                        f"управленческой стоимости, это "
+                        f"{fmt_qty(health.get('risk_stale_qty'))} "
+                        f"{plural(num(health.get('risk_stale_qty')) or 0, 'штука', 'штуки', 'штук')} "
+                        f"по {fmt_qty(health.get('risk_stale_products'))} "
+                        f"{plural(num(health.get('risk_stale_products')) or 0, 'товару', 'товарам', 'товарам')}."
+                    ),
+                    cause=(
+                        f"Это товар старше "
+                        f"{fmt_days(health.get('new_arrival_window_days'))} "
+                        f"на складе, у которого либо нет продаж, "
+                        f"либо покрытие больше 90 дней — новые "
+                        f"поставки сюда уже не попадают, они "
+                        f"показаны отдельно."
+                    ),
+                    action=(
+                        "По каждой позиции нужно решение — уценка, "
+                        "вывоз или списание, а не ожидание."
+                    ),
+                    weight=num(health.get("risk_stale_management_value")) or 0,
+                ))
+
+            if (
+                risk_new_share is not None
+                and risk_new_share >= C.STOCK_NEW_ARRIVAL_NOTE_PCT
+            ):
+                out.append(Finding(
+                    severity="neutral",
+                    scope="stocks",
+                    title=(
+                        f"{pct(risk_new_share)} запаса — новые поставки "
+                        f"без продаж"
+                    ),
+                    metric=money(health.get("risk_new_management_value")),
+                    fact=(
+                        f"Приехало за последние "
+                        f"{fmt_days(health.get('new_arrival_window_days'))} "
+                        f"и пока без продаж (или с покрытием больше "
+                        f"90 дней при малой истории) "
+                        f"{fmt_qty(health.get('risk_new_qty'))} "
+                        f"{plural(num(health.get('risk_new_qty')) or 0, 'штука', 'штуки', 'штук')} "
+                        f"по {fmt_qty(health.get('risk_new_products'))} "
+                        f"{plural(num(health.get('risk_new_products')) or 0, 'товару', 'товарам', 'товарам')} "
+                        f"на {money(health.get('risk_new_management_value'))}."
+                    ),
+                    cause=(
+                        "Это не проблема, а нормальный разгон продаж "
+                        "после поставки — решение по этому товару "
+                        "пока не нужно, нужно время."
+                    ),
+                    action="",
+                    weight=0,
+                ))
+
+        elif risk_share is not None and risk_share >= C.STOCK_RISK_ALERT_PCT:
+            # Истории остатков не хватает, чтобы надёжно отличить
+            # новое от залежавшегося (например, свежее подключение
+            # склада) -- честно откатываемся к общей формулировке
+            # с оговоркой, а не делаем вид, что деление посчитано.
             no_sales_share = num(health.get("no_sales_share_pct")) or 0
 
             out.append(Finding(
@@ -869,8 +949,9 @@ def _stock_findings(payload):
                     f"вообще ни разу за последние 30 дней. "
                     f"Важная оговорка: в эту же группу попадает "
                     f"товар, который только что приехал и ещё не "
-                    f"успел начать продаваться, — по остаткам он "
-                    f"неотличим от залежавшегося."
+                    f"успел начать продаваться — по остаткам он "
+                    f"неотличим от залежавшегося, а истории "
+                    f"остатков пока не хватает, чтобы их разделить."
                 ),
                 action=(
                     "Сначала отделите новые поставки: по ним "
@@ -1261,7 +1342,25 @@ def fbs_findings(fbs, window_days=30):
     amount = num(kpi.get("amount")) or 0
     total = num(kpi.get("orders_total")) or 0
 
-    if in_work and overdue:
+    # Если срез заказов не обновлялся давно, "просрочка" в нём
+    # не значит реальную просрочку -- она значит, что статусы
+    # просто не снялись. Писать вывод по таким цифрам как про
+    # проблему сборки нельзя, поэтому просрочку из выводов
+    # в этом случае не считаем вовсе.
+    as_of = fbs.get("as_of")
+    is_stale = (
+        isinstance(as_of, datetime)
+        and (
+            (
+                datetime.now(as_of.tzinfo)
+                if as_of.tzinfo
+                else datetime.now()
+            )
+            - as_of
+        ) > timedelta(hours=C.FBS_STALE_HOURS)
+    )
+
+    if in_work and overdue and not is_stale:
         share = 100.0 * overdue / in_work
         avg_check = amount / total if total else 0
         frozen = overdue * avg_check
@@ -1333,7 +1432,11 @@ def fbs_findings(fbs, window_days=30):
     # --- концентрация просрочки по направлениям ----------------------
     logistics = fbs.get("logistics")
 
-    if logistics is not None and not getattr(logistics, "empty", True):
+    if (
+        not is_stale
+        and logistics is not None
+        and not getattr(logistics, "empty", True)
+    ):
         try:
             grouped = (
                 logistics
