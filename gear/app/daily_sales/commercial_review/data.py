@@ -49,6 +49,7 @@ def build_fbs_slice(report_date: date, window_days=FBS_WINDOW_DAYS):
         return collect_fbs_analysis(
             start=report_date - timedelta(days=window_days - 1),
             end=report_date,
+            as_of_date=report_date,
         )
 
     except Exception:

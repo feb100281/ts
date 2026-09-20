@@ -103,7 +103,7 @@ def commercial_review_controls():
 
                                                     dmc.Text(
                                                         (
-                                                            "17 страниц: "
+                                                            
                                                             "выводы, графики, "
                                                             "заказы FBS"
                                                         ),

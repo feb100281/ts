@@ -144,10 +144,24 @@ class FbsData:
     """
     Контекст работы с витринами заказов FBS.
 
-    При входе создаётся временная таблица fbs_base — текущий
-    срез заказов, обогащённый карточкой товара и рассчитанным
-    возрастом заказа. Все остальные запросы читают её.
+    При входе создаётся временная таблица fbs_base — срез
+    заказов на нужный момент, обогащённый карточкой товара
+    и рассчитанным возрастом заказа. Все остальные запросы
+    читают её.
+
+    as_of_date — на какую дату брать снимок (snapshot_date).
+    По умолчанию None — берём самый свежий снимок, какой есть
+    (это поведение, на котором работает обычный дашборд
+    заказов и Excel-выгрузка, и оно не меняется). Если задан,
+    берём последний снимок НЕ ПОЗЖЕ этой даты — так отчёт за
+    конкретное число может показать состояние заказов именно
+    на эту дату, а не на сегодня. Снимков "будущее число"
+    (позже as_of_date) при этом не существует физически, но
+    подстраховка на всякий случай не помешает.
     """
+
+    def __init__(self, as_of_date: date | None = None) -> None:
+        self._as_of_date = as_of_date
 
     def __enter__(self) -> "FbsData":
         self.con = get_duckdb_conn_with_opt(with_pg=False)
@@ -274,6 +288,25 @@ class FbsData:
     # Момент, на который актуальны данные
     # --------------------------------------------------------
 
+    def _snapshot_expr(self, source: str) -> str:
+        """
+        Подзапрос, возвращающий нужный snapshot_date источника.
+
+        Без as_of_date — просто самый свежий снимок (прежнее
+        поведение). С as_of_date — последний снимок не позже
+        запрошенной даты: снимки идут по дням, и на выходные
+        или сбой синхронизации точного совпадения может не
+        быть, поэтому берём ближайший предыдущий, а не точное
+        равенство.
+        """
+        if self._as_of_date is None:
+            return f"(SELECT MAX(snapshot_date) FROM {source})"
+
+        return (
+            f"(SELECT MAX(snapshot_date) FROM {source} "
+            f"WHERE snapshot_date <= DATE '{self._as_of_date.isoformat()}')"
+        )
+
     def _resolve_as_of(self) -> datetime:
         """
         Момент выгрузки текущего среза.
@@ -288,9 +321,7 @@ class FbsData:
                 MAX(loaded_at) AS loaded_at,
                 MAX(snapshot_date) AS snapshot_date
             FROM {self.orders_source}
-            WHERE snapshot_date = (
-                SELECT MAX(snapshot_date) FROM {self.orders_source}
-            )
+            WHERE snapshot_date = {self._snapshot_expr(self.orders_source)}
             """
         ).fetchone()
 
@@ -377,10 +408,7 @@ class FbsData:
             f"""
             SELECT {checks}
             FROM {self.orders_source}
-            WHERE snapshot_date = (
-                SELECT MAX(snapshot_date)
-                FROM {self.orders_source}
-            )
+            WHERE snapshot_date = {self._snapshot_expr(self.orders_source)}
             """
         ).fetchone()
 
@@ -457,10 +485,7 @@ class FbsData:
             WITH snapshot AS (
                 SELECT *
                 FROM {self.orders_source}
-                WHERE snapshot_date = (
-                    SELECT MAX(snapshot_date)
-                    FROM {self.orders_source}
-                )
+                WHERE snapshot_date = {self._snapshot_expr(self.orders_source)}
             ),
 
             enriched AS (
@@ -907,10 +932,7 @@ class FbsData:
             LEFT JOIN (
                 SELECT *
                 FROM {self.supplies_source}
-                WHERE snapshot_date = (
-                    SELECT MAX(snapshot_date)
-                    FROM {self.supplies_source}
-                )
+                WHERE snapshot_date = {self._snapshot_expr(self.supplies_source)}
             ) s ON s.supply_id = o.supply_id
             """
             supply_columns = """
@@ -1127,6 +1149,7 @@ def collect_fbs_analysis(
     cat_list=None,
     brand_list=None,
     gender_list=None,
+    as_of_date=None,
 ) -> dict:
     """
     Собирает все срезы анализа за один заход.
@@ -1143,7 +1166,7 @@ def collect_fbs_analysis(
         "gender_list": gender_list,
     }
 
-    with FbsData() as fbs:
+    with FbsData(as_of_date=as_of_date) as fbs:
         return {
             "kpi": fbs.get_kpi(**filters),
             "buckets_in_work": fbs.get_assembly_buckets(
@@ -1159,6 +1182,7 @@ def collect_fbs_analysis(
             "statuses": fbs.get_statuses(**filters),
             "daily": fbs.get_daily(**filters),
             "as_of": fbs.as_of,
+            "as_of_date_requested": as_of_date,
             "source": fbs.orders_source,
             "amount_source": fbs.amount_source,
         }

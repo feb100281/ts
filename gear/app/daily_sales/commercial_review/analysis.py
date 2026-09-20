@@ -62,6 +62,8 @@ class Finding:
     action: str = ""
     metric: str = ""       # короткая цифра для плашки
     weight: float = 0.0    # вес в рублях, для сортировки внутри severity
+    live: bool = False     # верно "прямо сейчас", а не на report_date --
+                            # такие находки не попадают на страницу 1
 
     def sort_key(self):
         return (
@@ -501,6 +503,9 @@ def _plan_findings(payload):
                 f"Факт {money(fact_to_date)} против плана "
                 f"{money(plan.get('plan_to_date'))} на эту дату, "
                 f"отставание {signed_money(delta)}."
+                "Корректировка плана пока не проведена: в отчёте используется "
+                "первоначальный план, утверждённый в начале года, без учёта последствий "
+                "пожаров и потери товара."
             ),
             cause=gap,
             action=(
@@ -666,14 +671,20 @@ def _finance_findings(payload):
                 f"продано без известной себестоимости."
             ),
             cause=(
-                "Пока себестоимости нет, маржа по этим продажам "
-                "считается завышенной: расход просто не попадает "
-                "в расчёт."
+                "В проводке по этим продажам не записана "
+                "бухгалтерская себестоимость, поэтому вместо неё "
+                "подставляется оценка: последняя известная цена "
+                "по товару, а если и её нет — усреднённый резерв "
+                "(620 ₽ для управленческого учёт)."
+                " Маржа по этим продажам посчитана "
+                "по оценке, а не по факту, и может быть как ниже, "
+                "так и выше реальной."
             ),
             action=(
                 "Проверьте приходные документы по товарам без "
-                "себестоимости — до этого цифры маржи в отчёте "
-                "оптимистичнее реальных."
+                "себестоимости — чем их больше, тем сильнее "
+                "оценочная себестоимость может расходиться "
+                "с реальной по этим позициям."
             ),
             weight=num(quality.get("no_cost_units")) or 0,
         ))
@@ -1347,18 +1358,26 @@ def fbs_findings(fbs, window_days=30):
     # просто не снялись. Писать вывод по таким цифрам как про
     # проблему сборки нельзя, поэтому просрочку из выводов
     # в этом случае не считаем вовсе.
+    # Та же логика "устарел ли снимок", что и в pages.py::
+    # _fbs_is_stale -- для отчёта за прошлую дату сравниваем
+    # снимок с самой этой датой, а не с "сейчас" (иначе любой
+    # исторический отчёт считался бы устаревшим просто по факту
+    # того, что дата в прошлом).
     as_of = fbs.get("as_of")
-    is_stale = (
-        isinstance(as_of, datetime)
-        and (
-            (
-                datetime.now(as_of.tzinfo)
-                if as_of.tzinfo
-                else datetime.now()
+    requested = fbs.get("as_of_date_requested")
+
+    if isinstance(as_of, datetime):
+        if requested is not None and requested != date.today():
+            reference = datetime.combine(requested, datetime.max.time())
+            if as_of.tzinfo:
+                reference = reference.replace(tzinfo=as_of.tzinfo)
+        else:
+            reference = (
+                datetime.now(as_of.tzinfo) if as_of.tzinfo else datetime.now()
             )
-            - as_of
-        ) > timedelta(hours=C.FBS_STALE_HOURS)
-    )
+        is_stale = (reference - as_of) > timedelta(hours=C.FBS_STALE_HOURS)
+    else:
+        is_stale = False
 
     if in_work and overdue and not is_stale:
         share = 100.0 * overdue / in_work
@@ -1373,16 +1392,29 @@ def fbs_findings(fbs, window_days=30):
             else ("serious" if share >= C.FBS_OVERDUE_ALERT_PCT else "warning")
         )
 
+        as_of_label = (
+            f" (данные на {fmt_date(as_of)}"
+            + (f", {as_of.strftime('%H:%M')}" if as_of else "")
+            + ")"
+            if isinstance(as_of, datetime)
+            else ""
+        )
+
         out.append(Finding(
             severity=severity,
             scope="fbs",
-            title=f"Просрочено {fmt_qty(overdue)} заказов FBS прямо сейчас",
+            title=(
+                f"Просрочено {fmt_qty(overdue)} заказов FBS "
+                f"на момент среза{as_of_label}"
+            ),
             metric=pct(share),
             fact=(
-                f"Это {pct(share)} от того, что сейчас на сборке "
-                f"({fmt_qty(in_work)}). Самый старый висит "
+                f"Это {pct(share)} от того, что было на сборке "
+                f"({fmt_qty(in_work)}). Самый старый заказ провисел "
                 f"{fmt_hours(oldest)} при нормативе "
-                f"{C.FBS_SLA_HOURS} часов."
+                f"{C.FBS_SLA_HOURS} часов. Возраст заказов и статус "
+                f"«просрочено» считаются от снимка данных, ближайшего "
+                f"к дате этого отчёта, а не от текущего момента."
             ),
             cause=(
                 f"В этих заказах примерно {money(frozen)} — деньги, "
@@ -1394,7 +1426,68 @@ def fbs_findings(fbs, window_days=30):
                 "раньше, чем собирать новые заказы."
             ),
             weight=frozen,
+            # "Прямо сейчас" -- живой остаток на сборке, привязанный
+            # к моменту синхронизации с WB, а не к report_date отчёта.
+            # На странице 1 (которая всегда про report_date) это
+            # вводит в заблуждение, поэтому там эта находка не
+            # показывается -- см. summary_page(). В разделе FBS
+            # (там, где ясно видно as_of) остаётся.
+            live=True,
         ))
+
+    # --- скорость сборки закрытых заказов -----------------------------
+    avg_close = num(kpi.get("avg_hours_to_close"))
+    closed = num(kpi.get("orders_closed")) or 0
+
+    if closed and avg_close is not None:
+        over_norm = avg_close > C.FBS_SLA_HOURS
+
+        if over_norm:
+            ratio = avg_close / C.FBS_SLA_HOURS if C.FBS_SLA_HOURS else 1
+            out.append(Finding(
+                severity="serious" if ratio >= 1.5 else "warning",
+                scope="fbs",
+                title=(
+                    f"Закрытые заказы FBS собираются в среднем "
+                    f"{fmt_hours(avg_close)} {period}"
+                ),
+                metric=fmt_hours(avg_close),
+                fact=(
+                    f"Норматив — {C.FBS_SLA_HOURS} ч. Расчёт по "
+                    f"{fmt_qty(closed)} уже закрытым "
+                    f"{plural(closed, 'заказу', 'заказам', 'заказам')} "
+                    f"{period} — это факт по отгруженному, а не срез "
+                    f"на текущий момент, поэтому он не зависит от "
+                    f"того, когда собирался отчёт."
+                ),
+                cause=(
+                    "Сборка стабильно выходит за норматив — это "
+                    "уже не разовый затор, а рабочий темп склада."
+                ),
+                action=(
+                    "Стоит смотреть, что именно тормозит сборку: "
+                    "конкретный склад, категория товара или общая "
+                    "нагрузка на команду."
+                ),
+                weight=closed * (avg_close - C.FBS_SLA_HOURS),
+            ))
+        else:
+            out.append(Finding(
+                severity="good",
+                scope="fbs",
+                title=(
+                    f"Закрытые заказы FBS собираются в среднем "
+                    f"{fmt_hours(avg_close)} {period}"
+                ),
+                metric=fmt_hours(avg_close),
+                fact=(
+                    f"Это в пределах норматива ({C.FBS_SLA_HOURS} ч). "
+                    f"Расчёт по {fmt_qty(closed)} уже закрытым "
+                    f"{plural(closed, 'заказу', 'заказам', 'заказам')} "
+                    f"{period}."
+                ),
+                weight=closed,
+            ))
 
     # --- отмены ------------------------------------------------------
     cancelled = num(kpi.get("orders_cancelled")) or 0

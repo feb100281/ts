@@ -220,6 +220,14 @@ def as_date(value):
     if value is None or value == "":
         return None
 
+    # NaN/NaT (pandas) не равны сами себе -- ловим их без
+    # импорта pandas в модуль форматирования.
+    try:
+        if value != value:
+            return None
+    except Exception:
+        pass
+
     if isinstance(value, datetime):
         return value.date()
 
