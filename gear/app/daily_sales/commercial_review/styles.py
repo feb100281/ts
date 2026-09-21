@@ -263,7 +263,7 @@ p {{ margin: 0 0 7px; }}
     font-size: 10.6px;
     line-height: 1.5;
     margin: 0;
-    max-width: 150mm;
+    max-width: none;
 }}
 
 .rule-soft {{
@@ -775,6 +775,14 @@ table.tbl.wide tbody td {{
 .cal-week-delta {{
     font-size: 8.4px;
     font-weight: 700;
+}}
+
+.cal-week-extra {{
+    font-size: 7.3px;
+    font-weight: 600;
+    color: {C.MUTED};
+    margin-top: 2px;
+    line-height: 1.15;
 }}
 
 .cal-legend {{

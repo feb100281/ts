@@ -29,7 +29,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 from . import config as C
 from .formats import as_date, month_number, num
@@ -205,21 +205,106 @@ def _headroom(ax, factor=1.18):
 # 1. ВЫРУЧКА: ДИНАМИКА
 # ============================================================
 
+# def revenue_trend(rows, days=90, width=FULL_W, height=2.45):
+#     """
+#     Дневная выручка за период и её сглаженная линия.
+
+#     Столбики — факт по дням, линия — среднее за 7 дней.
+#     Одна только линия скрывает выходные провалы, одни только
+#     столбики не показывают тренд: нужны оба слоя.
+#     """
+#     data = []
+
+#     for row in rows or []:
+#         d = as_date(row.get("date_from"))
+#         v = num(row.get("net_amount"))
+#         if d is None:
+#             continue
+#         data.append((d, v or 0.0))
+
+#     if len(data) < 7:
+#         return None
+
+#     data.sort(key=lambda item: item[0])
+#     data = data[-days:]
+
+#     labels = [d.strftime("%d.%m") for d, _ in data]
+#     values = [v for _, v in data]
+
+#     # Среднее за 7 дней
+#     ma = []
+#     for i in range(len(values)):
+#         window = values[max(0, i - 6): i + 1]
+#         ma.append(sum(window) / len(window))
+
+#     x = list(range(len(values)))
+
+#     fig, ax = _fig(width, height)
+
+#     ax.bar(
+#         x,
+#         values,
+#         width=0.72,
+#         color=C.TINT,
+#         edgecolor=C.SERIES_1,
+#         linewidth=0.35,
+#         label="Выручка за день",
+#     )
+
+#     ax.plot(
+#         x,
+#         ma,
+#         color=C.SERIES_1,
+#         linewidth=1.7,
+#         label="Среднее за день по последним 7 дням",
+#     )
+
+#     # Подписываем только последнее значение сглаженной линии:
+#     # оно и есть текущий темп.
+#     # Без единицы это число читают как выручку последнего дня.
+#     ax.annotate(
+#         f"{_short(ma[-1])} ₽ в день",
+#         xy=(x[-1], ma[-1]),
+#         xytext=(-2, 7),
+#         textcoords="offset points",
+#         ha="right",
+#         color=C.SERIES_1,
+#         fontweight="bold",
+#         fontsize=7.4,
+#     )
+
+#     keep = _thin(labels, 14)
+#     ax.set_xticks([x[i] for i in keep])
+#     ax.set_xticklabels([labels[i] for i in keep])
+
+#     ax.yaxis.set_major_formatter(_money_formatter())
+#     ax.set_ylabel("Выручка, ₽")
+#     ax.set_xlim(-0.8, len(values) - 0.2)
+#     _headroom(ax, 1.14)
+#     _legend(ax, ncol=2)
+
+#     return _render(fig)
+
+
+
+
+
 def revenue_trend(rows, days=90, width=FULL_W, height=2.45):
     """
     Дневная выручка за период и её сглаженная линия.
 
     Столбики — факт по дням, линия — среднее за 7 дней.
-    Одна только линия скрывает выходные провалы, одни только
-    столбики не показывают тренд: нужны оба слоя.
+    Максимальный и минимальный дни выделены цветом.
     """
     data = []
 
     for row in rows or []:
         d = as_date(row.get("date_from"))
         v = num(row.get("net_amount"))
+
         if d is None:
             continue
+
         data.append((d, v or 0.0))
 
     if len(data) < 7:
@@ -230,18 +315,22 @@ def revenue_trend(rows, days=90, width=FULL_W, height=2.45):
 
     labels = [d.strftime("%d.%m") for d, _ in data]
     values = [v for _, v in data]
+    x = list(range(len(values)))
+
+    # Максимальный и минимальный дни за показанный период
+    max_idx = max(range(len(values)), key=lambda i: values[i])
+    min_idx = min(range(len(values)), key=lambda i: values[i])
 
     # Среднее за 7 дней
     ma = []
-    for i in range(len(values)):
-        window = values[max(0, i - 6): i + 1]
-        ma.append(sum(window) / len(window))
 
-    x = list(range(len(values)))
+    for i in range(len(values)):
+        window = values[max(0, i - 6):i + 1]
+        ma.append(sum(window) / len(window))
 
     fig, ax = _fig(width, height)
 
-    ax.bar(
+    bars = ax.bar(
         x,
         values,
         width=0.72,
@@ -251,6 +340,13 @@ def revenue_trend(rows, days=90, width=FULL_W, height=2.45):
         label="Выручка за день",
     )
 
+    # Выделяем только максимальный и минимальный столбики
+    bars[max_idx].set_facecolor(C.GOOD)
+    bars[max_idx].set_edgecolor(C.GOOD)
+
+    bars[min_idx].set_facecolor(C.CRITICAL)
+    bars[min_idx].set_edgecolor(C.CRITICAL)
+
     ax.plot(
         x,
         ma,
@@ -259,9 +355,35 @@ def revenue_trend(rows, days=90, width=FULL_W, height=2.45):
         label="Среднее за день по последним 7 дням",
     )
 
-    # Подписываем только последнее значение сглаженной линии:
-    # оно и есть текущий темп.
-    # Без единицы это число читают как выручку последнего дня.
+    # Максимальная выручка
+    ax.annotate(
+        f"Максимум\n{labels[max_idx]} · {_short(values[max_idx])} ₽",
+        xy=(x[max_idx], values[max_idx]),
+        xytext=(0, 8),
+        textcoords="offset points",
+        ha="center",
+        va="bottom",
+        color=C.GOOD,
+        fontweight="bold",
+        fontsize=6.8,
+        linespacing=1.25,
+    )
+
+    # Минимальная выручка
+    ax.annotate(
+        f"Минимум\n{labels[min_idx]} · {_short(values[min_idx])} ₽",
+        xy=(x[min_idx], values[min_idx]),
+        xytext=(0, 8),
+        textcoords="offset points",
+        ha="center",
+        va="bottom",
+        color=C.CRITICAL,
+        fontweight="bold",
+        fontsize=6.8,
+        linespacing=1.25,
+    )
+
+    # Последнее значение сглаженной линии — текущий темп
     ax.annotate(
         f"{_short(ma[-1])} ₽ в день",
         xy=(x[-1], ma[-1]),
@@ -280,7 +402,10 @@ def revenue_trend(rows, days=90, width=FULL_W, height=2.45):
     ax.yaxis.set_major_formatter(_money_formatter())
     ax.set_ylabel("Выручка, ₽")
     ax.set_xlim(-0.8, len(values) - 0.2)
-    _headroom(ax, 1.14)
+
+    # Чуть больше свободного места сверху для подписи максимума
+    _headroom(ax, 1.22)
+
     _legend(ax, ncol=2)
 
     return _render(fig)
@@ -380,7 +505,8 @@ def revenue_vs_last_year(rows, width=FULL_W, height=2.3):
 # 2. РАЗЛОЖЕНИЕ ИЗМЕНЕНИЯ ВЫРУЧКИ
 # ============================================================
 
-def revenue_waterfall(split, width=FULL_W, height=2.6):
+def revenue_waterfall(split, width=FULL_W, height=2.6,
+                      prev_label=None, cur_label=None):
     """
     Из чего сложилось изменение чистой выручки.
 
@@ -388,6 +514,11 @@ def revenue_waterfall(split, width=FULL_W, height=2.6):
     три столбика: количество, цена и возвраты. Их сумма точно
     равна разнице — картинку можно показывать коммерческой
     команде без оговорок.
+
+    prev_label / cur_label — готовые подписи для крайних
+    столбиков (обычно с датами периода, чтобы не гадать,
+    какая именно неделя на графике). Без них — старые общие
+    подписи "Прошлая неделя" / "Текущая неделя".
     """
     if not split:
         return None
@@ -404,11 +535,11 @@ def revenue_waterfall(split, width=FULL_W, height=2.6):
     fig, ax = _fig(width, height)
 
     labels = [
-        "Прошлая\nнеделя",
+        prev_label or "Прошлая\nнеделя",
         "Количество",
         "Средняя\nцена",
         "Возвраты",
-        "Текущая\nнеделя",
+        cur_label or "Текущая\nнеделя",
     ]
 
     running = base
@@ -470,6 +601,61 @@ def revenue_waterfall(split, width=FULL_W, height=2.6):
     ax.set_ylabel("Чистая выручка за неделю, ₽")
     ax.set_ylim(bottom=0)
     _headroom(ax, 1.16)
+
+    return _render(fig)
+
+
+def revenue_change_trend(weeks, width=FULL_W, height=1.9):
+    """
+    Изменение чистой выручки к тому же отрезку прошлой недели,
+    по нескольким последним неделям (см. decompose_weeks).
+
+    Отвечает на вопрос "разовый скачок или тренд": один
+    столбик над нулём или под ним ничего не говорит сам
+    по себе, а несколько подряд в одну сторону — уже
+    закономерность, а не шум. Недели без полных 7 дней
+    (текущая, ещё не закрытая) рисуем серым — их высота
+    не сравнима напрямую с полными неделями.
+    """
+    rows = [w for w in (weeks or []) if w.get("total") is not None]
+    if len(rows) < 2:
+        return None
+
+    labels = [w["label"] for w in rows]
+    values = [w["total"] for w in rows]
+    full = [bool(w.get("full")) for w in rows]
+    x = list(range(len(rows)))
+
+    fig, ax = _fig(width, height)
+
+    colors = [
+        (C.GOOD if v >= 0 else C.CRITICAL) if f else C.LINE
+        for v, f in zip(values, full)
+    ]
+
+    ax.bar(x, values, width=0.55, color=colors, linewidth=0)
+    ax.axhline(0, color=C.AXIS, linewidth=0.6)
+
+    for i, v in enumerate(values):
+        ax.annotate(
+            _short_signed(v),
+            xy=(x[i], v),
+            xytext=(0, 3 if v >= 0 else -11),
+            textcoords="offset points",
+            ha="center",
+            va="bottom" if v >= 0 else "top",
+            fontsize=7.0,
+            fontweight="bold",
+            color=C.INK if full[i] else C.MUTED,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+    ax.margins(y=0.22)
+
+    ax.yaxis.set_major_formatter(_money_formatter())
+    ax.set_ylabel("Изменение выручки, ₽")
 
     return _render(fig)
 
@@ -1003,7 +1189,11 @@ def price_and_discount(rows, days=60, width=FULL_W, height=2.45):
     Цена продавца, цена покупателя и скидка WB между ними.
 
     Заливка между линиями — это и есть скидка WB в рублях
-    на единицу. Её не надо считать, она видна.
+    на единицу. Её не надо считать, она видна. Подписи у пика,
+    у минимума и в конце графика дают скидку сразу и в рублях,
+    и в процентах от цены до скидки WB — одни рубли легко
+    прочитать неверно (624 ₽ скидки при цене 1800 ₽ и при цене
+    900 ₽ — совсем разная по силе скидка).
     """
     data = []
 
@@ -1061,31 +1251,41 @@ def price_and_discount(rows, days=60, width=FULL_W, height=2.45):
             fontweight="bold",
         )
 
-    # Скидка отдельно: конец периода, максимум и минимум.
-    # Без этого разницу между линиями нужно было бы прикидывать
-    # на глаз по заливке -- а её как раз спрашивают чаще всего.
+    # Скидка отдельно: конец периода, максимум и минимум --
+    # в рублях и в процентах от цены до скидки WB. Без этого
+    # разницу между линиями нужно было бы прикидывать на глаз
+    # по заливке -- а её как раз спрашивают чаще всего.
     discount = [s - b for s, b in zip(seller, buyer)]
+    discount_pct = [
+        (value / s * 100) if s else 0.0
+        for value, s in zip(discount, seller)
+    ]
+
     end_discount = discount[-1]
+    end_pct = discount_pct[-1]
     max_i = max(range(len(discount)), key=lambda i: discount[i])
     min_i = min(range(len(discount)), key=lambda i: discount[i])
 
     ax.annotate(
-        f"скидка {_short(end_discount)}",
+        f"скидка {_short(end_discount)} · {_pct_label(end_pct, 0)}",
         xy=(x[-1], (seller[-1] + buyer[-1]) / 2),
-        xytext=(-34, -3),
+        xytext=(-8, 0),
         textcoords="offset points",
         ha="right",
         va="center",
-        fontsize=6.6,
+        fontsize=6.8,
+        fontweight="bold",
         color=C.MUTED,
     )
 
     # Максимум и минимум не подписываем, когда они совпадают
     # с концом периода -- подпись уже стоит рядом, вторая
-    # только наложится на первую.
+    # только наложится на первую. Красный/зелёный -- та же
+    # логика цвета, что и в остальном отчёте: где скидка
+    # съедала больше всего маржи и где меньше всего.
     for i, tag, color in (
-        (max_i, "макс.", C.SERIES_2),
-        (min_i, "мин.", C.NAVY),
+        (max_i, "макс.", C.CRITICAL),
+        (min_i, "мин.", C.GOOD),
     ):
         if i in (len(discount) - 1, 0):
             continue
@@ -1100,18 +1300,19 @@ def price_and_discount(rows, days=60, width=FULL_W, height=2.45):
             zorder=5,
         )
         ax.annotate(
-            f"{tag} скидка {_short(discount[i])}",
+            f"{tag} скидка {_short(discount[i])} "
+            f"· {_pct_label(discount_pct[i], 0)}",
             xy=(x[i], mid_y),
-            xytext=(0, 9 if above else -11),
+            xytext=(0, 10 if above else -12),
             textcoords="offset points",
             ha="center",
             va="bottom" if above else "top",
-            fontsize=6.6,
+            fontsize=6.8,
             fontweight="bold",
             color=color,
         )
 
-    ax.margins(y=0.14)
+    ax.margins(y=0.17)
 
     keep = _thin(labels, 12)
     ax.set_xticks([x[i] for i in keep])
@@ -1637,6 +1838,13 @@ def revenue_vs_margin(rows, limit=12, width=FULL_W, height=None):
     ax_left.set_xlabel("Выручка без НДС, ₽")
     ax_left.set_xlim(0, (max(revenue) or 1) * 1.26)
 
+    # Панель узкая (меньше половины ширины фигуры), а разброс
+    # выручки между брендами обычно большой -- дефолтный локатор
+    # matplotlib расставляет тик через каждые 20 млн и подписи
+    # наезжают друг на друга. Ограничиваем число тиков явно,
+    # чтобы они гарантированно помещались.
+    ax_left.xaxis.set_major_locator(MaxNLocator(nbins=5))
+
     # ---- справа: маржинальность ----------------------------
     colors = []
     values = []
@@ -1717,6 +1925,73 @@ EXPENSE_PALETTE = [
 ]
 
 
+def discount_weekly(weeks, width=FULL_W, height=1.7):
+    """
+    Скидка WB по неделям — столбики с процентом сверху.
+
+    Та же разбивка по неделям, что и в календаре выручки —
+    читаются вместе: там сумма, здесь доля, которую забирает
+    скидка. Недели без полных 7 дней данных рисуем светлее
+    и без подписи "макс/мин", чтобы не сравнивать их как
+    полноценные.
+    """
+    rows = [w for w in (weeks or []) if w.get("discount_pct") is not None]
+    if len(rows) < 2:
+        return None
+
+    labels = [w["label"] for w in rows]
+    values = [w["discount_pct"] for w in rows]
+    full = [bool(w.get("full")) for w in rows]
+    x = list(range(len(rows)))
+
+    fig, ax = _fig(width, height)
+
+    full_values = [v for v, f in zip(values, full) if f]
+    max_i = (
+        max((i for i in x if full[i]), key=lambda i: values[i])
+        if full_values else None
+    )
+    min_i = (
+        min((i for i in x if full[i]), key=lambda i: values[i])
+        if full_values else None
+    )
+
+    colors = []
+    for i in x:
+        if not full[i]:
+            colors.append(C.LINE)
+        elif i == max_i:
+            colors.append(C.CRITICAL)
+        elif i == min_i:
+            colors.append(C.SERIES_1)
+        else:
+            colors.append(C.SERIES_2)
+
+    ax.bar(x, values, width=0.55, color=colors, linewidth=0)
+
+    for i, v in enumerate(values):
+        ax.annotate(
+            _pct_label(v, 1),
+            xy=(x[i], v),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            fontsize=7.0,
+            fontweight="bold",
+            color=C.INK if full[i] else C.MUTED,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+
+    ax.yaxis.set_major_formatter(_pct_formatter(0))
+    ax.set_ylabel("Скидка WB")
+    _headroom(ax, 1.22)
+
+    return _render(fig)
+
+
 def wb_expenses_weekly(weeks, categories, total_spike=None,
                         width=FULL_W, height=2.7):
     """
@@ -1795,6 +2070,168 @@ def wb_expenses_weekly(weeks, categories, total_spike=None,
     ax.set_ylabel("Расходы WB, ₽")
     _headroom(ax, 1.28)
     _legend(ax, ncol=3, y=1.1)
+
+    return _render(fig)
+
+
+def wb_costs_share_weekly(rows, width=FULL_W, height=1.7):
+    """
+    Расходы WB как доля чистой выручки, по неделям.
+
+    В разделе "Финансовый результат" эта доля есть только за
+    одну неделю. Здесь -- несколько подряд, чтобы увидеть, растут
+    расходы WB быстрее выручки или вместе с ней (если столбики
+    примерно на одном уровне -- это пропорциональный рост,
+    а не ухудшение экономики).
+    """
+    data = [r for r in (rows or []) if r.get("wb_costs_share") is not None]
+    if len(data) < 2:
+        return None
+
+    labels = [r["label"] for r in data]
+    values = [r["wb_costs_share"] for r in data]
+    closed = [bool(r.get("is_closed")) for r in data]
+    x = list(range(len(data)))
+
+    fig, ax = _fig(width, height)
+
+    colors = [C.WARNING if c else C.LINE for c in closed]
+
+    ax.bar(x, values, width=0.55, color=colors, linewidth=0)
+
+    for i, v in enumerate(values):
+        ax.annotate(
+            _pct_label(v, 1),
+            xy=(x[i], v),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            fontsize=7.0,
+            fontweight="bold",
+            color=C.INK if closed[i] else C.MUTED,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlim(-0.6, len(data) - 0.4)
+
+    ax.yaxis.set_major_formatter(_pct_formatter(0))
+    ax.set_ylabel("Расходы WB, % от выручки без НДС")
+    _headroom(ax, 1.25)
+
+    return _render(fig)
+
+
+def wb_expenses_category_trend(weeks, category, spike=None,
+                                width=FULL_W, height=1.7):
+    """
+    Одна статья расходов WB по неделям, отдельно от остальных.
+
+    На общем стеке (wb_expenses_weekly) статья вроде штрафов --
+    тонкая полоска на фоне рекламы и логистики, почти не видно.
+    А именно штрафы чаще всего можно оспорить у WB, а не просто
+    принять как данность -- поэтому им отдельный, крупный график.
+    Неделю со всплеском (см. category_spikes в data.py)
+    подсвечиваем отдельным цветом.
+    """
+    rows = [
+        w for w in (weeks or [])
+        if category in (w.get("by_category") or {})
+    ]
+    if len(rows) < 2:
+        return None
+
+    labels = [w["label"] for w in rows]
+    values = [w["by_category"].get(category, 0.0) for w in rows]
+    closed = [bool(w.get("is_closed")) for w in rows]
+    x = list(range(len(rows)))
+
+    fig, ax = _fig(width, height)
+
+    spike_label = spike["label"] if spike else None
+    colors = [
+        (C.CRITICAL if lbl == spike_label else C.SERIES_2)
+        if is_closed else C.LINE
+        for lbl, is_closed in zip(labels, closed)
+    ]
+
+    ax.bar(x, values, width=0.55, color=colors, linewidth=0)
+    ax.axhline(0, color=C.AXIS, linewidth=0.6)
+
+    for i, v in enumerate(values):
+        ax.annotate(
+            _short(v),
+            xy=(x[i], v),
+            xytext=(0, -11 if v < 0 else 3),
+            textcoords="offset points",
+            ha="center",
+            va="top" if v < 0 else "bottom",
+            fontsize=7.0,
+            fontweight="bold",
+            color=C.INK if closed[i] else C.MUTED,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+    ax.margins(y=0.22)
+
+    ax.yaxis.set_major_formatter(_money_formatter())
+    ax.set_ylabel(f"{category}, ₽")
+
+    return _render(fig)
+
+
+def wb_expenses_category_share(weeks, categories, width=FULL_W, height=1.9):
+    """
+    Доля каждой статьи в расходах WB, по неделям -- 100%-стек.
+
+    wb_expenses_weekly() показывает суммы: там видно, где расходы
+    выросли в деньгах. Здесь то же самое в процентах -- видно,
+    куда сместилась структура, даже если общая сумма почти
+    не изменилась (например, доля рекламы выросла за счёт доли
+    логистики при том же итоге).
+    """
+    rows = [w for w in (weeks or []) if w.get("by_category")]
+    if len(rows) < 2 or not categories:
+        return None
+
+    labels = [w["label"] for w in rows]
+    x = list(range(len(rows)))
+
+    totals_abs = [
+        sum(abs(v) for v in w["by_category"].values()) for w in rows
+    ]
+
+    fig, ax = _fig(width, height)
+
+    bottoms = [0.0] * len(rows)
+    for i, cat in enumerate(categories):
+        shares = [
+            100 * abs(w["by_category"].get(cat, 0.0)) / total_abs
+            if total_abs else 0.0
+            for w, total_abs in zip(rows, totals_abs)
+        ]
+        color = EXPENSE_PALETTE[i % len(EXPENSE_PALETTE)]
+
+        ax.bar(
+            x, shares,
+            bottom=bottoms,
+            width=0.6,
+            color=color,
+            label=cat,
+            linewidth=0,
+        )
+        bottoms = [b + v for b, v in zip(bottoms, shares)]
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+    ax.set_ylim(0, 100)
+
+    ax.yaxis.set_major_formatter(_pct_formatter(0))
+    ax.set_ylabel("Доля от расходов WB за неделю")
+    _legend(ax, ncol=3, y=1.12)
 
     return _render(fig)
 

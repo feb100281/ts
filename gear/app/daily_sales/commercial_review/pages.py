@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from . import charts, config as C
-from .analysis import decompose_revenue
+from .analysis import decompose_revenue, decompose_weeks
 from .blocks import (
     bullet_bar,
     bullets,
@@ -33,6 +33,8 @@ from .blocks import (
 )
 from .formats import (
     as_date,
+    cost_money,
+    cost_money_exact,
     date_full,
     date_short,
     date_words,
@@ -170,6 +172,66 @@ def _no_findings_note(subject):
         f"отдельного решения не требует.",
         plain=True,
     )
+
+
+def _weekly_discount(price_rows, report_date, weeks=5):
+    """
+    Скидка WB и факт продажи WB по календарным неделям.
+
+    Границы недель те же, что в revenue_calendar() выше по
+    странице: понедельник—воскресенье, последняя неделя — та,
+    что содержит report_date. Оба места считают от одной и той
+    же даты независимо, поэтому границы совпадают без общего
+    состояния между функциями.
+    """
+    if report_date is None:
+        return []
+
+    daily = {}
+    for row in price_rows or []:
+        d = as_date(row.get("date_from") or row.get("date"))
+        if d is None:
+            continue
+        amt = num(row.get("amount"))
+        retail = num(row.get("retail_amount"))
+        if amt is None or retail is None:
+            continue
+        daily[d] = (amt, retail)
+
+    if not daily:
+        return []
+
+    last_monday = report_date - timedelta(days=report_date.weekday())
+    start = last_monday - timedelta(weeks=weeks - 1)
+
+    result = []
+    week_start = start
+    while week_start <= last_monday:
+        week_end = week_start + timedelta(days=6)
+        filled = [
+            daily[week_start + timedelta(days=i)]
+            for i in range(7)
+            if (week_start + timedelta(days=i)) in daily
+        ]
+
+        if filled:
+            amount_sum = sum(item[0] for item in filled)
+            retail_sum = sum(item[1] for item in filled)
+            result.append({
+                "label": f"{week_start.strftime('%d.%m')}"
+                         f"\u2013{week_end.strftime('%d.%m')}",
+                "discount_pct": (
+                    (amount_sum - retail_sum) / amount_sum * 100
+                    if amount_sum else None
+                ),
+                "retail_amount": retail_sum,
+                "amount": amount_sum,
+                "full": len(filled) == 7,
+            })
+
+        week_start += timedelta(weeks=1)
+
+    return result
 
 
 def _weekday_pattern(rows, days=90):
@@ -405,8 +467,6 @@ def contents(payload) -> str:
          "откуда и куда отправляем, что именно заказывают"),
         ("17", "Выводы и рекомендации",
          "полный список: что произошло, почему, что делать"),
-        ("18", "Методика",
-         "как считаются показатели и чего в отчёте нет"),
     ]
 
     how = bullets([
@@ -523,13 +583,22 @@ def revenue_dynamics_page(payload) -> str:
         ("mtd", "С начала месяца"),
     ):
         block = comparisons.get(key) or {}
+
+        current = num(block.get("current"))
+        previous = num(block.get("previous"))
+        delta_rub = (
+            current - previous
+            if current is not None and previous is not None
+            else None
+        )
+
         cards.append(
             kpi(
                 label,
-                money(block.get("current")),
                 signed_pct(block.get("change_pct")),
+                signed_money(delta_rub),
                 _state(block.get("change_pct")),
-                f"было {money(block.get('previous'))} "
+                f"{money(current)}, было {money(previous)} "
                 f"({escape(str(block.get('previous_label') or ''))})",
             )
         )
@@ -540,21 +609,52 @@ def revenue_dynamics_page(payload) -> str:
     # Вывод под графиком: последняя закрытая календарная неделя
     # против предыдущей — это и есть текущий темп.
     split = decompose_revenue(payload)
+    
+    
+    trend_points = []
+
+    for row in daily_rows or []:
+        d = as_date(row.get("date_from"))
+        v = num(row.get("net_amount"))
+
+        if d is not None and v is not None:
+            trend_points.append((d, v))
+
+    trend_points.sort(key=lambda item: item[0])
+    trend_points = trend_points[-90:]
+
+    extremes_note = ""
+
+    if trend_points:
+        max_date, max_value = max(trend_points, key=lambda item: item[1])
+        min_date, min_value = min(trend_points, key=lambda item: item[1])
+
+        extremes_note = (
+            f" За последние 90 дней максимальная выручка — "
+            f"<b>{money(max_value)}</b> ({escape(date_short(max_date))}), "
+            f"минимальная — <b>{money(min_value)}</b> "
+            f"({escape(date_short(min_date))})."
+        )
+        
 
     trend_note = (
-        f"<b>Текущий темп:</b> неделя "
-        f"{escape(date_short(split['cur_start']))}–"
-        f"{escape(date_short(split['cur_end']))} дала "
-        f"{money(split['current']['amount'])} против "
-        f"{money(split['previous']['amount'])} неделей раньше — "
-        f"{signed_money(split['total'])} "
-        f"({signed_pct(split['change_pct'])}). "
-        f"Столбики показывают выходные провалы, линия — "
-        f"скользящее среднее за 7 дней, то есть тренд без них."
+        (
+            f"<b>Текущий темп:</b> неделя "
+            f"{escape(date_short(split['cur_start']))}–"
+            f"{escape(date_short(split['cur_end']))} дала "
+            f"{money(split['current']['amount'])} против "
+            f"{money(split['previous']['amount'])} неделей раньше — "
+            f"{signed_money(split['total'])} "
+            f"({signed_pct(split['change_pct'])}). "
+            f"Столбики показывают дневную выручку, линия — "
+            f"скользящее среднее за 7 дней."
+        )
         if split and split.get("change_pct") is not None
-        else "Линия — скользящее среднее за 7 дней: она сглаживает "
-             "разницу между выходными и буднями."
-    )
+        else (
+            "Линия — скользящее среднее за 7 дней: она сглаживает "
+            "разницу между выходными и буднями."
+        )
+    ) + extremes_note
 
     ytd_years = sorted({
         (as_date(row.get("date_from")) or as_date("1970-01-01")).year
@@ -570,8 +670,7 @@ def revenue_dynamics_page(payload) -> str:
         f"{signed_money(ytd_block.get('delta'))} "
         f"({signed_pct(ytd_block.get('change_pct'))}). "
         + (
-            "Линии расходятся — значит разрыв копится, и одной "
-            "акцией его не закрыть."
+            "Линии расходятся — значит разрыв копится."
             if (num(ytd_block.get("change_pct")) or 0) < 0
             else "Опережение устойчивое: линия текущего года выше "
                  "на всём отрезке."
@@ -596,11 +695,17 @@ def revenue_dynamics_page(payload) -> str:
         caption="Выручка по дням недели",
         note=(
             "За последние 90 дней. Красным — дни заметно ниже "
-            "среднего: если провал по выходным устойчивый, "
-            "с ним можно планировать акции и поставки, а не "
-            "удивляться ему каждую неделю."
+            "среднего (если имеются)."
         ),
     ) if weekday_rows else ""
+
+    report_date = as_date(payload.get("report_date"))
+    weekly_discount_rows = _weekly_discount(
+        _list(payload, "price_analysis_page", "rows"),
+        report_date,
+        weeks=5,
+    )
+    discount_chart = charts.discount_weekly(weekly_discount_rows)
 
     body = (
         kpi_grid(cards)
@@ -609,11 +714,24 @@ def revenue_dynamics_page(payload) -> str:
             weeks=5,
             subtitle=(
                 "Каждая клетка — один закрытый день, выручка с НДС "
-                "до скидки WB. Справа итог недели"
+                "до скидки WB. Справа итог недели, скидка WB "
+                "и сумма продажи WB за неделю"
             ),
+            price_rows=_list(payload, "price_analysis_page", "rows"),
         )
         + figure(
-            "Выручка по дням и скользящее среднее за 7 дней",
+            "Скидка WB по неделям",
+            discount_chart,
+            "Те же недели, что в календаре выше — красным неделя "
+            "с самой высокой скидкой, синим — с самой низкой",
+            (
+                "Серым — недели без полных 7 дней данных: "
+                "сравнивать их с полными неделями по проценту нечестно."
+            ),
+            empty="Пока не набралось хотя бы двух недель со скидкой WB",
+        )
+        + figure(
+            "Выручка по дням (до скидки) и скользящее среднее за 7 дней",
             trend,
             "За последние 90 дней, ₽ с НДС",
             trend_note,
@@ -649,8 +767,24 @@ def revenue_dynamics_page(payload) -> str:
 # ============================================================
 
 def revenue_reasons_page(payload, findings) -> str:
-    split = decompose_revenue(payload, window=7)
-    waterfall = charts.revenue_waterfall(split)
+    split = decompose_revenue(payload, window=7, live=True)
+
+    prev_label = cur_label = None
+    if split:
+        prev_label = (
+            f"Прошлая\n{split['prev_start'].strftime('%d.%m')}"
+            f"\u2013{split['prev_end'].strftime('%d.%m')}"
+        )
+        cur_label = (
+            f"Текущая\n{split['cur_start'].strftime('%d.%m')}"
+            f"\u2013{split['cur_end'].strftime('%d.%m')}"
+        )
+        if split.get("is_partial"):
+            cur_label += "\n(не закрыта)"
+
+    waterfall = charts.revenue_waterfall(
+        split, prev_label=prev_label, cur_label=cur_label
+    )
 
     if split:
         qty_effect = split["qty_effect"]
@@ -666,17 +800,13 @@ def revenue_reasons_page(payload, findings) -> str:
             key=lambda item: abs(item[1]),
         )[0]
 
-        running = split.get("running")
-
-        running_note = ""
-        if running and running.get("qty"):
-            running_note = (
-                f" Текущая неделя "
-                f"({escape(date_short(running['start']))}–"
-                f"{escape(date_short(running['end']))}) ещё идёт: "
-                f"{fmt_days(running['days'])} из семи, "
-                f"{money(running.get('amount'))} — в сравнение "
-                f"она не входит."
+        partial_note = ""
+        if split.get("is_partial"):
+            partial_note = (
+                f" Текущая неделя ещё не закрыта: сравнение — "
+                f"по {fmt_days(split['days_in_period'])} с обеих "
+                f"сторон, а не по всей неделе целиком, и будет "
+                f"обновляться каждый день по мере продаж."
             )
 
         note = (
@@ -687,37 +817,66 @@ def revenue_reasons_page(payload, findings) -> str:
             f"{signed_money(returns_effect)}. Сумма трёх вкладов "
             f"точно равна изменению выручки, поэтому спорить "
             f"про «примерно» не нужно. Главный фактор — {leader}."
-            + running_note
+            + partial_note
         )
 
+        if split.get("is_partial"):
+            period_sentence = (
+                "Сравниваются два равных по длине отрезка — "
+                f"{escape(date_short(split['prev_start']))}–"
+                f"{escape(date_short(split['prev_end']))} и "
+                f"{escape(date_short(split['cur_start']))}–"
+                f"{escape(date_short(split['cur_end']))} "
+                f"({fmt_days(split['days_in_period'])} с каждой "
+                "стороны), потому что текущая неделя ещё не "
+                "закончилась: сравнивать её с целой прошлой "
+                "неделей значило бы получить отставание просто "
+                "от нехватки дней, а не от продаж."
+            )
+        else:
+            period_sentence = (
+                "Сравниваются две полные календарные недели, "
+                "понедельник — воскресенье: "
+                f"{escape(date_short(split['prev_start']))}–"
+                f"{escape(date_short(split['prev_end']))} и "
+                f"{escape(date_short(split['cur_start']))}–"
+                f"{escape(date_short(split['cur_end']))}."
+            )
+
         method = callout(
-            "Как считается",
-            "Вклад количества — разница в проданных штуках, "
-            "умноженная на прежнюю цену. Вклад цены — разница "
-            "в средней цене, умноженная на новое количество. "
-            "Вклад возвратов — насколько больше или меньше "
-            "вернули. Возвраты вынесены отдельно не для красоты: "
-            "средняя цена в данных считается только по продажам, "
-            "и без этого разделения рост возвратов выглядел бы "
-            "как падение цены. Сравниваются две соседние "
-            "календарные недели, понедельник — воскресенье: "
-            f"{escape(date_short(split['prev_start']))}–"
-            f"{escape(date_short(split['prev_end']))} и "
-            f"{escape(date_short(split['cur_start']))}–"
-            f"{escape(date_short(split['cur_end']))}. "
-            "Если текущая неделя ещё не закрыта, она в сравнение "
-            "не входит — иначе падение получилось бы просто "
-            "от нехватки дней. "
-            "Средняя цена — это выручка, делённая на штуки, "
-            "поэтому она меняется и сама по себе, когда "
-            "в продажах меняется доля дорогих и дешёвых позиций.",
-            plain=True,
-        )
+                "Как рассчитано изменение",
+                "Изменение выручки разложено на три фактора. "
+                "Вклад количества — изменение числа проданных единиц, "
+                "умноженное на прежнюю среднюю цену. Вклад цены — изменение "
+                "средней цены, умноженное на новое количество проданных единиц. "
+                "Вклад возвратов показывает, как изменилась сумма возвращённого товара. "
+                "Возвраты выделены отдельно, поскольку средняя цена рассчитывается "
+                "только по продажам: иначе рост возвратов мог бы ошибочно выглядеть "
+                "как снижение цены. "
+                + period_sentence
+                + " Средняя цена зависит не только от изменения цен на товары, "
+                "но и от структуры продаж: когда меняется доля дорогих и дешёвых "
+                "позиций, меняется и среднее значение.",
+                plain=True,
+            )
     else:
         note = ""
         method = ""
 
-    brands = _list(payload, "sales", "top_brands")
+    weekly_split_rows = decompose_weeks(payload, weeks=5)
+    change_trend = charts.revenue_change_trend(weekly_split_rows)
+
+    brand_week = _node(payload, "top_brands_week")
+    brands = brand_week.get("rows") or []
+    brand_period_from = as_date(brand_week.get("date_from"))
+    brand_period_to = as_date(brand_week.get("date_to"))
+
+    brand_caption = "Бренды за неделю: кто принёс выручку"
+    if brand_period_from and brand_period_to:
+        brand_caption += (
+            f" ({date_short(brand_period_from)}"
+            f"–{date_short(brand_period_to)})"
+        )
 
     brand_table = table(
         [
@@ -749,7 +908,7 @@ def revenue_reasons_page(payload, findings) -> str:
         ],
         total=(
             {
-                "name": "Итого по топ-5 брендов",
+                "name": "Итого по всем брендам",
                 "revenue": sum(num(r.get("revenue")) or 0 for r in brands),
                 "sold_units": sum(
                     num(r.get("sold_units")) or 0 for r in brands
@@ -770,46 +929,59 @@ def revenue_reasons_page(payload, findings) -> str:
             if brands
             else None
         ),
-        caption="Бренды за день: кто принёс выручку",
+        caption=brand_caption,
+        keep_together=len(brands) <= 20,
         note=(
             "Красным выделены бренды, где возвраты превысили "
             f"{pct(C.RETURNS_ALERT_PCT, 0)} продаж. "
-            "<b>Важно про источник:</b> разрез по брендам "
-            "берётся из витрины продаж, а карточки и календарь "
-            "выше — из контура реализации, по которому считается "
-            "план. Итоги этих двух витрин за один день отличаются "
-            "на несколько процентов, поэтому сумма по брендам "
-            "и выручка в карточке не обязаны совпадать до рубля. "
-            "Подробнее — в разделе «Методика»."
+
         ),
     ) if brands else ""
 
     sales_findings = _scope(findings, "sales", limit=3)
 
+    waterfall_sub = (
+        "Текущая неделя (в процессе) против того же по длине "
+        "отрезка прошлой недели, ₽"
+        if split and split.get("is_partial")
+        else "Последняя закрытая неделя против предыдущей, ₽"
+    )
+
     body = (
         figure(
             "Из чего сложилось изменение выручки за неделю",
             waterfall,
-            "Последняя закрытая неделя против предыдущей, ₽",
+            waterfall_sub,
             note,
             "Недостаточно дней для сравнения двух недель",
         )
         + method
+        + figure(
+            "Изменение выручки к прошлой неделе, по неделям",
+            change_trend,
+            "Тот же способ счёта, что и в разложении выше — "
+            "по каждой из последних 5 недель",
+            "Серым — недели без полных 7 дней (текущая, ещё не "
+            "закрытая): их высоту не стоит сравнивать напрямую "
+            "с полными неделями.",
+            "Пока не набралось хотя бы двух недель для сравнения",
+        )
         + brand_table
         + (_cards(sales_findings) if sales_findings
            else _no_findings_note("Выручка"))
     )
 
     return page(
-        "03",
-        "Выручка",
-        "Выручка: почему она изменилась",
-        "«Выручка упала на 12 %» — это не вывод. Вывод — какая "
-        "часть этих 12 % пришлась на количество, какая на цену "
-        "и какая на возвраты. Недели здесь календарные, "
-        "с понедельника по воскресенье.",
-        body,
-    )
+            "03",
+            "Выручка",
+            "Выручка: почему она изменилась",
+            "Изменение выручки разложено на три составляющие: "
+            "количество проданных единиц, среднюю цену и возвраты. "
+            "Сравнение обновляется каждый день: если неделя ещё "
+            "не закрыта, сравниваются равные по длине отрезки "
+            "текущей и прошлой недели, а не неделя целиком.",
+            body,
+)
 
 
 # ============================================================
@@ -924,9 +1096,12 @@ def price_page(payload) -> str:
             "Цена до скидки WB и цена покупателя",
             charts.price_and_discount(price_rows),
             "За последние 60 дней, ₽ за единицу",
-            "<b>Заливка между линиями — это скидка WB в рублях "
-            "на каждую единицу.</b> Чем она шире, тем большую "
-            "часть цены оплачивает не покупатель, а наша маржа.",
+            (
+                "<b>Заливка между линиями — это скидка WB в рублях "
+                "на каждую единицу.</b> Чем она шире, тем большую "
+                "часть цены оплачивает не покупатель, а наша маржа. "
+                
+            ),
             "Нет истории цен за период",
         )
     )
@@ -1580,6 +1755,10 @@ def finance_page(payload, findings) -> str:
 
     result_pct = num(current.get("result_pct"))
     margin_pct = num(current.get("margin_pct"))
+    report_date_obj = (
+        as_date(current.get("date"))
+        or as_date(payload.get("report_date"))
+    )
 
     cards = [
         kpi(
@@ -1702,8 +1881,12 @@ def finance_page(payload, findings) -> str:
                 f"не нашлась себестоимость — это "
                 f"{pct(no_cost)} продаж. "
                 + (
-                    "Маржа по ним считается завышенной, поэтому "
-                    "итоговый процент немного оптимистичен."
+                    "Вместо неё подставлена оценка — последняя "
+                    "известная цена по товару, а если и её нет — "
+                    "усреднённый резерв. Маржа по этим продажам "
+                    "посчитана по оценке, а не по факту, и может "
+                    "быть как ниже, так и выше реальной — а не "
+                    "только выше."
                     if (no_cost or 0) >= 3
                     else "На итог это практически не влияет."
                 )
@@ -1714,7 +1897,27 @@ def finance_page(payload, findings) -> str:
     finance_findings = _scope(findings, "finance", limit=3)
 
     body = (
-        kpi_grid(cards)
+        f'<p class="small dim">Четыре карточки ниже — снимок '
+        f'одного дня, {escape(date_full(report_date_obj))}, '
+        f'а не недели.</p>'
+        + kpi_grid(cards)
+        + callout(
+            "",
+            (
+                "<b>Смотреть на дневной результат отдельно не "
+                "стоит.</b> WB присылает данные по логистике, "
+                "хранению, приёмке, рекламе и штрафам не каждый "
+                "день, а пачками — часто за несколько дней сразу. "
+                "Из-за этого дневная цифра может резко скакать "
+                "вверх-вниз без всякой связи с тем, что "
+                "происходит с продажами: просто в этот день "
+                "легла (или не легла) очередная порция расходов. "
+                "Ниже на странице те же показатели за неделю — "
+                "там такие перекосы сглаживаются, и это более "
+                "честная картина."
+            ),
+            plain=True,
+        )
         + figure(
             "Куда уходят 100 ₽ выручки",
             structure,
@@ -1730,10 +1933,8 @@ def finance_page(payload, findings) -> str:
                 "от выручки без НДС, мелко — он же в рублях"
             ),
             note=(
-                "<b>Смотреть надо на ход, а не на точку.</b> "
-                "Одна просевшая неделя — обычное дело: расходы WB "
-                "приходят неравномерно. Две-три подряд — это уже "
-                "изменение экономики. Текущая неделя обведена "
+    
+                "Текущая неделя обведена "
                 "рамкой и помечена как оперативная: её цифра ещё "
                 "уточнится, когда WB выгрузит логистику и рекламу."
             ),
@@ -1767,6 +1968,41 @@ def finance_page(payload, findings) -> str:
 # ============================================================
 # 12. АНАЛИЗ РАСХОДОВ WB
 # ============================================================
+
+def _wb_costs_vs_revenue_rows(expense_weeks, financial_weeks):
+    """
+    Расходы WB как % от выручки, по тем же неделям, что и на
+    странице "Анализ расходов WB".
+
+    Обе недельные разбивки считают понедельник началом недели
+    независимо друг от друга (см. week_bounds в analysis.py и
+    _week_start в daily_brief/data/financial.py), поэтому недели
+    сопоставляются по дате начала без общего состояния между
+    модулями. Долю не пересчитываем заново -- берём готовую
+    wb_costs_share из financial.weeks, это тот же процент, что
+    в разделе "Финансовый результат".
+    """
+    by_start = {
+        fw.get("date_from"): fw
+        for fw in (financial_weeks or [])
+        if fw.get("has_data")
+    }
+
+    rows = []
+    for ew in expense_weeks or []:
+        fw = by_start.get(ew.get("week_start"))
+        if not fw:
+            continue
+        share = num(fw.get("wb_costs_share"))
+        if share is None:
+            continue
+        rows.append({
+            "label": ew["label"],
+            "wb_costs_share": share,
+            "is_closed": ew.get("is_closed"),
+        })
+    return rows
+
 
 def wb_expenses_page(payload) -> str:
     expenses = _node(payload, "wb_expenses")
@@ -1813,7 +2049,7 @@ def wb_expenses_page(payload) -> str:
     cards = [
         kpi(
             "Расходы WB, закрытые недели",
-            money(grand_total),
+            cost_money(grand_total),
             f"{len(closed_weeks)} " + plural(
                 len(closed_weeks), "неделя", "недели", "недель"
             ),
@@ -1822,7 +2058,7 @@ def wb_expenses_page(payload) -> str:
         ),
         kpi(
             "В среднем за неделю",
-            money(avg_week),
+            cost_money(avg_week),
             "",
             "flat",
             "ориентир, с которым сравниваются остальные недели",
@@ -1854,8 +2090,8 @@ def wb_expenses_page(payload) -> str:
     if total_spike:
         chart_note_parts.append(
             f"<b>Неделя {escape(total_spike['label'])} — пик общих "
-            f"расходов WB:</b> {money(total_spike['value'])} против "
-            f"{money(total_spike['baseline'])} в среднем по остальным "
+            f"расходов WB:</b> {cost_money(total_spike['value'])} против "
+            f"{cost_money(total_spike['baseline'])} в среднем по остальным "
             f"закрытым неделям окна — в "
             f"{total_spike['ratio']:.1f}".replace(".", ",")
             + " раза больше."
@@ -1864,8 +2100,8 @@ def wb_expenses_page(payload) -> str:
         top = category_spikes[0]
         chart_note_parts.append(
             f"Больше всего вырос(ла) статья «{escape(top['category'])}»: "
-            f"неделя {escape(top['label'])} дала {money(top['value'])} "
-            f"против обычных {money(top['baseline'])}."
+            f"неделя {escape(top['label'])} дала {cost_money(top['value'])} "
+            f"против обычных {cost_money(top['baseline'])}."
         )
     if not chart_note_parts:
         chart_note_parts.append(
@@ -1890,10 +2126,10 @@ def wb_expenses_page(payload) -> str:
             "key": cat,
             "label": cat,
             "num": True,
-            "fmt": money_exact,
+            "fmt": cost_money_exact,
         })
     week_table_columns.append(
-        {"key": "total", "label": "Итого, ₽", "num": True, "fmt": money_exact}
+        {"key": "total", "label": "Итого, ₽", "num": True, "fmt": cost_money_exact}
     )
     week_table_columns.append({"key": "status", "label": "Статус"})
 
@@ -1938,9 +2174,9 @@ def wb_expenses_page(payload) -> str:
                 {"key": "category", "label": "Статья"},
                 {"key": "label", "label": "Неделя-пик"},
                 {"key": "value", "label": "Расход за неделю, ₽",
-                 "num": True, "fmt": money_exact},
+                 "num": True, "fmt": cost_money_exact},
                 {"key": "baseline", "label": "Обычно за неделю, ₽",
-                 "num": True, "fmt": money_exact},
+                 "num": True, "fmt": cost_money_exact},
                 {"key": "ratio_pct", "label": "Во сколько раз больше",
                  "num": True, "fmt": lambda v: f"{v:.1f}".replace(".", ",") + " ×"},
             ],
@@ -1950,21 +2186,67 @@ def wb_expenses_page(payload) -> str:
             ],
             caption="По каким статьям были всплески",
             note=(
-                "Показаны только статьи заметного веса — на копеечных "
-                "статьях любое отклонение выглядит как всплеск, "
-                "хотя в деньгах это шум."
+                "Показаны только статьи заметного веса. "
+
             ),
+        )
+
+    fines_spike = next(
+        (s for s in category_spikes if s["category"] == "Штрафы"), None
+    )
+    cost_share_rows = _wb_costs_vs_revenue_rows(
+        weeks, _list(payload, "financial", "weeks")
+    )
+
+    fines_note_parts = [
+        "На общем графике выше штрафы почти не видно на фоне "
+        "рекламы и логистики — обычно это малая часть расходов "
+        "WB. Но именно штрафы чаще всего можно оспорить, а не "
+        "просто принять как есть, поэтому у них отдельный график."
+    ]
+    if fines_spike:
+        fines_note_parts.append(
+            f"<b>Неделя {escape(fines_spike['label'])} выделена "
+            f"красным:</b> штрафы дали "
+            f"{cost_money(fines_spike['value'])} против обычных "
+            f"{cost_money(fines_spike['baseline'])} — стоит "
+            f"проверить в личном кабинете WB, за что именно."
         )
 
     body = (
         kpi_grid(cards)
         + weekly_table
+        + callout("", chart_note, plain=True)
         + figure(
-            "Расходы WB по неделям и статьям",
-            charts.wb_expenses_weekly(weeks, categories, total_spike),
-            f"{period_label}, ₽ без НДС",
-            chart_note,
+            "Доли статей в расходах WB по неделям",
+            charts.wb_expenses_category_share(weeks, categories),
+            f"{period_label}, % от расходов WB за неделю",
+            "Сумма в деньгах может почти не меняться, а структура "
+            "— сдвигаться: например, доля продвижения растёт "
+            "за счёт доли логистики при том же общем итоге. "
+            "Абсолютные суммы по каждой статье и неделе — "
+            "в таблице выше.",
             "Недостаточно недель для графика",
+        )
+        + figure(
+            "Расходы WB как доля выручки",
+            charts.wb_costs_share_weekly(cost_share_rows),
+            f"{period_label}, % от выручки без НДС",
+            "Тот же процент, что и в разделе «Финансовый "
+            "результат», но не за одну неделю, а несколько "
+            "подряд — так видно, растут расходы WB быстрее "
+            "выручки или вместе с ней. Серым — недели, для "
+            "которых нет данных по выручке за тот же период.",
+            "Не удалось сопоставить с выручкой за этот период",
+        )
+        + figure(
+            "Штрафы по неделям",
+            charts.wb_expenses_category_trend(
+                weeks, "Штрафы", fines_spike
+            ),
+            f"{period_label}, ₽ без НДС",
+            " ".join(fines_note_parts),
+            "Недостаточно недель со штрафами для графика",
         )
         + spike_table
         + callout(
@@ -2244,16 +2526,13 @@ def stocks_page(payload) -> str:
         + "<h3>Сколько этот запас стоит</h3>"
         + kpi_grid(cost_cards, cols=3)
         + callout(
-            "Почему две стоимости",
+            "Используем две стоимости",
             (
                 "<b>Бухгалтерская</b> — цена, по которой товар "
                 "принят к учёту. <b>Управленческая</b> — та, по "
                 "которой мы считаем маржу: FIFO по фактическим "
-                "партиям. Расхождение само по себе не ошибка, но "
-                "если оно растёт, расходится и прибыль в двух "
-                "отчётах. Позиции без управленческой цены "
-                "занижают стоимость запаса и завышают маржу "
-                "по продажам."
+                "партиям."
+
             ),
             plain=True,
         )
@@ -2832,9 +3111,7 @@ def fbs_assembly_page(fbs) -> str:
             ),
         },
         caption="Сколько заказов приходило каждый день",
-        note="Красным — дни, где отменили больше 15 % заказов. "
-             "Дни недели подписаны: провал в субботу и провал "
-             "во вторник — разные новости.",
+        note="Красным — дни, где отменили больше 15 % заказов. ",
     ) if recent_days else ""
 
     stale_banner = callout(
@@ -3158,10 +3435,7 @@ def findings_page(payload, findings) -> str:
         "17",
         "Выводы",
         "Выводы и рекомендации",
-        "Полный список: что произошло, почему и что делать. "
-        "Выводы, у которых не удалось назвать причину, в отчёт "
-        "не попадают — общая фраза занимает место и создаёт "
-        "ощущение, что вопрос разобран.",
+        "Полный список: что произошло, почему и что делать. ",
         body,
     )
 
@@ -3456,7 +3730,7 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
 
     cards = [
         kpi(
-            "Выручка без НДС",
+            "Выручка без НДС до СПП",
             money(total_revenue),
             "",
             "flat",
@@ -3467,7 +3741,7 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
             money(total_profit),
             pct(average_margin),
             "good" if (average_margin or 0) >= C.MARGIN_ALERT_PCT else "bad",
-            "после себестоимости и комиссии WB",
+            "после себестоимости и комиссии WB (без учета логистики и маркетинга)",
         ),
         kpi(
             "Половину прибыли дают",
@@ -3588,10 +3862,8 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
     method = callout(
         "Как считается маржа",
         "Выручка без НДС минус управленческая себестоимость FIFO "
-        "плюс комиссия WB — комиссия приходит со своим знаком, "
-        "поэтому здесь сложение. Это тот же расчёт, что во "
-        "вкладке «Структура выручки» в дашборде, цифры должны "
-        "совпадать. В маржу не входят логистика, хранение, "
+        "минус комиссия WB "
+        "В маржу не входят логистика, хранение, "
         "реклама и штрафы: они не раскладываются по брендам "
         "и живут в разделе «Финансовый результат».",
         plain=True,
@@ -3643,8 +3915,6 @@ def _mix_page(payload, findings, number, dimension, title, note, subject) -> str
                 "усреднённый резерв). Чем выше доля, тем меньше "
                 "можно доверять марже в этой строке — она может "
                 "быть занижена или завышена, а не только завышена. "
-                "Комиссия WB показана со своим знаком, поэтому "
-                "маржа = выручка − себестоимость + комиссия."
             ),
         ),
         landscape=True,

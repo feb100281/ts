@@ -379,6 +379,117 @@ def build_wb_expenses_slice(report_date: date, weeks: int = None) -> dict:
     }
 
 
+def build_top_brands_week_slice(report_date: date) -> dict:
+    """
+    Все бренды за ТЕКУЩУЮ неделю в смысле "Выручка: почему
+    она изменилась" -- те же границы периода, что у
+    decompose_revenue(live=True): с понедельника по report_date,
+    если неделя ещё не закрыта, иначе целиком с понедельника
+    по воскресенье.
+
+    ВАЖНО: контур расчёта -- ТОТ ЖЕ, что у графика разложения
+    и календаря выручки: sales.sales_long, field='retail_price',
+    dt = продажа / cr = возврат (см. get_daily_fact в
+    wb_plan_monitor/data.py -- это тот же запрос, только с
+    разрезом по бренду вместо агрегата по дню). Раньше здесь
+    читалась таблица base/inv_gl_final ("витрина продаж" для
+    себестоимости и маржи) -- у неё другая природа возвратов,
+    поэтому колонка "Возвраты" там всегда была нулевой и сумма
+    не сходилась с графиком выше. Бренд достаём тем же джойном,
+    что уже использует ai_analysis/data.py для разреза по
+    брендам/категориям: sales_long.nm_id -> wb_product.card_id.
+    """
+    from .analysis import week_bounds
+
+    bounds = week_bounds(report_date)
+    running = bounds["running"]
+
+    if running:
+        start, end = running["start"], running["end"]
+    else:
+        start, end = bounds["cur_start"], bounds["cur_end"]
+
+    empty = {
+        "available": False,
+        "rows": [],
+        "date_from": start.isoformat(),
+        "date_to": end.isoformat(),
+    }
+
+    try:
+        from conns import get_duckdb_conn_with_opt
+
+        with get_duckdb_conn_with_opt() as con:
+            df = con.execute(
+                """
+                WITH agg AS (
+                    SELECT
+                        COALESCE(
+                            NULLIF(TRIM(p.brand), ''),
+                            'Бренд не указан'
+                        ) AS name,
+
+                        COALESCE(SUM(
+                            CASE WHEN s.oper = 'dt' THEN s.val ELSE 0 END
+                        ), 0) / 100.0 AS sales_amount,
+
+                        COALESCE(SUM(
+                            CASE WHEN s.oper = 'cr' THEN s.val ELSE 0 END
+                        ), 0) / 100.0 AS returns_amount,
+
+                        COUNT(
+                            CASE WHEN s.oper = 'dt' THEN 1 END
+                        ) AS sold_units,
+
+                        COUNT(
+                            CASE WHEN s.oper = 'cr' THEN 1 END
+                        ) AS returned_units
+
+                    FROM sales.sales_long s
+
+                    LEFT JOIN inventories.wb_product p
+                        ON p.card_id = s.nm_id
+
+                    WHERE s.field = 'retail_price'
+                      AND s.date_from::DATE BETWEEN ?::DATE AND ?::DATE
+
+                    GROUP BY 1
+                )
+
+                SELECT
+                    name,
+                    ROUND(sales_amount - returns_amount, 2) AS revenue,
+                    sold_units,
+                    returned_units,
+                    ROUND(sales_amount, 2) AS sales_amount,
+                    ROUND(returns_amount, 2) AS returns_amount,
+                    ROUND(
+                        sales_amount / NULLIF(sold_units, 0), 2
+                    ) AS avg_price
+
+                FROM agg
+
+                WHERE sales_amount - returns_amount > 0
+
+                ORDER BY revenue DESC
+                """,
+                [start.isoformat(), end.isoformat()],
+            ).df()
+
+    except Exception:
+        return empty
+
+    if df is None or df.empty:
+        return {**empty, "available": True}
+
+    return {
+        "available": True,
+        "rows": df.to_dict("records"),
+        "date_from": start.isoformat(),
+        "date_to": end.isoformat(),
+    }
+
+
 def build_review_data(report_date: date) -> tuple[dict, dict | None]:
     """
     Возвращает (payload, fbs).
@@ -400,6 +511,13 @@ def build_review_data(report_date: date) -> tuple[dict, dict | None]:
         payload["wb_expenses"] = build_wb_expenses_slice(report_date)
     except Exception:
         payload["wb_expenses"] = {"available": False, "weeks": [], "categories": []}
+
+    try:
+        payload["top_brands_week"] = build_top_brands_week_slice(report_date)
+    except Exception:
+        payload["top_brands_week"] = {
+            "available": False, "rows": [], "date_from": None, "date_to": None,
+        }
 
     fbs = build_fbs_slice(report_date)
 

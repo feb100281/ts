@@ -230,13 +230,23 @@ def figure(title, image, sub="", note="", empty="") -> str:
 # ТАБЛИЦА
 # ============================================================
 
-def table(columns, rows, total=None, caption="", note="", wide=False) -> str:
+def table(columns, rows, total=None, caption="", note="",
+          wide=False, keep_together=False) -> str:
     """
     Таблица.
 
     columns — список словарей: key, label, num (выравнивание
     по правому краю), fmt (функция форматирования).
     total — та же структура строки, печатается жирным итогом.
+
+    keep_together — не давать заголовку (caption) и телу
+    таблицы попасть на разные страницы. По умолчанию таблицы
+    можно резать между страницами (нужно для длинных таблиц
+    вроде "Структура" на много строк) — но у WeasyPrint
+    <caption> при этом иногда остаётся на одной странице,
+    а thead/tbody уезжают на следующую. Для коротких таблиц
+    (5-10 строк), которые с самого начала помещаются целиком,
+    так быть не должно.
     """
     head_cells = "".join(
         f'<th class="{"num" if column.get("num") else ""}">'
@@ -287,14 +297,21 @@ def table(columns, rows, total=None, caption="", note="", wide=False) -> str:
         f'<div class="table-note">{note}</div>' if note else ""
     )
 
-    return f"""
+    table_html = f"""
     <table class="tbl{' wide' if wide else ''}">
         {caption_html}
         <thead><tr>{head_cells}</tr></thead>
         <tbody>{"".join(body_rows)}</tbody>
     </table>
-    {note_html}
     """
+
+    if keep_together:
+        return (
+            f'<div style="page-break-inside: avoid;">'
+            f"{table_html}{note_html}</div>"
+        )
+
+    return f"{table_html}{note_html}"
 
 
 # ============================================================
@@ -440,14 +457,23 @@ def _heat(value, values):
     return C.HEAT[index], text
 
 
-def revenue_calendar(rows, weeks=5, money_fmt=None, subtitle="") -> str:
+def revenue_calendar(
+    rows, weeks=5, money_fmt=None, subtitle="", price_rows=None
+) -> str:
     """
     Тепловой календарь выручки: одна клетка — один закрытый день.
 
     Читается быстрее любого графика: сразу видно выходные
     провалы, сильные дни и итог недели рядом, в той же строке.
+
+    price_rows — опционально, дневные строки со скидкой WB
+    (payload["price_analysis_page"]["rows"]: поля date_from,
+    amount, retail_amount). Если переданы, в итог недели
+    добавляется строка "скидка N% · WB: сумма" — сколько WB
+    удержала скидкой и за сколько реально продала за эту
+    неделю, а не только выручка до скидки.
     """
-    from .formats import as_date, money as _money, num as _num, signed_pct
+    from .formats import as_date, money as _money, num as _num, pct, signed_pct
 
     fmt = money_fmt or _money
 
@@ -457,6 +483,17 @@ def revenue_calendar(rows, weeks=5, money_fmt=None, subtitle="") -> str:
         if d is None:
             continue
         points[d] = _num(row.get("amount")) or 0.0
+
+    discount_points = {}
+    for row in price_rows or []:
+        d = as_date(row.get("date_from") or row.get("date"))
+        if d is None:
+            continue
+        amt = _num(row.get("amount"))
+        retail = _num(row.get("retail_amount"))
+        if amt is None or retail is None:
+            continue
+        discount_points[d] = (amt, retail)
 
     if len(points) < 7:
         return ""
@@ -487,6 +524,9 @@ def revenue_calendar(rows, weeks=5, money_fmt=None, subtitle="") -> str:
         total = 0.0
         filled = 0
         has_any = False
+        week_amount = 0.0
+        week_retail = 0.0
+        week_discount_days = 0
 
         for offset in range(7):
             day = week_start + timedelta(days=offset)
@@ -500,6 +540,12 @@ def revenue_calendar(rows, weeks=5, money_fmt=None, subtitle="") -> str:
             filled += 1
             total += value
             background, color = _heat(value, values)
+
+            dp = discount_points.get(day)
+            if dp is not None:
+                week_amount += dp[0]
+                week_retail += dp[1]
+                week_discount_days += 1
 
             cells.append(
                 f'<td style="background:{background};'
@@ -543,11 +589,28 @@ def revenue_calendar(rows, weeks=5, money_fmt=None, subtitle="") -> str:
                 '<div class="cal-week-delta muted">база сравнения</div>'
             )
 
+        discount_html = ""
+        if (
+            price_rows is not None
+            and filled
+            and week_discount_days == filled
+            and week_amount
+        ):
+            discount_pct = (
+                (week_amount - week_retail) / week_amount * 100
+            )
+            discount_html = (
+                '<div class="cal-week-extra">'
+                f"скидка {pct(discount_pct)} · "
+                f"WB: {fmt(week_retail)}</div>"
+            )
+
         cells.append(
             '<td class="cal-week">'
             '<div class="cal-week-label">итого</div>'
             f'<div class="cal-week-value">{fmt(total)}</div>'
             f"{delta}"
+            f"{discount_html}"
             "</td>"
         )
 

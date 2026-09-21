@@ -110,8 +110,6 @@ def build_commercial_review_html(payload: dict, fbs=None) -> str:
          pages.fbs_logistics_page, (fbs, findings)),
         ("Выводы и рекомендации", "Выводы",
          pages.findings_page, (payload, findings)),
-        ("Методика", "Методика",
-         pages.methodology_page, (payload, fbs)),
     ]
 
     body = "".join(

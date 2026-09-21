@@ -163,7 +163,7 @@ def week_bounds(report_date):
     }
 
 
-def decompose_revenue(payload, window=None):
+def decompose_revenue(payload, window=None, live=False):
     """
     Раскладывает изменение чистой выручки на три фактора.
 
@@ -185,6 +185,20 @@ def decompose_revenue(payload, window=None):
     уже очищен от возвратов. Если этого не разделить, всплеск
     возвратов выглядит как падение средней цены — и решение
     принимается не по той причине.
+
+    live=False (по умолчанию) — прежнее поведение: если текущая
+    неделя ещё не закрыта, сравниваются две последние ПОЛНЫЕ
+    недели, а текущая отдаётся отдельным полем "running" и
+    в сравнение не входит. Так считает страница 1.
+
+    live=True — раздел "Выручка: почему изменилась" не хочет
+    неделю простаивать с одной и той же картинкой до
+    воскресенья. Если текущая неделя не закрыта, сравнение
+    берёт её же данные С НАЧАЛА НЕДЕЛИ ПО ДАТУ ОТЧЁТА и
+    сравнивает с тем же по счёту диапазоном дней прошлой
+    недели (день в день, а не неделя целиком против отрезка) —
+    так сравнение остаётся честным и обновляется каждый день.
+    "is_partial" в результате отмечает такой случай.
     """
     # Берём тот же ряд, что и календарь выручки: одна витрина
     # на весь отчёт — иначе недельный итог в календаре
@@ -196,9 +210,20 @@ def decompose_revenue(payload, window=None):
         return None
 
     bounds = week_bounds(report_date)
+    running = bounds["running"]
 
-    cur = _period_stats(rows, bounds["cur_start"], bounds["cur_end"])
-    prev = _period_stats(rows, bounds["prev_start"], bounds["prev_end"])
+    if live and running:
+        cur_start, cur_end = running["start"], running["end"]
+        prev_start = cur_start - timedelta(days=7)
+        prev_end = cur_end - timedelta(days=7)
+        is_partial = True
+    else:
+        cur_start, cur_end = bounds["cur_start"], bounds["cur_end"]
+        prev_start, prev_end = bounds["prev_start"], bounds["prev_end"]
+        is_partial = False
+
+    cur = _period_stats(rows, cur_start, cur_end)
+    prev = _period_stats(rows, prev_start, prev_end)
 
     if not cur["qty"] or not prev["qty"]:
         return None
@@ -214,10 +239,12 @@ def decompose_revenue(payload, window=None):
         100.0 * total / prev["amount"] if prev["amount"] else None
     )
 
-    running = bounds["running"]
+    # running_stats -- только для старого (не live) поведения:
+    # страница 1 отдельно отчитывается про незакрытую неделю
+    # и ждёт именно это поле.
     running_stats = None
 
-    if running:
+    if not live and running:
         running_stats = _period_stats(
             rows, running["start"], running["end"]
         )
@@ -226,10 +253,12 @@ def decompose_revenue(payload, window=None):
     return {
         "current": cur,
         "previous": prev,
-        "cur_start": bounds["cur_start"],
-        "cur_end": bounds["cur_end"],
-        "prev_start": bounds["prev_start"],
-        "prev_end": bounds["prev_end"],
+        "cur_start": cur_start,
+        "cur_end": cur_end,
+        "prev_start": prev_start,
+        "prev_end": prev_end,
+        "is_partial": is_partial,
+        "days_in_period": (cur_end - cur_start).days + 1,
         "running": running_stats,
         "total": total,
         "qty_effect": qty_effect,
@@ -247,10 +276,74 @@ def decompose_revenue(payload, window=None):
     }
 
 
+def decompose_weeks(payload, weeks=5):
+    """
+    То же разложение (количество/цена/возвраты), что и в
+    decompose_revenue(live=True), но по нескольким последним
+    неделям подряд, включая текущую незакрытую.
+
+    Нужно, чтобы отличить разовый скачок от тренда: один
+    столбик "выручка выросла на 2 млн" ни о чём не говорит,
+    а видно ли это же направление третью неделю подряд —
+    уже вопрос не к случайности, а к тому, что изменилось
+    в бизнесе.
+
+    Каждая неделя сравнивается день-в-день с тем же диапазоном
+    прошлой недели (та же логика, что у live-сравнения), а не
+    цепочкой "неделя к предыдущей неделе в этом же списке" —
+    так недели в списке не зависят друг от друга и не копят
+    ошибку.
+    """
+    rows = _rows(payload, "sales", "trend")
+    report_date = as_date(payload.get("report_date"))
+
+    if not rows or report_date is None:
+        return []
+
+    this_monday = report_date - timedelta(days=report_date.weekday())
+    result = []
+
+    for i in range(weeks):
+        cur_start = this_monday - timedelta(weeks=weeks - 1 - i)
+        cur_end = min(cur_start + timedelta(days=6), report_date)
+        prev_start = cur_start - timedelta(days=7)
+        prev_end = prev_start + (cur_end - cur_start)
+
+        cur_stats = _period_stats(rows, cur_start, cur_end)
+        prev_stats = _period_stats(rows, prev_start, prev_end)
+
+        if not cur_stats["qty"] or not prev_stats["qty"]:
+            continue
+        if cur_stats["price"] is None or prev_stats["price"] is None:
+            continue
+
+        qty_effect = (
+            (cur_stats["qty"] - prev_stats["qty"]) * prev_stats["price"]
+        )
+        price_effect = (
+            (cur_stats["price"] - prev_stats["price"]) * cur_stats["qty"]
+        )
+        returns_effect = -(cur_stats["returns"] - prev_stats["returns"])
+
+        result.append({
+            "label": f"{cur_start.strftime('%d.%m')}"
+                     f"\u2013{cur_end.strftime('%d.%m')}",
+            "cur_start": cur_start,
+            "cur_end": cur_end,
+            "qty_effect": qty_effect,
+            "price_effect": price_effect,
+            "returns_effect": returns_effect,
+            "total": cur_stats["amount"] - prev_stats["amount"],
+            "full": cur_end == cur_start + timedelta(days=6),
+        })
+
+    return result
+
+
 def _revenue_findings(payload):
     out = []
 
-    split = decompose_revenue(payload, window=7)
+    split = decompose_revenue(payload, window=7, live=True)
 
     if split and split["change_pct"] is not None:
         change = split["change_pct"]
@@ -320,17 +413,29 @@ def _revenue_findings(payload):
                     "это получилось, и повторить."
                 )
 
+            is_partial = split.get("is_partial")
+            title_period = "с начала недели" if is_partial else "за неделю"
+
+            partial_tail = (
+                f" Неделя ещё не закрыта: сравнение — по "
+                f"{fmt_days(split['days_in_period'])} с обеих сторон, "
+                f"а не по всей неделе целиком, и обновится, когда "
+                f"неделя закроется."
+                if is_partial else ""
+            )
+
             out.append(Finding(
                 severity=severity,
                 scope="sales",
                 title=(
-                    f"Выручка за неделю {direction} "
+                    f"Выручка {title_period} {direction} "
                     f"на {pct(abs(change))}"
                 ),
                 metric=signed_pct(change),
                 fact=(
                     f"Неделя {fmt_date(split['cur_start'])}–"
-                    f"{fmt_date(split['cur_end'])}: "
+                    f"{fmt_date(split['cur_end'])}"
+                    f"{' (ещё не закрыта)' if is_partial else ''}: "
                     f"{money(split['current']['amount'])} против "
                     f"{money(split['previous']['amount'])} "
                     f"за {fmt_date(split['prev_start'])}–"
@@ -343,36 +448,12 @@ def _revenue_findings(payload):
                     f"{money(split['current']['price'])}, "
                     f"возвращено на "
                     f"{money(split['current']['returns'])}."
+                    + partial_tail
                 ),
                 cause=cause,
                 action=action,
                 weight=abs(split["total"]),
             ))
-
-    # Незакрытая неделя не участвует в сравнении, но молчать
-    # про неё нельзя: её цифры уже видно в дашборде.
-    running = (split or {}).get("running")
-
-    if running and running.get("qty"):
-        out.append(Finding(
-            severity="neutral",
-            scope="sales",
-            title="Текущая неделя ещё не закрыта",
-            metric=money(running.get("amount")),
-            fact=(
-                f"С {fmt_date(running['start'])} по "
-                f"{fmt_date(running['end'])} прошло "
-                f"{fmt_days(running['days'])} из семи, "
-                f"выручка {money(running.get('amount'))} "
-                f"при средней цене {money(running.get('price'))}."
-            ),
-            cause=(
-                "В сравнении недель она не участвует: сравнивать "
-                "неполную неделю с полной — значит получить "
-                "падение там, где просто меньше дней."
-            ),
-            weight=0,
-        ))
 
     # --- год к году -------------------------------------------------
     ytd = _rows(payload, "sales", "comparisons", "ytd") or {}
@@ -586,7 +667,17 @@ def _finance_findings(payload):
     result_delta = num(current_week.get("result_delta_pp"))
 
     if result_pct is not None:
-        econ = _rows(payload, "financial", "current", "economics_100") or {}
+        # ВАЖНО: разбивка должна быть за ТУ ЖЕ неделю, что и сам
+        # процент рентабельности в заголовке карточки -- иначе
+        # "Остаётся X%" в тексте не совпадает с процентом в
+        # заголовке (там была разбивка за один день, а заголовок --
+        # за неделю).
+        econ = {
+            "cogs": num(current_week.get("cogs_share")),
+            "commission": num(current_week.get("commission_share")),
+            "wb_costs": num(current_week.get("wb_costs_share")),
+            "result": num(current_week.get("result_pct")),
+        }
 
         severity = "neutral"
         if result_pct < 0:
@@ -602,11 +693,11 @@ def _finance_findings(payload):
         if econ:
             cause = (
                 f"Из каждых 100 ₽ выручки без НДС "
-                f"{pct(econ.get('cogs'), 0)} уходит на себестоимость, "
-                f"{pct(econ.get('commission'), 0)} — комиссия WB, "
-                f"{pct(econ.get('wb_costs'), 0)} — логистика, хранение "
+                f"{pct(econ.get('cogs'), 1)} уходит на себестоимость, "
+                f"{pct(econ.get('commission'), 1)} — комиссия WB, "
+                f"{pct(econ.get('wb_costs'), 1)} — логистика, хранение "
                 f"и штрафы. Остаётся "
-                f"{pct(econ.get('result'), 0)}."
+                f"{pct(econ.get('result'), 1)}."
             )
 
         drivers = []
@@ -623,10 +714,11 @@ def _finance_findings(payload):
         if drivers:
             drivers.sort(key=lambda x: -abs(x[1]))
             label, delta = drivers[0]
-            word = "выросла" if delta > 0 else "снизилась"
+            # pp() сама ставит знак (+/−) -- не оборачиваем в abs(),
+            # иначе снижение подписывается плюсом.
             cause += (
                 f" За неделю сильнее всего изменилась {label}: "
-                f"{word} на {pp(abs(delta))}."
+                f"{pp(delta)}."
             )
 
         out.append(Finding(
@@ -672,7 +764,7 @@ def _finance_findings(payload):
             ),
             cause=(
                 "В проводке по этим продажам не записана "
-                "бухгалтерская себестоимость, поэтому вместо неё "
+                "себестоимость, поэтому вместо неё "
                 "подставляется оценка: последняя известная цена "
                 "по товару, а если и её нет — усреднённый резерв "
                 "(620 ₽ для управленческого учёт)."
@@ -1077,7 +1169,7 @@ def _stock_findings(payload):
             fact=(
                 f"{fmt_qty(balance.get('transit_qty'))} "
                 f"{plural(num(balance.get('transit_qty')) or 0, 'штука', 'штуки', 'штук')} "
-                f"едет и пока не продаётся."
+                f"едет к покупателю или от покупателя."
             ),
             action=(
                 "Учитывайте это при оценке покрытия: доступный "
@@ -1621,10 +1713,21 @@ def headline(payload, findings):
         top = findings[0]
         return f"{top.title}. {top.fact}"
 
-    split = decompose_revenue(payload, window=7)
+    split = decompose_revenue(payload, window=7, live=True)
 
     if split and split["change_pct"] is not None:
         direction = "выше" if split["change_pct"] > 0 else "ниже"
+
+        if split.get("is_partial"):
+            return (
+                f"С начала текущей недели "
+                f"({fmt_date(split['cur_start'])}–"
+                f"{fmt_date(split['cur_end'])}, ещё не закрыта) "
+                f"выручка {money(split['current']['amount'])}, на "
+                f"{pct(abs(split['change_pct']))} {direction} того "
+                f"же отрезка прошлой недели. Критичных отклонений нет."
+            )
+
         return (
             f"За неделю {fmt_date(split['cur_start'])}–"
             f"{fmt_date(split['cur_end'])} выручка "
