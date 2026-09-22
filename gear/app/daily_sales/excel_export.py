@@ -649,6 +649,16 @@ def _make_details_excel(
 
 
 def _parse_date_value(date_value):
+    # Чип "За весь период" (main.py, period_chip_maker) кладёт в
+    # value склейку "__whole_period__|<start>|<end>" -- разбираем
+    # её ДО остальных веток, иначе вся строка целиком уезжает в
+    # SQL как "дата", каст падает в NULL и результат тихо пустой
+    # (без исключения -- сравнение с NULL просто ничему не равно).
+    if isinstance(date_value, str) and date_value.count("|") == 2:
+        _, start, end = date_value.split("|")
+        if start and end:
+            return start, end, start != end
+
     if isinstance(
         date_value,
         (list, tuple),

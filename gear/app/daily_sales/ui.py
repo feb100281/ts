@@ -14,6 +14,13 @@ from .price_analysis.config import (
     PRICE_ANALYSIS_DOWNLOAD_ID,
     PRICE_ANALYSIS_LOADING_ID,
 )
+from .wb_expenses_excel import (
+    export_menu_item,
+    export_menu_dropdown_items,
+    WB_EXPENSES_EXPORT_DOWNLOAD_ID,
+    WB_EXPENSES_EXPORT_STATUS_ID,
+    WB_EXPENSES_EXPORT_CLICKS_ID,
+)
 
 
 # ============================================================
@@ -441,58 +448,81 @@ panel_block(
                         grow=True,
                         border_right=False,
                         children=dmc.Group(
-                            gap="md",
+                            gap="sm",
                             align="center",
                             wrap="nowrap",
-                            justify="space-between",
-                            style={
-                                "width": "100%",
-                            },
                             children=[
-                                dmc.Group(
-                                    gap="sm",
-                                    align="center",
-                                    wrap="nowrap",
-                                    children=[
-                                        section_icon(
-                                            icon=(
-                                                "solar:"
-                                                "download-minimalistic-linear"
-                                            ),
-                                            color=BLUE,
-                                            background_color=BLUE_BG,
-                                        ),
-
-                                        section_title(
-                                            title="Таблица",
-                                            subtitle="Экспорт данных",
-                                        ),
-                                    ],
+                                section_icon(
+                                    icon=(
+                                        "solar:"
+                                        "download-minimalistic-linear"
+                                    ),
+                                    color=BLUE,
+                                    background_color=BLUE_BG,
                                 ),
 
-                                dmc.Group(
-                                    gap=8,
-                                    align="center",
-                                    wrap="nowrap",
+                                section_title(
+                                    title="Экспорт",
+                                    subtitle="Отчёты и таблица",
+                                ),
+
+                                # Одно меню на всё: сама таблица
+                                # (Excel/CSV) и готовые отчёты.
+                                # Дальше сюда просто добавляются
+                                # новые пункты -- новых иконок
+                                # не заводим.
+                                dmc.Menu(
+                                    trigger="click",
+                                    position="bottom-end",
+                                    withArrow=True,
+                                    zIndex=10002,
                                     children=[
-                                        excel_action_icon(
-                                            button_id={
-                                                "type": "main-dnl",
-                                                "index": "xls",
-                                            },
-                                            tooltip=(
-                                                "Скачать таблицу в Excel"
+                                        dmc.MenuTarget(
+                                            action_icon(
+                                                button_id=(
+                                                    "export-reports-"
+                                                    "menu-trigger"
+                                                ),
+                                                tooltip="Экспорт отчётов",
+                                                icon=(
+                                                    "solar:"
+                                                    "download-"
+                                                    "minimalistic-"
+                                                    "linear"
+                                                ),
+                                                color="blue",
+                                                background_color=BLUE_BG,
                                             ),
                                         ),
+                                        dmc.MenuDropdown(
+                                            [
+                                                dmc.MenuLabel(
+                                                    "Текущая таблица"
+                                                ),
 
-                                        csv_action_icon(
-                                            button_id={
-                                                "type": "main-dnl",
-                                                "index": "csv",
-                                            },
-                                            tooltip=(
-                                                "Скачать таблицу в CSV"
-                                            ),
+                                                export_menu_item(
+                                                    "Таблица, Excel",
+                                                    "То, что сейчас "
+                                                    "показано на экране",
+                                                    {
+                                                        "type": "main-dnl",
+                                                        "index": "xls",
+                                                    },
+                                                ),
+
+                                                export_menu_item(
+                                                    "Таблица, CSV",
+                                                    "То же самое в CSV",
+                                                    {
+                                                        "type": "main-dnl",
+                                                        "index": "csv",
+                                                    },
+                                                ),
+
+                                                dmc.MenuDivider(),
+
+                                                *export_menu_dropdown_items(),
+                                            ]
                                         ),
                                     ],
                                 ),
@@ -515,6 +545,25 @@ panel_block(
 
             dcc.Download(
                 id=PRICE_ANALYSIS_DOWNLOAD_ID,
+            ),
+
+            dcc.Download(
+                id=WB_EXPENSES_EXPORT_DOWNLOAD_ID,
+            ),
+
+            dcc.Store(
+                id=WB_EXPENSES_EXPORT_CLICKS_ID,
+            ),
+
+            html.Div(
+                id=WB_EXPENSES_EXPORT_STATUS_ID,
+                style={
+                    "position": "fixed",
+                    "bottom": "16px",
+                    "right": "16px",
+                    "zIndex": 10050,
+                    "maxWidth": "420px",
+                },
             ),
 
     

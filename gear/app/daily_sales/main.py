@@ -18,6 +18,7 @@ from ..misc.baners import in_construction_banner
 from .summary import get_sales_summary
 from .stat import StatWindow
 from .excel_export import register_excel_export_callbacks, register_revenue_structure_excel_callbacks
+from .wb_expenses_excel import register_wb_expenses_excel_callbacks
 from .stocks.export import register_stock_export_callbacks
 from .quality_control_export import (
     QUALITY_CONTROL_EXPORT_DOWNLOAD_ID,
@@ -599,6 +600,7 @@ class MainWindow:
         ###-------------------###
         
         register_excel_export_callbacks(app,self.selected_dates_chips_id,)
+        register_wb_expenses_excel_callbacks(app, FILTERS)
         register_revenue_structure_excel_callbacks(app)
         register_stock_export_callbacks(app)
         register_quality_control_export_callbacks(app, FILTERS)
