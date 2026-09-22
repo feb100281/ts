@@ -735,7 +735,6 @@ def _write_toc(wb, df, period_label, sheet_entries):
 
     style.write_footer_note(
         ws, row, col_end,
-        f"Категоризация статей -- как в management/commands/sql/wb_costs.sql. "
         f"Сформировано {datetime.now():%d.%m.%Y %H:%M}.",
     )
 
@@ -776,7 +775,7 @@ def _assemble_workbook(df: pd.DataFrame, start_date: str, end_date: str) -> byte
     _write_pivot_sheet(
         wb, "По дням",
         "Расходы WB по дням",
-        "Раздел и статья по строкам, дни по столбцам",
+        "",
         params,
         hierarchy, day_labels, day_amounts,
     )
@@ -787,7 +786,7 @@ def _assemble_workbook(df: pd.DataFrame, start_date: str, end_date: str) -> byte
     _write_pivot_sheet(
         wb, "По неделям",
         "Расходы WB по неделям",
-        "Понедельник -- начало недели, как и в остальном отчёте",
+        "",
         params,
         hierarchy, week_labels, week_amounts,
     )
@@ -798,7 +797,7 @@ def _assemble_workbook(df: pd.DataFrame, start_date: str, end_date: str) -> byte
     _write_pivot_sheet(
         wb, "По месяцам",
         "Расходы WB по месяцам",
-        "Раздел и статья по строкам, месяцы по столбцам",
+        "",
         params,
         hierarchy, month_labels, month_amounts,
     )
