@@ -1,0 +1,323 @@
+CREATE OR REPLACE TEMP TABLE pl_sales AS
+
+WITH commissions AS (
+    SELECT
+        rrd_id,
+
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'dt'
+            ),
+            0
+        )
+        -
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'cr'
+            ),
+            0
+        ) AS net_comission
+
+    FROM sales.sales_long
+    GROUP BY rrd_id
+),
+
+sales_by_day AS (
+    SELECT
+        t.date_from::DATE AS date_from,
+
+        SUM(t.cr_rev) AS amount,
+        SUM(t.retail_amount) AS retail_amount,
+
+        SUM(t.cr_rev)
+        -
+        SUM(
+            t.cr_rev / (100 + t.vat_rate) * 100
+        ) AS vat_amount,
+
+        SUM(
+            t.cr_rev / (100 + t.vat_rate) * 100
+        ) AS amount_vatless,
+
+        SUM(t.adjusted_cogs) AS cogs,
+        SUM(t.adjusted_cogs_man) AS cogs_man,
+
+        SUM(
+            CASE
+                WHEN t.cr_rev > 0 THEN 1
+                WHEN t.cr_rev < 0 THEN -1
+                ELSE 0
+            END
+        ) AS total_net_sales,
+
+        COUNT(*) FILTER (
+            WHERE t.cr = 0
+        ) AS no_cost,
+
+        COUNT(*) FILTER (
+            WHERE t.storage_flag = 'Нет на складе'
+        ) AS no_stocks,
+
+        COUNT(*) FILTER (
+            WHERE t.storage_flag = 'Нет приходов'
+        ) AS no_income,
+
+        SUM(c.net_comission) AS net_comission
+
+    FROM base t
+
+    LEFT JOIN commissions c
+        ON c.rrd_id = t.rrd_id
+
+    WHERE t.cr_rev <> 0
+
+    --   AND t.date_from::DATE
+    --       BETWEEN ?::DATE AND ?::DATE
+
+    --   {filters}
+
+    GROUP BY
+        t.date_from::DATE
+),
+
+sales_count_by_week AS (
+    SELECT
+        YEARWEEK(t.date_from::DATE) AS yw,
+
+        SUM(
+            CASE
+                WHEN t.cr_rev > 0 THEN 1
+                WHEN t.cr_rev < 0 THEN -1
+                ELSE 0
+            END
+        ) AS rev_count
+
+    FROM base t
+
+    WHERE t.cr_rev <> 0
+
+    GROUP BY
+        YEARWEEK(t.date_from::DATE)
+),
+
+wb_costs_by_week AS (
+    SELECT
+        yw,
+
+        SUM(
+            dt / (100 + vat_rate) * 100
+        )
+        -
+        SUM(
+            cr / (100 + vat_rate) * 100
+        ) AS costs
+
+    FROM wb_costs
+
+    GROUP BY yw
+),
+
+cost_per_sale AS (
+    SELECT
+        s.yw,
+
+        CASE
+            WHEN COALESCE(s.rev_count, 0) = 0
+                THEN NULL
+            ELSE ABS(w.costs) / s.rev_count
+        END AS cost_per_sold
+
+    FROM sales_count_by_week s
+
+    LEFT JOIN wb_costs_by_week w
+        ON w.yw = s.yw
+),
+
+stock_by_day AS (
+    SELECT
+        t.stock_date,
+
+        SUM(t.stock_quantity) AS ending_stock,
+        SUM(t.warehouse_quantity) AS ending_warehouse_stock,
+        SUM(t.fbs_quantity) AS ending_fbs_stock,
+        SUM(t.in_transit_quantity) AS ending_in_transit_stock
+
+    FROM stocks_daily t
+
+    -- WHERE t.stock_date
+    --       BETWEEN ?::DATE AND ?::DATE
+
+    --   {stock_filters}
+
+    GROUP BY t.stock_date
+)
+
+SELECT
+    YEAR(s.date_from) as fye,
+    yearweek(s.date_from) as yw,
+    last_day(s.date_from) as me,
+    s.date_from,
+
+    ROUND(
+        s.amount / 100.00,
+        2
+    ) AS amount,
+
+    ROUND(
+        s.retail_amount / 100.00,
+        2
+    ) AS retail_amount,
+
+    ROUND(
+        CASE
+            WHEN s.amount = 0 THEN NULL
+            ELSE (
+                s.amount - s.retail_amount
+            ) / s.amount * 100
+        END,
+        2
+    ) AS wb_discount,
+
+    ROUND(
+        s.vat_amount / 100.00,
+        2
+    ) AS vat_amount,
+
+    ROUND(
+        s.amount_vatless / 100.00,
+        2
+    ) AS amount_vatless,
+
+    ROUND(
+        s.cogs / 100.00,
+        2
+    ) AS cogs,
+
+    ROUND(
+        s.cogs_man / 100.00,
+        2
+    ) AS cogs_man,
+
+    ROUND(
+        s.net_comission / 100.00,
+        2
+    ) AS net_comission,
+
+    ROUND(
+        (
+            s.amount_vatless
+            - s.cogs
+            + s.net_comission
+        ) / 100.00,
+        2
+    ) AS margin,
+
+    ROUND(
+        (
+            s.amount_vatless
+            - s.cogs_man
+            + s.net_comission
+        ) / 100.00,
+        2
+    ) AS margin_man,
+
+    s.total_net_sales,
+    s.no_cost,
+    s.no_stocks,
+    s.no_income,
+
+    ROUND(
+        CASE
+            WHEN s.amount_vatless = 0 THEN NULL
+            ELSE s.cogs_man
+                 / s.amount_vatless
+                 * 100
+        END,
+        2
+    ) AS cogs_man_share,
+
+    ROUND(
+        CASE
+            WHEN s.amount_vatless = 0 THEN NULL
+            ELSE -s.net_comission
+                 / s.amount_vatless
+                 * 100
+        END,
+        2
+    ) AS commision_percent,
+
+    ROUND(
+        CASE
+            WHEN s.amount_vatless = 0 THEN NULL
+            ELSE (
+                s.amount_vatless
+                - s.cogs_man
+                + s.net_comission
+            ) / s.amount_vatless * 100
+        END,
+        2
+    ) AS margin_percent,
+
+    ROUND(
+        cp.cost_per_sold / 100.00,
+        2
+    ) AS cost_per_sold,
+
+    ROUND(
+        s.total_net_sales
+        * cp.cost_per_sold
+        / 100.00,
+        2
+    ) AS wb_costs,
+
+    ROUND(
+        (
+            (
+                s.amount_vatless
+                - s.cogs_man
+                + s.net_comission
+            )
+            -
+            (
+                s.total_net_sales
+                * cp.cost_per_sold
+            )
+        ) / 100.00,
+        2
+    ) AS wb_result,
+
+    st.stock_date AS ending_stock_date,
+    st.ending_stock,
+    st.ending_warehouse_stock,
+    st.ending_fbs_stock,
+    st.ending_in_transit_stock,
+
+    ROUND(
+        CASE
+            WHEN COALESCE(s.total_net_sales, 0) <= 0
+                THEN NULL
+            WHEN st.ending_stock IS NULL
+                THEN NULL
+            ELSE
+                st.ending_stock
+                / s.total_net_sales
+        END,
+        2
+    ) AS daily_stock_days
+
+FROM sales_by_day s
+
+LEFT JOIN cost_per_sale cp
+    ON cp.yw = YEARWEEK(s.date_from)
+
+LEFT JOIN stock_by_day st
+    ON st.stock_date = s.date_from
+
+ORDER BY s.date_from DESC
+;

@@ -1,0 +1,47 @@
+<div id="appendix-a-certificates"></div>
+
+<div class="appendix-page keep-together">
+    <div class="section-title">Приложение A. Детализация рисков по сертификатам и декларациям</div>
+
+    <div class="small-note">
+        В приложении представлена полная выборка товаров, по которым срок действия сертификата/декларации
+        истекает в ближайшие 180 дней либо уже истек. Для приоритизации указан объем продаж за последние 90 дней.
+        <a href="#section-certificates" class="toc-link">Вернуться к основному разделу</a>.
+    </div>
+
+    <table class="data compact">
+        <thead>
+            <tr>
+                <th style="width:12%;">Артикул WB</th>
+                <th style="width:22%;">Название товара WB</th>
+                <th style="width:12%;">Срок действия до</th>
+                <th style="width:12%;">Дней до окончания</th>
+                <th style="width:12%;">Уровень риска</th>
+                <th style="width:12%;">Продажи 90д, руб.</th>
+                <th style="width:10%;">Продажи 90д, шт.</th>
+                <th style="width:8%;">Фото</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in certificate_risks %}
+            <tr>
+                <td class="left">{{ row.nm_id_str }}</td>
+                <td class="left">{{ row.product_name }}</td>
+                <td class="center">{{ row.cert_expiry_raw }}</td>
+                <td class="center">{{ row.days_to_expiry }}</td>
+                <td class="center {{ row.risk_class }}">{{ row.risk_level }}</td>
+                <td class="right">{{ row.sales_amount_90d_fmt }}</td>
+                <td class="right">{{ row.sales_qty_90d_fmt }}</td>
+                <td class="center">
+                    {% if row.photo_url %}
+                        <a href="{{ row.photo_url }}" target="_blank">Фото</a>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+

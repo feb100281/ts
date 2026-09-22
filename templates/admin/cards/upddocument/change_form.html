@@ -1,0 +1,224 @@
+{% extends "admin/change_form.html" %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block title %}
+  {% if original %}
+    УПД № {{ original.number }} от {{ original.date|date:"d.m.Y" }}
+  {% else %}
+    Новый УПД
+  {% endif %}
+{% endblock %}
+
+{% block content_title %}
+
+  <div class="upd-form-header">
+
+    <div class="upd-form-title-wrap">
+
+      <div class="upd-form-logo">
+        УПД
+      </div>
+
+      <div>
+        <div class="upd-form-eyebrow">
+          Документ
+        </div>
+
+        {% if original %}
+          <div class="upd-form-title">
+            УПД № {{ original.number }} от {{ original.date|date:"d.m.Y" }}
+          </div>
+
+          <div class="upd-form-meta">
+       
+            ID: {{ original.id }}
+          </div>
+        {% else %}
+          <div class="upd-form-title">
+            Новый УПД
+          </div>
+
+          <div class="upd-form-meta">
+            Создание документа
+          </div>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <div class="upd-form-actions">
+      <a href="{% url 'admin:cards_upddocument_changelist' %}" class="upd-back-button">
+        ← К списку УПД
+      </a>
+    </div>
+
+  </div>
+
+  <div class="upd-form-breadcrumb-row">
+
+    <nav>
+      <a href="{% url 'admin:index' %}">
+        Главная
+      </a>
+
+      <span>/</span>
+
+      <a href="{% url 'admin:cards_upddocument_changelist' %}">
+        УПД
+      </a>
+
+      <span>/</span>
+
+      <strong>
+        {% if original %}
+          № {{ original.number }}
+        {% else %}
+          Новый документ
+        {% endif %}
+      </strong>
+    </nav>
+
+  </div>
+
+{% endblock %}
+
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+
+    .upd-form-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding-bottom: 8px;
+    }
+
+    .upd-form-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .upd-form-logo {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #0f172a, #334155);
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+    }
+
+    .upd-form-eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+
+    .upd-form-title {
+      font-size: 24px;
+      line-height: 1.2;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .upd-form-meta {
+      margin-top: 5px;
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .upd-form-meta span {
+      color: #cbd5e1;
+      margin: 0 8px;
+    }
+
+    .upd-form-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .upd-back-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 7px 14px;
+      background: #f8fafc;
+      color: #0f172a !important;
+      border: 1px solid #e2e8f0;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none !important;
+      transition: all 0.2s ease;
+    }
+
+    .upd-back-button:hover {
+      background: #e2e8f0;
+    }
+
+    .upd-form-breadcrumb-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+      padding: 10px 0 16px;
+      border-bottom: 1px solid #e2e8f0;
+      color: #64748b;
+      font-size: 12px;
+    }
+
+    .upd-form-breadcrumb-row a {
+      color: #64748b;
+      text-decoration: none;
+    }
+
+    .upd-form-breadcrumb-row a:hover {
+      color: #0f172a;
+      text-decoration: underline;
+    }
+
+    .upd-form-breadcrumb-row span {
+      color: #cbd5e1;
+      margin: 0 6px;
+    }
+
+    .upd-form-breadcrumb-row strong {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .inline-group {
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .inline-group h2 {
+      background: #f8fafc !important;
+      color: #0f172a !important;
+      font-weight: 800 !important;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .submit-row {
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+
+  </style>
+{% endblock %}

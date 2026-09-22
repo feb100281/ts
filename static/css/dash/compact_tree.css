@@ -1,0 +1,34 @@
+/* общий контейнер дерева */
+.compact-tree {
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+/* строки узлов */
+.compact-tree .mantine-Tree-node {
+    padding: 2px 4px !important;
+    min-height: 20px;
+}
+
+/* текст label */
+.compact-tree .mantine-Tree-label {
+    font-size: 12px !important;
+    padding: 0 !important;
+}
+
+/* чекбоксы */
+.compact-tree .mantine-Checkbox-root {
+    transform: scale(0.65);
+}
+
+/* иконки раскрытия */
+.compact-tree svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+/* расстояние между узлами */
+.compact-tree .mantine-Tree-children {
+    margin-left: 10px !important;
+    padding-left: 6px !important;
+}

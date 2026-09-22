@@ -1,0 +1,4 @@
+CREATE OR REPLACE TEMP TABLE cf AS
+select * from pg.cf_to_csv
+where date_from <= $date_from
+;
