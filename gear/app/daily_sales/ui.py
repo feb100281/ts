@@ -21,6 +21,13 @@ from .wb_expenses_excel import (
     WB_EXPENSES_EXPORT_STATUS_ID,
     WB_EXPENSES_EXPORT_CLICKS_ID,
 )
+from .wb_top_cards_report import (
+    top_cards_menu_items,
+    TOP_CARDS_PDF_DOWNLOAD_ID,
+    TOP_CARDS_EXCEL_DOWNLOAD_ID,
+    TOP_CARDS_STATUS_ID,
+    TOP_CARDS_CLICKS_ID,
+)
 
 
 # ============================================================
@@ -521,7 +528,19 @@ panel_block(
 
                                                 dmc.MenuDivider(),
 
+                                                # Каждый отчёт -- один
+                                                # report_menu_group
+                                                # (название отчёта,
+                                                # форматы -- во
+                                                # вложенном подменю
+                                                # сбоку), без
+                                                # разделителя между
+                                                # ними -- это строки
+                                                # одного списка
+                                                # "Отчёты", а не
+                                                # разные группы.
                                                 *export_menu_dropdown_items(),
+                                                *top_cards_menu_items(),
                                             ]
                                         ),
                                     ],
@@ -566,7 +585,30 @@ panel_block(
                 },
             ),
 
-    
+            dcc.Download(
+                id=TOP_CARDS_PDF_DOWNLOAD_ID,
+            ),
+
+            dcc.Download(
+                id=TOP_CARDS_EXCEL_DOWNLOAD_ID,
+            ),
+
+            dcc.Store(
+                id=TOP_CARDS_CLICKS_ID,
+            ),
+
+            html.Div(
+                id=TOP_CARDS_STATUS_ID,
+                style={
+                    "position": "fixed",
+                    "bottom": "16px",
+                    "right": "16px",
+                    "zIndex": 10050,
+                    "maxWidth": "420px",
+                },
+            ),
+
+
             wb_plan_modal(),
             ai_analysis_modal(),
         ],
