@@ -64,7 +64,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-09-20 2026-09-22 --overwrite
+1) python manage.py fin_report_range 2026-09-20 2026-09-23 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 
@@ -82,7 +82,9 @@ python manage.py duck_etl
 8) python manage.py fbs_stocks_etl (Распарсиваем остатки FBS) 
 9) python manage.py fbs_orders_etl (Распарсиваем заказы FBS) 
 10) python manage.py fbs_dicts_etl (Справочники складов FBS: названия вместо номеров)
-11) python manage.py inventories
+11) python utils/load_ad_campaigns.py (Забираем данные по рекламным кампаниям из API WB)
+12) python manage.py ad_campaigns_etl (Пересобираем таблицы рекламных кампаний в DuckDB)
+13) python manage.py inventories
 
 
 

@@ -28,6 +28,14 @@ from .wb_top_cards_report import (
     TOP_CARDS_STATUS_ID,
     TOP_CARDS_CLICKS_ID,
 )
+from .ad_campaigns_report import (
+    ad_campaigns_menu_items,
+    AD_CAMPAIGNS_PDF_DOWNLOAD_ID,
+    AD_CAMPAIGNS_EXCEL_DOWNLOAD_ID,
+    AD_CAMPAIGNS_PERIODS_DOWNLOAD_ID,
+    AD_CAMPAIGNS_STATUS_ID,
+    AD_CAMPAIGNS_CLICKS_ID,
+)
 
 
 # ============================================================
@@ -483,6 +491,14 @@ panel_block(
                                     position="bottom-end",
                                     withArrow=True,
                                     zIndex=10002,
+                                    # keepMounted=True -- та же причина,
+                                    # что и во вложенном report_menu_group
+                                    # (wb_expenses_excel.py): иначе пункты
+                                    # меню размонтируются при закрытии и
+                                    # их n_clicks сбрасывается, из-за чего
+                                    # повторное скачивание того же отчёта
+                                    # молча не срабатывает.
+                                    keepMounted=True,
                                     children=[
                                         dmc.MenuTarget(
                                             action_icon(
@@ -541,6 +557,7 @@ panel_block(
                                                 # разные группы.
                                                 *export_menu_dropdown_items(),
                                                 *top_cards_menu_items(),
+                                                *ad_campaigns_menu_items(),
                                             ]
                                         ),
                                     ],
@@ -599,6 +616,33 @@ panel_block(
 
             html.Div(
                 id=TOP_CARDS_STATUS_ID,
+                style={
+                    "position": "fixed",
+                    "bottom": "16px",
+                    "right": "16px",
+                    "zIndex": 10050,
+                    "maxWidth": "420px",
+                },
+            ),
+
+            dcc.Download(
+                id=AD_CAMPAIGNS_PDF_DOWNLOAD_ID,
+            ),
+
+            dcc.Download(
+                id=AD_CAMPAIGNS_EXCEL_DOWNLOAD_ID,
+            ),
+
+            dcc.Download(
+                id=AD_CAMPAIGNS_PERIODS_DOWNLOAD_ID,
+            ),
+
+            dcc.Store(
+                id=AD_CAMPAIGNS_CLICKS_ID,
+            ),
+
+            html.Div(
+                id=AD_CAMPAIGNS_STATUS_ID,
                 style={
                     "position": "fixed",
                     "bottom": "16px",

@@ -831,20 +831,22 @@ def _assemble_workbook(df: pd.DataFrame, start_date: str, end_date: str) -> byte
 
 
 # ================================================================ UI: пункт меню "Экспорт"
-def export_menu_item(label, description, component_id):
+def export_menu_item(label, description, component_id, disabled=False):
+    kwargs = {"id": component_id, "n_clicks": 0}
+    if disabled:
+        kwargs["disabled"] = True
     return dmc.MenuItem(
         dmc.Box(
             children=[
-                dmc.Text(label, size="sm", fw=600),
+                dmc.Text(label, size="sm", fw=600, **({"c": "dimmed"} if disabled else {})),
                 dmc.Text(description, size="xs", c="dimmed"),
             ]
         ),
-        id=component_id,
-        n_clicks=0,
+        **kwargs,
     )
 
 
-def report_menu_group(title, items):
+def report_menu_group(title, items, disabled=False):
     """Один отчёт со своими форматами экспорта -- как вложенное
     подменю (наводишь на название отчёта -- сбоку раскрывается список
     форматов), а не плоский список из нескольких пунктов подряд под
@@ -857,24 +859,43 @@ def report_menu_group(title, items):
     trigger="hover"): по мере роста числа отчётов верхний уровень
     списка остаётся коротким -- один пункт на отчёт, а не N пунктов
     на каждый его формат.
+
+    keepMounted=True -- иначе Mantine убирает содержимое подменю из
+    DOM при закрытии (после ухода курсора / после клика по пункту),
+    и при следующем открытии пункты меню (dmc.MenuItem) монтируются
+    заново с n_clicks=0 -- тогда счётчик кликов "сбрасывается", и
+    повторное скачивание ТОГО ЖЕ отчёта перестаёт срабатывать (n_clicks
+    после пересборки снова равен 1, что совпадает с уже сохранённым
+    значением в Store -- клик выглядит "тем же самым" и не замечается).
     """
+    # c=None/fs=None явно передавать нельзя -- Mantine у некоторых
+    # версий валит рендер всего Text при explicit None -- из-за
+    # этого один раз уже пропадали ВСЕ названия отчётов в меню.
+    label_kwargs = {"size": "sm", "fw": 600}
+    if disabled:
+        label_kwargs["c"] = "dimmed"
+    label = dmc.Text(title, **label_kwargs)
+
+    right_kwargs = {"size": "sm", "c": "dimmed"}
+    if disabled:
+        right_kwargs["fs"] = "italic"
+    right = dmc.Text("дорабатывается" if disabled else "›", **right_kwargs)
     return dmc.Menu(
         trigger="hover",
         position="left-start",
         withArrow=True,
         zIndex=10003,
+        keepMounted=True,
         children=[
             dmc.MenuTarget(
                 dmc.MenuItem(
                     dmc.Group(
-                        [
-                            dmc.Text(title, size="sm", fw=600),
-                            dmc.Text("›", size="sm", c="dimmed"),
-                        ],
+                        [label, right],
                         justify="space-between",
                         gap=6,
                         wrap="nowrap",
                     ),
+                    disabled=disabled,
                 ),
             ),
             dmc.MenuDropdown(items),
