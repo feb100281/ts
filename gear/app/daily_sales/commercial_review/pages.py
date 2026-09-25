@@ -2004,6 +2004,278 @@ def _wb_costs_vs_revenue_rows(expense_weeks, financial_weeks):
     return rows
 
 
+# def wb_expenses_page(payload) -> str:
+#     expenses = _node(payload, "wb_expenses")
+
+#     if not expenses.get("available"):
+#         return page(
+#             "12",
+#             "Расходы WB",
+#             "Анализ расходов WB",
+#             "",
+#             callout(
+#                 "",
+#                 "<b>Разрез расходов WB по неделям не собрался.</b> "
+#                 "Показатель считается отдельным запросом к тем же "
+#                 "проводкам, что и раздел «Финансовый результат» — "
+#                 "если сумма расходов WB там есть, а здесь пусто, "
+#                 "дело не в данных, а в этом конкретном разрезе.",
+#                 plain=True,
+#             ),
+#         )
+
+#     weeks = expenses.get("weeks") or []
+#     closed_weeks = [w for w in weeks if w.get("is_closed")]
+#     current_week = next((w for w in weeks if not w.get("is_closed")), None)
+#     categories = expenses.get("categories") or []
+#     total_spike = expenses.get("total_spike")
+#     category_spikes = expenses.get("category_spikes") or []
+
+#     period_label = (
+#         f"{escape(date_short(expenses.get('date_from')))}–"
+#         f"{escape(date_short(expenses.get('date_to')))}"
+#     )
+
+#     grand_total = num(expenses.get("grand_total")) or 0
+#     grand_total_all = num(expenses.get("grand_total_all")) or grand_total
+#     avg_week = grand_total / len(closed_weeks) if closed_weeks else 0
+
+#     top_category = categories[0] if categories else None
+#     top_category_amount = (
+#         sum(w["by_category"].get(top_category, 0.0) for w in weeks)
+#         if top_category else 0.0
+#     )
+
+#     cards = [
+#         kpi(
+#             "Расходы WB, закрытые недели",
+#             cost_money(grand_total),
+#             f"{len(closed_weeks)} " + plural(
+#                 len(closed_weeks), "неделя", "недели", "недель"
+#             ),
+#             "flat",
+#             period_label,
+#         ),
+#         kpi(
+#             "В среднем за неделю",
+#             cost_money(avg_week),
+#             "",
+#             "flat",
+#             "ориентир, с которым сравниваются остальные недели",
+#         ),
+#         kpi(
+#             "Крупнейшая статья",
+#             escape(top_category) if top_category else "—",
+#             (
+#                 pct(100.0 * top_category_amount / grand_total_all)
+#                 if top_category and grand_total_all
+#                 else ""
+#             ),
+#             "flat",
+#             "доля от расходов WB за всё окно, включая текущую неделю",
+#         ),
+#         kpi(
+#             "Недель с всплеском",
+#             fmt_qty(len({s["label"] for s in category_spikes} | (
+#                 {total_spike["label"]} if total_spike else set()
+#             ))),
+#             "",
+#             "bad" if (total_spike or category_spikes) else "good",
+#             f"выше среднего по остальным закрытым неделям в "
+#             f"{C.WB_EXPENSES_SPIKE_RATIO:.2f}".replace(".", ",") + " раза и больше",
+#         ),
+#     ]
+
+#     chart_note_parts = []
+#     if total_spike:
+#         chart_note_parts.append(
+#             f"<b>Неделя {escape(total_spike['label'])} — пик общих "
+#             f"расходов WB:</b> {cost_money(total_spike['value'])} против "
+#             f"{cost_money(total_spike['baseline'])} в среднем по остальным "
+#             f"закрытым неделям окна — в "
+#             f"{total_spike['ratio']:.1f}".replace(".", ",")
+#             + " раза больше."
+#         )
+#     if category_spikes:
+#         top = category_spikes[0]
+#         chart_note_parts.append(
+#             f"Больше всего вырос(ла) статья «{escape(top['category'])}»: "
+#             f"неделя {escape(top['label'])} дала {cost_money(top['value'])} "
+#             f"против обычных {cost_money(top['baseline'])}."
+#         )
+#     if not chart_note_parts:
+#         chart_note_parts.append(
+#             "Явных всплесков среди закрытых недель нет — расходы WB "
+#             "идут ровно от недели к неделе."
+#         )
+#     if current_week:
+#         chart_note_parts.append(
+#             f"<span class=\"muted\">Текущая неделя "
+#             f"({escape(current_week['label'])}) ещё не закрыта — "
+#             f"в ней пока {fmt_qty(current_week.get('days_covered'))} "
+#             f"{plural(current_week.get('days_covered') or 0, 'день', 'дня', 'дней')} "
+#             f"вместо семи, сравнивать её с полными неделями рано.</span>"
+#         )
+
+#     chart_note = " ".join(chart_note_parts)
+
+#     # ---- таблица по неделям и статьям: то, ради чего страница ----
+#     week_table_columns = [{"key": "label", "label": "Неделя"}]
+#     for cat in categories:
+#         week_table_columns.append({
+#             "key": cat,
+#             "label": cat,
+#             "num": True,
+#             "fmt": cost_money_exact,
+#         })
+#     week_table_columns.append(
+#         {"key": "total", "label": "Итого, ₽", "num": True, "fmt": cost_money_exact}
+#     )
+#     week_table_columns.append({"key": "status", "label": "Статус"})
+
+#     week_table_rows = []
+#     for w in weeks:
+#         row = {"label": w["label"], "total": w["total"]}
+#         for cat in categories:
+#             row[cat] = w["by_category"].get(cat, 0.0)
+#         if w.get("is_closed"):
+#             row["status"] = "закрыта"
+#         else:
+#             days = w.get("days_covered") or 0
+#             row["status"] = (
+#                 f"текущая, {fmt_qty(days)} "
+#                 f"{plural(days, 'день', 'дня', 'дней')}"
+#             )
+#             row["_alert"] = False
+#         week_table_rows.append(row)
+
+#     weekly_table = table(
+#         week_table_columns,
+#         week_table_rows,
+#         total={
+#             "label": "Итого по закрытым",
+#             **{cat: sum(w["by_category"].get(cat, 0.0) for w in closed_weeks)
+#                for cat in categories},
+#             "total": grand_total,
+#             "status": "",
+#         },
+#         caption="Расходы WB по неделям и статьям",
+#         note=(
+#             "Текущая (незакрытая) неделя не входит в «Итого по "
+#             "закрытым» и не участвует в поиске всплесков — в ней "
+#             "физически меньше дней, сравнение было бы нечестным."
+#         ),
+#     ) if weeks else ""
+
+#     spike_table = ""
+#     if category_spikes:
+#         spike_table = table(
+#             [
+#                 {"key": "category", "label": "Статья"},
+#                 {"key": "label", "label": "Неделя-пик"},
+#                 {"key": "value", "label": "Расход за неделю, ₽",
+#                  "num": True, "fmt": cost_money_exact},
+#                 {"key": "baseline", "label": "Обычно за неделю, ₽",
+#                  "num": True, "fmt": cost_money_exact},
+#                 {"key": "ratio_pct", "label": "Во сколько раз больше",
+#                  "num": True, "fmt": lambda v: f"{v:.1f}".replace(".", ",") + " ×"},
+#             ],
+#             [
+#                 {**s, "ratio_pct": s["ratio"], "_alert": True}
+#                 for s in category_spikes
+#             ],
+#             caption="По каким статьям были всплески",
+#             note=(
+#                 "Показаны только статьи заметного веса. "
+
+#             ),
+#         )
+
+#     fines_spike = next(
+#         (s for s in category_spikes if s["category"] == "Штрафы"), None
+#     )
+#     cost_share_rows = _wb_costs_vs_revenue_rows(
+#         weeks, _list(payload, "financial", "weeks")
+#     )
+
+#     fines_note_parts = [
+#         "На общем графике выше штрафы почти не видно на фоне "
+#         "рекламы и логистики — обычно это малая часть расходов "
+#         "WB. Но именно штрафы чаще всего можно оспорить, а не "
+#         "просто принять как есть, поэтому у них отдельный график."
+#     ]
+#     if fines_spike:
+#         fines_note_parts.append(
+#             f"<b>Неделя {escape(fines_spike['label'])} выделена "
+#             f"красным:</b> штрафы дали "
+#             f"{cost_money(fines_spike['value'])} против обычных "
+#             f"{cost_money(fines_spike['baseline'])} — стоит "
+#             f"проверить в личном кабинете WB, за что именно."
+#         )
+
+#     body = (
+#         kpi_grid(cards)
+#         + weekly_table
+#         + callout("", chart_note, plain=True)
+#         + figure(
+#             "Доли статей в расходах WB по неделям",
+#             charts.wb_expenses_category_share(weeks, categories),
+#             f"{period_label}, % от расходов WB за неделю",
+#             "Сумма в деньгах может почти не меняться, а структура "
+#             "— сдвигаться: например, доля продвижения растёт "
+#             "за счёт доли логистики при том же общем итоге. "
+#             "Абсолютные суммы по каждой статье и неделе — "
+#             "в таблице выше.",
+#             "Недостаточно недель для графика",
+#         )
+#         + figure(
+#             "Расходы WB как доля выручки",
+#             charts.wb_costs_share_weekly(cost_share_rows),
+#             f"{period_label}, % от выручки без НДС",
+#             "Тот же процент, что и в разделе «Финансовый "
+#             "результат», но не за одну неделю, а несколько "
+#             "подряд — так видно, растут расходы WB быстрее "
+#             "выручки или вместе с ней. Серым — недели, для "
+#             "которых нет данных по выручке за тот же период.",
+#             "Не удалось сопоставить с выручкой за этот период",
+#         )
+#         + figure(
+#             "Штрафы по неделям",
+#             charts.wb_expenses_category_trend(
+#                 weeks, "Штрафы", fines_spike
+#             ),
+#             f"{period_label}, ₽ без НДС",
+#             " ".join(fines_note_parts),
+#             "Недостаточно недель со штрафами для графика",
+#         )
+#         + spike_table
+#         + callout(
+#             "Как считается",
+#             (
+#                 "Логистика, хранение, приёмка, штрафы, программа "
+#                 "лояльности и продвижение/услуги WB — из тех же "
+#                 "проводок WB, что и строка «Расходы WB» в разделе "
+#                 "«Финансовый результат», без НДС. Отличие — здесь "
+#                 "это разложено по неделям и статьям, а не показано "
+#                 "одной суммой. Комиссия WB и себестоимость сюда "
+#                 "не входят — они уже учтены в марже на предыдущей "
+#                 "странице."
+#             ),
+#             plain=True,
+#         )
+#     )
+
+#     return page(
+#         "12",
+#         "Расходы WB",
+#         "Анализ расходов WB",
+#         f"Логистика, хранение, штрафы и продвижение по неделям — "
+#         f"и где случился скачок.",
+#         body,
+#     )
+
+
+
 def wb_expenses_page(payload) -> str:
     expenses = _node(payload, "wb_expenses")
 
@@ -2028,17 +2300,100 @@ def wb_expenses_page(payload) -> str:
     closed_weeks = [w for w in weeks if w.get("is_closed")]
     current_week = next((w for w in weeks if not w.get("is_closed")), None)
     categories = expenses.get("categories") or []
+
     total_spike = expenses.get("total_spike")
-    category_spikes = expenses.get("category_spikes") or []
+    category_spikes = list(expenses.get("category_spikes") or [])
 
     period_label = (
         f"{escape(date_short(expenses.get('date_from')))}–"
         f"{escape(date_short(expenses.get('date_to')))}"
     )
 
-    grand_total = num(expenses.get("grand_total")) or 0
-    grand_total_all = num(expenses.get("grand_total_all")) or grand_total
-    avg_week = grand_total / len(closed_weeks) if closed_weeks else 0
+    grand_total_all = num(expenses.get("grand_total_all"))
+    if grand_total_all is None:
+        grand_total_all = sum(num(w.get("total")) or 0 for w in weeks)
+
+    avg_week = grand_total_all / len(weeks) if weeks else 0
+
+    # Готовые всплески приходят по закрытым неделям.
+    # Текущую неделю добавляем отдельно, чтобы не потерять старый расчет.
+    if current_week and closed_weeks:
+        current_total = num(current_week.get("total")) or 0
+        closed_totals = [
+            num(w.get("total")) or 0
+            for w in closed_weeks
+            if (num(w.get("total")) or 0) > 0
+        ]
+
+        if current_total > 0 and closed_totals:
+            baseline = sum(closed_totals) / len(closed_totals)
+            ratio = current_total / baseline if baseline else 0
+
+            if ratio >= C.WB_EXPENSES_SPIKE_RATIO:
+                current_total_spike = {
+                    "label": current_week["label"],
+                    "value": current_total,
+                    "baseline": baseline,
+                    "ratio": ratio,
+                    "is_closed": False,
+                }
+
+                if (
+                    total_spike is None
+                    or current_total_spike["ratio"] > total_spike["ratio"]
+                ):
+                    total_spike = current_total_spike
+
+        existing_spike_keys = {
+            (s.get("category"), s.get("label"))
+            for s in category_spikes
+        }
+
+        for cat in categories:
+            current_value = num(
+                current_week.get("by_category", {}).get(cat)
+            ) or 0
+
+            if current_value <= 0:
+                continue
+
+            closed_values = [
+                num(w.get("by_category", {}).get(cat)) or 0
+                for w in closed_weeks
+                if (num(w.get("by_category", {}).get(cat)) or 0) > 0
+            ]
+
+            if not closed_values:
+                continue
+
+            baseline = sum(closed_values) / len(closed_values)
+
+            if baseline <= 0:
+                continue
+
+            ratio = current_value / baseline
+
+            if ratio >= C.WB_EXPENSES_SPIKE_RATIO:
+                key = (cat, current_week["label"])
+
+                if key not in existing_spike_keys:
+                    category_spikes.append(
+                        {
+                            "category": cat,
+                            "label": current_week["label"],
+                            "value": current_value,
+                            "baseline": baseline,
+                            "ratio": ratio,
+                            "is_closed": False,
+                        }
+                    )
+                    existing_spike_keys.add(key)
+
+    category_spikes = sorted(
+        category_spikes,
+        key=lambda x: x.get("ratio") or 0,
+        reverse=True,
+    )
 
     top_category = categories[0] if categories else None
     top_category_amount = (
@@ -2048,10 +2403,10 @@ def wb_expenses_page(payload) -> str:
 
     cards = [
         kpi(
-            "Расходы WB, закрытые недели",
-            cost_money(grand_total),
-            f"{len(closed_weeks)} " + plural(
-                len(closed_weeks), "неделя", "недели", "недель"
+            "Расходы WB, всего",
+            cost_money(grand_total_all),
+            f"{len(weeks)} " + plural(
+                len(weeks), "неделя", "недели", "недель"
             ),
             "flat",
             period_label,
@@ -2061,7 +2416,7 @@ def wb_expenses_page(payload) -> str:
             cost_money(avg_week),
             "",
             "flat",
-            "ориентир, с которым сравниваются остальные недели",
+            "среднее по всем неделям окна, включая текущую",
         ),
         kpi(
             "Крупнейшая статья",
@@ -2081,21 +2436,23 @@ def wb_expenses_page(payload) -> str:
             ))),
             "",
             "bad" if (total_spike or category_spikes) else "good",
-            f"выше среднего по остальным закрытым неделям в "
+            f"выше среднего по остальным неделям в "
             f"{C.WB_EXPENSES_SPIKE_RATIO:.2f}".replace(".", ",") + " раза и больше",
         ),
     ]
 
     chart_note_parts = []
+
     if total_spike:
         chart_note_parts.append(
             f"<b>Неделя {escape(total_spike['label'])} — пик общих "
             f"расходов WB:</b> {cost_money(total_spike['value'])} против "
             f"{cost_money(total_spike['baseline'])} в среднем по остальным "
-            f"закрытым неделям окна — в "
+            f"неделям окна — в "
             f"{total_spike['ratio']:.1f}".replace(".", ",")
             + " раза больше."
         )
+
     if category_spikes:
         top = category_spikes[0]
         chart_note_parts.append(
@@ -2103,24 +2460,26 @@ def wb_expenses_page(payload) -> str:
             f"неделя {escape(top['label'])} дала {cost_money(top['value'])} "
             f"против обычных {cost_money(top['baseline'])}."
         )
+
     if not chart_note_parts:
         chart_note_parts.append(
-            "Явных всплесков среди закрытых недель нет — расходы WB "
-            "идут ровно от недели к неделе."
+            "Явных всплесков нет — расходы WB идут ровно от недели к неделе."
         )
+
     if current_week:
         chart_note_parts.append(
             f"<span class=\"muted\">Текущая неделя "
             f"({escape(current_week['label'])}) ещё не закрыта — "
             f"в ней пока {fmt_qty(current_week.get('days_covered'))} "
             f"{plural(current_week.get('days_covered') or 0, 'день', 'дня', 'дней')} "
-            f"вместо семи, сравнивать её с полными неделями рано.</span>"
+            f"вместо семи. Она входит в общее «Итого», а для всплесков "
+            f"дополнительно сравнивается с закрытыми неделями.</span>"
         )
 
     chart_note = " ".join(chart_note_parts)
 
-    # ---- таблица по неделям и статьям: то, ради чего страница ----
     week_table_columns = [{"key": "label", "label": "Неделя"}]
+
     for cat in categories:
         week_table_columns.append({
             "key": cat,
@@ -2128,16 +2487,20 @@ def wb_expenses_page(payload) -> str:
             "num": True,
             "fmt": cost_money_exact,
         })
+
     week_table_columns.append(
         {"key": "total", "label": "Итого, ₽", "num": True, "fmt": cost_money_exact}
     )
     week_table_columns.append({"key": "status", "label": "Статус"})
 
     week_table_rows = []
+
     for w in weeks:
         row = {"label": w["label"], "total": w["total"]}
+
         for cat in categories:
             row[cat] = w["by_category"].get(cat, 0.0)
+
         if w.get("is_closed"):
             row["status"] = "закрыта"
         else:
@@ -2147,27 +2510,30 @@ def wb_expenses_page(payload) -> str:
                 f"{plural(days, 'день', 'дня', 'дней')}"
             )
             row["_alert"] = False
+
         week_table_rows.append(row)
 
     weekly_table = table(
         week_table_columns,
         week_table_rows,
         total={
-            "label": "Итого по закрытым",
-            **{cat: sum(w["by_category"].get(cat, 0.0) for w in closed_weeks)
-               for cat in categories},
-            "total": grand_total,
+            "label": "Итого",
+            **{
+                cat: sum(w["by_category"].get(cat, 0.0) for w in weeks)
+                for cat in categories
+            },
+            "total": grand_total_all,
             "status": "",
         },
         caption="Расходы WB по неделям и статьям",
         note=(
-            "Текущая (незакрытая) неделя не входит в «Итого по "
-            "закрытым» и не участвует в поиске всплесков — в ней "
-            "физически меньше дней, сравнение было бы нечестным."
+            "Итого считается по всем неделям окна, включая текущую "
+            "незакрытую неделю."
         ),
     ) if weeks else ""
 
     spike_table = ""
+
     if category_spikes:
         spike_table = table(
             [
@@ -2186,24 +2552,22 @@ def wb_expenses_page(payload) -> str:
             ],
             caption="По каким статьям были всплески",
             note=(
-                "Показаны только статьи заметного веса. "
-
+                ''
             ),
         )
 
     fines_spike = next(
         (s for s in category_spikes if s["category"] == "Штрафы"), None
     )
+
     cost_share_rows = _wb_costs_vs_revenue_rows(
         weeks, _list(payload, "financial", "weeks")
     )
 
     fines_note_parts = [
-        "На общем графике выше штрафы почти не видно на фоне "
-        "рекламы и логистики — обычно это малая часть расходов "
-        "WB. Но именно штрафы чаще всего можно оспорить, а не "
-        "просто принять как есть, поэтому у них отдельный график."
+''
     ]
+
     if fines_spike:
         fines_note_parts.append(
             f"<b>Неделя {escape(fines_spike['label'])} выделена "
@@ -2269,11 +2633,10 @@ def wb_expenses_page(payload) -> str:
         "12",
         "Расходы WB",
         "Анализ расходов WB",
-        f"Логистика, хранение, штрафы и продвижение по неделям — "
-        f"и где случился скачок.",
+        "Логистика, хранение, штрафы и продвижение по неделям — "
+        "и где случился скачок.",
         body,
     )
-
 
 # ============================================================
 # 13. ЗАПАСЫ: СТРУКТУРА И ПОКРЫТИЕ
