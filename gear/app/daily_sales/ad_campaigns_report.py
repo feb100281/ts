@@ -1131,6 +1131,11 @@ def _fetch_report_bundle(start_date: str, end_date: str) -> dict:
     totals["drr_direct"] = _div(totals["spend_rub"], totals["revenue_direct"], 100)
     totals["assoc_share"] = _div(totals["revenue_assoc"], totals["revenue_direct"] + totals["revenue_assoc"], 100)
     prev_totals = _totals(prev_stats) if prev_stats is not None and not prev_stats.empty else None
+    if prev_totals is not None:
+        prev_direct = _safe(_fetch_daily_direct, prev_start, prev_end, default=pd.DataFrame())
+        if prev_direct is not None and not prev_direct.empty:
+            prev_totals["revenue_direct"] = float(pd.to_numeric(prev_direct["revenue_direct"], errors="coerce").sum())
+            prev_totals["drr_direct"] = _div(prev_totals["spend_rub"], prev_totals["revenue_direct"], 100)
 
     freq = _trend_freq(period_days)
     daily_direct = _safe(_fetch_daily_direct, start_date, end_date, default=pd.DataFrame())
@@ -1263,14 +1268,19 @@ def _recommendations(bundle: dict) -> list[tuple[str, str, str]]:
             f"Оценки кампаний в отчёте считаются по рекламируемым товарам.",
         ))
 
-    if prev is not None and drr is not None and prev.get("drr") is not None:
-        diff = drr - prev["drr"]
+    cur_drr = drr_direct if drr_direct is not None else drr
+    prev_drr = prev.get("drr_direct") if prev is not None else None
+    if prev_drr is None and prev is not None:
+        prev_drr, cur_drr = prev.get("drr"), drr
+    if prev is not None and cur_drr is not None and prev_drr is not None:
+        diff = cur_drr - prev_drr
         prev_label = _period_label(bundle["prev_start"], bundle["prev_end"])
         spend_chg = _change_pct(spend, prev["spend_rub"])
         orders_chg = _change_pct(t["orders"], prev["orders"])
+        kind = "по рекламируемым товарам " if prev.get("drr_direct") is not None else ""
         base = (
-            f"Предыдущий период ({prev_label}): ДРР {_pct1(prev['drr'])}. "
-            f"Расход {_signed_pct(spend_chg)}, заказы {_signed_pct(orders_chg)}."
+            f"ДРР {kind}{_pct1(cur_drr)} против {_pct1(prev_drr)} за {prev_label}. "
+            f"Расход {_signed_pct(spend_chg)}, заказы от рекламы {_signed_pct(orders_chg)}."
         )
         if abs(diff) >= DRR_TREND_DELTA:
             recs.append((
@@ -2045,12 +2055,22 @@ def _platforms_html(bundle: dict) -> str:
         best = df.loc[df["drr_direct"].idxmin()] if df["drr_direct"].notna().any() else None
         worst = df.loc[df["drr_direct"].idxmax()] if df["drr_direct"].notna().any() else None
         main = df.iloc[0]
-        parts.append(f"Больше всего бюджета уходит на {main['platform']} — {_pct1(main['share'])}.")
+        parts.append(f"Больше всего бюджета приходится на {main['platform']} — {_pct1(main['share'])} расхода.")
         if best is not None and worst is not None and best["platform"] != worst["platform"]:
             parts.append(
-                f"Дешевле всего заказы обходятся на {best['platform']} (ДРР {_pct1(best['drr_direct'])}, "
-                f"конверсия клика в заказ {_pct1(best['cr_direct'])}), дороже всего — на {worst['platform']} "
-                f"(ДРР {_pct1(worst['drr_direct'])})."
+                f"Лучше всего реклама окупается на {best['platform']}: ДРР {_pct1(best['drr_direct'])} "
+                f"против {_pct1(worst['drr_direct'])} на {worst['platform']}. "
+                + (
+                    f"Из 100 кликов на {best['platform']} получается {_spaced(best['cr_direct'], 1)} заказа, "
+                    f"на {worst['platform']} — {_spaced(worst['cr_direct'], 1)}; "
+                    f"клик стоит {_money_dec(best['cpc'])} и {_money_dec(worst['cpc'])}."
+                    if pd.notna(best["cr_direct"]) and pd.notna(worst["cr_direct"]) else ""
+                )
+            )
+            parts.append(
+                "Ставка в кампании одна для всех площадок, WB сам распределяет показы между ними. "
+                "Разница в ДРР — от поведения покупателей, а не от разных расценок: где чаще кликают, "
+                "там клик дешевле (при оплате за показы), где чаще заказывают — там выше отдача."
             )
     conclusion = f'<div class="summary">{_esc(" ".join(parts))}</div>' if parts else ""
     return table + note + conclusion
@@ -2335,7 +2355,11 @@ def build_ad_campaigns_html(bundle: dict) -> str:
     active_n = int((campaigns["spend_rub"] > 0).sum()) if not campaigns.empty else 0
     stocks_note = (f"Остатки на {_date(bundle['stocks_as_of'])}." if bundle.get("stocks_as_of") else "Остатки недоступны.")
 
-    type_chart = _hbar_html(bundle["by_type"], "type_name", "По типам кампаний")
+    by_type = bundle["by_type"]
+    type_chart = (
+        _hbar_html(by_type, "type_name", "По типам кампаний")
+        if by_type is not None and (by_type["spend_rub"] > 0).sum() > 1 else ""
+    )
 
     return f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Анализ рекламных кампаний WB</title>
