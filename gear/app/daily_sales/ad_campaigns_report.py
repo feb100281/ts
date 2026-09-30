@@ -376,16 +376,51 @@ def _fetch_campaign_products_daily(start_date: str, end_date: str) -> pd.DataFra
     )
 
 
-def _fetch_platforms(start_date: str, end_date: str) -> pd.DataFrame:
-    return _query(
-        f"""
-        SELECT app_type_name AS platform, {_METRICS_SQL}
+_DIRECT_CTE = """
+    WITH direct_nm AS (
+        SELECT advert_id, nm_id, 1 AS is_direct
         FROM ads.unpacked_ad_campaigns_stats_by_nm
         WHERE date BETWEEN $start_date AND $end_date
-        GROUP BY app_type_name
+        GROUP BY advert_id, nm_id
+        HAVING SUM(views) > 0 OR SUM(spend_rub) > 0
+    )
+"""
+
+_DIRECT_SQL = """
+    SUM(s.orders) FILTER (WHERE COALESCE(is_direct, 0) = 1) AS orders_direct,
+    SUM(s.revenue_rub) FILTER (WHERE COALESCE(is_direct, 0) = 1) AS revenue_direct
+"""
+
+
+def _fetch_platforms(start_date: str, end_date: str) -> pd.DataFrame:
+    metrics = ",\n".join(f"SUM(s.{m}) AS {m}" for m in _METRICS)
+    return _query(
+        f"""
+        {_DIRECT_CTE}
+        SELECT s.app_type_name AS platform, {metrics}, {_DIRECT_SQL}
+        FROM ads.unpacked_ad_campaigns_stats_by_nm s
+        LEFT JOIN direct_nm USING (advert_id, nm_id)
+        WHERE s.date BETWEEN $start_date AND $end_date
+        GROUP BY s.app_type_name
         """,
         {"start_date": start_date, "end_date": end_date},
-        columns=["platform", *_METRICS],
+        columns=["platform", *_METRICS, "orders_direct", "revenue_direct"],
+        safe=True,
+    )
+
+
+def _fetch_daily_direct(start_date: str, end_date: str) -> pd.DataFrame:
+    return _query(
+        f"""
+        {_DIRECT_CTE}
+        SELECT s.date, {_DIRECT_SQL}
+        FROM ads.unpacked_ad_campaigns_stats_by_nm s
+        LEFT JOIN direct_nm USING (advert_id, nm_id)
+        WHERE s.date BETWEEN $start_date AND $end_date
+        GROUP BY s.date
+        """,
+        {"start_date": start_date, "end_date": end_date},
+        columns=["date", "orders_direct", "revenue_direct"],
         safe=True,
     )
 
@@ -821,6 +856,24 @@ def _aggregate_products(cp, sales, sales_window_cp) -> pd.DataFrame:
     return g.sort_values("spend_rub", ascending=False).reset_index(drop=True)
 
 
+def _low_stock(cp: pd.DataFrame, campaigns: pd.DataFrame) -> pd.DataFrame:
+    cols = ["nm_id", "title", "brand", "stock_qty", "spend_rub", "orders", "campaigns"]
+    if cp is None or cp.empty or campaigns.empty:
+        return pd.DataFrame(columns=cols)
+    live = campaigns[campaigns["status"].isin([STATUS_ACTIVE, STATUS_PAUSED])]
+    names = live.set_index("advert_id")["name"].to_dict()
+    stock = pd.to_numeric(cp["stock_qty"], errors="coerce")
+    rows = cp[cp["advert_id"].isin(names) & cp["direct"] & stock.notna() & (stock < LOW_STOCK_QTY_THRESHOLD)]
+    if rows.empty:
+        return pd.DataFrame(columns=cols)
+    g = rows.groupby("nm_id").agg(
+        title=("title", "first"), brand=("brand", "first"), stock_qty=("stock_qty", "first"),
+        spend_rub=("spend_rub", "sum"), orders=("orders", "sum"),
+        campaigns=("advert_id", lambda ids: ", ".join(names[i] for i in ids)),
+    ).reset_index()
+    return g.sort_values("spend_rub", ascending=False).reset_index(drop=True)[cols]
+
+
 def _aggregate_time(stats: pd.DataFrame, freq: str) -> pd.DataFrame:
     if stats is None or stats.empty:
         return _add_rates(pd.DataFrame(columns=["period_start", "label"]))
@@ -842,6 +895,26 @@ def _aggregate_time(stats: pd.DataFrame, freq: str) -> pd.DataFrame:
     else:
         g["label"] = g["period_start"].dt.strftime("%m.%Y")
     return g
+
+
+def _add_direct_to_time(df: pd.DataFrame, daily_direct: pd.DataFrame, freq: str) -> pd.DataFrame:
+    df = df.copy()
+    if df.empty or daily_direct is None or daily_direct.empty:
+        df["revenue_direct"] = np.nan
+        df["drr_direct"] = np.nan
+        return df
+    dd = daily_direct.copy()
+    d = pd.to_datetime(dd["date"])
+    if freq == "day":
+        dd["period_start"] = d.dt.normalize()
+    elif freq == "week":
+        dd["period_start"] = (d - pd.to_timedelta(d.dt.weekday, unit="D")).dt.normalize()
+    else:
+        dd["period_start"] = d.dt.to_period("M").dt.to_timestamp()
+    g = dd.groupby("period_start")[["orders_direct", "revenue_direct"]].sum().reset_index()
+    df = df.merge(g, on="period_start", how="left")
+    df["drr_direct"] = _ratio(df["spend_rub"], df["revenue_direct"], 100)
+    return df
 
 
 def _trend_freq(period_days: int) -> str:
@@ -882,6 +955,32 @@ def _group_share(campaigns: pd.DataFrame, by: str) -> pd.DataFrame:
     total = g["spend_rub"].sum()
     g["share"] = _ratio(g["spend_rub"], pd.Series(total, index=g.index), 100)
     return g.sort_values("spend_rub", ascending=False).reset_index(drop=True)
+
+
+def _reconciliation_by_period(stats: pd.DataFrame, expenses: pd.DataFrame, freq: str) -> pd.DataFrame:
+    frames = []
+    for df, value, name in ((stats, "spend_rub", "stats_spend"), (expenses, "amount_rub", "charged")):
+        if df is None or df.empty:
+            continue
+        d = pd.to_datetime(df["date"])
+        if freq == "week":
+            key = (d - pd.to_timedelta(d.dt.weekday, unit="D")).dt.normalize()
+        else:
+            key = d.dt.to_period("M").dt.to_timestamp()
+        frames.append(df.assign(period_start=key).groupby("period_start")[value].sum().rename(name))
+    if not frames:
+        return pd.DataFrame(columns=["period_start", "label", "stats_spend", "charged", "diff", "diff_pct"])
+    g = pd.concat(frames, axis=1).fillna(0).reset_index().sort_values("period_start")
+    for col in ("stats_spend", "charged"):
+        if col not in g:
+            g[col] = 0.0
+    g["diff"] = g["stats_spend"] - g["charged"]
+    g["diff_pct"] = _ratio(g["diff"], g["charged"], 100)
+    if freq == "week":
+        g["label"] = g["period_start"].apply(lambda x: f"{x:%d.%m}–{x + pd.Timedelta(days=6):%d.%m.%Y}")
+    else:
+        g["label"] = g["period_start"].dt.strftime("%m.%Y")
+    return g.reset_index(drop=True)
 
 
 def _reconciliation(campaigns: pd.DataFrame, expenses: pd.DataFrame) -> dict:
@@ -1022,6 +1121,7 @@ def _fetch_report_bundle(start_date: str, end_date: str) -> dict:
             }
 
     products_df = _aggregate_products(campaign_products, sales, sales_window_cp)
+    low_stock = _low_stock(campaign_products, campaigns)
 
     prev_stats = _safe(_fetch_stats, prev_start, prev_end, default=pd.DataFrame(columns=_METRICS))
     totals = _totals(stats)
@@ -1033,7 +1133,8 @@ def _fetch_report_bundle(start_date: str, end_date: str) -> dict:
     prev_totals = _totals(prev_stats) if prev_stats is not None and not prev_stats.empty else None
 
     freq = _trend_freq(period_days)
-    trend = _aggregate_time(stats, freq)
+    daily_direct = _safe(_fetch_daily_direct, start_date, end_date, default=pd.DataFrame())
+    trend = _add_direct_to_time(_aggregate_time(stats, freq), daily_direct, freq)
 
     balance = _safe(_fetch_balance)
     budget = _budget_summary(campaigns, balance, totals, period_days)
@@ -1044,6 +1145,11 @@ def _fetch_report_bundle(start_date: str, end_date: str) -> dict:
 
     platforms = _fetch_platforms(start_date, end_date)
     platforms = _add_rates(platforms) if not platforms.empty else platforms
+    if not platforms.empty:
+        for col in ("orders_direct", "revenue_direct"):
+            platforms[col] = pd.to_numeric(platforms[col], errors="coerce").fillna(0)
+        platforms["drr_direct"] = _ratio(platforms["spend_rub"], platforms["revenue_direct"], 100)
+        platforms["cr_direct"] = _ratio(platforms["orders_direct"], platforms["clicks"], 100)
     if not platforms.empty:
         total = platforms["spend_rub"].sum()
         platforms["share"] = platforms["spend_rub"] / total * 100 if total else np.nan
@@ -1064,9 +1170,9 @@ def _fetch_report_bundle(start_date: str, end_date: str) -> dict:
         "trend": trend,
         "trend_freq": freq,
         "trend_spike": _find_spike(trend),
-        "daily": _aggregate_time(stats, "day"),
-        "weekly": _aggregate_time(stats, "week"),
-        "monthly": _aggregate_time(stats, "month"),
+        "daily": _add_direct_to_time(_aggregate_time(stats, "day"), daily_direct, "day"),
+        "weekly": _add_direct_to_time(_aggregate_time(stats, "week"), daily_direct, "week"),
+        "monthly": _add_direct_to_time(_aggregate_time(stats, "month"), daily_direct, "month"),
         "by_type": _group_share(campaigns, "type_name"),
         "by_bid": _group_share(campaigns, "bid_type_name"),
         "by_payment": _group_share(campaigns, "payment_name"),
@@ -1079,9 +1185,14 @@ def _fetch_report_bundle(start_date: str, end_date: str) -> dict:
         "budget": budget,
         "expenses": expenses,
         "payments": _fetch_payments(start_date, end_date),
-        "reconciliation": _reconciliation(campaigns, expenses),
+        "reconciliation": {
+            **_reconciliation(campaigns, expenses),
+            "by_period": _reconciliation_by_period(stats, expenses, "week" if period_days <= 120 else "month"),
+            "by_period_freq": "week" if period_days <= 120 else "month",
+        },
         "period_to_date": _safe(_fetch_period_to_date, end_date),
         "stocks_as_of": stocks_as_of,
+        "low_stock": low_stock,
         "stocks_available": stocks is not None and not stocks.empty,
         "sales_as_of": sales_as_of,
     }
@@ -1195,14 +1306,22 @@ def _recommendations(bundle: dict) -> list[tuple[str, str, str]]:
         bad = active[active["quality"] == QUALITY_BAD]
         if not bad.empty:
             bad_spend = bad["spend_rub"].sum()
-            no_orders = bad[bad["orders"] == 0]
+            no_orders = bad[bad["orders_direct"] == 0]
+            ok_with_assoc = bad[bad["drr"].notna() & (bad["drr"] <= DRR_HIGH_THRESHOLD)]
             text = (
                 f"{len(bad)} {_plural(len(bad), 'кампания', 'кампании', 'кампаний')} "
-                f"с расходом {_money(bad_spend)} ({_spaced(bad_spend / spend * 100, 1)} % бюджета)"
+                f"с расходом {_money(bad_spend)} ({_spaced(bad_spend / spend * 100, 1)} % бюджета): "
+                f"ДРР по рекламируемым товарам выше {_pct1(DRR_HIGH_THRESHOLD)}"
             )
             if not no_orders.empty:
-                text += f", из них {len(no_orders)} без единого заказа"
-            recs.append(("bad", "Неэффективные кампании", text + ". Список — в разделе «Кампании»."))
+                text += f", у {len(no_orders)} нет заказов рекламируемых товаров"
+            if not ok_with_assoc.empty:
+                text += (
+                    f". С учётом связанных заказов {len(ok_with_assoc)} из них укладываются в порог — "
+                    f"они приносят продажи другим товарам, но сами рекламируемые товары продаются слабо"
+                )
+            recs.append(("bad", "Неэффективные кампании (по рекламируемым товарам)",
+                         text + ". Список — в разделе «Неэффективные кампании»."))
 
     if not products.empty:
         dead_threshold = max(500.0, spend * 0.005)
@@ -1214,13 +1333,14 @@ def _recommendations(bundle: dict) -> list[tuple[str, str, str]]:
                 f"релевантность запросам. Например: " + ", ".join(f"«{x}»" for x in dead["title"].head(3)) + ".",
             ))
 
-        stock = pd.to_numeric(products["stock_qty"], errors="coerce")
-        low = products[(products["spend_rub"] > 0) & stock.notna() & (stock < LOW_STOCK_QTY_THRESHOLD)]
-        if not low.empty:
+        low = bundle.get("low_stock")
+        if low is not None and not low.empty:
             recs.append((
                 "warn", f"Реклама на товары с низким остатком: {len(low)}",
-                f"Расход {_money(low['spend_rub'].sum())} на товары с остатком меньше "
-                f"{LOW_STOCK_QTY_THRESHOLD} шт. Пополнить остаток или приостановить рекламу.",
+                f"Товары в активных и приостановленных кампаниях с остатком меньше {LOW_STOCK_QTY_THRESHOLD} шт. "
+                f"(WB + FBS на {_date(bundle.get('stocks_as_of'))}); расход на них за период — "
+                f"{_money(low['spend_rub'].sum())}. Пополнить остаток или исключить товар из кампании. "
+                f"Список — в разделе «Товары».",
             ))
 
     if not campaigns.empty:
@@ -1252,12 +1372,13 @@ def _recommendations(bundle: dict) -> list[tuple[str, str, str]]:
         ))
 
     platforms = bundle.get("platforms")
-    if platforms is not None and not platforms.empty and drr:
-        worst = platforms[(platforms["share"] >= 10) & (platforms["drr"] > drr * 1.5)]
+    if platforms is not None and not platforms.empty and drr_direct and "drr_direct" in platforms:
+        worst = platforms[(platforms["share"] >= 10) & (platforms["drr_direct"] > drr_direct * 1.5)]
         for row in worst.head(1).itertuples(index=False):
             recs.append((
                 "warn", f"Площадка «{row.platform}» дороже среднего",
-                f"{_spaced(row.share)} % расхода, ДРР {_pct1(row.drr)} против {_pct1(drr)} в среднем.",
+                f"{_spaced(row.share)} % расхода, ДРР по рекламируемым товарам {_pct1(row.drr_direct)} "
+                f"против {_pct1(drr_direct)} в среднем.",
             ))
 
     return recs
@@ -1269,16 +1390,15 @@ def _narrative(bundle: dict) -> str:
         return "За выбранный период данных по рекламе нет."
 
     parts = [
-        f"Расход на рекламу — {_money(t['spend_rub'])}. Реклама принесла {_int(t['orders'])} "
-        f"{_plural(t['orders'], 'заказ', 'заказа', 'заказов')} на {_money(t['revenue_rub'])}"
-        + (f", ДРР {_pct1(t['drr'])}." if t["drr"] is not None else ".")
+        f"Расход на рекламу — {_money(t['spend_rub'])}. Рекламируемые товары получили "
+        f"{_int(t.get('orders_direct'))} {_plural(t.get('orders_direct') or 0, 'заказ', 'заказа', 'заказов')} на "
+        f"{_money(t.get('revenue_direct'))}, ДРР по ним — {_pct1(t.get('drr_direct'))}."
     ]
-    if t.get("assoc_share"):
+    if t.get("revenue_assoc"):
         parts.append(
-            f"Из них {_money(t['revenue_assoc'])} ({_pct1(t['assoc_share'])}) — связанные заказы других товаров; "
-            f"по самим рекламируемым товарам ДРР — {_pct1(t.get('drr_direct'))}."
+            f"Ещё {_money(t['revenue_assoc'])} — связанные заказы других товаров после перехода по рекламе; "
+            f"с ними ДРР — {_pct1(t['drr'])}."
         )
-
     prev = bundle["prev_totals"]
     if prev and prev["spend_rub"]:
         parts.append(
@@ -1337,7 +1457,7 @@ def _methodology() -> list[tuple[str, list[tuple[str, str]]]]:
             ("Сумма заказов", "Стоимость рекламных заказов по цене на момент заказа. Не равна выручке: "
                               "часть заказов будет отменена или не выкуплена."),
             ("ДРР", "Доля рекламных расходов: расход ÷ сумма заказов от рекламы × 100 %. Считается по всем "
-                    "заказам, которые WB отнёс к рекламе, — так же, как в кабинете WB."),
+                    "заказам, которые WB отнёс к рекламе, включая связанные."),
             ("Связанные заказы", "Заказы других товаров продавца, сделанные покупателем после перехода по рекламе. "
                                  "WB включает их в статистику кампании, хотя эти товары не рекламировались и не "
                                  "показывались. В отчёте выделены отдельно."),
@@ -1347,6 +1467,9 @@ def _methodology() -> list[tuple[str, list[tuple[str, str]]]]:
             ("ДРР от продаж", "Расход ÷ продажи товара по всем каналам (отчёт реализации, за вычетом возвратов) "
                               "× 100 %. Считается только за дни, по которым есть отчёт реализации."),
             ("Средняя позиция", "Средняя позиция товара в выдаче; WB отдаёт её для кампаний с единой ставкой."),
+            ("Площадка", "Где покупатель увидел объявление и кликнул: приложение WB на iOS или Android либо сайт. "
+                         "Заказ засчитывается площадке, с которой был клик."),
+            ("Остаток", "Остаток товара на складах WB и FBS на дату последнего снимка, не на конец периода."),
         ]),
         ("Расчёт и агрегация", [
             ("Средневзвешенные", "CTR, CPC, CR, ДРР за период считаются из сумм показов, кликов, расхода, заказов, "
@@ -1371,9 +1494,12 @@ def _methodology() -> list[tuple[str, list[tuple[str, str]]]]:
             ("Низкий остаток", f"Товар в рекламе с остатком меньше {LOW_STOCK_QTY_THRESHOLD} шт. (WB + FBS)."),
         ]),
         ("Сверка и ограничения", [
-            ("Статистика и списания", "Расход в статистике начисляется по дням показов, списания — по датам "
-                                      "документов. На границах периода возможна разница; расхождение больше "
-                                      f"{_spaced(RECONCILIATION_TOLERANCE_PCT)} % выносится в выводы."),
+            ("Начислено и списано", "Начислено — расход из статистики показов и кликов. Списано — суммы из "
+                                    "«Истории затрат» WB Продвижение. Списания идут с задержкой до суток, поэтому "
+                                    "по дням возможна разница; расхождение больше "
+                                    f"{_spaced(RECONCILIATION_TOLERANCE_PCT)} % за период выносится в выводы."),
+            ("Единый счёт", "Деньги на Едином счёте — предоплата, а не расход. Расходом они становятся при списании "
+                            "за рекламу. С самого счёта WB снимает накопленный расход пачкой раз в несколько дней."),
             ("Атрибуция", "Отнесение заказов к рекламе выполняет WB по своим правилам. Заказ может быть учтён "
                           "у товара без прямого расхода (например, при заказе нескольких товаров в одной сессии)."),
             ("Бюджеты", "Показываются на момент последней загрузки, не на дату окончания периода."),
@@ -1573,7 +1699,7 @@ def _kpis_html(bundle: dict) -> str:
         _kpi("CPC, цена клика", _money_dec(t["cpc"]), _delta_html("cpc", t["cpc"], pv("cpc"))),
         _kpi("CR, клик → заказ", _pct1(t["cr"]), _delta_html("cr", t["cr"], pv("cr") if p else None, True)),
         _kpi("CPO, цена заказа", _money(t["cpo"]), _delta_html("cpo", t["cpo"], pv("cpo"))),
-        _kpi("ДРР (как в кабинете WB)", _pct1(t["drr"]), _delta_html("drr", t["drr"], pv("drr") if p else None, True)),
+        _kpi("ДРР с учётом связанных заказов", _pct1(t["drr"]), _delta_html("drr", t["drr"], pv("drr") if p else None, True)),
         _kpi("ДРР от продаж", _pct1(tacos.get("value")), tacos_sub),
     ]
     return f'<div class="kpis">{"".join(tiles)}</div>'
@@ -1603,20 +1729,63 @@ def _drr_scale_html() -> str:
     return _table([("Оценка ДРР", "l", 55), ("Диапазон", "r", 45)], rows, "scale")
 
 
+def _drr_explain_html(bundle: dict) -> str:
+    t = bundle["totals"]
+    tacos = bundle["tacos"]
+    rows = [
+        (["<b>ДРР по рекламируемым товарам</b>", _drr_cell(t.get("drr_direct")),
+          "Расход ÷ сумма заказов товаров, которые показывались в кампании",
+          "Основной показатель: окупается ли реклама самих товаров. По нему ставятся оценки кампаний."], ""),
+        (["<b>ДРР с учётом связанных заказов</b>", _pct1(t["drr"]),
+          "Расход ÷ все заказы, которые WB отнёс к рекламе, включая заказы других товаров "
+          "после перехода по объявлению",
+          "Полный эффект рекламы на продажи магазина. Всегда ниже первого показателя."], ""),
+        (["<b>ДРР от продаж</b>", _pct1(tacos.get("value")),
+          "Расход ÷ фактические продажи всех товаров по отчёту реализации (за вычетом возвратов)",
+          "Доля рекламы в реальной выручке — ближе всего к финансовой отчётности."], ""),
+    ]
+    return _table(
+        [("Показатель", "l", 22), ("Значение", "r", 10), ("Как считается", "l", 36), ("Зачем смотреть", "l", 32)],
+        [([f"<span class='wrap'>{c}</span>" for c in cells], cls) for cells, cls in rows],
+    )
+
+
+def _ptd_ranges(as_of) -> dict:
+    end = pd.Timestamp(as_of).normalize()
+    starts = {
+        "week": end - pd.Timedelta(days=end.weekday()),
+        "month": end.replace(day=1),
+        "quarter": end.to_period("Q").start_time,
+        "year": end.replace(month=1, day=1),
+    }
+    shifts = {
+        "week": pd.Timedelta(days=7),
+        "month": pd.DateOffset(months=1),
+        "quarter": pd.DateOffset(months=3),
+        "year": pd.DateOffset(years=1),
+    }
+    return {k: (starts[k], end, starts[k] - shifts[k], end - shifts[k]) for k in starts}
+
+
 def _ptd_html(bundle: dict) -> str:
     ptd = bundle.get("period_to_date")
-    if not ptd:
+    if not ptd or ptd.get("as_of") is None:
         return '<div class="empty">Нет данных.</div>'
+    ranges = _ptd_ranges(ptd["as_of"])
     tiles = []
     for key in ("week", "month", "quarter", "year"):
         p = ptd[key]
+        s, e, ps, pe = ranges[key]
+        prev_label = f"{ps:%d.%m}–{pe:%d.%m.%Y}"
         if p["change_pct"] is None:
-            sub = '<span class="neutral">нет данных за прошлый отрезок</span>'
+            sub = f'<span class="neutral">нет данных за {prev_label}</span>'
         else:
-            sub = (f'<span class="neutral">{_signed_pct(p["change_pct"])} к тем же дням, ДРР {_pct1(p["drr"])}</span>')
-        tiles.append(_kpi(p["label"], _money(p["spend"]), sub))
+            sub = (f'{_delta_html("spend_rub", p["spend"], p["prev_spend"]).split(" <span")[0]} '
+                   f'<span class="neutral">к {prev_label}</span>')
+        tiles.append(_kpi(f"{p['label']} ({s:%d.%m}–{e:%d.%m})", _money(p["spend"]), sub))
     return (f'<div class="kpis">{"".join(tiles)}</div>'
-            f'<div class="note">Расчёт по {_date(ptd.get("as_of"))} включительно (конец периода отчёта).</div>')
+            f'<div class="note">Расход с начала недели, месяца, квартала и года по {_date(ptd.get("as_of"))} '
+            f'включительно — в сравнении с тем же числом дней предыдущей недели, месяца, квартала и года.</div>')
 
 
 def _recommendations_html(bundle: dict) -> str:
@@ -1630,44 +1799,104 @@ def _recommendations_html(bundle: dict) -> str:
 
 
 # ================================================================ PDF: графики
+_FREQ_WORDS = {
+    "day": ("по дням", "в день", "день", ("день", "дня", "дней")),
+    "week": ("по неделям", "в неделю", "неделя", ("неделя", "недели", "недель")),
+    "month": ("по месяцам", "в месяц", "месяц", ("месяц", "месяца", "месяцев")),
+}
+
+
+def _spend_conclusion(df: pd.DataFrame, freq: str) -> str:
+    _, per, unit, _ = _FREQ_WORDS[freq]
+    values = df["spend_rub"].astype(float)
+    parts = [f"В среднем реклама тратила {_money(values.mean())} {per}."]
+    if len(df) >= 4:
+        half = len(df) // 2
+        first, second = values.iloc[:half].mean(), values.iloc[half:].mean()
+        chg = _change_pct(second, first)
+        if chg is not None and abs(chg) >= 5:
+            parts.append(
+                f"Во второй половине периода расход {'вырос' if chg > 0 else 'снизился'} на "
+                f"{_spaced(abs(chg))} % ({_money(first)} → {_money(second)} {per})."
+            )
+        else:
+            parts.append("Темп расходов в течение периода был ровным.")
+    top = df.loc[values.idxmax()]
+    parts.append(f"Самый дорогой {unit} — {top['label']}: {_money(top['spend_rub'])}.")
+    return " ".join(parts)
+
+
+def _drr_conclusion(df: pd.DataFrame, freq: str) -> str:
+    _, _, _, forms = _FREQ_WORDS[freq]
+    direct = df[df["drr_direct"].notna()] if "drr_direct" in df else df.iloc[0:0]
+    parts = []
+    if not direct.empty:
+        lo, hi = direct.loc[direct["drr_direct"].idxmin()], direct.loc[direct["drr_direct"].idxmax()]
+        parts.append(
+            f"ДРР по рекламируемым товарам менялся от {_pct1(lo['drr_direct'])} ({lo['label']}) "
+            f"до {_pct1(hi['drr_direct'])} ({hi['label']})."
+        )
+        over = int((direct["drr_direct"] > DRR_HIGH_THRESHOLD).sum())
+        if over:
+            parts.append(f"Выше порога {_pct1(DRR_HIGH_THRESHOLD)} — {over} {_plural(over, *forms)} из {len(direct)}.")
+        else:
+            parts.append(f"Ни разу не поднимался выше порога {_pct1(DRR_HIGH_THRESHOLD)}.")
+    total = df[df["drr"].notna()]
+    if not total.empty:
+        parts.append(
+            f"С учётом связанных заказов ДРР держался в диапазоне {_pct1(total['drr'].min())}–"
+            f"{_pct1(total['drr'].max())}."
+        )
+    return " ".join(parts)
+
+
 def _trend_charts_html(bundle: dict) -> str:
     df = bundle["trend"]
     if df is None or df.empty:
         return '<div class="empty">Нет данных.</div>'
 
-    unit = {"day": "по дням", "week": "по неделям", "month": "по месяцам"}[bundle["trend_freq"]]
+    freq = bundle["trend_freq"]
+    unit = _FREQ_WORDS[freq][0]
     spike = bundle.get("trend_spike")
     labels = df["label"].tolist()
     values = df["spend_rub"].astype(float).tolist()
     x = list(range(len(labels)))
     step = max(1, -(-len(labels) // 14))
     annotate = len(labels) <= 16
+    peak = int(np.argmax(values)) if values else None
 
-    fig, ax = _cr_fig(height=2.1)
+    fig, ax = _cr_fig(height=2.9)
     colors = [C.CRITICAL if spike and lbl == spike["label"] else C.SERIES_1 for lbl in labels]
     ax.bar(x, values, width=0.62, color=colors, linewidth=0)
-    if annotate:
-        for i, v in enumerate(values):
+    for i, v in enumerate(values):
+        if annotate or i == peak:
             ax.annotate(_cr_short(v), xy=(i, v), xytext=(0, 2), textcoords="offset points",
-                        ha="center", fontsize=6.6, fontweight="bold", color=C.INK)
+                        ha="center", fontsize=6.8, fontweight="bold", color=C.INK)
     ax.set_xticks(x[::step])
     ax.set_xticklabels(labels[::step], fontsize=6.6)
     ax.set_xlim(-0.6, len(labels) - 0.4)
     ax.yaxis.set_major_formatter(_cr_money_formatter())
     ax.set_ylabel("Расход, ₽")
-    ax.set_ylim(0, (max(values) or 1) * 1.22)
+    ax.set_ylim(0, (max(values) or 1) * 1.2)
     spend_uri = _cr_render(fig)
 
-    drr_df = df[df["drr"].notna()]
     drr_uri = None
+    has_direct = "drr_direct" in df and df["drr_direct"].notna().sum() >= 2
+    main_col = "drr_direct" if has_direct else "drr"
+    drr_df = df[df[main_col].notna()]
     if len(drr_df) >= 2:
+        fig2, ax2 = _cr_fig(height=2.5)
         dx = [labels.index(lbl) for lbl in drr_df["label"]]
-        dv = drr_df["drr"].astype(float).tolist()
-        fig2, ax2 = _cr_fig(height=1.7)
-        ax2.plot(dx, dv, color=C.SERIES_1, linewidth=1.4, marker="o", markersize=2.6)
+        dv = drr_df[main_col].astype(float).tolist()
+        ax2.plot(dx, dv, color=C.SERIES_1, linewidth=1.6, marker="o", markersize=2.8,
+                 label="по рекламируемым товарам" if has_direct else "ДРР")
+        if has_direct:
+            tdf = df[df["drr"].notna()]
+            ax2.plot([labels.index(lbl) for lbl in tdf["label"]], tdf["drr"].astype(float).tolist(),
+                     color=C.AXIS, linewidth=1.2, linestyle=(0, (2, 1.5)), label="с учётом связанных заказов")
         over = [(i, v) for i, v in zip(dx, dv) if v > DRR_HIGH_THRESHOLD]
         if over:
-            ax2.scatter([i for i, _ in over], [v for _, v in over], color=C.CRITICAL, s=10, zorder=3)
+            ax2.scatter([i for i, _ in over], [v for _, v in over], color=C.CRITICAL, s=12, zorder=3)
         ax2.axhline(DRR_HIGH_THRESHOLD, color=C.CRITICAL, linewidth=0.7, linestyle=(0, (3, 2)))
         ax2.annotate(f"порог {_cr_pct_label(DRR_HIGH_THRESHOLD, 0)}", xy=(len(labels) - 0.5, DRR_HIGH_THRESHOLD),
                      xytext=(0, 3), textcoords="offset points", ha="right", fontsize=6.4, color=C.CRITICAL)
@@ -1681,15 +1910,49 @@ def _trend_charts_html(bundle: dict) -> str:
         ax2.yaxis.set_major_formatter(_cr_pct_formatter(0))
         ax2.set_ylabel("ДРР, %")
         ax2.set_ylim(0, max(max(dv) * 1.25, DRR_HIGH_THRESHOLD * 1.35))
+        if has_direct:
+            ax2.legend(loc="upper left", ncol=2, fontsize=6.6)
         drr_uri = _cr_render(fig2)
 
-    parts = [f"<h3>Расход {unit}</h3>", _chart(spend_uri)]
-    if spike:
-        parts.append(f'<div class="note">Пик — {_esc(spike["label"])}: расход в '
-                     f'{_spaced(spike["ratio"], 1)} раза выше среднего по остальным интервалам.</div>')
+    parts = [f"<h3>Расход {unit}</h3>", _chart(spend_uri),
+             f'<div class="summary">{_esc(_spend_conclusion(df, freq))}</div>']
     if drr_uri:
-        parts += [f"<h3>ДРР {unit}</h3>", _chart(drr_uri)]
+        parts += [f"<h3>ДРР {unit}</h3>", _chart(drr_uri),
+                  f'<div class="summary">{_esc(_drr_conclusion(df, freq))}</div>']
     return "".join(parts)
+
+
+def _quality_block_html(bundle: dict) -> str:
+    campaigns = bundle["campaigns"]
+    if campaigns.empty or campaigns["spend_rub"].sum() <= 0:
+        return '<div class="empty">Нет данных.</div>'
+    active = campaigns[campaigns["spend_rub"] > 0]
+    q = active.groupby("quality")["spend_rub"].sum().reindex(list(QUALITY_ORDER)).fillna(0).reset_index()
+    q = q[q["spend_rub"] > 0]
+    uri = _cr_hbar(
+        labels=q["quality"].tolist(), values=q["spend_rub"].tolist(),
+        colors=[{QUALITY_GOOD: C.GOOD, QUALITY_BAD: C.CRITICAL}.get(x, C.AXIS) for x in q["quality"]],
+        axis_label="Расход, ₽", height=1.5,
+    )
+    total = active["spend_rub"].sum()
+    counts = active["quality"].value_counts()
+    bad = active[active["quality"] == QUALITY_BAD]
+    parts = [
+        f"Из {len(active)} кампаний с расходом {int(counts.get(QUALITY_GOOD, 0))} окупаются в пределах порога, "
+        f"{int(counts.get(QUALITY_BAD, 0))} — нет, по {int(counts.get(QUALITY_LOW, 0))} данных пока мало."
+    ]
+    if not bad.empty:
+        rescued = bad[bad["drr"].notna() & (bad["drr"] <= DRR_HIGH_THRESHOLD)]
+        parts.append(
+            f"На неэффективные ушло {_pct1(bad['spend_rub'].sum() / total * 100)} бюджета. "
+            f"Оценка строгая — только по рекламируемым товарам."
+        )
+        if not rescued.empty:
+            parts.append(
+                f"Если учитывать связанные заказы, {len(rescued)} из {len(bad)} таких кампаний укладываются в порог: "
+                f"они приводят покупателей в магазин, но сами рекламируемые товары покупают реже, чем хотелось бы."
+            )
+    return _chart(uri) + f'<div class="summary">{_esc(" ".join(parts))}</div>'
 
 
 def _hbar_html(df: pd.DataFrame, label_col: str, caption: str, colors=None, n: int = TOP_CHART_N) -> str:
@@ -1749,7 +2012,7 @@ def _group_table_html(df: pd.DataFrame, col: str, title: str, compact: bool = Fa
     ]
     return _table(
         [(title, "l", 25), ("Кампаний", "r", 9), ("Доля", "r", 9), ("Расход", "r", 14),
-         ("Заказы*", "r", 10), ("CPO*", "r", 11), ("ДРР*", "r", 11), ("ДРР WB", "r", 11)],
+         ("Заказы*", "r", 10), ("CPO*", "r", 11), ("ДРР*", "r", 11), ("ДРР всех заказов", "r", 11)],
         rows,
     )
 
@@ -1758,16 +2021,39 @@ def _platforms_html(bundle: dict) -> str:
     df = bundle["platforms"]
     if df is None or df.empty:
         return '<div class="empty">Нет детализации по площадкам.</div>'
+    df = df[df["spend_rub"] > 0]
+    has_direct = "drr_direct" in df.columns
     rows = [
         ([_esc(r.platform), _pct1(r.share), _int(r.views), _pct1(r.ctr), _money_dec(r.cpc),
-          _money(r.spend_rub), _int(r.orders), _pct1(r.cr), _drr_cell(r.drr)], "zebra")
+          _money(r.spend_rub),
+          _int(r.orders_direct if has_direct else r.orders),
+          _pct1(r.cr_direct if has_direct else r.cr),
+          _drr_cell(r.drr_direct if has_direct else r.drr), _pct1(r.drr)], "zebra")
         for r in df.itertuples(index=False)
     ]
-    return _table(
-        [("Площадка", "l", 16), ("Доля расхода", "r", 10), ("Показы", "r", 11), ("CTR", "r", 8),
-         ("CPC", "r", 10), ("Расход", "r", 12), ("Заказы", "r", 9), ("CR", "r", 8), ("ДРР", "r", 10)],
+    table = _table(
+        [("Площадка", "l", 12), ("Доля расхода", "r", 10), ("Показы", "r", 11), ("CTR", "r", 7),
+         ("CPC", "r", 9), ("Расход", "r", 12), ("Заказы*", "r", 9), ("CR*", "r", 8), ("ДРР*", "r", 10),
+         ("ДРР всех заказов", "r", 12)],
         rows,
     )
+    note = ('<div class="note">Площадка — где покупатель увидел рекламу и кликнул по ней: в приложении WB на '
+            'iOS или Android либо на сайте wildberries.ru. Заказ засчитывается площадке, с которой был клик. '
+            '* По рекламируемым товарам.</div>')
+    parts = []
+    if has_direct and len(df) >= 2:
+        best = df.loc[df["drr_direct"].idxmin()] if df["drr_direct"].notna().any() else None
+        worst = df.loc[df["drr_direct"].idxmax()] if df["drr_direct"].notna().any() else None
+        main = df.iloc[0]
+        parts.append(f"Больше всего бюджета уходит на {main['platform']} — {_pct1(main['share'])}.")
+        if best is not None and worst is not None and best["platform"] != worst["platform"]:
+            parts.append(
+                f"Дешевле всего заказы обходятся на {best['platform']} (ДРР {_pct1(best['drr_direct'])}, "
+                f"конверсия клика в заказ {_pct1(best['cr_direct'])}), дороже всего — на {worst['platform']} "
+                f"(ДРР {_pct1(worst['drr_direct'])})."
+            )
+    conclusion = f'<div class="summary">{_esc(" ".join(parts))}</div>' if parts else ""
+    return table + note + conclusion
 
 
 def _brands_html(bundle: dict) -> str:
@@ -1781,11 +2067,25 @@ def _brands_html(bundle: dict) -> str:
           _int(r.orders), _money(r.revenue_rub), _drr_cell(r.drr)], "zebra")
         for r in top.itertuples(index=False)
     ]
-    return _hbar_html(top, "brand", "По брендам") + _table(
-        [("Бренд", "l", 30), ("Доля", "r", 10), ("Расход", "r", 15), ("Заказы", "r", 11),
-         ("Сумма заказов", "r", 17), ("ДРР", "r", 17)],
+    table = _table(
+        [("Бренд", "l", 30), ("Доля", "r", 10), ("Расход", "r", 15), ("Заказы*", "r", 11),
+         ("Сумма заказов*", "r", 17), ("ДРР*", "r", 17)],
         rows,
     )
+    parts = []
+    if not top.empty and total:
+        lead = top.iloc[0]
+        parts.append(f"Основной бюджет — {lead['brand']}: {_pct1(lead['spend_rub'] / total * 100)} расхода, "
+                     f"ДРР {_pct1(lead['drr'])}.")
+        judged = top[top["drr"].notna()]
+        if len(judged) >= 2:
+            best, worst = judged.loc[judged["drr"].idxmin()], judged.loc[judged["drr"].idxmax()]
+            if best["brand"] != worst["brand"]:
+                parts.append(f"Эффективнее всего реклама работает у {best['brand']} ({_pct1(best['drr'])}), "
+                             f"хуже всего — у {worst['brand']} ({_pct1(worst['drr'])}).")
+    note = '<div class="note">* По рекламируемым товарам бренда, без связанных заказов.</div>'
+    summary = f'<div class="summary">{_esc(" ".join(parts))}</div>' if parts else ""
+    return _hbar_html(top, "brand", "По брендам") + table + note + summary
 
 
 def _campaign_budgets_html(bundle: dict) -> str:
@@ -1809,9 +2109,12 @@ def _campaign_budgets_html(bundle: dict) -> str:
     return _table(
         [("Кампания", "l", 32), ("Статус", "l", 8), ("Бюджет", "r", 9), ("Расход/день (7 дн.)", "r", 10),
          ("Хватит, дн.", "r", 8), ("Расход за период", "r", 10), ("Заказы*", "r", 7), ("ДРР*", "r", 8),
-         ("ДРР WB", "r", 8)],
+         ("ДРР всех заказов", "r", 8)],
         rows,
-    )
+    ) + ('<div class="note">Бюджет — остаток на момент последней загрузки. «Хватит, дн.» — бюджет ÷ средний '
+         f'расход за последние {RUNWAY_LOOKBACK_DAYS} дней. «Расход за период», «Заказы*», «ДРР*» — за выбранный '
+         'в отчёте период. * По рекламируемым товарам. «ДРР всех заказов» — с учётом связанных заказов; '
+         'рассчитан по статистике WB (WB отдаёт расход и заказы, ДРР считаем сами).</div>')
 
 
 def _campaigns_tree_html(bundle: dict) -> str:
@@ -1827,38 +2130,39 @@ def _campaigns_tree_html(bundle: dict) -> str:
             f"▾ {_esc(r.name)}<div class='muted' style='font-weight:400'>{int(r.advert_id)} · {_esc(r.type_name)} · "
             f"{_esc(r.payment_name)}</div>",
             _status_tag(r.status, r.status_name), _quality_tag(r.quality),
-            _int(r.views), _pct1(r.ctr), _money_dec(r.cpc), _money(r.spend_rub),
-            _int(r.orders_direct), _money(_div(r.spend_rub, r.orders_direct)), _drr_cell(r.drr_direct),
+            _int(r.views), _pct1(r.ctr), _money(r.spend_rub),
+            _int(r.orders_direct), _money(r.revenue_direct), _money(_div(r.spend_rub, r.orders_direct)),
+            _drr_cell(r.drr_direct),
         ], "parent"))
         children = cp[(cp["advert_id"] == r.advert_id) & ((cp["spend_rub"] > 0) | (cp["views"] > 0))] if not cp.empty else cp
         shown = children.head(TOP_CAMPAIGN_PRODUCTS_N)
         for c in shown.itertuples(index=False):
             rows.append(([
                 f"↳ {_esc(c.title)} <span class='muted'>· {int(c.nm_id)}</span>",
-                "", "", _int(c.views), _pct1(c.ctr), _money_dec(c.cpc), _money(c.spend_rub),
-                _int(c.orders), _money(c.cpo), _drr_cell(c.drr),
+                "", "", _int(c.views), _pct1(c.ctr), _money(c.spend_rub),
+                _int(c.orders), _money(c.revenue_rub), _money(c.cpo), _drr_cell(c.drr),
             ], "child"))
         if len(children) > len(shown):
             rest = children.iloc[len(shown):]
             rows.append(([
                 f"<span class='muted'>ещё {len(rest)} {_plural(len(rest), 'товар', 'товара', 'товаров')}</span>",
-                "", "", _int(rest["views"].sum()), "", "", _money(rest["spend_rub"].sum()),
-                _int(rest["orders"].sum()), "", "",
+                "", "", _int(rest["views"].sum()), "", _money(rest["spend_rub"].sum()),
+                _int(rest["orders"].sum()), _money(rest["revenue_rub"].sum()), "", "",
             ], "child"))
         if _num(r.revenue_assoc):
             rows.append(([
                 f"<span class='muted'>+ связанные заказы других товаров: {_int(r.assoc_n)} арт.</span>",
-                "", "", "", "", "", "", _int(r.orders_assoc), "",
-                f"<span class='muted'>{_money(r.revenue_assoc)}</span>",
+                "", "", "", "", "", _int(r.orders_assoc),
+                f"<span class='muted'>{_money(r.revenue_assoc)}</span>", "", "",
             ], "child"))
 
     return _table(
-        [("Кампания / товар", "l", 33), ("Статус", "l", 8), ("Оценка", "l", 9), ("Показы", "r", 8),
-         ("CTR", "r", 6), ("CPC", "r", 7), ("Расход", "r", 9), ("Заказы*", "r", 6), ("CPO*", "r", 7),
-         ("ДРР*", "r", 7)],
+        [("Кампания / товар", "l", 30), ("Статус", "l", 8), ("Оценка", "l", 9), ("Показы", "r", 8),
+         ("CTR", "r", 6), ("Расход", "r", 9), ("Заказы*", "r", 6), ("Сумма заказов*", "r", 10),
+         ("CPO*", "r", 7), ("ДРР*", "r", 7)],
         rows,
-    ) + ('<div class="note">* По рекламируемым товарам. Связанные заказы других товаров показаны отдельной '
-         'строкой (в последней колонке — их сумма) и в ДРР* не входят.</div>')
+    ) + ('<div class="note">* По рекламируемым товарам: заказы, их сумма по цене заказа, стоимость заказа и ДРР. '
+         'Связанные заказы других товаров показаны отдельной строкой и в ДРР* не входят.</div>')
 
 
 def _quality_html(bundle: dict, quality: str) -> str:
@@ -1905,13 +2209,40 @@ def _products_html(bundle: dict) -> str:
         return '<div class="empty">Нет данных по товарам.</div>'
     rows = [
         ([f"{_esc(r.title)}<div class='muted'>{int(r.nm_id)} · {_esc(r.brand)}</div>",
-          _int(r.campaigns_n), _int(r.views), _pct1(r.ctr), _money(r.spend_rub), _int(r.orders),
-          _money(r.cpo), _drr_cell(r.drr), _pct1(r.tacos), _stock_html(r.stock_qty)], "zebra")
+          _int(r.campaigns_n), _int(r.views), _money(r.spend_rub), _int(r.orders), _money(r.revenue_rub),
+          _drr_cell(r.drr), _money(r.sales_rub), _pct1(r.tacos), _stock_html(r.stock_qty)], "zebra")
         for r in top.itertuples(index=False)
     ]
+    tacos = bundle["tacos"]
+    sales_to = _date(tacos.get("end")) if tacos.get("available") else "—"
+    note = (
+        '<div class="note">Все показатели — за выбранный период. «Заказы», «Сумма заказов» и «ДРР» — по рекламе '
+        'этого товара (заказы после клика по его объявлению, по цене заказа). «Продажи» — фактические продажи '
+        f'товара по всем каналам из отчёта реализации WB, за вычетом возвратов, по {sales_to}. «ДРР от продаж» — '
+        'расход на рекламу товара ÷ его продажи: какая доля реальной выручки товара ушла на рекламу. '
+        f'«Остаток» — WB + FBS на {_date(bundle.get("stocks_as_of"))}.</div>'
+    )
     return _table(
-        [("Товар", "l", 32), ("Кампаний", "r", 6), ("Показы", "r", 8), ("CTR", "r", 6), ("Расход", "r", 9),
-         ("Заказы", "r", 7), ("CPO", "r", 8), ("ДРР", "r", 7), ("ДРР от продаж", "r", 8), ("Остаток", "r", 9)],
+        [("Товар", "l", 27), ("Кампаний", "r", 6), ("Показы", "r", 8), ("Расход", "r", 8), ("Заказы", "r", 6),
+         ("Сумма заказов", "r", 9), ("ДРР", "r", 6), ("Продажи", "r", 9), ("ДРР от продаж", "r", 7),
+         ("Остаток", "r", 8)],
+        rows,
+    ) + note
+
+
+def _low_stock_html(bundle: dict) -> str:
+    df = bundle.get("low_stock")
+    if df is None or df.empty:
+        return '<div class="empty">Товаров с остатком меньше {} шт. в активных кампаниях нет.</div>'.format(
+            LOW_STOCK_QTY_THRESHOLD)
+    rows = [
+        ([f"{_esc(r.title)}<div class='muted'>{int(r.nm_id)} · {_esc(r.brand)}</div>", _stock_html(r.stock_qty),
+          _money(r.spend_rub), _int(r.orders), f"<span class='wrap'>{_esc(r.campaigns)}</span>"], "zebra")
+        for r in df.itertuples(index=False)
+    ]
+    return _table(
+        [("Товар", "l", 32), ("Остаток", "r", 9), ("Расход за период", "r", 12), ("Заказы", "r", 8),
+         ("В кампаниях", "l", 39)],
         rows,
     )
 
@@ -1920,33 +2251,61 @@ def _reconciliation_html(bundle: dict) -> str:
     rec = bundle["reconciliation"]
     if not rec["available"]:
         return ('<div class="empty">Данных о списаниях за период нет. Они появятся после загрузки '
-                'истории списаний (load_ad_campaigns.py --full).</div>')
+                'истории списаний.</div>')
+
+    intro = (
+        '<div class="summary">Зачем эта страница: проверить, что расход в отчёте совпадает с деньгами, которые WB '
+        'реально списал. <b>Начислено</b> — расход из статистики показов и кликов (то, что считает отчёт). '
+        '<b>Списано</b> — суммы из «Истории затрат» в кабинете WB Продвижение: WB списывает их документами, '
+        'обычно в течение суток после показов. Поэтому по отдельным дням и неделям цифры могут немного '
+        'расходиться, а за месяц должны почти совпадать.</div>'
+    )
+
+    diff_pct = rec["diff_pct"]
+    if diff_pct is None:
+        verdict = "Сравнить не с чем."
+    elif abs(diff_pct) < RECONCILIATION_TOLERANCE_PCT:
+        verdict = (f"Расхождение {_pct1(abs(diff_pct))} — в пределах нормы (до "
+                   f"{_spaced(RECONCILIATION_TOLERANCE_PCT)} %). Расход в отчёте подтверждается списаниями WB.")
+    else:
+        verdict = (f"Расхождение {_pct1(abs(diff_pct))} — больше обычного. Чаще всего это значит, что WB ещё не "
+                   f"выставил документы за последние дни периода; стоит сверить после следующей загрузки.")
+
     tiles = [
-        _kpi("Расход по статистике", _money(rec["stats_spend"]), "начисление по дням показов", True),
-        _kpi("Списано по документам", _money(rec["charged"]), "фактические списания WB", True),
-        _kpi("Разница", _money(rec["diff"]), _signed_pct(rec["diff_pct"]) + " к списаниям"),
+        _kpi("Начислено по статистике", _money(rec["stats_spend"]), "расход по показам и кликам", True),
+        _kpi("Списано WB", _money(rec["charged"]), "история затрат в кабинете", True),
+        _kpi("Разница", _money(rec["diff"]), _signed_pct(diff_pct) + " к списанному"),
         _kpi("Пополнения счёта", _money(bundle["payments"]["amount_rub"].sum() if not bundle["payments"].empty else 0),
              f"{len(bundle['payments'])} операций за период"),
     ]
+
+    period_df = rec.get("by_period")
+    period_html = ""
+    if period_df is not None and not period_df.empty:
+        title = "По неделям" if rec.get("by_period_freq") == "week" else "По месяцам"
+        rows = [
+            ([_esc(r.label), _money(r.stats_spend), _money(r.charged), _money(r.diff), _signed_pct(r.diff_pct)], "zebra")
+            for r in period_df.itertuples(index=False)
+        ]
+        period_html = f"<h3>{title}</h3>" + _table(
+            [("Период", "l", 28), ("Начислено", "r", 18), ("Списано WB", "r", 18), ("Разница", "r", 18),
+             ("Разница, %", "r", 18)],
+            rows,
+        )
+
     by_source = rec["by_source"]
     source_html = ""
     if not by_source.empty:
         total = by_source["amount_rub"].sum()
-        source_html = "<h3>Списания по источнику</h3>" + _table(
+        source_html = "<h3>Из каких средств списано</h3>" + _table(
             [("Источник", "l", 50), ("Сумма", "r", 25), ("Доля", "r", 25)],
             [([_esc(r.payment_source), _money(r.amount_rub), _pct1(r.amount_rub / total * 100 if total else None)], "zebra")
              for r in by_source.itertuples(index=False)],
-        )
-    rows_df = rec["rows"].head(15) if not rec["rows"].empty else rec["rows"]
-    detail = ""
-    if not rows_df.empty:
-        detail = "<h3>Наибольшие расхождения по кампаниям</h3>" + _table(
-            [("Кампания", "l", 46), ("Статус", "l", 12), ("Статистика", "r", 14), ("Списано", "r", 14), ("Разница", "r", 14)],
-            [([f"{_esc(r.name)} <span class='muted'>· {int(r.advert_id)}</span>", _esc(r.status_name),
-               _money(r.spend_rub), _money(r.charged_rub), _money(r.diff_rub)], "zebra")
-             for r in rows_df.itertuples(index=False)],
-        )
-    return f'<div class="kpis">{"".join(tiles)}</div>' + source_html + detail
+        ) + ('<div class="note">«Баланс» — Единый счёт WB Продвижение, «Промобонусы» — бонусы WB. '
+             'Расхождения по отдельным кампаниям — в Excel-детализации, лист «Сверка».</div>')
+
+    return (intro + f'<div class="kpis">{"".join(tiles)}</div>' + f'<div class="summary">{_esc(verdict)}</div>'
+            + period_html + source_html)
 
 
 def _methodology_html() -> str:
@@ -1976,13 +2335,6 @@ def build_ad_campaigns_html(bundle: dict) -> str:
     active_n = int((campaigns["spend_rub"] > 0).sum()) if not campaigns.empty else 0
     stocks_note = (f"Остатки на {_date(bundle['stocks_as_of'])}." if bundle.get("stocks_as_of") else "Остатки недоступны.")
 
-    quality_chart = ""
-    if not campaigns.empty and campaigns["spend_rub"].sum() > 0:
-        q = campaigns.groupby("quality")["spend_rub"].sum().reindex(list(QUALITY_ORDER)).fillna(0).reset_index()
-        q = q[q["spend_rub"] > 0]
-        quality_chart = _hbar_html(q, "quality", "Расход по оценке кампаний",
-                                   colors=[{QUALITY_GOOD: C.GOOD, QUALITY_BAD: C.CRITICAL}.get(x, C.AXIS) for x in q["quality"]])
-
     type_chart = _hbar_html(bundle["by_type"], "type_name", "По типам кампаний")
 
     return f"""<!doctype html>
@@ -2009,8 +2361,11 @@ def build_ad_campaigns_html(bundle: dict) -> str:
   <div class="cols">
     <div><h3>Воронка</h3>{_safe_html(_funnel_html, bundle["totals"])}</div>
     <div style="flex:.6"><h3>Шкала ДРР</h3>{_safe_html(_drr_scale_html)}
-      <div class="note">Внутренний ориентир; маржа до рекламы ~{_pct1(PRE_AD_MARGIN_REFERENCE_PCT)}.</div></div>
+      <div class="note">Внутренний ориентир; маржа до рекламы ~{_pct1(PRE_AD_MARGIN_REFERENCE_PCT)}.
+      Применяется к ДРР по рекламируемым товарам.</div></div>
   </div>
+  <h3>Три показателя ДРР — в чём разница</h3>
+  {_safe_html(_drr_explain_html, bundle)}
 </section>
 
 <section>
@@ -2025,8 +2380,8 @@ def build_ad_campaigns_html(bundle: dict) -> str:
   <h2>Динамика</h2>
   <div class="lead">Расход и ДРР во времени; пунктир — порог ДРР {_pct1(DRR_HIGH_THRESHOLD)}.</div>
   {_safe_html(_trend_charts_html, bundle)}
-  <h3>Расход по оценке кампаний</h3>
-  {quality_chart or '<div class="empty">Нет данных.</div>'}
+  <h3>Расход по оценке кампаний (по рекламируемым товарам)</h3>
+  {_safe_html(_quality_block_html, bundle)}
 </section>
 
 <section>
@@ -2070,11 +2425,15 @@ def build_ad_campaigns_html(bundle: dict) -> str:
   <h2>Товары</h2>
   <div class="lead">Топ-{TOP_PRODUCTS_N} товаров по расходу на рекламу. {stocks_note}</div>
   {_safe_html(_products_html, bundle)}
+  <h3>Реклама на товары с низким остатком</h3>
+  <div class="note" style="margin-top:0">Товары в активных и приостановленных кампаниях, у которых осталось меньше
+  {LOW_STOCK_QTY_THRESHOLD} шт. Реклама на них может закончиться отказами и пустыми показами.</div>
+  {_safe_html(_low_stock_html, bundle)}
 </section>
 
 <section>
-  <h2>Сверка с фактическими списаниями</h2>
-  <div class="lead">Расход по статистике показов против сумм, списанных WB по документам за тот же период.</div>
+  <h2>Сверка: начислено и списано</h2>
+  <div class="lead">Проверка, что расход в отчёте совпадает с реальными списаниями WB.</div>
   {_safe_html(_reconciliation_html, bundle)}
 </section>
 
@@ -2290,7 +2649,7 @@ def _xl_summary_sheet(wb, bundle, params):
     metrics = [
         ("Расход на рекламу, ₽", "spend_rub", "money", False),
         ("Сумма заказов от рекламы, ₽", "revenue_rub", "money", False),
-        ("ДРР (все заказы, как в кабинете WB), %", "drr", "pct", True),
+        ("ДРР с учётом связанных заказов, %", "drr", "pct", True),
         ("Заказы от рекламы", "orders", "int", False),
         ("Заказано, шт.", "shks", "int", False),
         ("Показы", "views", "int", False),
@@ -2358,7 +2717,7 @@ def _xl_campaigns_sheet(wb, bundle, params):
         ("Расход/день (7 дн.), ₽", "avg_daily_spend", 13, "money"),
         ("Хватит, дн.", "runway_days", 10, "num1"),
         *_XL_METRIC_COLS[:-2],
-        ("ДРР WB, %", "drr", 9, "pct"),
+        ("ДРР с учётом связанных, %", "drr", 12, "pct"),
         ("Заказы рекл. товаров", "orders_direct", 11, "int"),
         ("Сумма заказов рекл. товаров, ₽", "revenue_direct", 15, "money"),
         ("ДРР рекл. товаров, %", "drr_direct", 11, "pct"),
@@ -2454,7 +2813,7 @@ def _xl_budgets_sheet(wb, bundle, params):
         ("Расход за 7 дн., ₽", "recent_spend", 14, "money"), ("Расход/день, ₽", "avg_daily_spend", 13, "money"),
         ("Хватит, дн.", "runway_days", 11, "num1"), ("Расход за период, ₽", "spend_rub", 15, "money"),
         ("Заказы рекл. товаров", "orders_direct", 11, "int"), ("ДРР рекл. товаров, %", "drr_direct", 11, "pct"),
-        ("ДРР WB, %", "drr", 9, "pct"),
+        ("ДРР с учётом связанных, %", "drr", 12, "pct"),
     ]
     ws, row = _xl_sheet(wb, "Бюджеты", "Бюджеты активных кампаний",
                         f"Остаток бюджета и прогноз по среднему расходу за {RUNWAY_LOOKBACK_DAYS} дней",
@@ -2537,19 +2896,30 @@ def _xl_structure_sheet(wb, bundle, params):
 def _xl_reconciliation_sheet(wb, bundle, params):
     rec = bundle["reconciliation"]
     width = 8
-    ws, row = _xl_sheet(wb, "Сверка", "Сверка со списаниями",
-                        "Расход по статистике показов против фактических списаний WB по документам", params, width)
+    ws, row = _xl_sheet(wb, "Сверка", "Сверка: начислено и списано",
+                        "Начислено — расход по статистике показов и кликов; списано — «История затрат» "
+                        "WB Продвижение. По дням возможна разница из-за задержки списаний", params, width)
     cols = [("ID", "advert_id", 12, "id"), ("Кампания", "name", 44, "text"), ("Статус", "status_name", 12, "text"),
             ("Статистика, ₽", "spend_rub", 15, "money"), ("Списано, ₽", "charged_rub", 15, "money"),
             ("Разница, ₽", "diff_rub", 14, "money"), ("Разница, %", "diff_pct", 12, "pct"),
             ("", "blank", 16, "text")]
+    period_df = rec.get("by_period")
+    if period_df is not None and not period_df.empty:
+        pcols = [("Период", "label", 12, "text"), ("", "blank0", 44, "text"), ("", "blank1", 12, "text"),
+                 ("Начислено, ₽", "stats_spend", 15, "money"), ("Списано WB, ₽", "charged", 15, "money"),
+                 ("Разница, ₽", "diff", 14, "money"), ("Разница, %", "diff_pct", 12, "pct"), ("", "blank2", 16, "text")]
+        row = _xl_block_title(ws, row, "По периодам" , width)
+        row = _xl_table(ws, row, pcols, [{"v": _row_values(r)} for r in period_df.itertuples(index=False)],
+                        autofilter=False, set_widths=False)
+        row = _xl_block_title(ws, row + 1, "По кампаниям", width)
+
     rows = []
     if not rec["rows"].empty:
         for r in rec["rows"].itertuples(index=False):
             rows.append({"v": _row_values(r, {"diff_pct": _div(r.diff_rub, r.charged_rub, 100)})})
     total = {"name": "ИТОГО", "spend_rub": rec["stats_spend"], "charged_rub": rec["charged"],
              "diff_rub": rec["diff"], "diff_pct": rec["diff_pct"]}
-    row = _xl_table(ws, row, cols, rows, total=total, freeze_col=3)
+    row = _xl_table(ws, row, cols, rows, total=total)
 
     expenses = bundle["expenses"]
     row = _xl_block_title(ws, row + 1, "Списания по документам", width)
@@ -2624,7 +2994,7 @@ def _xl_toc(wb, bundle, sheets: list[tuple[str, str]], title: str):
         ("Сумма заказов от рекламы", _money(t["revenue_rub"]), delta("revenue_rub")),
         ("ДРР по рекламируемым товарам",
          _pct1(t.get("drr_direct")) + (f" · {_drr_rating(t.get('drr_direct'))}" if _drr_rating(t.get("drr_direct")) else ""),
-         f"с учётом связанных заказов (как в WB) — {_pct1(t['drr'])}"),
+         f"с учётом связанных заказов — {_pct1(t['drr'])}"),
         ("Заказы от рекламы", _int(t["orders"]), delta("orders")),
     ]
     cards_2 = [

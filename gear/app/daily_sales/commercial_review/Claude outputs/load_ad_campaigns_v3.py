@@ -602,7 +602,7 @@ def history_months(
     since: date,
     today: date,
 ) -> dict[date, list[int]]:
-    """Месяцы, за которые нужна статистика по давно завершённым кампаниям."""
+    """Месяцы, за которые нужна статистика по кампаниям."""
     months: dict[date, set[int]] = {}
     target = set(advert_ids)
 
@@ -612,7 +612,7 @@ def history_months(
         spend = spend[spend["advert_id"].isin(target)]
         for advert_id, charge_date in zip(spend["advert_id"], spend["upd_date"]):
             charged.add(int(advert_id))
-            for d in (charge_date, charge_date - timedelta(days=1)):
+            for d in (charge_date, charge_date - timedelta(days=7)):
                 if d >= since:
                     months.setdefault(d.replace(day=1), set()).add(int(advert_id))
 
