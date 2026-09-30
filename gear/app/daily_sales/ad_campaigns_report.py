@@ -77,6 +77,7 @@ QUALITY_ORDER = (QUALITY_GOOD, QUALITY_BAD, QUALITY_LOW)
 
 STATUS_ACTIVE = 9
 STATUS_PAUSED = 11
+_STATUS_SHORT = {STATUS_ACTIVE: "активна", STATUS_PAUSED: "на паузе"}
 
 BID_TYPE_NAMES = {"unified": "Единая ставка", "manual": "Ручная ставка"}
 PAYMENT_TYPE_NAMES = {"cpm": "За показы (CPM)", "cpc": "За клики (CPC)"}
@@ -124,6 +125,13 @@ def _esc(text) -> str:
 
 def _spaced(n: float, digits: int = 0) -> str:
     return f"{n:,.{digits}f}".replace(",", " ").replace(".", ",")
+
+
+def _signed_money(v) -> str:
+    v = _num(v)
+    if v is None:
+        return "—"
+    return ("+" if v >= 0 else "−") + _money(abs(v))
 
 
 def _money(v, dash="—") -> str:
@@ -862,6 +870,7 @@ def _low_stock(cp: pd.DataFrame, campaigns: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=cols)
     live = campaigns[campaigns["status"].isin([STATUS_ACTIVE, STATUS_PAUSED])]
     names = live.set_index("advert_id")["name"].to_dict()
+    statuses = live.set_index("advert_id")["status"].to_dict()
     stock = pd.to_numeric(cp["stock_qty"], errors="coerce")
     rows = cp[cp["advert_id"].isin(names) & cp["direct"] & stock.notna() & (stock < LOW_STOCK_QTY_THRESHOLD)]
     if rows.empty:
@@ -869,9 +878,11 @@ def _low_stock(cp: pd.DataFrame, campaigns: pd.DataFrame) -> pd.DataFrame:
     g = rows.groupby("nm_id").agg(
         title=("title", "first"), brand=("brand", "first"), stock_qty=("stock_qty", "first"),
         spend_rub=("spend_rub", "sum"), orders=("orders", "sum"),
-        campaigns=("advert_id", lambda ids: ", ".join(names[i] for i in ids)),
+        campaigns=("advert_id", lambda ids: "; ".join(
+            f"{names[i]} ({_STATUS_SHORT.get(statuses.get(i), '—')})" for i in dict.fromkeys(ids))),
+        campaign_list=("advert_id", lambda ids: [(names[i], statuses.get(i)) for i in dict.fromkeys(ids)]),
     ).reset_index()
-    return g.sort_values("spend_rub", ascending=False).reset_index(drop=True)[cols]
+    return g.sort_values("spend_rub", ascending=False).reset_index(drop=True)[cols + ["campaign_list"]]
 
 
 def _aggregate_time(stats: pd.DataFrame, freq: str) -> pd.DataFrame:
@@ -1280,7 +1291,8 @@ def _recommendations(bundle: dict) -> list[tuple[str, str, str]]:
         kind = "по рекламируемым товарам " if prev.get("drr_direct") is not None else ""
         base = (
             f"ДРР {kind}{_pct1(cur_drr)} против {_pct1(prev_drr)} за {prev_label}. "
-            f"Расход {_signed_pct(spend_chg)}, заказы от рекламы {_signed_pct(orders_chg)}."
+            f"Расход {_signed_pct(spend_chg)} ({_signed_money(spend - prev['spend_rub'])}), "
+            f"заказы от рекламы {_signed_pct(orders_chg)}."
         )
         if abs(diff) >= DRR_TREND_DELTA:
             recs.append((
@@ -1412,7 +1424,9 @@ def _narrative(bundle: dict) -> str:
     prev = bundle["prev_totals"]
     if prev and prev["spend_rub"]:
         parts.append(
-            f"К предыдущему периоду: расход {_signed_pct(_change_pct(t['spend_rub'], prev['spend_rub']))}, "
+            f"К предыдущему периоду ({_period_label(bundle['prev_start'], bundle['prev_end'])}): расход "
+            f"{_signed_pct(_change_pct(t['spend_rub'], prev['spend_rub']))} — с {_money(prev['spend_rub'])} "
+            f"до {_money(t['spend_rub'])} ({_signed_money(t['spend_rub'] - prev['spend_rub'])}), "
             f"сумма заказов {_signed_pct(_change_pct(t['revenue_rub'], prev['revenue_rub']))}."
         )
 
@@ -1653,7 +1667,7 @@ _POLARITY = {
 }
 
 
-def _delta_html(key: str, cur, prev, is_pct: bool = False) -> str:
+def _delta_html(key: str, cur, prev, is_pct: bool = False, abs_fmt=None) -> str:
     if prev is None:
         return '<span class="neutral">нет данных для сравнения</span>'
     if is_pct:
@@ -1672,7 +1686,11 @@ def _delta_html(key: str, cur, prev, is_pct: bool = False) -> str:
         cls = "neutral"
     else:
         cls = "up-good" if diff * polarity > 0 else "up-bad"
-    return f'<span class="{cls}">{text}</span> <span class="neutral">к пред. периоду</span>'
+    extra = ""
+    if abs_fmt is not None and _num(cur) is not None and _num(prev) is not None:
+        extra = (f'<br><span class="neutral">было {abs_fmt(prev)}, '
+                 f'{"+" if _num(cur) >= _num(prev) else "−"}{abs_fmt(abs(_num(cur) - _num(prev)))}</span>')
+    return f'<span class="{cls}">{text}</span> <span class="neutral">к пред. периоду</span>{extra}'
 
 
 def _kpi(label: str, value: str, sub: str = "", main: bool = False) -> str:
@@ -1699,10 +1717,12 @@ def _kpis_html(bundle: dict) -> str:
     ) if tacos.get("available") else "нет данных о продажах"
 
     tiles = [
-        _kpi("Расход на рекламу", _money(t["spend_rub"]), _delta_html("spend_rub", t["spend_rub"], pv("spend_rub")), True),
+        _kpi("Расход на рекламу", _money(t["spend_rub"]),
+             _delta_html("spend_rub", t["spend_rub"], pv("spend_rub"), abs_fmt=_money), True),
         _kpi("Сумма заказов от рекламы", _money(t["revenue_rub"]), assoc_sub, True),
         _kpi("ДРР по рекламируемым товарам", drr_direct_value, "без связанных заказов", True),
-        _kpi("Заказы от рекламы", _int(t["orders"]), _delta_html("orders", t["orders"], pv("orders")), True),
+        _kpi("Заказы от рекламы", _int(t["orders"]),
+             _delta_html("orders", t["orders"], pv("orders"), abs_fmt=lambda v: f"{_int(v)} шт."), True),
         _kpi("Показы", _int(t["views"]), _delta_html("views", t["views"], pv("views"))),
         _kpi("Клики", _int(t["clicks"]), _delta_html("clicks", t["clicks"], pv("clicks"))),
         _kpi("CTR", _pct1(t["ctr"]), _delta_html("ctr", t["ctr"], pv("ctr") if p else None, True)),
@@ -2250,6 +2270,82 @@ def _products_html(bundle: dict) -> str:
     ) + note
 
 
+_WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+SPEND_DAYS_MAX = 62
+
+
+def _spend_rows(df: pd.DataFrame, label) -> list:
+    rows = []
+    for r in df.itertuples(index=False):
+        orders = getattr(r, "orders_direct", np.nan)
+        rows.append(([label(r), _money(r.spend_rub), _int(orders) if pd.notna(orders) else "—",
+                      _money(getattr(r, "revenue_direct", np.nan)), _drr_cell(getattr(r, "drr_direct", np.nan))],
+                     "zebra"))
+    return rows
+
+
+def _spend_total_row(df: pd.DataFrame, label: str) -> tuple:
+    spend = df["spend_rub"].sum()
+    orders = df["orders_direct"].sum() if "orders_direct" in df else np.nan
+    revenue = df["revenue_direct"].sum() if "revenue_direct" in df else np.nan
+    return ([label, _money(spend), _int(orders), _money(revenue), _drr_cell(_div(spend, revenue, 100))], "total")
+
+
+def _spend_tables_html(bundle: dict) -> str:
+    daily = bundle.get("daily")
+    if daily is None or daily.empty:
+        return '<div class="empty">Нет данных о расходе за период.</div>'
+    daily = daily.sort_values("period_start").reset_index(drop=True)
+    headers = [("{}", "l", 34), ("Расход", "r", 18), ("Заказы*", "r", 14), ("Сумма заказов*", "r", 20),
+               ("ДРР*", "r", 14)]
+
+    def hdr(first):
+        return [(first if i == 0 else h, a, w) for i, (h, a, w) in enumerate(headers)]
+
+    for col in ("orders_direct", "revenue_direct"):
+        if col not in daily:
+            daily[col] = np.nan
+    d = daily.copy()
+    d["week"] = (d["period_start"] - pd.to_timedelta(d["period_start"].dt.weekday, unit="D")).dt.normalize()
+    weeks = d.groupby("week").agg(
+        first=("period_start", "min"), last=("period_start", "max"), days=("period_start", "count"),
+        spend_rub=("spend_rub", "sum"), orders_direct=("orders_direct", "sum"),
+        revenue_direct=("revenue_direct", "sum"),
+    ).reset_index()
+    weeks["drr_direct"] = _ratio(weeks["spend_rub"], weeks["revenue_direct"], 100)
+    weeks["per_day"] = weeks["spend_rub"] / weeks["days"]
+
+    def week_label(r):
+        text = f"{r.first:%d.%m}–{r.last:%d.%m}"
+        return text + (f" <span class='muted'>({r.days} дн.)</span>" if r.days < 7 else "")
+
+    parts = []
+    if len(weeks) <= 60:
+        week_rows = _spend_rows(weeks, week_label) + [_spend_total_row(weeks, "Итого")]
+        parts.append("<h3>По неделям</h3>" + _table(hdr("Неделя (пн–вс)"), week_rows))
+        full = weeks[weeks["days"] == 7]
+        if len(full) >= 2:
+            top, low = full.loc[full["spend_rub"].idxmax()], full.loc[full["spend_rub"].idxmin()]
+            parts.append(
+                f'<div class="summary">В среднем за полную неделю — {_money(full["spend_rub"].mean())}. '
+                f'Больше всего потрачено за {top["first"]:%d.%m}–{top["last"]:%d.%m} '
+                f'({_money(top["spend_rub"])}), меньше всего — за {low["first"]:%d.%m}–{low["last"]:%d.%m} '
+                f'({_money(low["spend_rub"])}).</div>'
+            )
+
+    if len(daily) <= SPEND_DAYS_MAX:
+        day_rows = _spend_rows(daily, lambda r: f"{r.period_start:%d.%m.%Y}, {_WEEKDAYS[r.period_start.weekday()]}")
+        day_rows.append(_spend_total_row(daily, "Итого"))
+        parts.append("<h3>По дням</h3>" + _table(hdr("Дата"), day_rows))
+    else:
+        parts.append(f'<div class="note">Расход по дням для периода длиннее {SPEND_DAYS_MAX} дней — '
+                     f'в Excel-детализации, лист «По дням».</div>')
+
+    parts.append('<div class="note">* По рекламируемым товарам, без связанных заказов. Неделя — с понедельника '
+                 'по воскресенье; неполные недели на границах периода отмечены числом дней.</div>')
+    return "".join(parts)
+
+
 def _low_stock_html(bundle: dict) -> str:
     df = bundle.get("low_stock")
     if df is None or df.empty:
@@ -2257,13 +2353,28 @@ def _low_stock_html(bundle: dict) -> str:
             LOW_STOCK_QTY_THRESHOLD)
     rows = [
         ([f"{_esc(r.title)}<div class='muted'>{int(r.nm_id)} · {_esc(r.brand)}</div>", _stock_html(r.stock_qty),
-          _money(r.spend_rub), _int(r.orders), f"<span class='wrap'>{_esc(r.campaigns)}</span>"], "zebra")
+          _money(r.spend_rub), _int(r.orders), _low_stock_campaigns(r)], "zebra")
         for r in df.itertuples(index=False)
     ]
-    return _table(
-        [("Товар", "l", 32), ("Остаток", "r", 9), ("Расход за период", "r", 12), ("Заказы", "r", 8),
-         ("В кампаниях", "l", 39)],
+    table = _table(
+        [("Товар", "l", 32), ("Остаток", "r", 8), ("Расход за период", "r", 11), ("Заказы", "r", 7),
+         ("Реклама: кампания и статус", "l", 42)],
         rows,
+    )
+    active = sum(any(st == STATUS_ACTIVE for _, st in (lst or [])) for lst in df["campaign_list"])
+    note = (f'<div class="note">Статус — на момент последней загрузки. «Активна» — реклама идёт сейчас, '
+            f'деньги тратятся; «На паузе» — показы остановлены, но кампания запустится снова, если её '
+            f'возобновить. Товаров в активных кампаниях: {active} из {len(df)}.</div>')
+    return table + note
+
+
+def _low_stock_campaigns(r) -> str:
+    items = r.campaign_list if isinstance(r.campaign_list, list) else []
+    if not items:
+        return f"<span class='wrap'>{_esc(r.campaigns)}</span>"
+    return "".join(
+        f"<div class='wrap'>{_status_tag(st, _STATUS_SHORT.get(st, '—').capitalize())} {_esc(name)}</div>"
+        for name, st in items
     )
 
 
@@ -2406,6 +2517,12 @@ def build_ad_campaigns_html(bundle: dict) -> str:
   {_safe_html(_trend_charts_html, bundle)}
   <h3>Расход по оценке кампаний (по рекламируемым товарам)</h3>
   {_safe_html(_quality_block_html, bundle)}
+</section>
+
+<section>
+  <h2>Расход по дням и неделям</h2>
+  <div class="lead">Суммы расхода на рекламу за каждый день и каждую неделю периода.</div>
+  {_safe_html(_spend_tables_html, bundle)}
 </section>
 
 <section>
