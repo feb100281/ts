@@ -177,13 +177,14 @@ def _classify(r, report_date):
     if r.get("valid_gtins"):
         gtin = (OK, None)
     elif not r.get("barcodes"):
-        gtin = ((CRIT, "нет штрихкода, товар с маркировкой ЧЗ") if kiz
+        gtin = ((CRIT, "нет штрихкода, в карточке WB отмечена маркировка") if kiz
                 else (CHECK, "нет штрихкода"))
     else:
-        gtin = ((CRIT, "нет ни одного действительного GTIN, товар с маркировкой ЧЗ")
+        gtin = ((CRIT, "нет ни одного действительного GTIN, в карточке WB отмечена маркировка")
                 if kiz else
                 (CHECK, "нет ни одного действительного GTIN "
-                        "(маркировка не обязательна — WB сейчас не блокирует)"))
+                        "(маркировка в карточке WB не отмечена — проверить, "
+                        "подлежит ли товар маркировке)"))
 
     t = r.get("tnved") or ""
     if not t:
@@ -222,6 +223,8 @@ def get_cards_check_data(report_date) -> pd.DataFrame:
     df["status"] = np.where((levels == CRIT).any(axis=1), CRIT,
                             np.where((levels == CHECK).any(axis=1), CHECK, OK))
     df["brand"] = df["brand"].fillna("Без бренда").astype(str).str.upper()
+    df["valid_gtins"] = df["valid_gtins"].where(
+        df["valid_gtins"].notna() & (df["valid_gtins"] != ""), "нет")
     return df
 
 
@@ -239,9 +242,9 @@ COLUMNS = [
     ("wb_qty", "Склады WB", FMT_QTY),
     ("fbs_qty", "FBS", FMT_QTY),
     ("transit_qty", "В пути", FMT_QTY),
-    ("kiz_marked", "Маркировка ЧЗ", None),
-    ("valid_gtins", "Действительные GTIN", None),
+    ("kiz_marked", "Маркировка (отметка в карточке WB)", None),
     ("gtin_issue", "GTIN: проблема", None),
+    ("valid_gtins", "Действительные штрихкоды (GTIN)", None),
     ("bad_barcodes", "Недействительные штрихкоды (справочно)", None),
     ("tnved_raw", "ТН ВЭД", None),
     ("tnved_issue", "ТН ВЭД: проблема", None),
@@ -253,7 +256,7 @@ LEVEL_OF = {"gtin_issue": "gtin_level", "tnved_issue": "tnved_level",
             "doc_issue": "doc_level", "status": "status"}
 WIDTHS = {"Наименование": 40, "Декларация / сертификат": 32,
           "GTIN: проблема": 36, "ТН ВЭД: проблема": 18, "Документ: проблема": 36,
-          "Действительные GTIN": 22, "Недействительные штрихкоды (справочно)": 40,
+          "Действительные штрихкоды (GTIN)": 26, "Недействительные штрихкоды (справочно)": 40,
           "Статус": 12}
 
 SHEET_CRIT = "Критично"
@@ -286,7 +289,8 @@ def _fit_width(ws):
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 
 
-def _write_rows(ws, hdr, columns, records, level_of=None, widths=None):
+def _write_rows(ws, hdr, columns, records, level_of=None, widths=None,
+                freeze=True):
     ncols = len(columns)
     write_table_header(ws, hdr, 1, [c[1] for c in columns])
     numeric = {i + 1 for i, c in enumerate(columns) if c[2]}
@@ -309,8 +313,9 @@ def _write_rows(ws, hdr, columns, records, level_of=None, widths=None):
     for j in range(1, ncols + 1):
         ws.cell(row=hdr, column=j).alignment = Alignment(
             horizontal="center", vertical="center", wrap_text=True)
-    freeze_table(ws, hdr, first_col=4)
-    enable_autofilter(ws, hdr, 1, ncols, last)
+    if freeze:
+        freeze_table(ws, hdr, first_col=4)
+        enable_autofilter(ws, hdr, 1, ncols, last)
     _fit_width(ws)
     return last
 
@@ -337,6 +342,15 @@ def _card_flags(df):
     return out
 
 
+def _summary_row(label, cards, crit, check, n, total_q):
+    cq, kq = cards.loc[crit, "qty"].sum(), cards.loc[check, "qty"].sum()
+    return {"check": label,
+            "crit_n": int(crit.sum()), "crit_p": _pct(crit.sum(), n),
+            "crit_q": cq, "crit_qp": _pct(cq, total_q),
+            "check_n": int(check.sum()), "check_p": _pct(check.sum(), n),
+            "check_q": kq, "check_qp": _pct(kq, total_q)}
+
+
 def _pct(part, total):
     return part / total * 100 if total else None
 
@@ -350,7 +364,7 @@ def make_cards_check_excel(df, report_date) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = TOC_SHEET_NAME
-    ncol = 7
+    ncol = 9
     write_sheet_header(
         ws, "ПРОВЕРКА КАРТОЧЕК WB",
         "GTIN, ТН ВЭД, декларации и сертификаты · только товары с остатком",
@@ -366,32 +380,35 @@ def make_cards_check_excel(df, report_date) -> bytes:
     # ---- сводка: карточек и % от карточек с остатком
     summary_cols = [
         ("check", "Проверка", None),
-        ("crit_n", "Критично, карточек", FMT_QTY),
-        ("crit_p", "Критично, %", FMT_PCT),
-        ("crit_q", "Остаток в критичных, шт", FMT_QTY),
-        ("check_n", "Проверить, карточек", FMT_QTY),
-        ("check_p", "Проверить, %", FMT_PCT),
-        ("check_q", "Остаток, шт", FMT_QTY),
+        ("crit_n", "Критично: карточек", FMT_QTY),
+        ("crit_p", "Критично: % карточек", FMT_PCT),
+        ("crit_q", "Критично: остаток, шт", FMT_QTY),
+        ("crit_qp", "Критично: % остатка", FMT_PCT),
+        ("check_n", "Проверить: карточек", FMT_QTY),
+        ("check_p", "Проверить: % карточек", FMT_PCT),
+        ("check_q", "Проверить: остаток, шт", FMT_QTY),
+        ("check_qp", "Проверить: % остатка", FMT_PCT),
     ]
+    total_q = cards["qty"].sum()
     rows = []
     for key, label in (("gtin", "GTIN (штрихкод)"), ("tnved", "ТН ВЭД"),
                        ("doc", "Декларация / сертификат")):
         c, k = cards[key + "_crit"], cards[key + "_check"] & ~cards[key + "_crit"]
-        rows.append({"check": label, "crit_n": int(c.sum()), "crit_p": _pct(c.sum(), n),
-                     "crit_q": cards.loc[c, "qty"].sum(), "check_n": int(k.sum()),
-                     "check_p": _pct(k.sum(), n), "check_q": cards.loc[k, "qty"].sum()})
-    rows.append({"check": "ИТОГО карточек (без повторов)",
-                 "crit_n": int(cards["crit"].sum()), "crit_p": _pct(cards["crit"].sum(), n),
-                 "crit_q": cards.loc[cards["crit"], "qty"].sum(),
-                 "check_n": int(cards["check"].sum()), "check_p": _pct(cards["check"].sum(), n),
-                 "check_q": cards.loc[cards["check"], "qty"].sum()})
+        rows.append(_summary_row(label, cards, c, k, n, total_q))
+    rows.append(_summary_row("ИТОГО (карточка учтена один раз)", cards,
+                             cards["crit"], cards["check"], n, total_q))
+    ws.merge_cells(start_row=6, start_column=1, end_row=6, end_column=ncol)
+    c = ws.cell(row=6, column=1, value="ВСЕГО С ОСТАТКОМ: %s карточек · %s шт"
+                % (f"{n:,}".replace(",", " "), f"{int(total_q):,}".replace(",", " ")))
+    c.font = Font(name=FONT, size=11, bold=True)
+    c.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[6].height = 24
     last = _write_rows(ws, 7, summary_cols, rows,
-                       widths={"Проверка": 32})
-    for j in range(1, ncol + 1):
+                       widths={"Проверка": 32}, freeze=False)
+    for j in range(1, len(summary_cols) + 1):
         ws.cell(row=last, column=j).font = Font(name=FONT, size=10, bold=True)
-    ws.freeze_panes = None
-    ws.auto_filter.ref = None
-    for col, w in zip("ABCDEFG", (36, 14, 12, 18, 14, 12, 14)):
+
+    for col, w in zip("ABCDEFGHI", (40, 13, 13, 14, 13, 13, 13, 14, 13)):
         ws.column_dimensions[col].width = w
 
     row = write_toc_links(ws, last + 2, [
@@ -399,7 +416,7 @@ def make_cards_check_excel(df, report_date) -> bytes:
         (SHEET_CHECK, "Нужна ручная проверка: ошибки может и не быть"),
         (SHEET_BRANDS, "Сколько проблем по каждому бренду, в штуках и процентах"),
         (SHEET_ALL, "Все размеры с остатком — для сверки"),
-    ], col_label=1, col_desc=2, desc_span=6)
+    ], col_label=1, col_desc=2, desc_span=8)
 
     notes = [
         "КАК ПРОВЕРЯЕТСЯ GTIN. Штрихкоды карточки — это и есть GTIN (EAN-13 и т. п.). "
@@ -409,14 +426,13 @@ def make_cards_check_excel(df, report_date) -> bytes:
         "(выдуман или с опечаткой). Пример: 4610503150759 — сумма 61, контрольная 9, совпало.",
         "У размера бывает несколько штрихкодов. Размер в порядке, если среди них есть хотя бы "
         "один действительный GTIN; лишние недействительные коды показаны справочно.",
-        "КРИТИЧНО: нет действительного GTIN у товара с маркировкой ЧЗ; ТН ВЭД не из 10 цифр; "
+        "МАРКИРОВКА: берётся отметка «маркируется» (kizMarked) из карточки WB — её ставит "
+        "продавец или WB по категории. Обязательность маркировки в Честном знаке отчёт сам "
+        "не проверяет: если отметки нет, а товар подлежит маркировке, это тоже нужно исправить.",
+        "КРИТИЧНО: нет действительного GTIN у товара с отметкой маркировки; ТН ВЭД не из 10 цифр; "
         "срок декларации/сертификата истёк; карточка не найдена.",
-        "ПРОВЕРИТЬ: нет действительного GTIN у товара без обязательной маркировки (WB сейчас "
-        "его не проверяет); в карточке нет номера документа (не нужен, если товар не подлежит "
+        "ПРОВЕРИТЬ: нет действительного GTIN у товара без отметки маркировки; в карточке нет номера документа (не нужен, если товар не подлежит "
         "ТР ТС); не указан срок действия документа.",
-        "Статус карточки — худший из статусов её размеров. Проценты — от числа карточек с "
-        "остатком. Регистрацию GTIN в Честном знаке и документа в реестре ФСА по этим данным "
-        "проверить нельзя.",
     ]
     row += 1
     for text in notes:
