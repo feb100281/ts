@@ -731,7 +731,7 @@ def columns_layout(ws, cols, report_year):
 # =============================================================================
 
 def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
-             note_anchors=None, rowmap_out=None):
+             note_anchors=None):
     as_of = as_of or report_date
     """
     pl_data      — {(me, section, item): value}
@@ -993,8 +993,6 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     columns_layout(ws, cols, report_date.year)
     ws.freeze_panes = ws.cell(row=hdr + 1, column=COL_FIRST)
     ws.print_title_rows = "1:%d" % hdr
-    if rowmap_out is not None:
-        rowmap_out.update(rowmap)
     return r
 
 
@@ -2521,1168 +2519,6 @@ def build_pl_notes(ws, note_rows, months, report_date, as_of=None):
 
 
 # =============================================================================
-#  07E. ЛИСТ «ТОЧКА БЕЗУБЫТОЧНОСТИ»
-#
-#      Модель «затраты — объём — прибыль» поверх P&L: затраты делятся на
-#      переменные и постоянные, ТБУ = постоянные затраты / КМД.
-#      Все значения — ссылки на P&L и формулы Excel; колонки совпадают с P&L.
-#      Годовые и итоговые колонки считаются от сумм периода, а не как сумма
-#      помесячных ТБУ.
-# =============================================================================
-
-BREAKEVEN_SHEET_NAME = "Точка безубыточности"
-BE_NOTES_SHEET_NAME = "Пояснения ТБУ"
-PL_SHEET_NAME = "P&L"
-
-BE_DELTA_DEFAULT = 100_000       # прирост постоянных затрат в месяц, ₽
-BE_KMD_STEPS = (-2, -1, 1, 2)    # шаги чувствительности КМД, п.п.
-CONV_LOAN_TITLE_ID = 27          # тип договора «Договор конвертируемого займа»
-BE_INPUT_ROW = 6
-BE_INPUT_CELL = "$D$%d" % BE_INPUT_ROW
-BE_KMD_FOOTNOTE = (
-    "* КМД — коэффициент маржинального дохода: какая доля каждого рубля выручки "
-    "остаётся после переменных затрат (себестоимость, комиссия WB, логистика, "
-    "хранение, реклама) на покрытие постоянных затрат и прибыль.\n"
-    "КМД = Маржинальный доход / Чистая выручка без НДС × 100 % (строка 3.1 / строка 1.2).\n"
-    "Пример: продали на 100 ₽, переменные затраты — 70 ₽ → маржинальный доход 30 ₽, КМД = 30 %."
-)
-
-
-def _be_tbu(fc, k):
-    """ТБУ = −постоянные / КМД; пусто без выручки, «н/д» при КМД ≤ 0."""
-    return ('IF(ISNUMBER({k}),IF({k}>0,MAX(0,-({fc}))/{k}*100,"н/д"),"")'
-            .format(fc=fc, k=k))
-
-
-def be_layout():
-    """
-    Строки листа: (kind, code, label, spec, role, fmt, source).
-      link  — ссылка на строку P&L, spec = код строки P&L
-      calc  — сумма строк листа, spec = [(код, знак), ...]
-      ratio — отношение, spec = (числитель, знаменатель, множитель)
-      expr  — формула, spec = f(ref) -> текст формулы; ref(код) -> адрес ячейки
-      count — служебный счётчик, spec = 'months' | 'days'
-      input — сценарный прирост из ячейки ввода
-    """
-    L = []
-    add = L.append
-    blank = ("blank", None, None, None, None, None, None)
-
-    add(("band", "1", "ВЫРУЧКА", None, None, None, None))
-    add(("link", "1.1", "Продажи до СПП с НДС (валовый оборот WB), справочно",
-         "1.1", "ref", FMT_MONEY, "P&L 1.1"))
-    add(("link", "1.2", "ЧИСТАЯ ВЫРУЧКА БЕЗ НДС — база расчёта",
-         "1.4", "total", FMT_MONEY, "P&L 1.4"))
-    add(("link", "1.3", "Продажи, шт", "2.1", "ref", FMT_QTY, "P&L 2.1"))
-    add(("ratio", "1.4", "Средняя цена продажи без НДС, ₽",
-         ("1.2", "1.3", 1), "ref", FMT_PRICE, "= 1.2 / 1.3"))
-    add(blank)
-
-    add(("band", "2", "ПЕРЕМЕННЫЕ ЗАТРАТЫ — растут вместе с продажами",
-         None, None, None, None))
-    add(("link", "2.1", "Себестоимость проданного товара (FIFO)",
-         "1.6", "expense", FMT_MONEY, "P&L 1.6"))
-    add(("link", "2.2", "Комиссия WB", "1.9", "expense", FMT_MONEY, "P&L 1.9"))
-    add(("link", "2.3", "Расходы на реализацию WB (логистика, хранение)",
-         "3", "expense", FMT_MONEY, "P&L разд. 3"))
-    add(("link", "2.4", "Продвижение WB (реклама, буст, отзывы)",
-         "4", "expense", FMT_MONEY, "P&L разд. 4"))
-    add(("calc", "2.5", "ИТОГО ПЕРЕМЕННЫЕ ЗАТРАТЫ",
-         [("2.1", 1), ("2.2", 1), ("2.3", 1), ("2.4", 1)],
-         "total_expense", FMT_MONEY, "= 2.1 + 2.2 + 2.3 + 2.4"))
-    add(("ratio", "2.6", "Переменные затраты, % к чистой выручке",
-         ("2.5", "1.2", -100), "ratio", FMT_PCT, "= −2.5 / 1.2"))
-    add(blank)
-
-    add(("band", "3", "МАРЖИНАЛЬНЫЙ ДОХОД — покрывает постоянные затраты",
-         None, None, None, None))
-    add(("calc", "3.1", "МАРЖИНАЛЬНЫЙ ДОХОД",
-         [("1.2", 1), ("2.5", 1)], "total", FMT_MONEY, "= 1.2 + 2.5  (= P&L GP2)"))
-    add(("ratio", "3.2", "КОЭФФИЦИЕНТ МАРЖИНАЛЬНОГО ДОХОДА (КМД)*, %",
-         ("3.1", "1.2", 100), "key", FMT_PCT, "= 3.1 / 1.2"))
-    add(("expr", "3.3", "Выручка, нужная на каждый 1 ₽ постоянных затрат, ₽",
-         lambda r: 'IF(ISNUMBER({k}),IF({k}>0,100/{k},"н/д"),"")'.format(k=r("3.2")),
-         "ref", FMT_PRICE, "= 1 / КМД"))
-    add(blank)
-
-    add(("band", "4", "ПОСТОЯННЫЕ ЗАТРАТЫ — не зависят от объёма продаж",
-         None, None, None, None))
-    add(("link", "4.1", "Накладные расходы", "6", "expense", FMT_MONEY,
-         "P&L разд. 6"))
-    add(("link", "4.2", "Корпоративные расходы", "7", "expense", FMT_MONEY,
-         "P&L разд. 7"))
-    add(("link", "4.3", "Финансовые расходы (проценты по кредитам и займам)",
-         "8", "expense", FMT_MONEY, "P&L разд. 8"))
-    add(("calc", "4.4", "ИТОГО ПОСТОЯННЫЕ ЗАТРАТЫ",
-         [("4.1", 1), ("4.2", 1), ("4.3", 1)],
-         "total_expense", FMT_MONEY, "= 4.1 + 4.2 + 4.3"))
-    add(("data", "4.5", "из них проценты по договорам конвертируемого займа",
-         "conv", "expense", FMT_MONEY, "учёт, тип дог. %d" % CONV_LOAN_TITLE_ID))
-    add(("calc", "4.6", "Постоянные затраты без процентов по конвертируемым займам",
-         [("4.4", 1), ("4.5", -1)], "ref", FMT_MONEY, "= 4.4 − 4.5"))
-    add(blank)
-
-    add(("band", "5", "ТОЧКА БЕЗУБЫТОЧНОСТИ", None, None, None, None))
-    add(("expr", "5.1", "ТБУ по EBITDA (без финансовых расходов), ₽",
-         lambda r: _be_tbu("%s+%s" % (r("4.1"), r("4.2")), r("3.2")),
-         "ref", FMT_MONEY, "= −(4.1 + 4.2) / КМД"))
-    add(("expr", "5.2", "ТОЧКА БЕЗУБЫТОЧНОСТИ — прибыль до налога = 0, ₽",
-         lambda r: _be_tbu(r("4.4"), r("3.2")),
-         "grand", FMT_MONEY, "= −4.4 / КМД"))
-    add(("expr", "5.3", "Точка безубыточности в штуках",
-         lambda r: 'IF(AND(ISNUMBER({t}),ISNUMBER({p})),{t}/{p},"")'
-                   .format(t=r("5.2"), p=r("1.4")),
-         "ref", FMT_QTY, "= 5.2 / 1.4"))
-    add(("expr", "5.4", "ТБУ в среднем за месяц, ₽",
-         lambda r: 'IF(ISNUMBER({t}),{t}/{m},{t})'.format(t=r("5.2"), m=r("10.1")),
-         "ref", FMT_MONEY, "= 5.2 / 10.1"))
-    add(("expr", "5.5", "ТБУ в среднем за день, ₽",
-         lambda r: 'IF(ISNUMBER({t}),{t}/{d},{t})'.format(t=r("5.2"), d=r("10.2")),
-         "ref", FMT_MONEY, "= 5.2 / 10.2"))
-    add(("expr", "5.6", "ЗАПАС ФИНАНСОВОЙ ПРОЧНОСТИ, ₽",
-         lambda r: 'IF(ISNUMBER({t}),{v}-{t},"")'.format(t=r("5.2"), v=r("1.2")),
-         "total", FMT_MONEY, "= 1.2 − 5.2"))
-    add(("expr", "5.7", "Запас финансовой прочности, % к чистой выручке",
-         lambda r: 'IF(AND(ISNUMBER({z}),{v}<>0),{z}/{v}*100,"")'
-                   .format(z=r("5.6"), v=r("1.2")),
-         "ratio", FMT_PCT, "= 5.6 / 1.2"))
-    add(("expr", "5.8", "Статус: выручка выше или ниже ТБУ",
-         lambda r: ('IF(NOT(ISNUMBER({k})),"",IF({k}<=0,"КМД ≤ 0",'
-                    'IF({v}>={t},"выше ТБУ","ниже ТБУ")))'
-                    .format(k=r("3.2"), v=r("1.2"), t=r("5.2"))),
-         "status", None, "факт 1.2 против 5.2"))
-    add(blank)
-
-    add(("band", "6", "ТОЧКА БЕЗУБЫТОЧНОСТИ БЕЗ ПРОЦЕНТОВ ПО КОНВЕРТИРУЕМЫМ ЗАЙМАМ",
-         None, None, None, None))
-    add(("expr", "6.1", "ТБУ БЕЗ ПРОЦЕНТОВ ПО КОНВ. ЗАЙМАМ — прибыль до налога = 0, ₽",
-         lambda r: _be_tbu(r("4.6"), r("3.2")),
-         "grand", FMT_MONEY, "= −4.6 / КМД"))
-    add(("expr", "6.2", "Точка безубыточности в штуках",
-         lambda r: 'IF(AND(ISNUMBER({t}),ISNUMBER({p})),{t}/{p},"")'
-                   .format(t=r("6.1"), p=r("1.4")),
-         "ref", FMT_QTY, "= 6.1 / 1.4"))
-    add(("expr", "6.3", "ТБУ в среднем за месяц, ₽",
-         lambda r: 'IF(ISNUMBER({t}),{t}/{m},{t})'.format(t=r("6.1"), m=r("10.1")),
-         "ref", FMT_MONEY, "= 6.1 / 10.1"))
-    add(("expr", "6.4", "ТБУ в среднем за день, ₽",
-         lambda r: 'IF(ISNUMBER({t}),{t}/{d},{t})'.format(t=r("6.1"), d=r("10.2")),
-         "ref", FMT_MONEY, "= 6.1 / 10.2"))
-    add(("expr", "6.5", "ЗАПАС ФИНАНСОВОЙ ПРОЧНОСТИ, ₽",
-         lambda r: 'IF(ISNUMBER({t}),{v}-{t},"")'.format(t=r("6.1"), v=r("1.2")),
-         "total", FMT_MONEY, "= 1.2 − 6.1"))
-    add(("expr", "6.6", "Запас финансовой прочности, % к чистой выручке",
-         lambda r: 'IF(AND(ISNUMBER({z}),{v}<>0),{z}/{v}*100,"")'
-                   .format(z=r("6.5"), v=r("1.2")),
-         "ratio", FMT_PCT, "= 6.5 / 1.2"))
-    add(("expr", "6.7", "Статус: выручка выше или ниже ТБУ",
-         lambda r: ('IF(NOT(ISNUMBER({k})),"",IF({k}<=0,"КМД ≤ 0",'
-                    'IF({v}>={t},"выше ТБУ","ниже ТБУ")))'
-                    .format(k=r("3.2"), v=r("1.2"), t=r("6.1"))),
-         "status", None, "факт 1.2 против 6.1"))
-    add(("expr", "6.8", "Разница с ТБУ из 5.2 — выручка на проценты по конв. займам, ₽",
-         lambda r: 'IF(AND(ISNUMBER({a}),ISNUMBER({b})),{a}-{b},"")'
-                   .format(a=r("5.2"), b=r("6.1")),
-         "ref", FMT_MONEY, "= 5.2 − 6.1"))
-    add(blank)
-
-    add(("band", "7", "СЦЕНАРИЙ: РОСТ ПОСТОЯННЫХ ЗАТРАТ (сумма — в ячейке D6)",
-         None, None, None, None))
-    add(("input", "7.1", "Прирост постоянных затрат, ₽", None,
-         "expense", FMT_MONEY, "= D6 × 10.1"))
-    add(("expr", "7.2", "НУЖНЫЙ ПРИРОСТ ЧИСТОЙ ВЫРУЧКИ БЕЗ НДС, ₽",
-         lambda r: 'IF(ISNUMBER({k}),IF({k}>0,{x}/{k}*100,"н/д"),"")'
-                   .format(k=r("3.2"), x=r("7.1")),
-         "key", FMT_MONEY, "= 7.1 / КМД"))
-    add(("expr", "7.3", "То же в продажах до СПП с НДС (как в отчёте WB), ₽",
-         lambda r: 'IF(AND(ISNUMBER({y}),{v}<>0),{y}*{g}/{v},"")'
-                   .format(y=r("7.2"), g=r("1.1"), v=r("1.2")),
-         "ref", FMT_MONEY, "= 7.2 × 1.1 / 1.2"))
-    add(("expr", "7.4", "Нужный прирост выручки, % к факту",
-         lambda r: 'IF(AND(ISNUMBER({y}),{v}<>0),{y}/{v}*100,"")'
-                   .format(y=r("7.2"), v=r("1.2")),
-         "ratio", FMT_PCT, "= 7.2 / 1.2"))
-    add(("expr", "7.5", "Нужный прирост продаж, шт",
-         lambda r: 'IF(AND(ISNUMBER({y}),ISNUMBER({p})),{y}/{p},"")'
-                   .format(y=r("7.2"), p=r("1.4")),
-         "ref", FMT_QTY, "= 7.2 / 1.4"))
-    add(("expr", "7.6", "Новая точка безубыточности, ₽",
-         lambda r: 'IF(AND(ISNUMBER({t}),ISNUMBER({y})),{t}+{y},"")'
-                   .format(t=r("5.2"), y=r("7.2")),
-         "total", FMT_MONEY, "= 5.2 + 7.2"))
-    add(blank)
-
-    add(("band", "8", "ЧУВСТВИТЕЛЬНОСТЬ: ТБУ ПРИ ИЗМЕНЕНИИ КМД", None, None, None, None))
-    for n, step in enumerate(BE_KMD_STEPS, 1):
-        add(("expr", "8.%d" % n,
-             "ТБУ при КМД %s%d п.п., ₽" % ("+" if step > 0 else "−", abs(step)),
-             lambda r, s=step: ('IF(ISNUMBER({k}),IF({k}+({s})>0,MAX(0,-{fc})/({k}+({s}))*100,'
-                                '"н/д"),"")'.format(k=r("3.2"), s=s, fc=r("4.4"))),
-             "ref", FMT_MONEY,
-             "= −4.4 / (КМД %s%d)" % ("+" if step > 0 else "−", abs(step))))
-    add(blank)
-
-    add(("band", "9", "СВЕРКА С P&L", None, None, None, None))
-    add(("calc", "9.1", "Прибыль по модели ТБУ (маржинальный доход − постоянные)",
-         [("3.1", 1), ("4.4", 1)], "total", FMT_MONEY, "= 3.1 + 4.4"))
-    add(("link", "9.2", "Прочие доходы и расходы — в модель ТБУ не входят",
-         "5", "ref", FMT_MONEY, "P&L разд. 5"))
-    add(("link", "9.3", "Прибыль до налогообложения по P&L (EBT)",
-         "EBT", "total", FMT_MONEY, "P&L EBT"))
-    add(("expr", "9.4", "Контроль: 9.1 + 9.2 − 9.3, должно быть 0",
-         lambda r: 'ROUND({a}+{b}-{c},0)'.format(a=r("9.1"), b=r("9.2"), c=r("9.3")),
-         "check", FMT_MONEY, "= 9.1 + 9.2 − 9.3"))
-    add(blank)
-
-    add(("band", "10", "СЛУЖЕБНЫЕ СТРОКИ", None, None, None, None))
-    add(("count", "10.1", "Месяцев в колонке", "months", "ref", FMT_QTY, "календарь"))
-    add(("count", "10.2", "Календарных дней в колонке (по дату отчёта)", "days",
-         "ref", FMT_QTY, "календарь"))
-    return L
-
-
-def build_breakeven(ws, pl_rowmap, months, report_date, as_of=None,
-                    conv_by_month=None):
-    """
-    pl_rowmap     — {код строки P&L: номер строки на листе P&L}.
-    conv_by_month — {me: проценты по конвертируемым займам}, знак как в P&L.
-    Колонки листа совпадают с колонками P&L, поэтому ссылки идут в ту же букву.
-    """
-    as_of = as_of or report_date
-    cols = make_columns(months)
-    ncols = COL_FIRST + len(cols) - 1
-
-    sheet_setup(ws)
-    title_band(
-        ws,
-        "ТОЧКА БЕЗУБЫТОЧНОСТИ (ТБУ)",
-        "Модель «затраты — объём — прибыль» на данных P&L · "
-        "ТБУ = постоянные затраты / коэффициент маржинального дохода (КМД)",
-        ncols,
-        extra="Российский рубль (RUB) · выручка без НДС · дата отчёта: %s · "
-              "период: %s — %s"
-              % (as_of.strftime("%d.%m.%Y"),
-                 month_label(months[0]), month_label(months[-1])),
-    )
-
-    # ---- ячейка ввода сценария
-    ri = BE_INPUT_ROW
-    ws.merge_cells(start_row=ri, start_column=COL_CODE, end_row=ri, end_column=COL_LABEL)
-    write(ws, ri, COL_CODE,
-          "СЦЕНАРИЙ · прирост постоянных затрат в месяц, ₽  →",
-          font=Font(name=FONT, size=10, bold=True, color=NAVY_3),
-          fillc=SURFACE_4, align="left", indent=1)
-    ws.cell(row=ri, column=COL_LABEL).fill = fill(SURFACE_4)
-    box = Border(left=_side(WARN), right=_side(WARN),
-                 top=_side(WARN), bottom=_side(WARN))
-    write(ws, ri, COL_NOTE, BE_DELTA_DEFAULT,
-          font=Font(name=FONT, size=11, bold=True, color=TEXT),
-          fmt=FMT_MONEY, fillc=WARN_BG, border=box, align="center")
-    ws.row_dimensions[ri].height = 22
-
-    ws.merge_cells(start_row=ri + 1, start_column=COL_CODE,
-                   end_row=ri + 1, end_column=COL_NOTE)
-    c = write(ws, ri + 1, COL_CODE,
-              "Жёлтую ячейку можно менять — раздел 7 пересчитается. "
-              "Методика и пример — лист «%s» →" % BE_NOTES_SHEET_NAME,
-              font=Font(name=FONT, size=8, italic=True, color=NAVY_3),
-              align="left", indent=1)
-    c.hyperlink = "#'%s'!A1" % BE_NOTES_SHEET_NAME
-    ws.row_dimensions[ri + 1].height = 14
-
-    hdr_year, hdr = ri + 2, ri + 3
-    columns_header(ws, cols, hdr_year, hdr, report_date.year,
-                   note_header="ИСТОЧНИК / ФОРМУЛА")
-
-    plan = be_layout()
-    rowmap, r = {}, hdr + 1
-    for kind, code, *_ in plan:
-        if code and kind != "band":
-            rowmap.setdefault(code, r)
-        r += 1
-
-    f_band = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_code = Font(name=FONT, size=8, color=MUTED)
-    f_src = Font(name=FONT, size=8, color=MUTED)
-    f_label = Font(name=FONT, size=10, color=TEXT)
-    f_label_b = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_label_key = Font(name=FONT, size=10, bold=True, color=NAVY_3)
-    f_label_small = Font(name=FONT, size=9, color=TEXT_2)
-
-    # role -> (шрифт цифр, шрифт подписи, заливка, граница)
-    STYLES = {
-        "ref": (Font(name=FONT, size=10, color=INCOME), f_label, None, B_BOTTOM),
-        "expense": (Font(name=FONT, size=10, color=EXPENSE), f_label, None, B_BOTTOM),
-        "total": (Font(name=FONT, size=10, bold=True, color=TEXT), f_label_b,
-                  TOTAL_ROW, B_TOTAL),
-        "total_expense": (Font(name=FONT, size=10, bold=True, color=EXPENSE),
-                          f_label_b, TOTAL_ROW, B_TOTAL),
-        "grand": (Font(name=FONT, size=11, bold=True, color=TEXT), f_label_b,
-                  TOTAL_ROW, B_GRAND),
-        "key": (Font(name=FONT, size=10, bold=True, color=NAVY_3), f_label_key,
-                SURFACE_4, B_TOTAL),
-        "ratio": (Font(name=FONT, size=9, color=TEXT_2), f_label_small, None, B_BOTTOM),
-        "status": (Font(name=FONT, size=9, bold=True, color=TEXT_2), f_label_small,
-                   None, B_BOTTOM),
-        "check": (Font(name=FONT, size=9, color=MUTED), f_label_small, None, B_BOTTOM),
-    }
-
-    def days_in(m):
-        first = date(m.year, m.month, 1)
-        end = min(m, as_of) if as_of >= first else m
-        return (end - first).days + 1
-
-    r = hdr + 1
-    for kind, code, label, spec, role, fmt, source in plan:
-        if kind == "blank":
-            ws.row_dimensions[r].height = 6
-            r += 1
-            continue
-
-        if kind == "band":
-            ws.merge_cells(start_row=r, start_column=COL_CODE,
-                           end_row=r, end_column=COL_NOTE)
-            write(ws, r, COL_CODE, "%s. %s" % (code, label), font=f_band,
-                  align="left", indent=1, border=B_SECTION)
-            for cc in range(COL_CODE, ncols + 1):
-                ws.cell(row=r, column=cc).border = B_SECTION
-            ws.row_dimensions[r].height = 18
-            r += 1
-            continue
-
-        f_num, f_lbl, bg, bd = STYLES[role]
-        strong = role in ("total", "total_expense", "grand", "key")
-
-        write(ws, r, COL_CODE, code, font=f_code, fillc=bg, border=bd,
-              align="left", indent=1)
-        write(ws, r, COL_LABEL, label, font=f_lbl, fillc=bg, border=bd,
-              align="left", indent=1 if strong else 2)
-        c = write(ws, r, COL_NOTE, source, font=f_src, fillc=bg, border=bd,
-                  align="left", indent=1)
-        c.data_type = "s"      # подсказка «= …» — текст, не формула
-
-        for i in range(len(cols)):
-            cl = L(i)
-
-            def ref(key, cl=cl):
-                return "%s%d" % (cl, rowmap[key])
-
-            v = None
-            if kind == "link":
-                pr = pl_rowmap.get(spec)
-                v = "='%s'!%s%d" % (PL_SHEET_NAME, cl, pr) if pr else 0
-            elif kind == "calc":
-                v = "=" + "".join("%s%s" % ("+" if s > 0 else "-", ref(k))
-                                  for k, s in spec).lstrip("+")
-            elif kind == "ratio":
-                num, den, mult = spec
-                sign = "-" if mult < 0 else ""
-                tail = "" if abs(mult) == 1 else "*%d" % abs(mult)
-                v = '=IF(%s=0,"",%s%s/%s%s)' % (ref(den), sign, ref(num),
-                                                ref(den), tail)
-            elif kind == "expr":
-                v = "=" + spec(ref)
-            elif kind == "data":
-                src = conv_by_month or {}
-                v = period_formula(cols, i, rowmap[code], lambda m: src.get(m))
-            elif kind == "count":
-                v = period_formula(
-                    cols, i, rowmap[code],
-                    (lambda m: 1) if spec == "months" else days_in)
-            elif kind == "input":
-                v = period_formula(cols, i, rowmap[code],
-                                   lambda m: "=%s" % BE_INPUT_CELL)
-
-            fillv = bg
-            if cols[i][0] != "month" and not strong:
-                fillv = SURFACE_3
-            write(ws, r, COL_FIRST + i, v, font=f_num, fmt=fmt, fillc=fillv,
-                  border=bd, align="center" if role == "status" else "right")
-
-        ws.row_dimensions[r].height = 19 if strong else 17
-        r += 1
-    last_row = r - 1
-
-    # ---- сноска к КМД
-    fr = last_row + 2
-    ws.merge_cells(start_row=fr, start_column=COL_CODE, end_row=fr, end_column=COL_NOTE)
-    c = write(ws, fr, COL_CODE, BE_KMD_FOOTNOTE,
-              font=Font(name=FONT, size=9, color=TEXT_2), fillc=SURFACE_5,
-              border=Border(top=_side(NAVY)))
-    c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, indent=1)
-    ws.row_dimensions[fr].height = 64
-
-    # ---- условное форматирование
-    first_col, last_col = L(0), L(len(cols) - 1)
-
-    def rng(code):
-        return "%s%d:%s%d" % (first_col, rowmap[code], last_col, rowmap[code])
-
-    bad_font = Font(name=FONT, bold=True, color=EXPENSE)
-    good_font = Font(name=FONT, bold=True, color=FREE)
-    for code in ("5.6", "5.7", "6.5", "6.6"):
-        ws.conditional_formatting.add(
-            rng(code), CellIsRule(operator="lessThan", formula=["0"], font=bad_font))
-    for code in ("5.8", "6.7"):
-        ws.conditional_formatting.add(
-            rng(code), CellIsRule(operator="equal", formula=['"выше ТБУ"'],
-                                  font=good_font, fill=fill(FREE_BG)))
-        for txt in ("ниже ТБУ", "КМД ≤ 0"):
-            ws.conditional_formatting.add(
-                rng(code), CellIsRule(operator="equal", formula=['"%s"' % txt],
-                                      font=bad_font, fill=fill(OCCUPIED_BG)))
-    ws.conditional_formatting.add(
-        rng("9.4"), CellIsRule(operator="notEqual", formula=["0"],
-                               font=Font(name=FONT, bold=True, color=WARN),
-                               fill=fill(WARN_BG)))
-
-    ws.column_dimensions["A"].width = 3
-    ws.column_dimensions["B"].width = 7
-    ws.column_dimensions["C"].width = 64
-    ws.column_dimensions["D"].width = 22
-    apply_zebra(ws, hdr + 1, last_row, COL_CODE, ncols)
-    apply_column_dividers(ws, hdr, last_row, COL_CODE, ncols)
-    columns_layout(ws, cols, report_date.year)
-    ws.freeze_panes = ws.cell(row=hdr + 1, column=COL_FIRST)
-    ws.print_title_rows = "1:%d" % hdr
-    return last_row
-
-
-NOTES_BE = [
-    ("Что такое точка безубыточности", [
-        "Точка безубыточности (ТБУ) — выручка, при которой компания работает в ноль: "
-        "маржинальный доход от продаж ровно покрывает постоянные затраты, прибыль "
-        "до налога равна нулю. Каждый рубль выручки сверх ТБУ приносит прибыль, "
-        "каждый рубль ниже — убыток.",
-        "Лист отвечает на три вопроса: сколько нужно продавать, чтобы не терять деньги; "
-        "насколько фактические продажи выше этого уровня (запас прочности); на сколько "
-        "должна вырасти выручка, если вырастут затраты.",
-    ]),
-    ("Главная формула", [
-        "ТБУ, ₽ = Постоянные затраты / КМД.",
-        "КМД (коэффициент маржинального дохода) = Маржинальный доход / Чистая выручка — "
-        "сколько копеек с каждого рубля выручки остаётся после переменных затрат.",
-        "Маржинальный доход = Чистая выручка без НДС − Переменные затраты.",
-        "Чистая выручка — строка 1.4 P&L «Продажи без НДС». Та же база, что и для всех "
-        "процентов рентабельности в пакете, поэтому КМД напрямую сопоставим с "
-        "показателями P&L и юнит-экономики.",
-        "Все цифры листа — формулы со ссылками на ячейки P&L: любую можно проверить, "
-        "кликнув на ячейку. Колонка «Источник / формула» подсказывает, откуда взята "
-        "строка или как она посчитана.",
-    ]),
-    ("Переменные затраты (раздел 2 листа)", [
-        "Переменные — затраты, которые растут пропорционально продажам: нет продажи — "
-        "нет затраты.",
-        "2.1 Себестоимость проданного товара (P&L 1.6) — FIFO.",
-        "2.2 Комиссия WB (P&L 1.9) — процент от каждой продажи.",
-        "2.3 Расходы на реализацию WB (P&L раздел 3) — логистика, хранение, приёмка, "
-        "штрафы. Хранение формально зависит от остатков, а не от продаж, но на "
-        "маркетплейсе остатки планируются под объём продаж, поэтому статья отнесена "
-        "к переменным.",
-        "2.4 Продвижение WB (P&L раздел 4) — отнесено к переменным, потому что бюджет "
-        "рекламы на площадке управляется как доля от выручки (ДРР) и без него продажи "
-        "не удерживаются. Если рекламный бюджет фиксирован независимо от продаж, "
-        "его прирост удобнее считать через сценарий раздела 7 как рост постоянных затрат.",
-        "Итог 3.1 «Маржинальный доход» совпадает со строкой P&L GP2 «Валовая прибыль "
-        "после продвижения WB».",
-    ]),
-    ("Постоянные затраты (раздел 4 листа)", [
-        "Постоянные — затраты, которые не зависят от объёма продаж в пределах месяца: "
-        "их нужно оплатить, даже если продаж не было.",
-        "4.1 Накладные расходы (P&L раздел 6): персонал, аренда, сервисы, банковские "
-        "комиссии, закупочные услуги.",
-        "4.2 Корпоративные расходы (P&L раздел 7): офис, консалтинг, профессиональные "
-        "услуги.",
-        "4.3 Финансовые расходы (P&L раздел 8): проценты и комиссии по кредитам и займам.",
-        "Не входят в расчёт: раздел 5 P&L «Прочие доходы и расходы» — разовые и "
-        "неторговые статьи (корректировки продаж, курсовые разницы, досрочное снятие "
-        "средств). Их нельзя планировать как регулярную нагрузку, а включение сделало "
-        "бы ТБУ случайной величиной. Их фактическое влияние показано в сверке "
-        "(раздел 9 листа).",
-        "Налог на прибыль тоже не входит: в точке безубыточности прибыли нет, "
-        "значит нет и налога.",
-    ]),
-    ("Уровни точки безубыточности", [
-        "5.1 ТБУ по EBITDA = (накладные + корпоративные) / КМД. Выручка, при которой "
-        "бизнес покрывает операционные затраты и выходит в ноль по EBITDA, без учёта "
-        "долговой нагрузки.",
-        "5.2 ТОЧКА БЕЗУБЫТОЧНОСТИ = (накладные + корпоративные + финансовые) / КМД. "
-        "Основной показатель: выручка, при которой прибыль до налога равна нулю. "
-        "Разница между 5.2 и 5.1 — сколько выручки нужно, чтобы обслуживать кредиты "
-        "и займы.",
-        "5.3 ТБУ в штуках = ТБУ, ₽ / средняя цена продажи без НДС (1.4).",
-        "5.4 и 5.5 — та же ТБУ в среднем за месяц и за день. В месячной колонке 5.4 "
-        "совпадает с 5.2; в годовой показывает среднемесячную планку. Дневная ТБУ — "
-        "удобный ориентир для ежедневного контроля продаж по дашборду.",
-    ]),
-    ("ТБУ без процентов по конвертируемым займам (раздел 6 листа)", [
-        "4.5 — проценты по договорам конвертируемого займа (тип договора %d в "
-        "справочнике договоров): та часть финансовых расходов раздела 8 P&L, которая "
-        "начислена по таким договорам. Допсоглашения учитываются по типу основного "
-        "договора. Источник — витрина pl_for_csv, запрос sql/conv_loans.txt." % CONV_LOAN_TITLE_ID,
-        "4.6 = 4.4 − 4.5 — постоянные затраты без этих процентов.",
-        "Раздел 6 повторяет все показатели раздела 5, но от постоянных затрат 4.6: "
-        "ТБУ в рублях, в штуках, в среднем за месяц и за день, запас финансовой "
-        "прочности в рублях и процентах, статус. Считается по тем же формулам и с тем "
-        "же КМД — отличаются только постоянные затраты.",
-        "Зачем: проценты по конвертируемым займам, как правило, не выплачиваются "
-        "деньгами, а при конвертации займа в долю перестают быть обязательством "
-        "компании. Раздел 6 показывает, какая выручка нужна без этой нагрузки.",
-        "6.8 = 5.2 − 6.1 — сколько выручки в месяц «съедают» проценты по "
-        "конвертируемым займам.",
-        "ТБУ по EBITDA (5.1) отдельно не повторяется: финансовые расходы в неё не "
-        "входят, поэтому без процентов по конвертируемым займам она та же.",
-    ]),
-    ("Запас финансовой прочности и статус", [
-        "5.6 Запас финансовой прочности, ₽ = Фактическая чистая выручка − ТБУ. "
-        "На сколько могут упасть продажи, прежде чем компания уйдёт в убыток.",
-        "5.7 Запас, % = 5.6 / выручка. Ориентиры: выше 20 % — комфортно; 10–20 % — "
-        "умеренно; ниже 10 % — любое колебание спроса или рост ставок WB уводит в "
-        "убыток; отрицательный — месяц ниже точки безубыточности.",
-        "5.8 Статус: «выше ТБУ» (зелёный) или «ниже ТБУ» (красный). «КМД ≤ 0» — "
-        "переменные затраты съели всю выручку: каждая продажа убыточна, и увеличение "
-        "объёма проблему не решит, ТБУ в этом случае не существует (в ячейках — «н/д»).",
-    ]),
-    ("Как считается по месяцам", [
-        "В колонке месяца все показатели считаются только по данным этого месяца: "
-        "ТБУ месяца = постоянные затраты месяца / КМД месяца.",
-        "Помесячная ТБУ колеблется сильнее годовой, и это нормально. Причины: "
-        "расходы WB в P&L учтены кассовым методом — в месяце удержания, а не продажи "
-        "(см. «Пояснения P&L»); отдельные постоянные расходы приходятся на один месяц "
-        "(годовые подписки, консалтинг, разовые платежи); себестоимость последних "
-        "месяцев уточняется по мере поступления возвратов.",
-        "Поэтому для решений опирайтесь на годовую колонку или на несколько месяцев "
-        "подряд, а отдельный месяц используйте как сигнал: запас прочности меньше "
-        "10 % или статус «ниже ТБУ» — повод разобраться в причинах.",
-        "Текущий месяц, если отчёт сформирован не на последний день, неполный: дней "
-        "в нём считается по дату отчёта (строка 10.2), и дневная ТБУ корректна, а "
-        "месячные суммы ещё будут расти.",
-    ]),
-    ("Как считается за год и за весь период", [
-        "Годовая ТБУ = постоянные затраты за год / КМД за год, где КМД за год = "
-        "маржинальный доход за год / выручка за год. Колонка «Итого за период» "
-        "считается так же — по суммам всего периода.",
-        "Годовая ТБУ НЕ равна сумме помесячных. В месяцы с низким КМД помесячная ТБУ "
-        "резко растёт, и простое сложение переоценивало бы годовую планку. Расчёт от "
-        "годовых сумм взвешивает каждый месяц по его фактической выручке — это "
-        "корректный метод.",
-        "Для текущего (незавершённого) года в годовой колонке — данные с января по "
-        "отчётный месяц включительно. Строка 5.4 «ТБУ в среднем за месяц» даёт "
-        "сопоставимую с месяцами планку: годовая ТБУ / число месяцев (строка 10.1).",
-    ]),
-    ("Сценарий: что будет, если затраты вырастут на 100 000 ₽", [
-        "Нужный прирост выручки = Прирост постоянных затрат / КМД. Чем ниже КМД, тем "
-        "больше выручки нужно, чтобы «отбить» каждый новый рубль затрат. Строка 3.3 "
-        "показывает этот множитель: сколько рублей выручки нужно на 1 ₽ постоянных затрат.",
-        "Сумма прироста задаётся в жёлтой ячейке D6 (по умолчанию 100 000 ₽ в месяц). "
-        "Её можно поменять — весь раздел 7 пересчитается. В годовой колонке прирост "
-        "умножается на число месяцев: 100 000 ₽ в месяц за 9 месяцев = 900 000 ₽.",
-        "7.2 — сколько дополнительной чистой выручки (без НДС) нужно, чтобы прибыль "
-        "осталась прежней. 7.3 — то же в продажах до СПП с НДС, в тех цифрах, которые "
-        "видны в отчётах WB. 7.4 — на сколько процентов должна вырасти выручка. "
-        "7.5 — сколько дополнительных единиц нужно продать. 7.6 — новая ТБУ.",
-        "Сценарий применим к любому росту затрат фиксированной суммой: новый сотрудник, "
-        "рост аренды, новый сервис, проценты по новому кредиту, фиксированный "
-        "рекламный бюджет. Если растут затраты, которые идут процентом от продаж "
-        "(комиссия WB, логистика), меняется КМД — для этого раздел 8.",
-    ]),
-    ("Чувствительность к КМД (раздел 8)", [
-        "Показывает, как сдвинется ТБУ, если КМД изменится на 1–2 процентных пункта "
-        "при тех же постоянных затратах: ТБУ = постоянные затраты / (КМД ± Δ).",
-        "Типичные причины падения КМД: рост комиссии или тарифов логистики WB, "
-        "увеличение ДРР, рост закупочных цен, более глубокие скидки. Рост КМД — "
-        "повышение цен, снижение себестоимости, смещение продаж в более маржинальный "
-        "ассортимент.",
-        "Раздел наглядно показывает, что на ТБУ сильнее всего влияет именно маржа: "
-        "потеря 1 п.п. КМД часто обходится дороже, чем рост постоянных затрат на "
-        "заметную сумму.",
-    ]),
-    ("Сверка с P&L (раздел 9)", [
-        "Прибыль по модели ТБУ = маржинальный доход − постоянные затраты.",
-        "Прибыль по модели + прочие доходы и расходы (P&L раздел 5) = прибыль до "
-        "налогообложения по P&L (EBT). Строка 9.4 проверяет это равенство и должна "
-        "быть равна нулю во всех колонках; ненулевое значение подсвечивается.",
-        "Если раздел 5 в каком-то месяце крупный, фактическая прибыль P&L отличается "
-        "от модельной — это эффект разовых статей, а не ошибка расчёта ТБУ.",
-    ]),
-    ("Пример расчёта", [
-        "Чистая выручка без НДС — 10 000 000 ₽, переменные затраты (себестоимость, "
-        "комиссия, логистика, реклама) — 7 000 000 ₽.",
-        "Маржинальный доход = 10 000 000 − 7 000 000 = 3 000 000 ₽; "
-        "КМД = 3 000 000 / 10 000 000 = 30 %.",
-        "Постоянные затраты — 2 400 000 ₽. ТБУ = 2 400 000 / 0,30 = 8 000 000 ₽. "
-        "На 1 ₽ постоянных затрат нужно 1 / 0,30 = 3,33 ₽ выручки.",
-        "Запас прочности = 10 000 000 − 8 000 000 = 2 000 000 ₽, или 20 % выручки: "
-        "продажи могут упасть на 20 %, прежде чем появится убыток.",
-        "Постоянные затраты выросли на 100 000 ₽ в месяц → выручка должна вырасти на "
-        "100 000 / 0,30 = 333 333 ₽ (+3,3 %). При средней цене 1 000 ₽ без НДС это "
-        "334 дополнительные единицы. Новая ТБУ — 8 333 333 ₽.",
-        "КМД снизился на 1 п.п. (с 30 % до 29 %) → ТБУ = 2 400 000 / 0,29 = "
-        "8 275 862 ₽, то есть +275 862 ₽ — почти столько же, сколько рост "
-        "постоянных затрат на 100 000 ₽.",
-    ]),
-    ("Допущения и ограничения", [
-        "Структура продаж считается неизменной: КМД — средний по всему ассортименту. "
-        "Если сместить продажи в товары с другой маржой, КМД и ТБУ изменятся.",
-        "Переменные затраты считаются строго пропорциональными выручке, постоянные — "
-        "неизменными при росте объёма. На больших скачках объёма это не так: "
-        "понадобятся склад, люди, оборотные деньги.",
-        "ТБУ — показатель прибыли, а не денег. Выход в ноль по P&L не означает "
-        "положительный денежный поток: закупка товара, выплаты по телу кредитов и "
-        "задержки выплат WB видны только в Cash Flow.",
-        "Данные последних месяцев предварительные (возвраты, пересчёт FIFO, поступление "
-        "УПД) — см. «Пояснения P&L». Вместе с ними может сдвинуться и ТБУ.",
-    ]),
-    ("Как читать колонки", [
-        "Колонки те же, что в P&L: месяц — значения за календарный месяц; завершённые "
-        "годы свёрнуты (развернуть — кнопкой «+» над таблицей), текущий раскрыт.",
-        "В колонках «Итого <год>» и «Итого за период» суммы складываются, а КМД, ТБУ, "
-        "запас прочности и сценарии пересчитываются по формуле от сумм периода.",
-    ]),
-]
-
-
-# =============================================================================
-#  07F. ЛИСТ «ВЫВОДЫ» — резюме отчётного месяца для собственника
-#
-#      Тексты собираются по тем же данным и правилам, что листы P&L и
-#      «Точка безубыточности», поэтому цифры в выводах совпадают с листами.
-# =============================================================================
-
-SUMMARY_SHEET_NAME = "Выводы"
-
-MONTHS_NOM = ("январь", "февраль", "март", "апрель", "май", "июнь", "июль",
-              "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
-MONTHS_PREP = ("январе", "феврале", "марте", "апреле", "мае", "июне", "июле",
-               "августе", "сентябре", "октябре", "ноябре", "декабре")
-
-SUM_LOOKBACK = 3          # база сравнения: среднее за N предыдущих месяцев
-SUM_PP_THRESHOLD = 1.0    # заметный сдвиг доли затрат в выручке, п.п.
-SUM_ITEM_MIN = 300_000    # порог отклонения статьи, ₽
-SUM_ITEM_REL = 0.30       # порог отклонения статьи, доля от среднего
-SUM_ITEMS_TOP = 4
-SUM_WIDTH_CHARS = 105     # символов в строке абзаца (для высоты строк)
-
-FMT_MLN = '#,##0.0,,;(#,##0.0,,);"–"'
-NB = " "
-
-
-def _num(x, d=0):
-    return "{:,.{d}f}".format(abs(x), d=d).replace(",", NB).replace(".", ",")
-
-
-def _rub(x):
-    if x is None:
-        return "—"
-    a, sign = abs(x), ("−" if x < 0 else "")
-    if a >= 1e6:
-        return "%s%s%sмлн%s₽" % (sign, _num(a / 1e6, 1), NB, NB)
-    if a >= 1e3:
-        return "%s%s%sтыс.%s₽" % (sign, _num(a / 1e3, 0), NB, NB)
-    return "%s%s%s₽" % (sign, _num(a, 0), NB)
-
-
-def _pct(x, d=1):
-    return "—" if x is None else "%s%s%s%%" % ("−" if x < 0 else "", _num(x, d), NB)
-
-
-def _chg(x, unit="%", d=1):
-    return "—" if x is None else "%s%s%s%s" % ("+" if x >= 0 else "−", _num(x, d), NB, unit)
-
-
-def _res(x):
-    """Результат словами: «прибыль 1,2 млн ₽» / «убыток 1,2 млн ₽»."""
-    return "—" if x is None else ("прибыль " if x >= 0 else "убыток ") + _rub(abs(x))
-
-
-def _rel(a, b):
-    return (a / b - 1) * 100 if b else None
-
-
-def _derive(b, n=1):
-    """Показатели периода по базовым суммам; n — делитель для среднего."""
-    d = {k: v / n for k, v in b.items()}
-    rev = d["rev"]
-    d["var"] = d["cogs"] + d["comm"] + d["sell"] + d["promo"]
-    d["md"] = rev + d["var"]
-    d["kmd"] = d["md"] / rev * 100 if rev else None
-    d["fc"] = d["ovh"] + d["corp"] + d["fin"]
-    d["ebt_model"] = d["md"] + d["fc"]
-    d["ebt"] = d["ebt_model"] + d["other"]
-    d["net"] = d["ebt"] + d["tax"]
-    if d["kmd"] is not None and d["kmd"] > 0:
-        d["tbu"] = max(0.0, -d["fc"]) / d["kmd"] * 100
-        d["zfp"] = rev - d["tbu"]
-        d["zfp_pct"] = d["zfp"] / rev * 100
-    else:
-        d["tbu"] = d["zfp"] = d["zfp_pct"] = None
-    conv = d.get("conv", 0.0)
-    if d["tbu"] is not None:
-        d["tbu_ex"] = max(0.0, -(d["fc"] - conv)) / d["kmd"] * 100
-        d["zfp_ex"] = rev - d["tbu_ex"]
-        d["zfp_ex_pct"] = d["zfp_ex"] / rev * 100
-    else:
-        d["tbu_ex"] = d["zfp_ex"] = d["zfp_ex_pct"] = None
-    for k in ("cogs", "comm", "sell", "promo"):
-        d[k + "_pct"] = -d[k] / rev * 100 if rev else None
-    return d
-
-
-def _base(pl_data, tax_by_month, me):
-    def g(sec, itm):
-        return pl_data.get((me, sec, itm)) or 0.0
-    return {
-        "rev": g(SEC_REVENUE, "1.4 Продажи без НДС"),
-        "qty": g(SEC_UNIT, "2.1 Продажи, шт."),
-        "cogs": -g(SEC_REVENUE, "1.6. Себестоимость"),
-        "comm": g(SEC_REVENUE, "1.9. Комиссия WB"),
-        "sell": section_sum(pl_data, me, SEC_SELLING),
-        "promo": section_sum(pl_data, me, SEC_PROMO),
-        "other": section_sum(pl_data, me, SEC_OTHER),
-        "ovh": section_sum(pl_data, me, SEC_OVERHEAD),
-        "corp": section_sum(pl_data, me, SEC_CORP),
-        "fin": section_sum(pl_data, me, SEC_FIN),
-        "tax": tax_by_month.get(me, 0.0),
-    }
-
-
-def month_summary(pl_data, tax_by_month, months, as_of, conv_by_month=None):
-    """Цифры и тексты выводов за последний месяц отчёта."""
-    me = months[-1]
-    i = len(months) - 1
-    first = date(me.year, me.month, 1)
-    elapsed = (min(me, as_of) - first).days + 1
-    total = me.day
-    partial = elapsed < total
-
-    def agg(ms):
-        out = defaultdict(float)
-        for m in ms:
-            for k, v in _base(pl_data, tax_by_month, m).items():
-                out[k] += v
-            out["conv"] += (conv_by_month or {}).get(m, 0.0)
-        return dict(out)
-
-    cur = _derive(agg([me]))
-    pm = months[i - 1] if i >= 1 else None
-    prev = _derive(agg([pm])) if pm else None
-    base_ms = months[max(0, i - SUM_LOOKBACK):i]
-    avg = _derive(agg(base_ms), len(base_ms)) if base_ms else None
-    lym = last_day(date(me.year - 1, me.month, 1))
-    ly = _derive(agg([lym])) if lym in months else None
-    if ly and not ly["rev"]:
-        ly = None
-    ytd_ms = [m for m in months if m.year == me.year]
-    ytd = _derive(agg(ytd_ms))
-    per_month = [(m, _derive(agg([m]))) for m in ytd_ms]
-
-    M = MONTHS_NOM[me.month - 1]
-    Mp = MONTHS_PREP[me.month - 1]
-    mtitle = "%s %d" % (M, me.year)
-    days_txt = " за %d из %d дней" % (elapsed, total) if partial else ""
-    k = cur["kmd"]
-    rev = cur["rev"]
-
-    # ---- главное
-    if not rev:
-        tone = "warn"
-        head = "В %s нет продаж — точку безубыточности посчитать нельзя." % Mp
-    elif k is None or k <= 0:
-        tone = "bad"
-        head = ("В %s продажи убыточны уже на уровне маржи: переменные затраты "
-                "(себестоимость, комиссия, логистика, реклама) больше выручки. "
-                "Точки безубыточности нет — рост продаж при такой марже только "
-                "увеличит убыток. Результат до налога — %s." % (Mp, _res(cur["ebt"])))
-    elif cur["zfp"] < 0:
-        tone = "bad"
-        head = ("%s — ниже точки безубыточности. Чистая выручка%s — %s, а чтобы "
-                "выйти в ноль, нужно %s: не хватило %s (%s выручки). Результат до "
-                "налога — %s."
-                % (mtitle.capitalize(), days_txt, _rub(rev), _rub(cur["tbu"]),
-                   _rub(-cur["zfp"]), _pct(-cur["zfp_pct"]), _res(cur["ebt"])))
-    elif cur["zfp_pct"] < 10:
-        tone = "warn"
-        head = ("%s — в плюсе, но запас минимальный: выручка%s %s выше точки "
-                "безубыточности (%s) всего на %s (%s). Небольшое падение продаж "
-                "или рост тарифов WB уведёт месяц в убыток. Результат до налога — %s."
-                % (mtitle.capitalize(), days_txt, _rub(rev), _rub(cur["tbu"]),
-                   _rub(cur["zfp"]), _pct(cur["zfp_pct"]), _res(cur["ebt"])))
-    else:
-        tone = "good"
-        mood = "уверенно в плюсе" if cur["zfp_pct"] >= 20 else "в плюсе с умеренным запасом"
-        head = ("%s — %s: выручка%s %s, это на %s (%s) выше точки "
-                "безубыточности %s. Результат до налога — %s."
-                % (mtitle.capitalize(), mood, days_txt, _rub(rev), _rub(cur["zfp"]),
-                   _pct(cur["zfp_pct"]), _rub(cur["tbu"]), _res(cur["ebt"])))
-    if partial:
-        head += " Месяц ещё не закрыт — итог уточнится."
-
-    blocks = []
-
-    # ---- продажи и маржа
-    p = []
-    s = "Чистая выручка без НДС — %s" % _rub(rev)
-    if cur["qty"]:
-        s += ", продано %s шт. по средней цене %s%s₽ без НДС" % (
-            _num(cur["qty"]), _num(rev / cur["qty"]), NB)
-    p.append(s + ".")
-
-    def cmp(other, m_other, where):
-        if not other or not other["rev"]:
-            return None
-        if partial:
-            a, b = rev / elapsed, other["rev"] / m_other.day
-            return ("Среднедневная выручка — %s против %s %s (%s)."
-                    % (_rub(a), _rub(b), where, _chg(_rel(a, b))))
-        return ("Выручка — %s против %s %s (%s)."
-                % (_rub(rev), _rub(other["rev"]), where, _chg(_rel(rev, other["rev"]))))
-
-    for line in (cmp(prev, pm, "в %s %d" % (MONTHS_PREP[pm.month - 1], pm.year) if pm else ""),
-                 cmp(ly, lym, "в %s %d" % (Mp, lym.year))):
-        if line:
-            p.append(line)
-    if k is not None and rev:
-        s = ("КМД — %s: с каждого рубля выручки после себестоимости, комиссии, "
-             "логистики и рекламы остаётся %s коп." % (_pct(k), _num(k)))
-        if avg and avg["kmd"] is not None:
-            s += " В среднем за %d предыдущих месяца — %s (%s)." % (
-                len(base_ms), _pct(avg["kmd"]), _chg(k - avg["kmd"], "п.п."))
-        p.append(s)
-    shifts = []
-    if avg and rev:
-        for key, name in (("cogs", "Себестоимость"), ("comm", "Комиссия WB"),
-                          ("sell", "Логистика, хранение и приёмка WB"),
-                          ("promo", "Реклама и продвижение WB")):
-            a, b = cur[key + "_pct"], avg[key + "_pct"]
-            if a is not None and b is not None and abs(a - b) >= SUM_PP_THRESHOLD:
-                shifts.append((key, a - b))
-                p.append("•  %s — %s выручки (%s к среднему за %d мес.)."
-                         % (name, _pct(a), _chg(a - b, "п.п."), len(base_ms)))
-        if not shifts:
-            p.append("Доли переменных затрат стабильны: ни одна не сдвинулась больше "
-                     "чем на %s п.п. к среднему за %d мес." % (_num(SUM_PP_THRESHOLD), len(base_ms)))
-    blocks.append(("Продажи и маржа", p))
-
-    # ---- постоянные затраты
-    p = ["Постоянные затраты — %s: накладные %s, корпоративные %s, финансовые %s."
-         % (_rub(-cur["fc"]), _rub(-cur["ovh"]), _rub(-cur["corp"]), _rub(-cur["fin"]))]
-    if avg and avg["fc"]:
-        p.append("В среднем за %d предыдущих месяца — %s в месяц (%s)."
-                 % (len(base_ms), _rub(-avg["fc"]), _chg(_rel(cur["fc"], avg["fc"]))))
-    spikes = []
-    if base_ms:
-        names = {"6": "накладные", "7": "корпоративные", "8": "финансовые", "5": "прочие"}
-        for code, sec in (("6", SEC_OVERHEAD), ("7", SEC_CORP), ("8", SEC_FIN), ("5", SEC_OTHER)):
-            items = {it for (m, s_, it) in pl_data
-                     if s_ == sec and (m == me or m in base_ms)}
-            for it in items:
-                c = pl_data.get((me, sec, it)) or 0.0
-                b = sum(pl_data.get((m, sec, it)) or 0.0 for m in base_ms) / len(base_ms)
-                worse = b - c          # > 0 — расход вырос или доход упал
-                if worse >= SUM_ITEM_MIN and (not b or worse / abs(b) >= SUM_ITEM_REL):
-                    spikes.append((worse, code, names[code], it, c, b))
-        spikes.sort(reverse=True)
-        spikes = spikes[:SUM_ITEMS_TOP]
-    if spikes:
-        p.append("Сильнее всего выросли:")
-        for worse, code, sname, it, c, b in spikes:
-            if code == "5":
-                p.append("•  «%s» (прочие): результат %s против %s в среднем — хуже на %s."
-                         % (it, _rub(c), _rub(b), _rub(worse)))
-            else:
-                p.append("•  «%s» (%s): %s против %s в среднем — больше на %s."
-                         % (it, sname, _rub(-c), _rub(-b), _rub(worse)))
-    elif base_ms:
-        p.append("Крупных отклонений по отдельным статьям нет (порог — %s и %d %% "
-                 "к среднему за %d мес.)." % (_rub(SUM_ITEM_MIN), SUM_ITEM_REL * 100, len(base_ms)))
-    if partial:
-        p.append("Месяц неполный: часть постоянных затрат начисляется сразу за весь "
-                 "месяц, а выручка — только за %d дней, поэтому результат месяца пока "
-                 "выглядит хуже, чем будет по итогу." % elapsed)
-    blocks.append(("Постоянные затраты", p))
-
-    # ---- точка безубыточности
-    p = []
-    if cur["tbu"] is not None:
-        s = "Точка безубыточности — %s в месяц" % _rub(cur["tbu"])
-        if cur["qty"]:
-            s += " (≈ %s шт.)" % _num(cur["tbu"] / (rev / cur["qty"]))
-        s += (": при КМД %s столько выручки нужно, чтобы покрыть все постоянные "
-              "затраты %s, включая финансовые расходы %s"
-              % (_pct(k), _rub(-cur["fc"]), _rub(-cur["fin"])))
-        if cur.get("conv"):
-            s += " (из них проценты по конвертируемым займам %s)" % _rub(-cur["conv"])
-        p.append(s + ".")
-        if cur["zfp"] >= 0:
-            p.append("Фактическая выручка — %s: запас финансовой прочности %s (%s). "
-                     "На столько могут упасть продажи до выхода в убыток."
-                     % (_rub(rev), _rub(cur["zfp"]), _pct(cur["zfp_pct"])))
-        else:
-            p.append("Фактическая выручка — %s: до точки безубыточности не хватает %s "
-                     "(%s выручки)." % (_rub(rev), _rub(-cur["zfp"]), _pct(-cur["zfp_pct"])))
-        s = ("Каждые 100 000 ₽ новых постоянных затрат в месяц требуют ещё %s выручки"
-             % _rub(100000 / k * 100))
-        if k > 1:
-            s += "; снижение КМД на 1 п.п. поднимает ТБУ на %s" % _rub(
-                max(0.0, -cur["fc"]) / (k - 1) * 100 - cur["tbu"])
-        p.append(s + ".")
-        if avg and avg["tbu"] is not None:
-            p.append("В среднем за %d предыдущих месяца ТБУ была %s в месяц (КМД %s, "
-                     "постоянные затраты %s)."
-                     % (len(base_ms), _rub(avg["tbu"]), _pct(avg["kmd"]), _rub(-avg["fc"])))
-    else:
-        p.append("Точку безубыточности посчитать нельзя: КМД не положительный.")
-    if abs(cur["other"]) >= SUM_ITEM_MIN:
-        p.append("Прочие доходы и расходы (раздел 5 P&L) дали %s — в расчёт ТБУ они не "
-                 "входят, но влияют на итоговую прибыль." % _rub(cur["other"]))
-    blocks.append(("Точка безубыточности с учётом всей финансовой нагрузки", p))
-
-    # ---- точка безубыточности без процентов по конвертируемым займам
-    p = []
-    if cur["tbu_ex"] is None:
-        p.append("Точку безубыточности посчитать нельзя: КМД не положительный.")
-    elif not cur.get("conv"):
-        p.append("В %s процентов по договорам конвертируемого займа не начислено, "
-                 "поэтому точка безубыточности та же, что в предыдущем разделе: %s."
-                 % (Mp, _rub(cur["tbu_ex"])))
-    else:
-        s = ("Если не считать проценты по договорам конвертируемого займа (%s), "
-             "постоянные затраты составят %s, и при том же КМД %s точка "
-             "безубыточности — %s в месяц"
-             % (_rub(-cur["conv"]), _rub(-(cur["fc"] - cur["conv"])), _pct(k),
-                _rub(cur["tbu_ex"])))
-        if cur["qty"]:
-            s += " (≈ %s шт.)" % _num(cur["tbu_ex"] / (rev / cur["qty"]))
-        p.append(s + ".")
-        if cur["zfp_ex"] >= 0:
-            p.append("Фактическая выручка — %s: запас финансовой прочности %s (%s), "
-                     "месяц выше этой точки безубыточности."
-                     % (_rub(rev), _rub(cur["zfp_ex"]), _pct(cur["zfp_ex_pct"])))
-        else:
-            p.append("Фактическая выручка — %s: до этой точки безубыточности не "
-                     "хватает %s (%s выручки)."
-                     % (_rub(rev), _rub(-cur["zfp_ex"]), _pct(-cur["zfp_ex_pct"])))
-        p.append("Проценты по конвертируемым займам поднимают точку безубыточности "
-                 "на %s в месяц (строка 6.8 листа «%s»)."
-                 % (_rub(cur["tbu"] - cur["tbu_ex"]), BREAKEVEN_SHEET_NAME))
-        if avg and avg["tbu_ex"] is not None:
-            p.append("В среднем за %d предыдущих месяца эта ТБУ была %s в месяц."
-                     % (len(base_ms), _rub(avg["tbu_ex"])))
-    blocks.append(("Точка безубыточности без процентов по конвертируемым займам", p))
-
-    # ---- прогноз до конца месяца
-    if partial and rev:
-        rem = total - elapsed
-        day = rev / elapsed
-        rf = day * total
-        p = ["Прошло %d из %d дней. Средняя выручка — %s в день; если темп "
-             "сохранится, за месяц выйдет около %s." % (elapsed, total, _rub(day), _rub(rf))]
-        if k is not None and k > 0:
-            ebt_f = rf * k / 100 + cur["fc"] + cur["other"]
-            p.append("При текущей марже и уже учтённых постоянных затратах за месяц "
-                     "ожидается %s до налога (оценка)." % _res(ebt_f))
-            gap = cur["tbu"] - rev
-            if gap <= 0:
-                p.append("Точка безубыточности уже пройдена: каждый следующий рубль "
-                         "выручки приносит около %s коп. прибыли." % _num(k))
-            elif rem > 0:
-                need = gap / rem
-                s = ("Чтобы выйти в ноль, в оставшиеся %d дн. нужно продавать по %s в "
-                     "день — в %s раза больше текущего темпа."
-                     % (rem, _rub(need), _num(need / day, 1)))
-                if need / day > 1.5:
-                    s += " Это нереалистично: месяц почти наверняка закроется в минусе."
-                p.append(s)
-        p.append("Прогноз линейный: не учитывает возвраты, которые ещё поступят, и "
-                 "расходы, которые начислят в конце месяца.")
-        blocks.append(("Прогноз до конца месяца", p))
-
-    # ---- с начала года
-    per = ("%s–%s %d" % (MONTHS_NOM[0], M, me.year)) if me.month > 1 else mtitle
-    p = ["За %s: выручка %s, маржинальный доход %s (КМД %s), постоянные затраты %s; "
-         "до налога — %s, после налога — %s."
-         % (per, _rub(ytd["rev"]), _rub(ytd["md"]), _pct(ytd["kmd"]), _rub(-ytd["fc"]),
-            _res(ytd["ebt"]), _res(ytd["net"]))]
-    if ytd["tbu"] is not None:
-        s = ("Точка безубыточности с учётом всей финансовой нагрузки — %s, в среднем %s в месяц; "
-             % (_rub(ytd["tbu"]), _rub(ytd["tbu"] / len(ytd_ms))))
-        s += ("запас прочности %s." % _pct(ytd["zfp_pct"]) if ytd["zfp"] >= 0
-              else "выручки не хватает до неё %s (%s)." % (_rub(-ytd["zfp"]), _pct(-ytd["zfp_pct"])))
-        p.append(s)
-    if ytd["tbu_ex"] is not None and ytd.get("conv"):
-        s = ("Без процентов по конвертируемым займам (%s за период) точка "
-             "безубыточности — %s, в среднем %s в месяц; "
-             % (_rub(-ytd["conv"]), _rub(ytd["tbu_ex"]), _rub(ytd["tbu_ex"] / len(ytd_ms))))
-        s += ("запас прочности %s." % _pct(ytd["zfp_ex_pct"]) if ytd["zfp_ex"] >= 0
-              else "выручки не хватает до неё %s (%s)."
-              % (_rub(-ytd["zfp_ex"]), _pct(-ytd["zfp_ex_pct"])))
-        p.append(s)
-    below = [MONTHS_NOM[m.month - 1] for m, d in per_month
-             if d["rev"] and (d["zfp"] is None or d["zfp"] < 0)]
-    n_ok = sum(1 for m, d in per_month if d["rev"]) - len(below)
-    s = ("Выше точки безубыточности (с учётом всей финансовой нагрузки) — %d из %d мес."
-         % (n_ok, n_ok + len(below)))
-    if below:
-        s += " Ниже: %s." % ", ".join(below)
-    p.append(s)
-    blocks.append(("С начала года", p))
-
-    # ---- вопросы для обсуждения
-    p = []
-    for worse, code, sname, it, c, b in spikes[:2]:
-        p.append("•  Разобраться, почему «%s» в %s выше обычного на %s: разовое "
-                 "начисление или новая постоянная нагрузка." % (it, Mp, _rub(worse)))
-    tips = {
-        "promo": "Доля рекламы выросла — проверить окупаемость кампаний (ДРР по артикулам).",
-        "cogs": "Себестоимость в выручке выросла — проверить закупочные цены и не было "
-                "ли продаж со сниженной наценкой.",
-        "sell": "Логистика и хранение в выручке выросли — проверить тарифы WB, долю "
-                "возвратов и коэффициенты складов.",
-        "comm": "Комиссия WB выросла — проверить изменения тарифов по категориям.",
-    }
-    for key, delta in shifts:
-        if delta > 0:
-            p.append("•  " + tips[key])
-    if cur["zfp"] is not None and cur["zfp"] < 0:
-        p.append("•  Решить, что даёт больший эффект: поднять маржу (цены, закупка, "
-                 "реклама) или сократить постоянные затраты — см. разделы 7–8 листа "
-                 "«%s»." % BREAKEVEN_SHEET_NAME)
-    if partial:
-        p.append("•  Вернуться к выводам после закрытия месяца — данные предварительные.")
-    if not p:
-        p.append("Существенных отклонений нет.")
-    blocks.append(("Что обсудить", p))
-
-    cols = [("%s %d%s" % (MONTHS_RU[me.month - 1].capitalize(), me.year,
-                          "\n%d из %d дн." % (elapsed, total) if partial else ""), cur)]
-    if prev:
-        cols.append(("%s %d" % (MONTHS_RU[pm.month - 1].capitalize(), pm.year), prev))
-    if avg:
-        cols.append(("Среднее\nза %d мес." % len(base_ms), avg))
-    if ly:
-        cols.append(("%s %d" % (MONTHS_RU[lym.month - 1].capitalize(), lym.year), ly))
-    cols.append(("С начала\n%d года" % me.year, ytd))
-
-    return {"title": mtitle, "headline": head, "tone": tone, "blocks": blocks,
-            "columns": cols, "partial": (elapsed, total) if partial else None}
-
-
-SUMMARY_KPI = (
-    ("rev", "Чистая выручка без НДС", FMT_MLN),
-    ("md", "Маржинальный доход", FMT_MLN),
-    ("kmd", "КМД*, %", FMT_PCT),
-    ("fc", "Постоянные затраты", FMT_MLN),
-    ("ebt", "Прибыль (убыток) до налога", FMT_MLN),
-    ("net", "Чистая прибыль", FMT_MLN),
-    ("tbu", "Точка безубыточности", FMT_MLN),
-    ("tbu_ex", "ТБУ без процентов по конв. займам", FMT_MLN),
-    ("zfp_ex_pct", "Запас прочности без конв. займов, %", FMT_PCT),
-    ("zfp_pct", "Запас финансовой прочности, %", FMT_PCT),
-)
-
-
-def _text_height(text, size=10):
-    lines = sum(max(1, -(-len(part) // SUM_WIDTH_CHARS)) for part in text.split("\n"))
-    return max(16, lines * (size + 5) + 4)
-
-
-def build_summary(ws, s, report_date, as_of=None):
-    as_of = as_of or report_date
-    sheet_setup(ws, landscape=False)
-    last = 7                                  # колонки B..G
-    extra = "Российский рубль (RUB) · выручка без НДС · дата отчёта: %s" % (
-        as_of.strftime("%d.%m.%Y"))
-    if s["partial"]:
-        extra += " · месяц неполный: %d из %d дней" % s["partial"]
-    title_band(ws, "ВЫВОДЫ ЗА %s" % s["title"].upper(),
-               "Резюме отчётного месяца для собственника: результат, точка "
-               "безубыточности, отклонения и прогноз", last, extra=extra)
-    for col, w in zip("ABCDEFGH", (3, 44, 15, 15, 15, 15, 15, 3)):
-        ws.column_dimensions[col].width = w
-
-    def merged(r, value, font, fillc=None, border=None, height=None, indent=1):
-        ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=last)
-        c = write(ws, r, 2, value, font=font, fillc=fillc, border=border)
-        c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True,
-                                indent=indent)
-        for cc in range(3, last + 1):
-            cell = ws.cell(row=r, column=cc)
-            if fillc:
-                cell.fill = fill(fillc)
-            if border:
-                cell.border = border
-        ws.row_dimensions[r].height = height or _text_height(str(value), font.sz or 10)
-        return c
-
-    # ---- главное
-    r = 7
-    fg, bg = {"good": (FREE, FREE_BG), "bad": (EXPENSE, OCCUPIED_BG),
-              "warn": (WARN, WARN_BG)}[s["tone"]]
-    write(ws, r, 2, "ГЛАВНОЕ", font=Font(name=FONT, size=8, bold=True, color=fg),
-          fillc=bg, align="left", indent=1)
-    ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=last)
-    for cc in range(3, last + 1):
-        ws.cell(row=r, column=cc).fill = fill(bg)
-    ws.row_dimensions[r].height = 16
-    r += 1
-    merged(r, s["headline"], Font(name=FONT, size=11, bold=True, color=TEXT),
-           fillc=bg, border=Border(bottom=_side(fg)),
-           height=_text_height(s["headline"], 12) + 6)
-    r += 2
-
-    # ---- ключевые цифры
-    cols = s["columns"]
-    f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
-    write(ws, r, 2, "КЛЮЧЕВЫЕ ЦИФРЫ · млн ₽", font=f_hdr, fillc=NAVY, align="left", indent=1)
-    for j, (title, _d) in enumerate(cols):
-        write(ws, r, 3 + j, title, font=f_hdr, fillc=NAVY_3 if j == 0 else NAVY,
-              align="center", wrap=True)
-    ws.row_dimensions[r].height = 30
-    first = r + 1
-    r += 1
-    for key, label, fmt in SUMMARY_KPI:
-        strong = key in ("ebt", "tbu")
-        write(ws, r, 2, label, font=Font(name=FONT, size=10, bold=strong, color=TEXT),
-              border=B_BOTTOM, align="left", indent=1)
-        for j, (_t, d) in enumerate(cols):
-            v = d.get(key)
-            color = EXPENSE if (v is not None and v < 0) else INCOME
-            write(ws, r, 3 + j, v, fmt=fmt, border=B_BOTTOM, align="right",
-                  font=Font(name=FONT, size=10, bold=(j == 0 or strong), color=color),
-                  fillc=SURFACE_4 if j == 0 else None)
-        ws.row_dimensions[r].height = 18
-        r += 1
-    apply_zebra(ws, first, r - 1, 2, 2 + len(cols))
-    apply_column_dividers(ws, first - 1, r - 1, 2, 2 + len(cols))
-    merged(r, "* КМД — коэффициент маржинального дохода: доля выручки, которая остаётся "
-              "после переменных затрат. КМД = маржинальный доход / чистая выручка без НДС. "
-              "Среднее за месяцы и «с начала года» считаются от сумм периода.",
-           Font(name=FONT, size=8, italic=True, color=MUTED))
-    r += 2
-
-    # ---- разделы выводов
-    f_h = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_p = Font(name=FONT, size=10, color=TEXT_2)
-    for num, (head, paras) in enumerate(s["blocks"], 1):
-        merged(r, "%02d   %s" % (num, head), f_h, fillc=SURFACE_4, border=B_SECTION,
-               height=22)
-        ws.cell(row=r, column=2).alignment = Alignment(horizontal="left",
-                                                       vertical="center", indent=1)
-        r += 1
-        for para in paras:
-            bullet = para.startswith("•")
-            merged(r, para, f_p, indent=3 if bullet else 1)
-            r += 1
-        r += 1
-
-    merged(r, "Выводы сформированы автоматически по данным пакета; цифры совпадают с "
-              "листами P&L и «%s»." % BREAKEVEN_SHEET_NAME,
-           Font(name=FONT, size=8, color=MUTED))
-    ws.print_area = "A1:%s%d" % (get_column_letter(last + 1), r)
-    return r
-
-
-# =============================================================================
 #  08. СБОРКА ПАКЕТА (вызывается и из команды, и из админки)
 # =============================================================================
 
@@ -3705,7 +2541,6 @@ def fetch_pack_data(con, date_from):
     deposits = read_sql("deposits.txt")
     pl_notes = read_sql("pl_notes.txt")
     wb_payouts = read_sql("wb_payouts.txt")
-    conv_loans = read_sql("conv_loans.txt")
 
     con.execute(base)
     con.execute(base_stocks)
@@ -3714,9 +2549,6 @@ def fetch_pack_data(con, date_from):
     con.execute(margin, parameters={"date_from": date_from})
     con.execute(opex, parameters={"date_from": date_from})
     con.execute(cf, parameters={"date_from": date_from})
-    con.execute(conv_loans, parameters={"date_from": date_from,
-                                        "title_id": CONV_LOAN_TITLE_ID})
-    conv_rows = con.execute("SELECT me, value FROM conv_loans").fetchall()
 
     pl_rows = con.execute("""
         SELECT me, section, item, value
@@ -3757,7 +2589,7 @@ def fetch_pack_data(con, date_from):
     payout_rows = con.execute("SELECT * FROM wb_payouts").fetchall()
 
     return (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows, payout_rows, conv_rows)
+        deposit_balance, note_rows, payout_rows)
 
 
 # Данные листа «Юнит-экономика». Считаются по тем же витринам, что и P&L,
@@ -3872,8 +2704,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     with get_duckdb_conn_with_opt(ro=True) as con:
         (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows, payout_rows,
-        conv_rows) = fetch_pack_data(con, date_from)
+        deposit_balance, note_rows, payout_rows) = fetch_pack_data(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -3890,11 +2721,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         key = (me, act or "", op or "", itm or "", sub or "",
                cp or "", contract or "")
         cf_data[key] = round(cf_data.get(key, 0.0) + float(amount or 0), 2)
-
-    conv_by_month = {}
-    for me, value in conv_rows:
-        me = me if isinstance(me, date) else date.fromisoformat(str(me))
-        conv_by_month[me] = round(float(value or 0), 2)
 
     unit_data = {}
     for row in unit_rows:
@@ -3944,30 +2770,21 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     wb = Workbook()
     ws_cover = wb.active
     ws_cover.title = TOC_SHEET_NAME
-    ws_sum = wb.create_sheet(SUMMARY_SHEET_NAME)
     ws_pl = wb.create_sheet("P&L")
     ws_notes_pl = wb.create_sheet(NOTES_SHEET_NAME)
     ws_unit = wb.create_sheet("Юнит-экономика")
-    ws_be = wb.create_sheet(BREAKEVEN_SHEET_NAME)
     ws_cf = wb.create_sheet("Cash Flow")
     ws_cash = wb.create_sheet("Остатки ДС")
     ws_payouts = wb.create_sheet(PAYOUTS_SHEET_NAME)
     ws_npl = wb.create_sheet("Пояснения P&L")
     ws_nunit = wb.create_sheet("Пояснения Юнит-экономика")
-    ws_nbe = wb.create_sheet(BE_NOTES_SHEET_NAME)
     ws_ncf = wb.create_sheet("Пояснения Cash Flow")
 
     note_anchors = build_pl_notes(ws_notes_pl, note_rows, months, report_date,
                                   as_of=date_from)
-    pl_rowmap = {}
     build_pl(ws_pl, pl_data, tax_by_month, months, report_date,
-             as_of=date_from, note_anchors=note_anchors, rowmap_out=pl_rowmap)
+             as_of=date_from, note_anchors=note_anchors)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
-    build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
-                    conv_by_month=conv_by_month)
-    build_summary(ws_sum, month_summary(pl_data, tax_by_month, months, date_from,
-                                        conv_by_month=conv_by_month),
-                  report_date, as_of=date_from)
     build_cf(ws_cf, cf_data, months, opening, report_date, as_of=date_from)
 
     bank_rows, wb_row = split_treasury(treasury_rows)
@@ -3999,9 +2816,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_notes(ws_nunit, "ПОЯСНЕНИЯ К ЮНИТ-ЭКОНОМИКЕ",
                 "Что показывает каждый показатель, как считается и почему "
                 "не сходится с кассой и отчётом WB", NOTES_UNIT)
-    build_notes(ws_nbe, "ПОЯСНЕНИЯ К РАСЧЁТУ ТОЧКИ БЕЗУБЫТОЧНОСТИ",
-                "Методика, классификация затрат, расчёт по месяцам и за год, "
-                "сценарии роста затрат и пример", NOTES_BE)
     build_notes(ws_ncf, "ПОЯСНЕНИЯ К ОТЧЁТУ О ДВИЖЕНИИ ДЕНЕЖНЫХ СРЕДСТВ",
                 "Структура денежных потоков, остатки и сверка с P&L", NOTES_CF)
 
@@ -4023,17 +2837,12 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     path.parent.mkdir(parents=True, exist_ok=True)
 
     contents = [
-        (SUMMARY_SHEET_NAME, "Главное за отчётный месяц простым языком: результат, "
-                             "точка безубыточности, отклонения, прогноз"),
         ("P&L", "Отчёт о прибылях и убытках с промежуточными итогами, "
                 "EBITDA, налогом и рентабельностью"),
         (NOTES_SHEET_NAME, "Расшифровка каждой строки P&L: статья, "
                            "контрагент, договор"),
         ("Юнит-экономика", "Количества, цены и себестоимость на единицу, "
                            "три уровня маржинальности и рентабельность"),
-        (BREAKEVEN_SHEET_NAME, "Точка безубыточности (ТБУ) по месяцам и за год, "
-                               "запас прочности, сценарий роста затрат "
-                               "и чувствительность к марже"),
         ("Cash Flow", "Отчёт о движении денежных средств прямым методом "
                       "по видам деятельности"),
         ("Остатки ДС", "Банковские счета, деньги в пути, баланс WB "
@@ -4043,8 +2852,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         ("Пояснения P&L", "Методика расчёта каждого раздела и промежуточного итога"),
         ("Пояснения Юнит-экономика", "Как считается каждый показатель "
                                      "и почему он не равен кассе"),
-        (BE_NOTES_SHEET_NAME, "Методика ТБУ: какие затраты переменные и "
-                              "постоянные, помесячный и годовой расчёт, пример"),
         ("Пояснения Cash Flow", "Структура потоков, остатки и связь с P&L"),
     ]
     contents = [c for c in contents if c[0] in wb.sheetnames]
@@ -4060,9 +2867,9 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     wb.active = 0
 
     # порядок листов: отчёты, затем пояснения
-    order = [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, "P&L", NOTES_SHEET_NAME, "Юнит-экономика",
-             BREAKEVEN_SHEET_NAME, "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
-             "Пояснения P&L", "Пояснения Юнит-экономика", BE_NOTES_SHEET_NAME,
+    order = [TOC_SHEET_NAME, "P&L", NOTES_SHEET_NAME, "Юнит-экономика",
+             "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
+             "Пояснения P&L", "Пояснения Юнит-экономика",
              "Пояснения Cash Flow"]
     ordered = [wb[n] for n in order if n in wb.sheetnames]
     ordered += [ws for ws in wb.worksheets if ws not in ordered]
@@ -4175,55 +2982,9 @@ PIVOTS_SKELETON = Path(__file__).resolve().parent / "assets" / "pivots_skeleton.
 PIVOT_SOURCES = {
     "raw_cf": "SELECT * FROM pg.cf_to_csv WHERE date_from <= $date_from "
               "ORDER BY date_from",
+    "raw_pl": "SELECT * FROM pg.pl_for_csv WHERE date_from <= $date_from "
+              "ORDER BY date_from",
 }
-
-# Сверка сводной P&L с листом P&L: (месяц, раздел) -> сумма.
-PIVOT_PL_CHECK_SQL = """
-    WITH pl AS (
-        SELECT me, TRIM(section) AS section,
-               CASE WHEN item = '1.6. Себестоимость' THEN -value ELSE value END AS value
-        FROM month_margins_wb_long
-        WHERE item IN ('1.4 Продажи без НДС', '1.6. Себестоимость', '1.9. Комиссия WB')
-        UNION ALL
-        SELECT me, section, value FROM opex
-        UNION ALL
-        SELECT LAST_DAY(date_from)::DATE, '9. НАЛОГ НА ПРИБЫЛЬ', amount
-        FROM cf WHERE subitem = '125200 Налог на прибыль'
-    ),
-    a AS (SELECT me, section, SUM(value) AS v FROM pl GROUP BY 1, 2),
-    b AS (SELECT LAST_DAY(date_from)::DATE AS me, parent_account_name AS section,
-                 SUM(amount) AS v
-          FROM pivot_pl GROUP BY 1, 2)
-    SELECT COALESCE(a.me, b.me), COALESCE(a.section, b.section),
-           COALESCE(a.v, 0), COALESCE(b.v, 0)
-    FROM a FULL JOIN b ON a.me = b.me AND a.section = b.section
-    WHERE ABS(COALESCE(a.v, 0) - COALESCE(b.v, 0)) > 1
-    ORDER BY 1, 2
-"""
-
-
-def pivot_pl_source(con, date_from):
-    """Источник сводной P&L по правилам листа P&L управленческого пакета.
-
-    Возвращает (колонки, строки, расхождения со сверкой). Расхождения —
-    список (месяц, раздел, P&L, сводная), пустой при полном совпадении.
-    """
-    params = {"date_from": date_from}
-    con.execute(read_sql("base.txt"))
-    con.execute(read_sql("base_stocks.txt"))
-    con.execute(read_sql("wb_costs.txt"))
-    con.execute(read_sql("dayly_sales_agg.txt"))
-    con.execute(read_sql("cf.txt"), parameters=params)
-    con.execute(read_sql("pivot_pl.txt"), parameters=params)
-
-    cur = con.execute("SELECT * FROM pivot_pl ORDER BY date_from")
-    columns = [d[0] for d in cur.description]
-    rows = cur.fetchall()
-
-    con.execute(read_sql("margin.txt"), parameters=params)
-    con.execute(read_sql("opex.txt"), parameters=params)
-    mismatches = con.execute(PIVOT_PL_CHECK_SQL).fetchall()
-    return columns, rows, mismatches
 
 
 def _pivot_cell(value):
@@ -4290,9 +3051,6 @@ PIVOT_LAYOUT = {
         "source": "raw_pl",
         "rows": ["parent_account_name", "account_name", "cost_item_group",
                  "cost_item", "cp_name", "contract_name"],
-        # раскрыты только разделы P&L; строки P&L свёрнуты под «+»
-        "open_levels": 1,
-        "row_stripes": False,
     },
 }
 
@@ -4359,7 +3117,7 @@ def sync_pivot_items(path, data):
             if not values and not blank:
                 continue
 
-            collapsed = level >= cfg.get("open_levels", PIVOT_OPEN_LEVELS)
+            collapsed = level >= PIVOT_OPEN_LEVELS
 
             shared = ET.SubElement(cache_fields[index], tag("sharedItems"))
             cache_fields[index].remove(shared)
@@ -4394,11 +3152,6 @@ def sync_pivot_items(path, data):
             if old is not None:
                 pivot_fields[index].remove(old)
             pivot_fields[index].append(items)
-
-        if "row_stripes" in cfg:
-            style = table.find(tag("pivotTableStyleInfo"))
-            if style is not None:
-                style.set("showRowStripes", "1" if cfg["row_stripes"] else "0")
 
         parts[cfg["cache"]] = ET.tostring(cache, encoding="UTF-8",
                                           xml_declaration=True)
@@ -4473,100 +3226,6 @@ def restore_pivot_number_format(path):
     return True
 
 
-PIVOT_STYLE_NAME = "ManpackPivotGreen"
-PIVOT_GRID = "FFDDDDDD"        # светло-серая сетка
-PIVOT_FONT = "Roboto"
-
-
-def _pivot_dxf(bold=False, color=TEXT, fill_rgb=None, border=None):
-    font = '<font>%s<sz val="10"/><color rgb="FF%s"/><name val="%s"/></font>' % (
-        "<b/>" if bold else "", color, PIVOT_FONT)
-    out = "<dxf>" + font
-    if fill_rgb:
-        out += ('<fill><patternFill patternType="solid"><fgColor rgb="FF%s"/>'
-                '<bgColor rgb="FF%s"/></patternFill></fill>' % (fill_rgb, fill_rgb))
-    if border:
-        out += "<border>%s</border>" % "".join(
-            '<%s style="%s"><color rgb="%s"/></%s>' % (side, st, col, side)
-            for side, st, col in border)
-    return out + "</dxf>"
-
-
-def polish_pivot_style(path):
-    """Оформление сводных: сетка, выделение разделов, итоговая строка.
-
-    Переписывает табличный стиль сводных прямо в сохранённом файле.
-    Строки разделов при промежуточных итогах «вверху» Excel оформляет
-    элементами Row Subheading, поэтому заданы и они, и Subtotal Row.
-    """
-    import re
-    import shutil
-    import tempfile
-    import zipfile
-
-    grid = [("left", "thin", PIVOT_GRID), ("right", "thin", PIVOT_GRID),
-            ("top", "thin", PIVOT_GRID), ("bottom", "thin", PIVOT_GRID),
-            ("vertical", "thin", PIVOT_GRID), ("horizontal", "thin", PIVOT_GRID)]
-    elements = [
-        ("wholeTable", None, _pivot_dxf(border=grid)),
-        ("headerRow", None, _pivot_dxf(True, "FFFFFF", NAVY, [
-            ("left", "thin", "FF" + NAVY_2), ("right", "thin", "FF" + NAVY_2),
-            ("vertical", "thin", "FF" + NAVY_2)])),
-        ("totalRow", None, _pivot_dxf(True, TEXT, SURFACE_4, [
-            ("top", "medium", "FF" + NAVY), ("bottom", "double", "FF" + NAVY)])),
-        ("firstRowSubheading", 1, _pivot_dxf(True, NAVY_3, "D5E8E0", [
-            ("top", "thin", "FF" + NAVY_2)])),
-        ("firstSubtotalRow", 1, _pivot_dxf(True, NAVY_3, "D5E8E0", [
-            ("top", "thin", "FF" + NAVY_2)])),
-        ("secondRowSubheading", 1, _pivot_dxf(False, TEXT, "F3F8F6")),
-        ("secondSubtotalRow", 1, _pivot_dxf(False, TEXT, "F3F8F6")),
-        ("firstRowStripe", 1, _pivot_dxf(fill_rgb="FAFAFA")),
-    ]
-
-    src = zipfile.ZipFile(path)
-    styles = src.read("xl/styles.xml").decode("utf-8")
-
-    m = re.search(r'<dxfs count="(\d+)"\s*/>|<dxfs count="(\d+)">(.*?)</dxfs>',
-                  styles, re.S)
-    if m:
-        base = int(m.group(1) or m.group(2))
-        body = (m.group(3) or "") + "".join(e[2] for e in elements)
-        styles = (styles[:m.start()]
-                  + '<dxfs count="%d">%s</dxfs>' % (base + len(elements), body)
-                  + styles[m.end():])
-    else:
-        base = 0
-        styles = styles.replace(
-            "<tableStyles", '<dxfs count="%d">%s</dxfs><tableStyles'
-            % (len(elements), "".join(e[2] for e in elements)), 1)
-
-    items = "".join(
-        '<tableStyleElement type="%s"%s dxfId="%d"/>'
-        % (kind, ' size="%d"' % size if size else "", base + i)
-        for i, (kind, size, _x) in enumerate(elements))
-    block = ('<tableStyles count="1" defaultTableStyle="TableStyleMedium2"'
-             ' defaultPivotStyle="%s"><tableStyle name="%s" pivot="1"'
-             ' count="%d">%s</tableStyle></tableStyles>'
-             % (PIVOT_STYLE_NAME, PIVOT_STYLE_NAME, len(elements), items))
-    if "<tableStyles" in styles:
-        styles = re.sub(r'<tableStyles.*?</tableStyles>|<tableStyles[^>]*/>',
-                        block, styles, count=1, flags=re.S)
-    else:
-        styles = styles.replace("</styleSheet>", block + "</styleSheet>", 1)
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    tmp.close()
-    out = zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED)
-    for info in src.infolist():
-        data = (styles.encode("utf-8") if info.filename == "xl/styles.xml"
-                else src.read(info.filename))
-        out.writestr(info, data)
-    out.close()
-    src.close()
-    shutil.move(tmp.name, path)
-    return True
-
-
 def build_pivots_workbook(date_from, out_path=None):
     """Собирает книгу со сводными на отчётную дату."""
     if isinstance(date_from, str):
@@ -4582,8 +3241,6 @@ def build_pivots_workbook(date_from, out_path=None):
         for name, sql in PIVOT_SOURCES.items():
             cur = con.execute(sql, parameters={"date_from": date_from})
             data[name] = ([d[0] for d in cur.description], cur.fetchall())
-        pl_columns, pl_rows, mismatches = pivot_pl_source(con, date_from)
-        data["raw_pl"] = (pl_columns, pl_rows)
 
     wb = load_workbook(PIVOTS_SKELETON)
 
@@ -4613,14 +3270,7 @@ def build_pivots_workbook(date_from, out_path=None):
 
     restore_pivot_number_format(path)
     sync_pivot_items(path, data)
-    polish_pivot_style(path)
 
-    if mismatches:
-        print("Сводная P&L не сходится с P&L по %d позициям (месяц, раздел, "
-              "P&L, сводная):" % len(mismatches))
-        for row in mismatches[:20]:
-            print("  ", row)
-    counts["pl_check"] = mismatches
     return path, counts
 
 
