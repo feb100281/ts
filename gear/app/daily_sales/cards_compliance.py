@@ -4,7 +4,10 @@
 #
 #  В выгрузку попадают только размеры с остатком на выбранную дату
 #  (склады WB + FBS + в пути), как в выгрузке остатков.
-#  Уровень строки: артикул WB + размер (штрихкоды размера — в одной ячейке).
+#  Уровень строки: артикул WB + размер (все штрихкоды размера — в одной строке).
+#
+#  Два уровня: «Критично» — WB заблокирует или не примет карточку;
+#  «Проверить» — нужна ручная проверка, ошибки может и не быть.
 # =============================================================================
 
 from io import BytesIO
@@ -19,10 +22,9 @@ from openpyxl.worksheet.properties import PageSetupProperties
 
 from conns import get_duckdb_conn_with_opt
 from .excel_report_style import (
-    TOC_SHEET_NAME, FONT, TEXT, EXPENSE, FREE, FREE_BG, OCCUPIED_BG, WARN_BG,
-    FMT_QTY, FMT_DATE,
-    write_sheet_header, write_table_header, style_data_row, apply_zebra,
-    apply_column_widths, freeze_table, enable_autofilter, write_kpi_cards,
+    TOC_SHEET_NAME, FONT, EXPENSE, WARN, WARN_BG, OCCUPIED_BG, FMT_QTY, FMT_DATE,
+    FMT_PCT, write_sheet_header, write_table_header, style_data_row,
+    apply_zebra, apply_column_widths, freeze_table, enable_autofilter,
     write_toc_links, write_footer_note, finalize_workbook,
 )
 from .ui import (
@@ -31,6 +33,10 @@ from .ui import (
     CARDS_CHECK_DOWNLOAD_ID,
     CARDS_CHECK_LOADING_ID,
 )
+
+CRIT = "Критично"
+CHECK = "Проверить"
+OK = "OK"
 
 
 CARDS_CHECK_SQL = r"""
@@ -50,22 +56,22 @@ fbs AS (
       AND nm_id IS NOT NULL
     GROUP BY 1, 2
 ),
-stock AS (
+stock_pos AS (
     SELECT
         COALESCE(wb.nm_id, fbs.nm_id)::BIGINT AS nm_id,
         COALESCE(wb.chrt_id, fbs.chrt_id)::BIGINT AS chrt_id,
         COALESCE(wb.wb_qty, 0) AS wb_qty,
         COALESCE(fbs.fbs_qty, 0) AS fbs_qty,
-        COALESCE(wb.transit_qty, 0) AS transit_qty
+        COALESCE(wb.transit_qty, 0) AS transit_qty,
+        COALESCE(wb.wb_qty, 0) + COALESCE(fbs.fbs_qty, 0)
+            + COALESCE(wb.transit_qty, 0) AS total_qty
     FROM wb
     FULL OUTER JOIN fbs
         ON wb.nm_id = fbs.nm_id AND wb.chrt_id = fbs.chrt_id
+    WHERE COALESCE(wb.wb_qty, 0) + COALESCE(fbs.fbs_qty, 0)
+          + COALESCE(wb.transit_qty, 0) > 0
 ),
-stock_pos AS (
-    SELECT *, wb_qty + fbs_qty + transit_qty AS total_qty
-    FROM stock
-    WHERE wb_qty + fbs_qty + transit_qty > 0
-),
+
 skus AS (
     SELECT DISTINCT
         c.nm_id::BIGINT AS nm_id,
@@ -74,29 +80,39 @@ skus AS (
         COALESCE(c.kiz_marked, FALSE) AS kiz_marked,
         TRIM(c.sku) AS barcode,
         TRIM(COALESCE(c.tnved, '')) AS tnved_raw,
-        TRIM(c.declaration_number) AS doc_number,
         try_strptime(c.cert_end_date, '%d.%m.%Y')::DATE AS doc_end_date
     FROM cards.unpacked_cards c
+),
+
+-- контрольная цифра GS1: цифры справа налево (без последней) с весами 3,1,3,1…
+sku_cd AS (
+    SELECT
+        *,
+        CASE WHEN regexp_matches(COALESCE(barcode, ''), '^[0-9]{8}$|^[0-9]{12,14}$')
+             THEN (10 - list_sum(list_transform(
+                    range(1, length(barcode)),
+                    i -> CAST(substr(barcode, length(barcode) - i, 1) AS INT)
+                         * CASE WHEN i % 2 = 1 THEN 3 ELSE 1 END)) % 10) % 10
+        END AS cd_expected
+    FROM skus
 ),
 sku_check AS (
     SELECT
         *,
         CASE
-            WHEN COALESCE(barcode, '') = '' THEN 'нет штрихкода'
+            WHEN COALESCE(barcode, '') = '' THEN NULL
             WHEN NOT regexp_matches(barcode, '^[0-9]+$') THEN 'есть не только цифры'
             WHEN length(barcode) NOT IN (8, 12, 13, 14)
-                THEN 'длина ' || length(barcode) || ' знаков'
+                THEN length(barcode) || ' знаков (нужно 8, 12, 13 или 14)'
+            WHEN cd_expected <> CAST(right(barcode, 1) AS INT)
+                THEN 'контрольная цифра ' || right(barcode, 1)
+                     || ', по расчёту должна быть ' || cd_expected
             WHEN length(barcode) = 13 AND starts_with(barcode, '2')
-                THEN 'внутренний код (на «2»), не GTIN'
-            WHEN (10 - list_sum(list_transform(
-                    range(1, length(barcode)),
-                    i -> CAST(substr(barcode, length(barcode) - i, 1) AS INT)
-                         * CASE WHEN i % 2 = 1 THEN 3 ELSE 1 END)) % 10) % 10
-                 <> CAST(right(barcode, 1) AS INT)
-                THEN 'неверная контрольная цифра'
-        END AS gtin_issue_one
-    FROM skus
+                THEN 'внутренний код (начинается на 2), не GTIN'
+        END AS bad_reason
+    FROM sku_cd
 ),
+
 -- одна строка на размер: остаток размера не дублируется по штрихкодам
 sizes AS (
     SELECT
@@ -107,63 +123,112 @@ sizes AS (
         any_value(title) AS title,
         any_value(tech_size) AS tech_size,
         bool_or(kiz_marked) AS kiz_marked,
-        string_agg(DISTINCT barcode, ', ') AS barcode,
-        string_agg(
-            CASE WHEN gtin_issue_one IS NOT NULL
-                 THEN COALESCE(NULLIF(barcode, ''), '—') || ': ' || gtin_issue_one END,
-            '; ') AS gtin_issue,
+        string_agg(DISTINCT barcode, ', ') FILTER (WHERE barcode <> '') AS barcodes,
+        string_agg(DISTINCT barcode, ', ')
+            FILTER (WHERE barcode <> '' AND bad_reason IS NULL) AS valid_gtins,
+        string_agg(DISTINCT barcode || ': ' || bad_reason, '; ')
+            FILTER (WHERE bad_reason IS NOT NULL) AS bad_barcodes,
         any_value(tnved_raw) AS tnved_raw,
-        any_value(doc_number) AS doc_number,
         max(doc_end_date) AS doc_end_date
     FROM sku_check
     GROUP BY nm_id, chrt_id
 ),
-joined AS (
-    SELECT s.*, z.* EXCLUDE (nm_id, chrt_id),
-           regexp_replace(COALESCE(z.tnved_raw, ''), '[^0-9]', '', 'g') AS tnved
-    FROM stock_pos s
-    LEFT JOIN sizes z ON z.nm_id = s.nm_id AND z.chrt_id = s.chrt_id
+
+-- номера документов: все характеристики со словами «декларац» / «сертификат»,
+-- кроме дат
+docs AS (
+    SELECT
+        r.nm_id::BIGINT AS nm_id,
+        string_agg(DISTINCT TRIM(COALESCE(
+            json_extract_string(ch.value, '$.value[0]'),
+            json_extract_string(ch.value, '$.value'))), '; ') AS doc_number,
+        string_agg(DISTINCT json_extract_string(ch.value, '$.name'), '; ') AS doc_fields
+    FROM cards.cards_raw r,
+         json_each(json_extract(r.payload, '$.characteristics')) AS ch
+    WHERE (json_extract_string(ch.value, '$.name') ILIKE '%декларац%'
+           OR json_extract_string(ch.value, '$.name') ILIKE '%сертификат%')
+      AND json_extract_string(ch.value, '$.name') NOT ILIKE '%дата%'
+      AND NULLIF(TRIM(COALESCE(
+            json_extract_string(ch.value, '$.value[0]'),
+            json_extract_string(ch.value, '$.value'))), '') IS NOT NULL
+    GROUP BY 1
 )
+
 SELECT
-    * EXCLUDE (gtin_issue, tnved),
-    CASE WHEN vendor_code IS NULL THEN 'карточка не найдена' ELSE gtin_issue END
-        AS gtin_issue,
-    CASE
-        WHEN vendor_code IS NULL THEN 'карточка не найдена'
-        WHEN tnved = '' THEN 'не заполнен'
-        WHEN length(tnved) <> 10 THEN length(tnved) || ' цифр вместо 10'
-    END AS tnved_issue,
-    CASE
-        WHEN vendor_code IS NULL THEN 'карточка не найдена'
-        WHEN COALESCE(doc_number, '') = '' THEN 'нет номера документа'
-        WHEN NOT regexp_matches(upper(doc_number), 'ЕАЭС|EAЭС|EAEU|RU')
-            THEN 'формат номера не похож на ЕАЭС / RU'
-        WHEN doc_end_date IS NULL THEN 'не указан срок действия'
-        WHEN doc_end_date < $report_date::DATE
-            THEN 'срок истёк ' || strftime(doc_end_date, '%d.%m.%Y')
-    END AS doc_issue
-FROM joined
-ORDER BY nm_id, tech_size
+    s.*,
+    z.* EXCLUDE (nm_id, chrt_id),
+    regexp_replace(COALESCE(z.tnved_raw, ''), '[^0-9]', '', 'g') AS tnved,
+    d.doc_number,
+    d.doc_fields
+FROM stock_pos s
+LEFT JOIN sizes z ON z.nm_id = s.nm_id AND z.chrt_id = s.chrt_id
+LEFT JOIN docs d ON d.nm_id = s.nm_id
+ORDER BY s.nm_id, z.tech_size
 """
+
+
+def _classify(r, report_date):
+    """Возвращает (gtin, tnved, doc) — каждая пара (уровень, текст) или (OK, None)."""
+    if pd.isna(r.get("vendor_code")):
+        miss = (CRIT, "карточка не найдена в выгрузке карточек")
+        return miss, miss, miss
+
+    kiz = bool(r.get("kiz_marked"))
+    if r.get("valid_gtins"):
+        gtin = (OK, None)
+    elif not r.get("barcodes"):
+        gtin = ((CRIT, "нет штрихкода, товар с маркировкой ЧЗ") if kiz
+                else (CHECK, "нет штрихкода"))
+    else:
+        gtin = ((CRIT, "нет ни одного действительного GTIN, товар с маркировкой ЧЗ")
+                if kiz else
+                (CHECK, "нет ни одного действительного GTIN "
+                        "(маркировка не обязательна — WB сейчас не блокирует)"))
+
+    t = r.get("tnved") or ""
+    if not t:
+        tnved = (CRIT, "не заполнен")
+    elif len(t) != 10:
+        tnved = (CRIT, "%d цифр вместо 10" % len(t))
+    else:
+        tnved = (OK, None)
+
+    num = r.get("doc_number")
+    end = r.get("doc_end_date")
+    end = None if end is None or pd.isna(end) else pd.to_datetime(end).date()
+    if not num:
+        doc = (CHECK, "в карточке нет номера декларации/сертификата "
+                      "(нужен, если товар подлежит ТР ТС)")
+    elif end is not None and end < report_date:
+        doc = (CRIT, "срок истёк %s" % end.strftime("%d.%m.%Y"))
+    elif end is None:
+        doc = (CHECK, "не указан срок действия")
+    else:
+        doc = (OK, None)
+    return gtin, tnved, doc
 
 
 def get_cards_check_data(report_date) -> pd.DataFrame:
     """Размеры с остатком на дату и результаты проверок."""
+    report_date = pd.to_datetime(report_date).date()
     with get_duckdb_conn_with_opt() as con:
-        df = con.execute(
-            CARDS_CHECK_SQL,
-            {"report_date": pd.to_datetime(report_date).date()},
-        ).df()
+        df = con.execute(CARDS_CHECK_SQL, {"report_date": report_date}).df()
 
-    df["issues"] = (
-        df[["gtin_issue", "tnved_issue", "doc_issue"]].notna().sum(axis=1)
-    )
+    res = [_classify(r, report_date) for r in df.to_dict("records")]
+    for i, key in enumerate(("gtin", "tnved", "doc")):
+        df[key + "_level"] = [x[i][0] for x in res]
+        df[key + "_issue"] = [x[i][1] for x in res]
+    levels = df[["gtin_level", "tnved_level", "doc_level"]]
+    df["status"] = np.where((levels == CRIT).any(axis=1), CRIT,
+                            np.where((levels == CHECK).any(axis=1), CHECK, OK))
+    df["brand"] = df["brand"].fillna("Без бренда").astype(str).str.upper()
     return df
 
 
 # ------------------------------------------------------------------ Excel
 
 COLUMNS = [
+    ("status", "Статус", None),
     ("nm_id", "Артикул WB", None),
     ("vendor_code", "Артикул продавца", None),
     ("brand", "Бренд", None),
@@ -175,28 +240,37 @@ COLUMNS = [
     ("fbs_qty", "FBS", FMT_QTY),
     ("transit_qty", "В пути", FMT_QTY),
     ("kiz_marked", "Маркировка ЧЗ", None),
-    ("barcode", "Штрихкоды", None),
+    ("valid_gtins", "Действительные GTIN", None),
     ("gtin_issue", "GTIN: проблема", None),
+    ("bad_barcodes", "Недействительные штрихкоды (справочно)", None),
     ("tnved_raw", "ТН ВЭД", None),
     ("tnved_issue", "ТН ВЭД: проблема", None),
     ("doc_number", "Декларация / сертификат", None),
     ("doc_end_date", "Действует до", FMT_DATE),
     ("doc_issue", "Документ: проблема", None),
-    ("issues", "Проблем", FMT_QTY),
 ]
-ISSUE_KEYS = {"gtin_issue", "tnved_issue", "doc_issue"}
-WIDTHS = {"Наименование": 42, "Декларация / сертификат": 30,
-          "GTIN: проблема": 30, "ТН ВЭД: проблема": 20,
-          "Документ: проблема": 30, "Штрихкоды": 24}
+LEVEL_OF = {"gtin_issue": "gtin_level", "tnved_issue": "tnved_level",
+            "doc_issue": "doc_level", "status": "status"}
+WIDTHS = {"Наименование": 40, "Декларация / сертификат": 32,
+          "GTIN: проблема": 36, "ТН ВЭД: проблема": 18, "Документ: проблема": 36,
+          "Действительные GTIN": 22, "Недействительные штрихкоды (справочно)": 40,
+          "Статус": 12}
 
-SHEET_ISSUES = "Карточки с проблемами"
+SHEET_CRIT = "Критично"
+SHEET_CHECK = "Проверить"
+SHEET_BRANDS = "По брендам"
 SHEET_ALL = "Все с остатком"
+
+FILL = {CRIT: PatternFill("solid", fgColor=OCCUPIED_BG),
+        CHECK: PatternFill("solid", fgColor=WARN_BG)}
+FONT_LVL = {CRIT: Font(name=FONT, size=10, color=EXPENSE, bold=True),
+            CHECK: Font(name=FONT, size=10, color=WARN)}
 
 
 def _cell_value(value):
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    if value is None or value is pd.NaT:
         return None
-    if value is pd.NaT:
+    if isinstance(value, float) and np.isnan(value):
         return None
     if isinstance(value, pd.Timestamp):
         return value.date()
@@ -212,106 +286,184 @@ def _fit_width(ws):
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 
 
-def _write_table(ws, df, title, subtitle, params):
-    ncols = len(COLUMNS)
-    hdr = write_sheet_header(ws, title, subtitle, params, ncols)
-    write_table_header(ws, hdr, 1, [c[1] for c in COLUMNS])
-
-    numeric = {i + 1 for i, c in enumerate(COLUMNS) if c[2]}
-    formats = {i + 1: c[2] for i, c in enumerate(COLUMNS) if c[2]}
-    bad_fill = PatternFill("solid", fgColor=OCCUPIED_BG)
-    bad_font = Font(name=FONT, size=10, color=EXPENSE)
-
+def _write_rows(ws, hdr, columns, records, level_of=None, widths=None):
+    ncols = len(columns)
+    write_table_header(ws, hdr, 1, [c[1] for c in columns])
+    numeric = {i + 1 for i, c in enumerate(columns) if c[2]}
+    formats = {i + 1: c[2] for i, c in enumerate(columns) if c[2]}
     row = hdr + 1
-    for rec in df.to_dict("records"):
-        for j, (key, _label, _fmt) in enumerate(COLUMNS, start=1):
+    for rec in records:
+        for j, (key, _l, _f) in enumerate(columns, start=1):
             ws.cell(row=row, column=j, value=_cell_value(rec.get(key)))
         style_data_row(ws, row, 1, ncols, numeric_cols=numeric, formats=formats)
-        for j, (key, _label, _fmt) in enumerate(COLUMNS, start=1):
-            if key in ISSUE_KEYS and rec.get(key):
-                cell = ws.cell(row=row, column=j)
-                cell.fill = bad_fill
-                cell.font = bad_font
+        for j, (key, _l, _f) in enumerate(columns, start=1):
+            lvl = rec.get(level_of[key]) if level_of and key in level_of else None
+            if lvl in FILL:
+                ws.cell(row=row, column=j).fill = FILL[lvl]
+                ws.cell(row=row, column=j).font = FONT_LVL[lvl]
         row += 1
-
     last = max(row - 1, hdr + 1)
     apply_zebra(ws, hdr + 1, last, 1, ncols)
-    apply_column_widths(ws, WIDTHS, hdr)
-    freeze_table(ws, hdr, first_col=3)
+    apply_column_widths(ws, widths or {}, hdr)
+    ws.row_dimensions[hdr].height = 36
+    for j in range(1, ncols + 1):
+        ws.cell(row=hdr, column=j).alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True)
+    freeze_table(ws, hdr, first_col=4)
     enable_autofilter(ws, hdr, 1, ncols, last)
     _fit_width(ws)
+    return last
+
+
+def _detail_sheet(wb, name, df, title, subtitle, params):
+    ws = wb.create_sheet(name)
+    hdr = write_sheet_header(ws, title, subtitle, params, len(COLUMNS))
+    _write_rows(ws, hdr, COLUMNS, df.to_dict("records"), LEVEL_OF, WIDTHS)
+
+
+def _card_flags(df):
+    """Статусы на уровне карточки: худший статус среди её размеров."""
+    g = df.groupby("nm_id")
+    out = pd.DataFrame({
+        "brand": g["brand"].first(),
+        "qty": g["total_qty"].sum(),
+    })
+    for key in ("gtin", "tnved", "doc"):
+        lv = df[key + "_level"]
+        out[key + "_crit"] = (lv == CRIT).groupby(df["nm_id"]).any()
+        out[key + "_check"] = (lv == CHECK).groupby(df["nm_id"]).any()
+    out["crit"] = out[["gtin_crit", "tnved_crit", "doc_crit"]].any(axis=1)
+    out["check"] = ~out["crit"] & out[["gtin_check", "tnved_check", "doc_check"]].any(axis=1)
+    return out
+
+
+def _pct(part, total):
+    return part / total * 100 if total else None
 
 
 def make_cards_check_excel(df, report_date) -> bytes:
     report_date = pd.to_datetime(report_date).date()
     d = report_date.strftime("%d.%m.%Y")
-    issues = df[df["issues"] > 0].sort_values(
-        ["issues", "total_qty"], ascending=[False, False])
+    cards = _card_flags(df)
+    n = len(cards)
 
     wb = Workbook()
     ws = wb.active
     ws.title = TOC_SHEET_NAME
+    ncol = 7
     write_sheet_header(
         ws, "ПРОВЕРКА КАРТОЧЕК WB",
         "GTIN, ТН ВЭД, декларации и сертификаты · только товары с остатком",
-        "Остатки на %s · склады WB + FBS + в пути" % d, 10, landscape=False)
-    # на оглавлении кнопка возврата не нужна
+        "Остатки на %s · склады WB + FBS + в пути · карточек с остатком: %d · "
+        "остаток %s шт" % (d, n, f"{int(df['total_qty'].sum()):,}".replace(",", " ")),
+        ncol, landscape=True)
     ws.unmerge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
     for col in (1, 2):
         cell = ws.cell(row=1, column=col)
         cell.value, cell.hyperlink = None, None
         cell.fill, cell.border = PatternFill(fill_type=None), Border()
 
-    cards_total = df["nm_id"].nunique()
-    cards_bad = issues["nm_id"].nunique()
-    qty_bad = issues["total_qty"].sum()
-    write_kpi_cards(ws, 7, [
-        ("КАРТОЧЕК С ОСТАТКОМ", f"{cards_total:,}".replace(",", " "),
-         f"остаток {int(df['total_qty'].sum()):,} шт".replace(",", " ")),
-        ("С ПРОБЛЕМАМИ", f"{cards_bad:,}".replace(",", " "),
-         f"остаток {int(qty_bad):,} шт".replace(",", " ")),
-        ("GTIN", str(df.loc[df["gtin_issue"].notna(), "nm_id"].nunique()), "карточек"),
-        ("ТН ВЭД", str(df.loc[df["tnved_issue"].notna(), "nm_id"].nunique()), "карточек"),
-        ("ДЕКЛАРАЦИИ / СЕРТИФИКАТЫ",
-         str(df.loc[df["doc_issue"].notna(), "nm_id"].nunique()), "карточек"),
-    ], col_start=1, card_width=2)
+    # ---- сводка: карточек и % от карточек с остатком
+    summary_cols = [
+        ("check", "Проверка", None),
+        ("crit_n", "Критично, карточек", FMT_QTY),
+        ("crit_p", "Критично, %", FMT_PCT),
+        ("crit_q", "Остаток в критичных, шт", FMT_QTY),
+        ("check_n", "Проверить, карточек", FMT_QTY),
+        ("check_p", "Проверить, %", FMT_PCT),
+        ("check_q", "Остаток, шт", FMT_QTY),
+    ]
+    rows = []
+    for key, label in (("gtin", "GTIN (штрихкод)"), ("tnved", "ТН ВЭД"),
+                       ("doc", "Декларация / сертификат")):
+        c, k = cards[key + "_crit"], cards[key + "_check"] & ~cards[key + "_crit"]
+        rows.append({"check": label, "crit_n": int(c.sum()), "crit_p": _pct(c.sum(), n),
+                     "crit_q": cards.loc[c, "qty"].sum(), "check_n": int(k.sum()),
+                     "check_p": _pct(k.sum(), n), "check_q": cards.loc[k, "qty"].sum()})
+    rows.append({"check": "ИТОГО карточек (без повторов)",
+                 "crit_n": int(cards["crit"].sum()), "crit_p": _pct(cards["crit"].sum(), n),
+                 "crit_q": cards.loc[cards["crit"], "qty"].sum(),
+                 "check_n": int(cards["check"].sum()), "check_p": _pct(cards["check"].sum(), n),
+                 "check_q": cards.loc[cards["check"], "qty"].sum()})
+    last = _write_rows(ws, 7, summary_cols, rows,
+                       widths={"Проверка": 32})
+    for j in range(1, ncol + 1):
+        ws.cell(row=last, column=j).font = Font(name=FONT, size=10, bold=True)
+    ws.freeze_panes = None
+    ws.auto_filter.ref = None
+    for col, w in zip("ABCDEFG", (36, 14, 12, 18, 14, 12, 14)):
+        ws.column_dimensions[col].width = w
 
-    row = write_toc_links(ws, 12, [
-        (SHEET_ISSUES, "Размеры, где есть хотя бы одна проблема"),
-        (SHEET_ALL, "Все размеры с остатком на дату — для сверки"),
-    ], col_label=1, col_desc=2, desc_span=9)
+    row = write_toc_links(ws, last + 2, [
+        (SHEET_CRIT, "Размеры, где WB может заблокировать карточку — исправлять в первую очередь"),
+        (SHEET_CHECK, "Нужна ручная проверка: ошибки может и не быть"),
+        (SHEET_BRANDS, "Сколько проблем по каждому бренду, в штуках и процентах"),
+        (SHEET_ALL, "Все размеры с остатком — для сверки"),
+    ], col_label=1, col_desc=2, desc_span=6)
 
     notes = [
-        "GTIN — штрихкод из 8/12/13/14 цифр с верной контрольной цифрой (GS1). "
-        "Код из 13 цифр на «2» — внутренний (в т. ч. сгенерированный WB), не GTIN. "
-        "Для товаров с маркировкой ЧЗ GTIN должен быть зарегистрирован в Честном знаке.",
-        "ТН ВЭД — ровно 10 цифр.",
-        "Документ — номер декларации/сертификата заполнен, похож на ЕАЭС/RU, "
-        "срок действия не истёк на дату остатков.",
-        "Наличие GTIN в Честном знаке и документа в реестре ФСА по этим данным "
-        "не проверяется — только заполненность и формат.",
+        "КАК ПРОВЕРЯЕТСЯ GTIN. Штрихкоды карточки — это и есть GTIN (EAN-13 и т. п.). "
+        "Последняя цифра — контрольная, она вычисляется из остальных по стандарту GS1: "
+        "цифры справа налево (без последней) умножаются поочерёдно на 3 и 1, суммируются, "
+        "контрольная = (10 − сумма mod 10) mod 10. Если она не совпала — код недействителен "
+        "(выдуман или с опечаткой). Пример: 4610503150759 — сумма 61, контрольная 9, совпало.",
+        "У размера бывает несколько штрихкодов. Размер в порядке, если среди них есть хотя бы "
+        "один действительный GTIN; лишние недействительные коды показаны справочно.",
+        "КРИТИЧНО: нет действительного GTIN у товара с маркировкой ЧЗ; ТН ВЭД не из 10 цифр; "
+        "срок декларации/сертификата истёк; карточка не найдена.",
+        "ПРОВЕРИТЬ: нет действительного GTIN у товара без обязательной маркировки (WB сейчас "
+        "его не проверяет); в карточке нет номера документа (не нужен, если товар не подлежит "
+        "ТР ТС); не указан срок действия документа.",
+        "Статус карточки — худший из статусов её размеров. Проценты — от числа карточек с "
+        "остатком. Регистрацию GTIN в Честном знаке и документа в реестре ФСА по этим данным "
+        "проверить нельзя.",
     ]
     row += 1
     for text in notes:
-        write_footer_note(ws, row, 10, text)
+        write_footer_note(ws, row, ncol, text)
         ws.cell(row=row, column=1).alignment = Alignment(
             horizontal="left", vertical="top", wrap_text=True)
-        ws.row_dimensions[row].height = 28
+        ws.row_dimensions[row].height = 44
         row += 1
-    for col in "ABCDEFGHIJ":
-        ws.column_dimensions[col].width = 14
-    ws.column_dimensions["A"].width = 26
     _fit_width(ws)
 
-    params = "Остатки на %s · уровень: артикул WB + размер" % d
-    _write_table(wb.create_sheet(SHEET_ISSUES), issues,
-                 "КАРТОЧКИ С ПРОБЛЕМАМИ",
-                 "Сначала — больше проблем и больше остаток", params)
-    _write_table(wb.create_sheet(SHEET_ALL),
-                 df.sort_values(["nm_id", "tech_size"]),
-                 "ВСЕ КАРТОЧКИ С ОСТАТКОМ", "Для сверки", params)
+    # ---- по брендам
+    b = cards.groupby("brand").agg(
+        cards=("qty", "size"), qty=("qty", "sum"),
+        crit=("crit", "sum"), check=("check", "sum"),
+        gtin=("gtin_crit", "sum"), tnved=("tnved_crit", "sum"), doc=("doc_crit", "sum"),
+    ).reset_index()
+    b["crit_q"] = cards[cards["crit"]].groupby("brand")["qty"].sum().reindex(b["brand"]).fillna(0).values
+    b["crit_p"] = b["crit"] / b["cards"] * 100
+    b["check_p"] = b["check"] / b["cards"] * 100
+    b = b.sort_values(["crit", "crit_q"], ascending=False)
+    brand_cols = [
+        ("brand", "Бренд", None), ("cards", "Карточек с остатком", FMT_QTY),
+        ("qty", "Остаток, шт", FMT_QTY), ("crit", "Критично, карточек", FMT_QTY),
+        ("crit_p", "Критично, %", FMT_PCT), ("crit_q", "Остаток в критичных, шт", FMT_QTY),
+        ("gtin", "из них GTIN", FMT_QTY), ("tnved", "ТН ВЭД", FMT_QTY),
+        ("doc", "Документы", FMT_QTY), ("check", "Проверить, карточек", FMT_QTY),
+        ("check_p", "Проверить, %", FMT_PCT),
+    ]
+    wsb = wb.create_sheet(SHEET_BRANDS)
+    hdr = write_sheet_header(wsb, "ПРОБЛЕМЫ ПО БРЕНДАМ",
+                             "Карточки с остатком · статус карточки — худший из её размеров",
+                             "Остатки на %s · сортировка: больше критичных выше" % d,
+                             len(brand_cols))
+    _write_rows(wsb, hdr, brand_cols, b.to_dict("records"), widths={"Бренд": 24})
 
-    finalize_workbook(wb, [TOC_SHEET_NAME, SHEET_ISSUES, SHEET_ALL])
+    params = "Остатки на %s · уровень: артикул WB + размер" % d
+    order = {CRIT: 0, CHECK: 1, OK: 2}
+    df = df.assign(_o=df["status"].map(order)).sort_values(
+        ["_o", "total_qty"], ascending=[True, False])
+    _detail_sheet(wb, SHEET_CRIT, df[df["status"] == CRIT], "КРИТИЧНО",
+                  "WB может заблокировать карточку · сначала больший остаток", params)
+    _detail_sheet(wb, SHEET_CHECK, df[df["status"] == CHECK], "ПРОВЕРИТЬ",
+                  "Нужна ручная проверка · критичных проблем нет", params)
+    _detail_sheet(wb, SHEET_ALL, df.sort_values(["brand", "nm_id", "tech_size"]),
+                  "ВСЕ КАРТОЧКИ С ОСТАТКОМ", "Для сверки", params)
+
+    finalize_workbook(wb, [TOC_SHEET_NAME, SHEET_CRIT, SHEET_CHECK, SHEET_BRANDS, SHEET_ALL])
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -330,8 +482,8 @@ def register_cards_check_callbacks(app):
     def export_cards_check(n_clicks, report_date):
         if not n_clicks:
             return no_update, no_update
-        report_date = pd.to_datetime(report_date).date() if report_date else (
-            date.today() - pd.Timedelta(days=1))
+        report_date = (pd.to_datetime(report_date).date() if report_date
+                       else date.today() - pd.Timedelta(days=1))
         df = get_cards_check_data(report_date)
         content = make_cards_check_excel(df, report_date)
         return (
