@@ -1,0 +1,351 @@
+CREATE OR REPLACE TEMP TABLE wb_costs AS
+
+WITH wb_costs AS (
+
+    -- ============================================================
+    -- Other income / loss
+    -- ============================================================
+    SELECT
+        date_from,
+        rrd_id,
+        'Other income / loss' AS account,
+        '5.1. Коррекции продаж и возвратов' AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'retail_price'
+      AND sop_name LIKE '%оррекция%'
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        sop_name
+
+
+    UNION ALL
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Other income / loss' AS account,
+        '5.2. Корректировки по прогамме WB' AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'additional_payment'
+      
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        sop_name
+
+
+    UNION ALL
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Other income / loss' AS account,
+        '5.3. Досрочное снятие' AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'payment_schedule'
+      
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        sop_name
+
+
+    UNION ALL
+
+
+    -- ============================================================
+    -- WB Logistic
+    -- ============================================================
+    SELECT
+        date_from,
+        rrd_id,
+        '3.1 Логистика' AS account,
+
+        CASE
+            WHEN COALESCE(btn, sop_name) ILIKE '%при продаже%'
+                THEN 'Логистика продажи'
+
+            WHEN COALESCE(btn, sop_name) ILIKE '%отмен%'
+                THEN 'Логистика отмен'
+
+            WHEN COALESCE(btn, sop_name) ILIKE '%брак%'
+                THEN 'Возврат брака'
+
+            WHEN COALESCE(btn, sop_name) ILIKE '%возврат%'
+                THEN 'Возвраты'
+
+            WHEN COALESCE(btn, sop_name) ILIKE '%коррекц%'
+              OR COALESCE(btn, sop_name) ILIKE '%коэффициент%'
+                THEN 'Коррекции логистики'
+
+            ELSE 'Прочие'
+        END AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'delivery_rub'
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        cost_item
+
+
+    UNION ALL
+
+
+    -- ============================================================
+    -- WB Storage
+    -- ============================================================
+    SELECT
+        date_from,
+        rrd_id,
+        '3.2. Хранение' AS account,
+        sop_name AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'storage_fee'
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        sop_name
+
+
+    UNION ALL
+
+
+    -- ============================================================
+    -- WB Acceptance
+    -- ============================================================
+    SELECT
+        date_from,
+        rrd_id,
+        '3.3. Приемка' AS account,
+        sop_name AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'acceptance'
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        sop_name
+
+
+    UNION ALL
+
+
+    -- ============================================================
+    -- WB Penalties
+    -- ============================================================
+    SELECT
+        date_from,
+        rrd_id,
+        '3.4. Штрафы' AS account,
+
+        CASE
+            WHEN btn ILIKE '%габарит%'
+              OR btn ILIKE '%обмер%'
+                THEN 'Габариты товара'
+
+            WHEN btn ILIKE '%расхождени%карточк%'
+                THEN 'Расхождения в карточке товара'
+
+            WHEN btn ILIKE '%хранени%возврат%'
+                THEN 'Хранение возвратов'
+
+            WHEN btn ILIKE '%подмен%товар%'
+                THEN 'Подмена товара'
+
+            WHEN btn ILIKE '%недовоз%'
+              OR btn ILIKE '%срок%передач%'
+              OR btn ILIKE '%невыполненн%заказ%'
+                THEN 'Нарушения поставки'
+
+            ELSE 'Прочие штрафы'
+        END AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'penalty'
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        cost_item
+
+
+    UNION ALL
+
+
+    -- ============================================================
+    -- WB Deduction
+    -- ============================================================
+    SELECT
+        date_from,
+        rrd_id,
+        'WB Deduction' AS account,
+
+        CASE
+            WHEN STARTS_WITH(btn, 'Списание за отзыв')
+                THEN '4.2. Отзывы'
+
+            WHEN STARTS_WITH(btn, 'Оказание услуг')
+              OR STARTS_WITH(btn, 'Предоставление услуг')
+              OR STARTS_WITH(btn, 'Витрина Магазина')
+                THEN '4.1. Услуги WB'
+
+            ELSE '4.3. Прочее'
+        END AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field = 'deduction'
+      AND NOT STARTS_WITH(btn, 'Платеж')
+      AND NOT STARTS_WITH(btn, 'Перевод')
+      AND btn IS NOT NULL
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        cost_item
+
+
+    UNION ALL
+
+
+    -- ============================================================
+    -- WB Loyality
+    -- ============================================================
+    SELECT
+        date_from,
+        rrd_id,
+        '3.6. Программа лояльности' AS account,
+        btn AS cost_item,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'dt'),
+            0
+        ) AS dt,
+
+        COALESCE(
+            SUM(val) FILTER (WHERE oper = 'cr'),
+            0
+        ) AS cr
+
+    FROM sales.sales_long
+
+    WHERE field IN (
+        'cashback_commission_change',
+        'cashback_amount'
+    )
+
+    GROUP BY
+        date_from,
+        rrd_id,
+        btn
+)
+
+SELECT
+    yearweek(t.date_from::DATE) AS yw,
+    last_day(t.date_from::date) as me,
+    t.*,
+    s.vat_rate
+
+FROM wb_costs t
+
+LEFT JOIN sales.sales_long s
+    ON s.rrd_id = t.rrd_id;

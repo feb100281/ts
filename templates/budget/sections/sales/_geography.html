@@ -1,0 +1,111 @@
+<div id="section-sales-geography"></div>
+<div class="page-break"></div>
+
+<!-- Раздел I.6: География продаж -->
+<div class="section-header">
+    <span class="section-number">I.6</span>
+    <div class="section-title-with-num">География продаж</div>
+</div>
+
+{% if sales_by_country %}
+<!-- Подраздел I.6.1: Комментарий по географии -->
+<div class="subsection-header">
+    <span class="subsection-number">I.6.1</span>
+    <div class="subsection-title">Структура продаж по странам</div>
+</div>
+
+{% if country_comment %}
+<div class="insight-box">
+    <strong>Комментарий по географии продаж:</strong><br>
+    {{ country_comment.comment }}
+
+    {% if country_comment.country_insights %}
+        <div style="margin-top: 12px;">
+            <strong>Структура продаж по ключевым странам:</strong>
+            {% for item in country_comment.country_insights %}
+            <div style="margin-top: 10px;">
+                <strong>
+                    {% if item.emoji_flag %}{{ item.emoji_flag }} {% endif %}{{ item.country_name }}
+                </strong>
+                — {{ item.net_amount_fmt }} руб. ({{ item.share_pct }}%)
+
+                {% if item.top_categories %}
+                <div class="muted" style="margin-top: 4px;">
+                    Топ-категории:
+                    {% for row in item.top_categories %}
+                        {{ row.subject_name }} ({{ row.net_amount_fmt }} руб.){% if not forloop.last %}; {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if item.top_products %}
+                <div class="muted" style="margin-top: 2px;">
+                    Топ-товары:
+                    {% for row in item.top_products %}
+                        {{ row.product_name }} ({{ row.net_amount_fmt }} руб.){% if not forloop.last %}; {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% comment %} {% if country_comment.note %}
+    <div class="small-note" style="margin-top: 12px;">
+        {{ country_comment.note }}
+    </div>
+    {% endif %} {% endcomment %}
+</div>
+{% endif %}
+
+<!-- Подраздел I.6.2: Карта продаж -->
+<div class="subsection-header">
+    <span class="subsection-number">I.6.2</span>
+    <div class="subsection-title">Карта продаж по странам</div>
+</div>
+
+{% if sales_country_map_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ sales_country_map_base64 }}" alt="Карта продаж по странам">
+</div>
+<div class="small-note">
+    На карте страны выделены по объему продаж за последние 90 дней. Подписи показывают долю в выручке.
+</div>
+{% endif %}
+
+<!-- Подраздел I.6.3: Детальная таблица -->
+<div class="subsection-header">
+    <span class="subsection-number">I.6.3</span>
+    <div class="subsection-title">Детальная таблица по странам</div>
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:38%;">Страна</th>
+            <th style="width:20%;">Продажи, руб.</th>
+            <th style="width:18%;">Возвраты, руб.</th>
+            <th style="width:12%;">Возвраты, %</th>
+            <th style="width:12%;">Доля, %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for country in sales_by_country %}
+        <tr>
+            <td class="left">
+                {% if country.emoji_flag %}
+                    {{ country.emoji_flag }} {{ country.country_name }}
+                {% else %}
+                    {{ country.country_name|default:"Не указана" }}
+                {% endif %}
+            </td>
+            <td class="right">{{ country.sales_amount_fmt }}</td>
+            <td class="right negative">{{ country.returns_amount_fmt }}</td>
+            <td class="center">{{ country.return_rate_amount_pct }}%</td>
+            <td class="center">{{ country.share_pct }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}

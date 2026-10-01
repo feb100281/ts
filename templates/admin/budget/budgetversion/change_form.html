@@ -1,0 +1,318 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+
+{% block content_title %}
+  {% url opts|admin_urlname:'changelist' as changelist_url %}
+  {% url opts|admin_urlname:'add' as add_url %}
+
+  <div class="budget-topbar">
+    <div class="budget-topbar__left">
+      <div class="budget-icon">📊</div>
+
+      <div class="budget-topbar__titles">
+        <div class="budget-kicker">Бюджетирование</div>
+
+        <div class="budget-title">
+          {% if add %}
+            Новая версия бюджета
+          {% else %}
+            {{ original.number }}
+          {% endif %}
+        </div>
+
+        <div class="budget-subtitle">
+          {% if not add and original.get_budget_type_display %}
+            Тип: {{ original.get_budget_type_display }}
+          {% else %}
+            Планирование, параметры модели и экспорт
+          {% endif %}
+        </div>
+
+        <div class="budget-meta">
+          <span class="chip chip-blue">
+            {% if add %}Создание{% else %}Редактирование{% endif %}
+          </span>
+
+          {% if not add and original.pk %}
+            <span class="chip chip-gray">ID: {{ original.pk }}</span>
+          {% endif %}
+
+          {% if not add and original.budget_type == 'baseline' %}
+            <span class="chip chip-blue">Базовый план</span>
+          {% elif not add and original.budget_type == 'rolling' %}
+            <span class="chip chip-green">Текущий прогноз</span>
+          {% elif not add and original.budget_type == 'adhoc' %}
+            <span class="chip chip-warn">Ad-hoc</span>
+          {% endif %}
+
+          {% if not add and original.date_from and original.date_to %}
+            <span class="chip chip-cyan">{{ original.date_from }} → {{ original.date_to }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="budget-topbar__right">
+      <a class="link-btn" href="{{ changelist_url }}">← К реестру</a>
+
+      {% if has_add_permission %}
+        <a class="primary-btn" href="{{ add_url }}">➕ Новая версия</a>
+      {% endif %}
+
+      {% if not add and original.pk %}
+        <a class="pill-btn" href="{% url 'admin:budget_budgetversion_export_csv' original.pk %}">⬇ CSV</a>
+        <a class="pill-btn" href="{% url 'admin:budget_budgetversion_export_pdf' original.pk %}">⬇ PDF</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="budget-breadcrumbs">
+    <nav class="crumbs">
+      <a href="{% url 'admin:index' %}">НАЧАЛО</a>
+      <span>›</span>
+      <a href="{{ changelist_url }}">БЮДЖЕТЫ</a>
+      <span>›</span>
+      <span class="crumbs-current">
+        {% if add %}НОВАЯ ВЕРСИЯ{% else %}{{ original.number|default:"КАРТОЧКА" }}{% endif %}
+      </span>
+    </nav>
+
+    <span class="crumbs-note">
+      {% if add %}
+        создание версии бюджета
+      {% else %}
+        период: {{ original.date_from|date:"d.m.Y" }} — {{ original.date_to|date:"d.m.Y" }}
+      {% endif %}
+    </span>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+    .budget-topbar{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      flex-wrap:wrap;
+      padding:6px 0 8px;
+      border-bottom:1px solid #e5e7eb;
+      margin-bottom:10px;
+    }
+
+    .budget-topbar__left{
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      min-width:320px;
+    }
+
+    .budget-icon{
+      width:38px;
+      height:38px;
+      border-radius:2px;
+      background:#0f172a;
+      color:#e2e8f0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:18px;
+      font-weight:800;
+      box-shadow:0 0 0 1px rgba(15,23,42,.18);
+      flex:0 0 auto;
+    }
+
+    .budget-kicker{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#6b7280;
+      line-height:1.1;
+      margin-top:1px;
+    }
+
+    .budget-title{
+      font-size:18px;
+      font-weight:750;
+      color:#111827;
+      line-height:1.15;
+      margin-top:2px;
+    }
+
+    .budget-subtitle{
+      margin-top:6px;
+      font-size:13px;
+      font-weight:700;
+      color:#0f172a;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .budget-meta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-top:6px;
+    }
+
+    .chip{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:2px;
+      font-weight:700;
+      border:1px solid rgba(15,23,42,.10);
+      background:#f8fafc;
+      color:#334155;
+    }
+
+    .chip-blue{
+      background:#eff6ff;
+      color:#1d4ed8;
+      border-color:rgba(29,78,216,.12);
+    }
+
+    .chip-gray{
+      background:#f3f4f6;
+      color:#4b5563;
+      border-color:rgba(75,85,99,.12);
+    }
+
+    .chip-cyan{
+      background:#ecfeff;
+      color:#155e75;
+      border-color:rgba(21,94,117,.12);
+    }
+
+    .chip-green{
+      background:#dcfce7;
+      color:#166534;
+      border-color:rgba(22,101,52,.14);
+    }
+
+    .chip-warn{
+      background:#fef3c7;
+      color:#92400e;
+      border-color:rgba(146,64,14,.14);
+    }
+
+    .budget-topbar__right{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .link-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:2px;
+      text-decoration:none;
+      background:#eef2ff;
+      color:#3730a3;
+      border:1px solid rgba(55,48,163,.12);
+    }
+
+    .primary-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:2px;
+      text-decoration:none;
+      background:#e0f2fe;
+      color:#075985;
+      border:1px solid rgba(2,132,199,.18);
+      font-weight:800;
+    }
+
+    .pill-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:2px;
+      text-decoration:none;
+      background:#f3f4f6;
+      color:#374151;
+      border:1px solid rgba(15,23,42,.10);
+    }
+
+    .budget-breadcrumbs{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      margin:8px 0 0;
+      padding-top:8px;
+      color:#6b7280;
+      font-size:11px;
+    }
+
+    .crumbs{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+
+    .crumbs a{
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      text-decoration:none;
+      color:#9ca3af;
+    }
+
+    .crumbs-current{
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:#4b5563;
+      font-weight:800;
+    }
+
+    .crumbs-note{
+      color:#9ca3af;
+    }
+
+    #content-main .module {
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .submit-row {
+      border-radius: 14px;
+    }
+
+    .form-row {
+      padding-top: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #eef2f7;
+    }
+
+    .aligned label {
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .readonly {
+      background: #f8fafc;
+      border-radius: 2px;
+      padding: 8px 10px;
+      display: inline-block;
+      min-width: 240px;
+    }
+
+    .help {
+      color: #6b7280;
+      font-size: 12px;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

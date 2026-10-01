@@ -10,16 +10,23 @@
 {% block content_title %}
   {% url cl.opts|admin_urlname:'add' as add_url %}
   {% url cl.opts|admin_urlname:'changelist' as changelist_url %}
+  {% url 'contracts:accruals_report' as accruals_report_url %}
+  {% url 'contracts:debt_report' as debt_report_url %}
 
   <div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; padding-bottom:6px;">
 
-    {# Левая часть #}
     <div style="display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap;">
       <div style="
-          width:40px;height:40px;border-radius:8px;
-          background:#0f172a;color:#e2e8f0;
-          display:flex;align-items:center;justify-content:center;
-          font-size:20px;font-weight:800;
+          width:40px;
+          height:40px;
+          border-radius:2px;
+          background:#0f172a;
+          color:#e2e8f0;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:20px;
+          font-weight:800;
           box-shadow:0 0 0 1px rgba(15,23,42,.18);
       ">📄</div>
 
@@ -33,17 +40,14 @@
         </span>
 
         <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;">
-          <span style="
-              font-size:11px;padding:2px 8px;border-radius:6px;
-              background:#eff6ff;color:#1d4ed8;font-weight:800;
-          ">
-            Всего: {{ cl.result_count }}
-          </span>
-
           {% if cl.query %}
             <span style="
-                font-size:11px;padding:2px 8px;border-radius:6px;
-                background:#fef3c7;color:#92400e;font-weight:700;
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:2px;
+                background:#fef3c7;
+                color:#92400e;
+                font-weight:700;
             ">
               Поиск: “{{ cl.query }}”
             </span>
@@ -51,8 +55,12 @@
 
           {% if cl.has_filters %}
             <span style="
-                font-size:11px;padding:2px 8px;border-radius:6px;
-                background:#f3f4f6;color:#4b5563;font-weight:700;
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:2px;
+                background:#f3f4f6;
+                color:#4b5563;
+                font-weight:700;
             ">
               Фильтры применены
             </span>
@@ -63,14 +71,16 @@
 
     <div style="flex:1;"></div>
 
-    {# Правая карточка: действия + быстрые фильтры #}
     <div style="
-        min-width:280px; max-width:360px;
-        border-radius:16px;
+        min-width:280px;
+        max-width:360px;
+        border-radius:2px;
         background:rgba(248,250,252,0.9);
         box-shadow:0 18px 40px rgba(15,23,42,0.16);
         padding:10px 12px 12px;
-        display:flex;flex-direction:column;gap:8px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
     ">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         <span style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9ca3af;">
@@ -86,80 +96,137 @@
           <a href="{{ add_url }}"
              class="button"
              style="
-               font-size:13px;padding:4px 10px;border-radius:8px;
-               display:inline-flex;align-items:center;gap:6px;justify-content:flex-start;
-               background:#e0f2fe;border:1px solid rgba(2,132,199,.20);
+               font-size:13px;
+               padding:4px 10px;
+               border-radius:2px;
+               display:inline-flex;
+               align-items:center;
+               gap:6px;
+               justify-content:flex-start;
+               background:#e0f2fe;
+               border:1px solid rgba(2,132,199,.20);
              ">
             ➕ Добавить договор
           </a>
         {% endif %}
-
-        <a href="{{ changelist_url }}"
-           style="
-             font-size:11px;padding:3px 8px;border-radius:8px;text-decoration:none;
-             background:#eef2ff;color:#3730a3;display:inline-flex;align-items:center;gap:6px;
-           ">
-          🔄 Обновить список
-        </a>
-
-        <a href="{{ changelist_url }}"
-           style="
-             font-size:11px;padding:3px 8px;border-radius:8px;text-decoration:none;
-             background:#fff1f2;color:#9f1239;display:inline-flex;align-items:center;gap:6px;
-           ">
-          🧹 Сбросить фильтры
-        </a>
       </div>
 
-      <div style="margin-top:6px;padding-top:8px;border-top:1px dashed rgba(15,23,42,.12);">
-        <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9ca3af;margin-bottom:6px;">
-          Быстрые фильтры
+      <div style="border-top:1px solid #e5e7eb; padding-top:10px;">
+        <div style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:0.08em;
+            color:#6b7280;
+            margin-bottom:8px;
+        ">
+          Отчеты
         </div>
 
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">
-          {# Подписаны / не подписаны (BooleanFieldFilter: 1/0) #}
-          <a href="{{ changelist_url }}?is_signed__exact=1"
-             style="font-size:11px;padding:3px 8px;border-radius:6px;text-decoration:none;
-                    background:#ecfdf5;color:#065f46;border:1px solid rgba(16,185,129,.18);">
-            Подписанные
-          </a>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <input
+            id="report-month"
+            type="month"
+            value="{% now 'Y-m' %}"
+            style="
+              height:34px;
+              border:1px solid #d1d5db;
+              border-radius:2px;
+              padding:4px 8px;
+              font-size:13px;
+              background:#fff;
+              color:#111827;
+            "
+          >
 
-          <a href="{{ changelist_url }}?is_signed__exact=0"
-             style="font-size:11px;padding:3px 8px;border-radius:6px;text-decoration:none;
-                    background:#fef2f2;color:#7f1d1d;border:1px solid rgba(239,68,68,.18);">
-            Не подписанные
-          </a>
+          <form
+            id="accruals-report-form"
+            method="get"
+            action="{{ accruals_report_url }}"
+            target="_blank"
+            style="margin:0;"
+          >
+            <input type="hidden" name="month" id="accruals-report-month" value="{% now 'Y-m' %}">
+            <button
+              type="submit"
+              style="
+                width:100%;
+                height:34px;
+                border:none;
+                border-radius:2px;
+                background:#0f172a;
+                color:#fff;
+                font-size:13px;
+                font-weight:700;
+                cursor:pointer;
+              "
+            >
+              📅 Открыть начисления
+            </button>
+          </form>
 
-          {# Основные/допники (pid__isnull) #}
-          <a href="{{ changelist_url }}?pid__isnull=1"
-             style="font-size:11px;padding:3px 8px;border-radius:6px;text-decoration:none;
-                    background:#f3f4f6;color:#374151;border:1px solid rgba(15,23,42,.10);">
-            Основные
-          </a>
+          <form
+            id="debt-report-form"
+            method="get"
+            action="{{ debt_report_url }}"
+            target="_blank"
+            style="margin:0;"
+          >
+            <input type="hidden" name="month" id="debt-report-month" value="{% now 'Y-m' %}">
+            <button
+              type="submit"
+              style="
+                width:100%;
+                height:34px;
+                border:none;
+                border-radius:2px;
+                background:#7c2d12;
+                color:#fff;
+                font-size:13px;
+                font-weight:700;
+                cursor:pointer;
+              "
+            >
+              💼 Открыть дебиторов / кредиторов
+            </button>
+          </form>
 
-          {% comment %} <a href="{{ changelist_url }}?pid__isnull=0"
-             style="font-size:11px;padding:3px 8px;border-radius:6px;text-decoration:none;
-                    background:#fff7ed;color:#92400e;border:1px solid rgba(245,158,11,.18);">
-            Доп.соглашения
-          </a> {% endcomment %}
-
-          {# Быстрый поиск по пустому номеру — если полезно #}
-          {% comment %} <a href="{{ changelist_url }}?number__isnull=1"
-             style="font-size:11px;padding:3px 8px;border-radius:6px;text-decoration:none;
-                    background:#eef2ff;color:#3730a3;border:1px solid rgba(99,102,241,.18);">
-            Без номера
-          </a> {% endcomment %}
+          <!-- НОВАЯ КНОПКА: Отчёт по займам и кредитным договорам -->
+          <button
+            id="loans-report-btn"
+            type="button"
+            style="
+              width:100%;
+              height:34px;
+              border:none;
+              border-radius:2px;
+              background:#059669;
+              color:#fff;
+              font-size:13px;
+              font-weight:700;
+              cursor:pointer;
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              gap:8px;
+            "
+          >
+            <i class="fa-solid fa-file-invoice-dollar"></i>
+            📊 Отчёт по займам и кредитам
+          </button>
         </div>
-
-        
       </div>
     </div>
   </div>
 
   <div style="
-      display:flex;justify-content:space-between;align-items:center;
-      margin-top:4px;padding:6px 2px 0;border-top:1px solid #e5e7eb;
-      color:#6b7280;font-size:11px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
   ">
     <nav style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
       <a href="{% url 'admin:index' %}"
@@ -183,9 +250,42 @@
 {% block extrahead %}
   {{ block.super }}
 
+  <!-- Подключаем внешний JS файл для отчёта по займам -->
+  <script src="{% static 'js/loans_report_modal.js' %}"></script>
+
+  <style>
+    #result_list tbody tr:hover { background: rgba(2,132,199,0.06); }
+    #changelist #toolbar { border-radius: 2px; overflow: hidden; }
+
+    #changelist-form .results {
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #result_list {
+      border-radius: 0;
+      overflow: visible;
+    }
+
+    #result_list thead th {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--body-bg, #fff);
+    }
+
+    #result_list thead th a {
+      background: inherit;
+    }
+
+    #result_list thead {
+      box-shadow: 0 2px 0 rgba(0,0,0,.06);
+    }
+  </style>
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      // Клик по строке таблицы
       const rows = document.querySelectorAll('#result_list tbody tr');
 
       rows.forEach(function (row) {
@@ -199,50 +299,45 @@
           if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
           if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
           if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+          if (e.target.closest('form')) return;
           window.location.href = link.href;
         });
       });
+
+      // Синхронизация месяца для существующих отчётов
+      const monthInput = document.getElementById('report-month');
+      const accrualsMonthInput = document.getElementById('accruals-report-month');
+      const debtMonthInput = document.getElementById('debt-report-month');
+      const accrualsForm = document.getElementById('accruals-report-form');
+      const debtForm = document.getElementById('debt-report-form');
+
+      function syncMonth() {
+        const month = monthInput && monthInput.value ? monthInput.value : "{% now 'Y-m' %}";
+
+        if (accrualsMonthInput) {
+          accrualsMonthInput.value = month;
+        }
+
+        if (debtMonthInput) {
+          debtMonthInput.value = month;
+        }
+      }
+
+      if (monthInput) {
+        monthInput.addEventListener('change', syncMonth);
+        monthInput.addEventListener('input', syncMonth);
+        syncMonth();
+      }
+
+      if (accrualsForm) {
+        accrualsForm.addEventListener('submit', syncMonth);
+      }
+
+      if (debtForm) {
+        debtForm.addEventListener('submit', syncMonth);
+      }
     });
   </script>
-
-  <style>
-
-    #result_list tbody tr:hover { background: rgba(2,132,199,0.06); }
-#changelist #toolbar { border-radius: 14px; overflow: hidden; }
-
-/* ✅ скругляем и обрезаем НЕ таблицу, а контейнер вокруг неё */
-#changelist-form .results {
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-/* саму таблицу не делаем overflow-контейнером */
-#result_list {
-  border-radius: 0;
-  overflow: visible;
-}
-
-/* ✅ заморозка заголовков */
-#result_list thead th {
-  position: sticky;
-  top: 0;                 /* если перекрывает верхняя шапка — поставь 48px/56px */
-  z-index: 5;
-  background: var(--body-bg, #fff);
-}
-
-/* чтобы фон был и у ссылок в заголовках */
-#result_list thead th a {
-  background: inherit;
-}
-
-/* легкая линия/тень под шапкой */
-#result_list thead {
-  box-shadow: 0 2px 0 rgba(0,0,0,.06);
-}
-
-
-
-  </style>
 {% endblock %}
 
 {% block content %}
