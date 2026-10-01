@@ -4,7 +4,7 @@
 #
 #  В выгрузку попадают только размеры с остатком на выбранную дату
 #  (склады WB + FBS + в пути), как в выгрузке остатков.
-#  Уровень строки: артикул WB + размер + штрихкод.
+#  Уровень строки: артикул WB + размер (штрихкоды размера — в одной ячейке).
 # =============================================================================
 
 from io import BytesIO
@@ -66,45 +66,68 @@ stock_pos AS (
     FROM stock
     WHERE wb_qty + fbs_qty + transit_qty > 0
 ),
-cards AS (
+skus AS (
     SELECT DISTINCT
         c.nm_id::BIGINT AS nm_id,
         c.chrt_id::BIGINT AS chrt_id,
-        c.vendor_code,
-        c.brand,
-        c.subject_name,
-        c.title,
-        c.tech_size,
+        c.vendor_code, c.brand, c.subject_name, c.title, c.tech_size,
         COALESCE(c.kiz_marked, FALSE) AS kiz_marked,
         TRIM(c.sku) AS barcode,
         TRIM(COALESCE(c.tnved, '')) AS tnved_raw,
-        regexp_replace(COALESCE(c.tnved, ''), '[^0-9]', '', 'g') AS tnved,
         TRIM(c.declaration_number) AS doc_number,
         try_strptime(c.cert_end_date, '%d.%m.%Y')::DATE AS doc_end_date
     FROM cards.unpacked_cards c
 ),
+sku_check AS (
+    SELECT
+        *,
+        CASE
+            WHEN COALESCE(barcode, '') = '' THEN 'нет штрихкода'
+            WHEN NOT regexp_matches(barcode, '^[0-9]+$') THEN 'есть не только цифры'
+            WHEN length(barcode) NOT IN (8, 12, 13, 14)
+                THEN 'длина ' || length(barcode) || ' знаков'
+            WHEN length(barcode) = 13 AND starts_with(barcode, '2')
+                THEN 'внутренний код (на «2»), не GTIN'
+            WHEN (10 - list_sum(list_transform(
+                    range(1, length(barcode)),
+                    i -> CAST(substr(barcode, length(barcode) - i, 1) AS INT)
+                         * CASE WHEN i % 2 = 1 THEN 3 ELSE 1 END)) % 10) % 10
+                 <> CAST(right(barcode, 1) AS INT)
+                THEN 'неверная контрольная цифра'
+        END AS gtin_issue_one
+    FROM skus
+),
+-- одна строка на размер: остаток размера не дублируется по штрихкодам
+sizes AS (
+    SELECT
+        nm_id, chrt_id,
+        any_value(vendor_code) AS vendor_code,
+        any_value(brand) AS brand,
+        any_value(subject_name) AS subject_name,
+        any_value(title) AS title,
+        any_value(tech_size) AS tech_size,
+        bool_or(kiz_marked) AS kiz_marked,
+        string_agg(DISTINCT barcode, ', ') AS barcode,
+        string_agg(
+            CASE WHEN gtin_issue_one IS NOT NULL
+                 THEN COALESCE(NULLIF(barcode, ''), '—') || ': ' || gtin_issue_one END,
+            '; ') AS gtin_issue,
+        any_value(tnved_raw) AS tnved_raw,
+        any_value(doc_number) AS doc_number,
+        max(doc_end_date) AS doc_end_date
+    FROM sku_check
+    GROUP BY nm_id, chrt_id
+),
 joined AS (
-    SELECT s.*, c.* EXCLUDE (nm_id, chrt_id)
+    SELECT s.*, z.* EXCLUDE (nm_id, chrt_id),
+           regexp_replace(COALESCE(z.tnved_raw, ''), '[^0-9]', '', 'g') AS tnved
     FROM stock_pos s
-    LEFT JOIN cards c ON c.nm_id = s.nm_id AND c.chrt_id = s.chrt_id
+    LEFT JOIN sizes z ON z.nm_id = s.nm_id AND z.chrt_id = s.chrt_id
 )
 SELECT
-    *,
-    CASE
-        WHEN vendor_code IS NULL THEN 'карточка не найдена'
-        WHEN COALESCE(barcode, '') = '' THEN 'нет штрихкода'
-        WHEN NOT regexp_matches(barcode, '^[0-9]+$') THEN 'есть не только цифры'
-        WHEN length(barcode) NOT IN (8, 12, 13, 14)
-            THEN 'длина ' || length(barcode) || ' знаков'
-        WHEN length(barcode) = 13 AND starts_with(barcode, '2')
-            THEN 'внутренний код (на «2»), не GTIN'
-        WHEN (10 - list_sum(list_transform(
-                range(1, length(barcode)),
-                i -> CAST(substr(barcode, length(barcode) - i, 1) AS INT)
-                     * CASE WHEN i % 2 = 1 THEN 3 ELSE 1 END)) % 10) % 10
-             <> CAST(right(barcode, 1) AS INT)
-            THEN 'неверная контрольная цифра'
-    END AS gtin_issue,
+    * EXCLUDE (gtin_issue, tnved),
+    CASE WHEN vendor_code IS NULL THEN 'карточка не найдена' ELSE gtin_issue END
+        AS gtin_issue,
     CASE
         WHEN vendor_code IS NULL THEN 'карточка не найдена'
         WHEN tnved = '' THEN 'не заполнен'
@@ -120,7 +143,7 @@ SELECT
             THEN 'срок истёк ' || strftime(doc_end_date, '%d.%m.%Y')
     END AS doc_issue
 FROM joined
-ORDER BY nm_id, tech_size, barcode
+ORDER BY nm_id, tech_size
 """
 
 
@@ -152,7 +175,7 @@ COLUMNS = [
     ("fbs_qty", "FBS", FMT_QTY),
     ("transit_qty", "В пути", FMT_QTY),
     ("kiz_marked", "Маркировка ЧЗ", None),
-    ("barcode", "Штрихкод", None),
+    ("barcode", "Штрихкоды", None),
     ("gtin_issue", "GTIN: проблема", None),
     ("tnved_raw", "ТН ВЭД", None),
     ("tnved_issue", "ТН ВЭД: проблема", None),
@@ -164,7 +187,7 @@ COLUMNS = [
 ISSUE_KEYS = {"gtin_issue", "tnved_issue", "doc_issue"}
 WIDTHS = {"Наименование": 42, "Декларация / сертификат": 30,
           "GTIN: проблема": 30, "ТН ВЭД: проблема": 20,
-          "Документ: проблема": 30, "Штрихкод": 16}
+          "Документ: проблема": 30, "Штрихкоды": 24}
 
 SHEET_ISSUES = "Карточки с проблемами"
 SHEET_ALL = "Все с остатком"
@@ -241,9 +264,10 @@ def make_cards_check_excel(df, report_date) -> bytes:
 
     cards_total = df["nm_id"].nunique()
     cards_bad = issues["nm_id"].nunique()
-    qty_bad = issues.drop_duplicates(["nm_id", "chrt_id"])["total_qty"].sum()
+    qty_bad = issues["total_qty"].sum()
     write_kpi_cards(ws, 7, [
-        ("КАРТОЧЕК С ОСТАТКОМ", f"{cards_total:,}".replace(",", " "), d),
+        ("КАРТОЧЕК С ОСТАТКОМ", f"{cards_total:,}".replace(",", " "),
+         f"остаток {int(df['total_qty'].sum()):,} шт".replace(",", " ")),
         ("С ПРОБЛЕМАМИ", f"{cards_bad:,}".replace(",", " "),
          f"остаток {int(qty_bad):,} шт".replace(",", " ")),
         ("GTIN", str(df.loc[df["gtin_issue"].notna(), "nm_id"].nunique()), "карточек"),
@@ -253,7 +277,7 @@ def make_cards_check_excel(df, report_date) -> bytes:
     ], col_start=1, card_width=2)
 
     row = write_toc_links(ws, 12, [
-        (SHEET_ISSUES, "Размеры и штрихкоды, где есть хотя бы одна проблема"),
+        (SHEET_ISSUES, "Размеры, где есть хотя бы одна проблема"),
         (SHEET_ALL, "Все размеры с остатком на дату — для сверки"),
     ], col_label=1, col_desc=2, desc_span=9)
 
@@ -279,7 +303,7 @@ def make_cards_check_excel(df, report_date) -> bytes:
     ws.column_dimensions["A"].width = 26
     _fit_width(ws)
 
-    params = "Остатки на %s · уровень: артикул WB + размер + штрихкод" % d
+    params = "Остатки на %s · уровень: артикул WB + размер" % d
     _write_table(wb.create_sheet(SHEET_ISSUES), issues,
                  "КАРТОЧКИ С ПРОБЛЕМАМИ",
                  "Сначала — больше проблем и больше остаток", params)
