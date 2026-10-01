@@ -47,6 +47,10 @@ STOCKS_EXPORT_BTN_ID = "daily-sales-stocks-export-btn"
 STOCKS_EXPORT_DOWNLOAD_ID = "daily-sales-stocks-export-download"
 STOCKS_EXPORT_LOADING_ID = "daily-sales-stocks-export-loading"
 
+CARDS_CHECK_BTN_ID = "daily-sales-cards-check-btn"
+CARDS_CHECK_DOWNLOAD_ID = "daily-sales-cards-check-download"
+CARDS_CHECK_LOADING_ID = "daily-sales-cards-check-loading"
+
 
 # ============================================================
 # ЦВЕТА
@@ -298,7 +302,7 @@ def export_panel_main():
                     # 1. ОСТАТКИ
                     # =================================================
 panel_block(
-    min_width="410px",
+    min_width="450px",
     children=dmc.Group(
         gap="sm",
         align="center",
@@ -351,6 +355,20 @@ panel_block(
                     loading_placeholder(
                         component_id=STOCKS_EXPORT_LOADING_ID,
                         color=GREEN,
+                    ),
+                    action_icon(
+                        button_id=CARDS_CHECK_BTN_ID,
+                        tooltip=(
+                            "Проверка карточек с остатком: "
+                            "GTIN, ТН ВЭД, декларации"
+                        ),
+                        icon="solar:shield-check-linear",
+                        color="orange",
+                        background_color=ORANGE_BG,
+                    ),
+                    loading_placeholder(
+                        component_id=CARDS_CHECK_LOADING_ID,
+                        color=ORANGE,
                     ),
                 ],
             ),
@@ -577,6 +595,9 @@ panel_block(
 
             dcc.Download(
                 id=STOCKS_EXPORT_DOWNLOAD_ID,
+            ),
+            dcc.Download(
+                id=CARDS_CHECK_DOWNLOAD_ID,
             ),
 
             dcc.Download(

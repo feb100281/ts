@@ -22,6 +22,7 @@ from .wb_expenses_excel import register_wb_expenses_excel_callbacks
 from .wb_top_cards_report import register_top_cards_callbacks
 from .ad_campaigns_report import register_ad_campaigns_callbacks
 from .stocks.export import register_stock_export_callbacks
+from .cards_compliance import register_cards_check_callbacks
 from .quality_control_export import (
     QUALITY_CONTROL_EXPORT_DOWNLOAD_ID,
     register_quality_control_export_callbacks,
@@ -607,6 +608,7 @@ class MainWindow:
         register_ad_campaigns_callbacks(app, FILTERS)
         register_revenue_structure_excel_callbacks(app)
         register_stock_export_callbacks(app)
+        register_cards_check_callbacks(app)
         register_quality_control_export_callbacks(app, FILTERS)
         register_methodology_callbacks(app)
         register_wb_plan_callbacks(app)

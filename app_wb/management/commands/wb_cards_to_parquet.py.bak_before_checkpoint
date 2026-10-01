@@ -22,10 +22,6 @@ MAX_RETRIES = 12
 BACKOFF_BASE = 1.7
 BACKOFF_CAP = 120
 
-# Промежуточное сохранение раз в N страниц. Перезапись всего файла после
-# каждой страницы растёт квадратично по объёму и роняла процесс.
-CHECKPOINT_EVERY = 20
-
 
 class Command(BaseCommand):
     help = "Download WB cards to parquet (raw payload)"
@@ -77,8 +73,7 @@ class Command(BaseCommand):
 
             rows.extend(chunk)
 
-            if page % CHECKPOINT_EVERY == 0:
-                self.save_parquet(rows, output_path)
+            self.save_parquet(rows, output_path)
 
             got_ids = [c.get("nmID") for c in chunk if c.get("nmID")]
             uniq_nm = len(set(got_ids))
