@@ -222,7 +222,7 @@ TOOLS.append({
     "input_schema": {
         "type": "object",
         "properties": {
-            "date_from": {"type": "string", "description": "YYYY-MM-DD; по умолчанию начало текущего месяца"},
+            "date_from": {"type": "string", "description": "YYYY-MM-DD; по умолчанию начало текущего месяца. Для одного дня — тот же день, что date_to"},
             "date_to": {"type": "string", "description": "YYYY-MM-DD; по умолчанию вчера"},
             "group_by": {"type": "string",
                          "enum": ["brand", "category", "gender", "brand_category",
@@ -240,7 +240,7 @@ TOOLS.append({
 TOOLS.append({
     "name": "wb_sales",
     "description": "Продажи и возвраты «как на сайте WB» (отчёт реализации, с НДС): "
-                   "продажи/возвраты/итого в штуках, розничная цена, до СПП, "
+                   "продажи/возвраты/итого в штуках, сумма до СПП, после СПП, "
                    "к перечислению, коррекции WB, доля возвратов. Возврат — строка "
                    "с типом документа «Возврат» без коррекций. ВСЕГДА используй этот "
                    "инструмент для штук, возвратов и выручки как на сайте — не SQL.",
@@ -258,7 +258,7 @@ TOOLS.append({
             "top": {"type": "integer", "description": "Сколько строк вернуть (до 200)"},
             "sort_by": {"type": "string",
                         "description": "Колонка для сортировки по убыванию, напр. "
-                                       "«Возвраты, шт» или «Розничная цена: итого, ₽»"},
+                                       "«Возвраты, шт» или «До СПП: итого, ₽»"},
         },
         "required": ["date_from", "date_to"],
     },

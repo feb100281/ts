@@ -1,5 +1,5 @@
 # gear/app/daily_sales/wb_sales_export.py
-"""Выгрузка продаж WB «как в личном кабинете» за любой период.
+"""Выгрузка продаж WB «как в личном кабинете» за любой период или один день.
 
 Источник — sales.sales_long (детализация отчёта реализации WB, дата операции
 rr_dt): одна строка field='retail_price' = одна единица товара, oper='dt' —
@@ -38,7 +38,7 @@ HL_RED = "F6E9E4"
 HIGHLIGHT = {
     "Бренд": HL_GREEN,
     "Итого, шт": HL_GREEN,
-    "Розничная цена: итого, ₽": HL_GREEN,
+    "До СПП: итого, ₽": HL_GREEN,
     "Возвраты, шт": HL_RED,
 }
 CSV_ZIP_FROM_MB = 25
@@ -72,15 +72,16 @@ METRICS = [
     ("sales_qty", "Продажи, шт"),
     ("ret_qty", "Возвраты, шт"),
     ("net_qty", "Итого, шт"),
-    ("rp_sales", "Розничная цена: продажи, ₽"),
-    ("rp_ret", "Розничная цена: возвраты, ₽"),
-    ("rp_net", "Розничная цена: итого, ₽"),
-    ("ra_sales", "До СПП: продажи, ₽"),
-    ("ra_ret", "До СПП: возвраты, ₽"),
-    ("ra_net", "До СПП: итого, ₽"),
-    ("corr", "Коррекции и прочее WB (розничная), ₽"),
-    ("avg_ra", "Средняя цена до СПП, ₽"),
-    ("disc_pct", "Скидка к розничной, %"),
+    ("rp_sales", "До СПП: продажи, ₽"),
+    ("rp_ret", "До СПП: возвраты, ₽"),
+    ("rp_net", "До СПП: итого, ₽"),
+    ("ra_sales", "После СПП: продажи, ₽"),
+    ("ra_ret", "После СПП: возвраты, ₽"),
+    ("ra_net", "После СПП: итого, ₽"),
+    ("corr", "Коррекции и прочее WB (до СПП), ₽"),
+    ("avg_rp", "Средняя цена до СПП, ₽"),
+    ("avg_ra", "Средняя цена после СПП, ₽"),
+    ("disc_pct", "СПП, %"),
     ("pay_net", "К перечислению, ₽"),
     ("ret_pct", "Доля возвратов, %"),
 ]
@@ -91,12 +92,12 @@ NOTES = [
     ("Продажи / возвраты, шт", "Строки отчёта с типом документа «Продажа» / «Возврат», "
                                "без коррекций WB (одна строка = одна единица)."),
     ("Коррекции и прочее", "Коррекции продаж/возвратов и прочие строки отчёта с "
-                           "розничной ценой: не продажа и не возврат, показаны отдельно."),
-    ("Розничная цена", "Поле отчёта WB «Цена розничная» (retail_price) — "
-                       "наша цена до скидки."),
-    ("До СПП", "Поле «Вайлдберриз реализовал Товар (Пр)» (retail_amount) — "
-               "цена с нашей скидкой, до СПП."),
-    ("Скидка к розничной, %", "1 − До СПП / Розничная цена, по чистым суммам."),
+                           "ценой до СПП: не продажа и не возврат, показаны отдельно."),
+    ("До СПП", "Наша цена продажи до скидки постоянного покупателя (СПП) — "
+               "та же база, что выручка в дашборде продаж и мэн паке, но с НДС."),
+    ("После СПП", "Поле отчёта «Вайлдберриз реализовал Товар (Пр)» — сумма, "
+                  "за которую WB продал товар покупателю, после СПП."),
+    ("СПП, %", "1 − После СПП / До СПП, по чистым суммам (продажи минус возвраты)."),
     ("К перечислению", "Поле «К перечислению продавцу за реализованный "
                        "товар» (ppvz_for_pay), продажи минус возвраты."),
     ("Отличие от P&L", "Это продажи «как на сайте WB» с НДС. В мэн паке "
@@ -152,6 +153,8 @@ def _sql(level, brands):
             SUM(ra_ret) AS ra_ret,
             SUM(ra_sales) - SUM(ra_ret) AS ra_net,
             SUM(corr) AS corr,
+            CASE WHEN SUM(sales_qty) - SUM(ret_qty) > 0
+                 THEN (SUM(rp_sales) - SUM(rp_ret)) / (SUM(sales_qty) - SUM(ret_qty)) END AS avg_rp,
             CASE WHEN SUM(sales_qty) - SUM(ret_qty) > 0
                  THEN (SUM(ra_sales) - SUM(ra_ret)) / (SUM(sales_qty) - SUM(ret_qty)) END AS avg_ra,
             CASE WHEN SUM(rp_sales) - SUM(rp_ret) > 0
@@ -413,13 +416,15 @@ def wb_sales_modal():
             dmc.Text("Выгрузка продаж WB", fw=700, size="lg"),
         ]),
         children=dmc.Stack(gap="md", children=[
-            dmc.Text("Продажи и возвраты как в личном кабинете WB: розничная цена, "
-                     "цена до СПП, штуки, к перечислению. Суммы с НДС.",
+            dmc.Text("Продажи и возвраты как в личном кабинете WB: до СПП, после СПП, "
+                     "штуки, к перечислению. Суммы с НДС. Для одного дня нажмите на "
+                     "дату дважды.",
                      size="sm", c="dimmed"),
             dmc.DatePickerInput(
                 id=PERIOD_ID, type="range", label="Период",
                 value=[start.isoformat(), end.isoformat()],
                 valueFormat="DD.MM.YYYY", maxDate=end.isoformat(),
+                allowSingleDateInRange=True,
                 leftSection=DashIconify(icon="solar:calendar-linear", width=16),
                 popoverProps={"zIndex": 10020},
             ),
@@ -479,11 +484,12 @@ def register_wb_sales_export_callbacks(app):
     def _run(n, period, level, brands, fmt_):
         if not n:
             return no_update, no_update
-        if not period or len(period) < 2 or not period[0] or not period[1]:
-            return no_update, dmc.Text("Выберите период: дату начала и конца.",
-                                       c="red", size="sm")
+        if not period or not period[0]:
+            return no_update, dmc.Text("Выберите период или один день.", c="red", size="sm")
         start = date.fromisoformat(str(period[0])[:10])
-        end = date.fromisoformat(str(period[1])[:10])
+        # выбрана одна дата — выгружаем этот день
+        end = (date.fromisoformat(str(period[1])[:10])
+               if len(period) > 1 and period[1] else start)
         level = level if level in LEVELS else "nm"
         try:
             df = fetch(start, end, level, brands or [])
