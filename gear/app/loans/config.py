@@ -34,24 +34,25 @@ COLORS = {
     "green": "#3C7A67",
     "light_green": "#E7F1ED",
     "very_light_green": "#F3F8F6",
-    "orange": "#B45309",
-    "light_orange": "#FEF3E7",
-    "red": "#A33A3A",
-    "light_red": "#FDECEC",
-    "yellow": "#9A6700",
-    "light_yellow": "#FFF6D8",
-    "blue": "#3B6B8F",
-    "light_blue": "#EDF4FA",
+    "orange": "#A15C38",
+    "light_orange": "#FBF5F1",
+    "red": "#C0392B",
+    "light_red": "#FBEFEE",
+    "yellow": "#A15C38",
+    "light_yellow": "#FBF5F1",
+    "blue": "#5B6770",
+    "light_blue": "#F7F9F8",
     "gray": "#6B7280",
-    "light_gray": "#F6F7F8",
-    "border": "#D9DEE2",
+    "light_gray": "#F7F9F8",
+    "border": "#E3E8E6",
     "white": "#FFFFFF",
-    "text": "#111827",
+    "text": "#1F1F1F",
     "muted": "#6B7280",
 }
 
 PLOTLY_CONFIG = {
     "displaylogo": False,
+    "displayModeBar": False,
     "responsive": True,
     "locale": "ru",
     "scrollZoom": False,
@@ -60,3 +61,9 @@ PLOTLY_CONFIG = {
         "select2d",
     ],
 }
+
+# цвета сторон на графиках
+OWE_COLOR = "#A15C38"        # мы должны
+OWE_LIGHT = "#DDBFAE"
+RECV_COLOR = "#2F6656"       # нам должны
+RECV_LIGHT = "#A9CBBF"

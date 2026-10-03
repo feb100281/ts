@@ -5,7 +5,8 @@ import locale
 
 import pandas as pd
 import dash_mantine_components as dmc
-from dash import dcc, Input, Output, State, ALL
+from dash_iconify import DashIconify
+from dash import dcc, html, Input, Output, State, ALL
 from dash.exceptions import PreventUpdate
 from .methodology import methodology_modal, register_methodology_callbacks
 
@@ -29,6 +30,8 @@ from .quality_control_export import (
 )
 from .wb_plan_monitor import register_wb_plan_callbacks
 from .ai_analysis import register_ai_analysis_callbacks
+from .assistant import register_assistant_callbacks
+from .wb_sales_export import register_wb_sales_export_callbacks
 from .price_analysis import register_price_analysis_export_callbacks
 from .stocks.dashboard import (
     StocksDashboard,
@@ -122,6 +125,13 @@ def period_chip_maker(rows):
         checked=False,
     )
 
+def tab_label(icon, text):
+    return dmc.Group(
+        gap=8, justify="center", wrap="nowrap",
+        children=[DashIconify(icon=icon, width=16), html.Span(text, className="ds-tab-text")],
+    )
+
+
 class MainWindow:
     def __init__(self):
         self.last_update = pd.to_datetime(get_last_update())
@@ -140,35 +150,25 @@ class MainWindow:
                     justify="flex-start",
                     align="center",
                     mb="xs",
+                    grow=True,
                     children=[
                         dmc.SegmentedControl(
                             id=self.summary_tab_id,
                             value="2",
-                           data=[
-                                    {
-                                        "label": "Статистика",
-                                        "value": "1",
-                                    },
-                                    {
-                                        "label": "Данные",
-                                        "value": "2",
-                                    },
-                                    {
-                                        "label": "Остатки",
-                                        "value": "3",
-                                    },
-                                    {
-                                        "label": "Заказы FBS",
-                                        "value": FBS_TAB_VALUE,
-                                    },
-                                    # {
-                                    #     "label": "Цены",
-                                    #     "value": "4",
-                                    # },
-                                ],
+                            data=[
+                                {"label": tab_label("solar:chart-2-linear", "Статистика"), "value": "1"},
+                                {"label": tab_label("solar:widget-4-linear", "Данные"), "value": "2"},
+                                {"label": tab_label("solar:box-linear", "Остатки"), "value": "3"},
+                                {"label": tab_label("solar:delivery-linear", "Заказы FBS"), "value": FBS_TAB_VALUE},
+                            ],
+                            fullWidth=True,
                             radius=0,
                             size="sm",
-                            color="blue",
+                            color="#2F6656",
+                            withItemsBorders=False,
+                            transitionDuration=200,
+                            className="ds-tabs",
+                            style={"width": "100%"},
                         ),
                     ],
                 ),
@@ -187,7 +187,6 @@ class MainWindow:
                     ],
                 ),
 
-                dmc.Divider(mt="sm"),
             ],
         )
 
@@ -613,6 +612,8 @@ class MainWindow:
         register_methodology_callbacks(app)
         register_wb_plan_callbacks(app)
         register_ai_analysis_callbacks(app)
+        register_assistant_callbacks(app)
+        register_wb_sales_export_callbacks(app)
         register_price_analysis_export_callbacks(app)
         register_stock_dashboard_callbacks(app)
         register_daily_brief_callbacks(app)

@@ -420,10 +420,11 @@ def pricing_strategy_controls():
             dmc.Button(
                 "Управление ценами",
                 id=OPEN_BTN_ID,
-                radius="md",
-                variant="filled",
-                color="indigo",
-                leftSection=dmc.Text("₽", fw=900),
+                radius=0,
+                variant="default",
+                size="sm",
+                className="ds-head-btn",
+                leftSection=dmc.Text("₽", fw=700, c="#2F6656"),
             ),
 
             dcc.Store(id=STORE_ID),

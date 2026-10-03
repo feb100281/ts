@@ -120,6 +120,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "gear.middleware.DashAppAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -420,6 +421,7 @@ JAZZMIN_SETTINGS = {
         "gear.CostsControl": "fa-solid fa-magnifying-glass-dollar",
         "gear.Stats": "fa-solid fa-square-poll-vertical",
         "gear.Loans": "fa-solid fa-hand-holding-dollar",
+        "gear.ManPack": "fa-solid fa-briefcase",
         
         # --- ОТЧЕТЫ / ПРЕЗЕНТАЦИИ ---
         "reports": "fa-solid fa-chart-area",

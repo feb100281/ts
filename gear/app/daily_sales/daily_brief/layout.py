@@ -52,9 +52,9 @@ def daily_brief_controls():
                 "Коммерческий обзор",
                 id=DAILY_BRIEF_OPEN_BTN_ID,
                 radius=0,
-                variant="outline",
-                color="teal",
+                variant="default",
                 size="sm",
+                className="ds-head-btn",
                 leftSection=DashIconify(
                     icon=(
                         "material-symbols:"

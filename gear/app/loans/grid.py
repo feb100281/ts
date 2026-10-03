@@ -826,9 +826,9 @@
 
 #             "suppressCellFocus": True,
 
-#             "rowHeight": 38,
+#             "rowHeight": 34,
 
-#             "headerHeight": 42,
+#             "headerHeight": 38,
 
 #             "ensureDomOrder": True,
 #         },
@@ -838,7 +838,7 @@
 #             "width": "100%",
 #         },
 
-#         className="ag-theme-quartz",
+#         className="ag-theme-quartz mp-grid ln-grid",
 #     )
 
 
@@ -874,9 +874,9 @@
 
 #             "suppressCellFocus": True,
 
-#             "rowHeight": 38,
+#             "rowHeight": 34,
 
-#             "headerHeight": 42,
+#             "headerHeight": 38,
 
 #             "ensureDomOrder": True,
 #         },
@@ -886,7 +886,7 @@
 #             "width": "100%",
 #         },
 
-#         className="ag-theme-quartz",
+#         className="ag-theme-quartz mp-grid ln-grid",
 #     )
 
 
@@ -940,59 +940,23 @@ PERCENT_FORMATTER = {
 
 
 DATE_FORMATTER = {
-    "function": """
-    if (
-        params.value === null
-        || params.value === undefined
-        || params.value === ''
-    ) {
-        return '';
-    }
-
-    const value = String(params.value).slice(0, 10);
-    const parts = value.split('-');
-
-    if (parts.length !== 3) {
-        return value;
-    }
-
-    return `${parts[2]}.${parts[1]}.${parts[0]}`;
-    """
+    "function": (
+        "params.value ? params.value.slice(8, 10) + '.' + "
+        "params.value.slice(5, 7) + '.' + params.value.slice(0, 4) : ''"
+    )
 }
 
 
 BOOLEAN_FORMATTER = {
-    "function": """
-    if (
-        params.value === null
-        || params.value === undefined
-    ) {
-        return '';
-    }
-
-    return params.value ? 'Да' : 'Нет';
-    """
+    "function": "params.value == null ? '' : (params.value ? 'Да' : 'Нет')"
 }
 
 
 DOCUMENTS_FORMATTER = {
-    "function": """
-    if (
-        params.value === null
-        || params.value === undefined
-        || Number(params.value) === 0
-    ) {
-        return '—';
-    }
-
-    return '📎 ' + d3.format(',.0f')(params.value)
-        .replaceAll(',', ' ');
-    """
+    "function": (
+        "params.value ? d3.format(',.0f')(params.value) : '—'"
+    )
 }
-
-
-
-
 
 
 # =====================================================================
@@ -1240,8 +1204,8 @@ def loans_column_defs():
 
             "valueFormatter": DOCUMENTS_FORMATTER,
 
-            "width": 105,
-            "minWidth": 105,
+            "width": 135,
+            "minWidth": 135,
 
             "cellStyle": DOCUMENTS_STYLE,
 
@@ -1275,8 +1239,8 @@ def loans_column_defs():
             "field": "currency",
             "headerName": "Валюта",
 
-            "width": 90,
-            "minWidth": 90,
+            "width": 115,
+            "minWidth": 115,
 
             "cellStyle": {
                 "textAlign": "center",
@@ -1340,9 +1304,6 @@ def loans_column_defs():
 
             "cellStyle": {
                 **BOLD_MONEY_STYLE,
-                "backgroundColor": COLORS[
-                    "very_light_green"
-                ],
             },
 
             "minWidth": 150,
@@ -1358,9 +1319,6 @@ def loans_column_defs():
 
             "cellStyle": {
                 **MONEY_CELL_STYLE,
-                "backgroundColor": COLORS[
-                    "light_orange"
-                ],
             },
 
             "minWidth": 160,
@@ -1537,9 +1495,6 @@ def transactions_column_defs():
 
             "cellStyle": {
                 **MONEY_CELL_STYLE,
-                "backgroundColor": COLORS[
-                    "light_blue"
-                ],
             },
 
             "minWidth": 160,
@@ -1555,9 +1510,6 @@ def transactions_column_defs():
 
             "cellStyle": {
                 **MONEY_CELL_STYLE,
-                "backgroundColor": COLORS[
-                    "very_light_green"
-                ],
             },
 
             "minWidth": 150,
@@ -1573,9 +1525,6 @@ def transactions_column_defs():
 
             "cellStyle": {
                 **MONEY_CELL_STYLE,
-                "backgroundColor": COLORS[
-                    "light_orange"
-                ],
             },
 
             "minWidth": 160,
@@ -1591,9 +1540,6 @@ def transactions_column_defs():
 
             "cellStyle": {
                 **MONEY_CELL_STYLE,
-                "backgroundColor": COLORS[
-                    "very_light_green"
-                ],
             },
 
             "minWidth": 160,
@@ -1664,6 +1610,19 @@ def transactions_column_defs():
 # =====================================================================
 
 
+LOCALE_RU = {
+    "pageSizeSelectorLabel": "Строк на странице:",
+    "page": "Страница", "of": "из", "to": "–", "more": "ещё",
+    "firstPage": "Первая", "previousPage": "Назад", "nextPage": "Вперёд", "lastPage": "Последняя",
+    "noRowsToShow": "Нет данных", "filterOoo": "Фильтр…", "searchOoo": "Поиск…",
+    "contains": "Содержит", "notContains": "Не содержит", "equals": "Равно",
+    "notEqual": "Не равно", "startsWith": "Начинается с", "endsWith": "Заканчивается на",
+    "blank": "Пусто", "notBlank": "Не пусто", "andCondition": "И", "orCondition": "ИЛИ",
+    "greaterThan": "Больше", "lessThan": "Меньше", "inRange": "В диапазоне",
+    "greaterThanOrEqual": "Больше или равно", "lessThanOrEqual": "Меньше или равно",
+}
+
+
 def build_loans_grid():
     return dag.AgGrid(
         id=LOANS_GRID_ID,
@@ -1681,6 +1640,7 @@ def build_loans_grid():
             # =====================================================
 
             "pagination": True,
+            "localeText": LOCALE_RU,
 
             "paginationPageSize": PAGE_SIZE,
 
@@ -1730,9 +1690,9 @@ def build_loans_grid():
 
             "suppressCellFocus": True,
 
-            "rowHeight": 38,
+            "rowHeight": 34,
 
-            "headerHeight": 42,
+            "headerHeight": 38,
 
             "ensureDomOrder": True,
         },
@@ -1742,7 +1702,7 @@ def build_loans_grid():
             "width": "100%",
         },
 
-        className="ag-theme-quartz",
+        className="ag-theme-quartz mp-grid ln-grid",
     )
 
 
@@ -1764,6 +1724,7 @@ def build_transactions_grid():
 
         dashGridOptions={
             "pagination": True,
+            "localeText": LOCALE_RU,
 
             "paginationPageSize": 50,
 
@@ -1778,9 +1739,9 @@ def build_transactions_grid():
 
             "suppressCellFocus": True,
 
-            "rowHeight": 38,
+            "rowHeight": 34,
 
-            "headerHeight": 42,
+            "headerHeight": 38,
 
             "ensureDomOrder": True,
         },
@@ -1790,5 +1751,5 @@ def build_transactions_grid():
             "width": "100%",
         },
 
-        className="ag-theme-quartz",
+        className="ag-theme-quartz mp-grid ln-grid",
     )

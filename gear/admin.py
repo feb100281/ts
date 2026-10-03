@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import SegmentsSales, DailySales, CostsControl, Stats, Loans
+from .models import SegmentsSales, DailySales, CostsControl, Stats, Loans, ManPack
 
 
 @admin.register(SegmentsSales)
@@ -148,3 +148,21 @@ class LoansDashboardAdmin(admin.ModelAdmin):
             self.model.objects.none()
         )
 
+
+
+
+@admin.register(ManPack)
+class ManPackDashboardAdmin(admin.ModelAdmin):
+
+    change_list_template = (
+        "admin/gear/manpack/manpack.html"
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return self.model.objects.none()

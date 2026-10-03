@@ -25,6 +25,13 @@ from .admin_exports import (
 
 from inventories.views import export_stocks_excel, export_stocks_map
 
+
+def assistant_file(request, fid):
+    # ленивый импорт: модуль помощника тянет dash и подключения к БД
+    from gear.app.daily_sales.assistant.views import assistant_file as view
+    return view(request, fid)
+
+
 def export_view(view, perm):
     """Ссылка из меню «Экспорт»: сотрудник админки + отдельное право.
 
@@ -59,6 +66,7 @@ urlpatterns = [
     path("admin/export/management-pack/pivots/", export_view(export_pivots, "export_management_pack"), name="export_pivots"),
     path("admin/api/budgets/", export_view(api_budgets, "export_budget_analysis"), name="api_budgets"),
     path("admin/export/budget-analysis/", export_view(export_budget_analysis, "export_budget_analysis"), name="export_budget_analysis"),
+    path("admin/assistant/file/<str:fid>/", admin.site.admin_view(assistant_file), name="assistant_file"),
     path("reports/", include("reports.urls")),
 
 

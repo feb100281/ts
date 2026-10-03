@@ -657,16 +657,14 @@ from .daily_interest_indicator import (
 
 
 PAGE_STYLE = {
-    "backgroundColor": "#F6F7F8",
+    "backgroundColor": "#FFFFFF",
     "minHeight": "100vh",
-    "padding": "16px",
 }
 
 HEADER_STYLE = {
-    "backgroundColor": COLORS["white"],
-    "border": f"1px solid {COLORS['border']}",
-    "padding": "14px 16px",
-    "marginBottom": "10px",
+    "padding": "0 0 14px",
+    "marginBottom": "12px",
+    "borderBottom": f"2px solid {COLORS['dark_green']}",
 }
 
 KPI_GRID_STYLE = {
@@ -674,7 +672,7 @@ KPI_GRID_STYLE = {
     "gridTemplateColumns": (
         "repeat(4, minmax(190px, 1fr))"
     ),
-    "gap": "8px",
+    "border": f"1px solid {COLORS['border']}",
 }
 
 CHART_GRID_STYLE = {
@@ -732,30 +730,15 @@ def build_header():
                         },
                         children=[
                             html.Div(
-                                style={
-                                    "width": "38px",
-                                    "height": "38px",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "backgroundColor": COLORS["light_green"],
-                                    "border": f"1px solid {COLORS['border']}",
-                                },
-                                children=DashIconify(
-                                    icon="solar:hand-money-linear",
-                                    width=22,
-                                    color=COLORS["green"],
-                                ),
-                            ),
-                            html.Div(
                                 children=[
                                     html.H1(
                                         APP_TITLE,
                                         style={
                                             "margin": 0,
-                                            "fontSize": "21px",
-                                            "fontWeight": 700,
-                                            "lineHeight": "26px",
+                                            "fontSize": "28px",
+                                            "fontWeight": 800,
+                                            "letterSpacing": "-.01em",
+                                            "lineHeight": "1.1",
                                             "color": COLORS["text"],
                                         },
                                     ),
@@ -765,8 +748,8 @@ def build_header():
                                             "требования по выданным займам"
                                         ),
                                         style={
-                                            "marginTop": "3px",
-                                            "fontSize": "12px",
+                                            "marginTop": "6px",
+                                            "fontSize": "13px",
                                             "color": COLORS["muted"],
                                         },
                                     ),
@@ -846,56 +829,56 @@ def build_kpis():
         style=KPI_GRID_STYLE,
         children=[
             kpi_card(
-                title="Договоры: мы должны / нам должны",
+                title="Договоры с долгом",
                 value_id=KPI_ACTIVE_LOANS_ID,
                 subtitle="полученные / выданные",
                 icon="solar:document-text-linear",
                 accent=COLORS["green"],
             ),
             kpi_card(
-                title="Обязательства / требования",
+                title="Задолженность всего",
                 value_id=KPI_TOTAL_DEBT_ID,
                 subtitle="мы должны / нам должны",
                 icon="solar:wallet-money-linear",
                 accent=COLORS["dark_green"],
             ),
             kpi_card(
-                title="Основной долг: мы / нам",
+                title="Основной долг",
                 value_id=KPI_PRINCIPAL_DEBT_ID,
                 subtitle="обязательство / требование",
                 icon="solar:banknote-2-linear",
                 accent=COLORS["blue"],
             ),
             kpi_card(
-                title="Проценты: к оплате / получению",
+                title="Начисленные проценты",
                 value_id=KPI_INTEREST_DEBT_ID,
                 subtitle="расход / доход",
                 icon="solar:percent-linear",
                 accent=COLORS["orange"],
             ),
             kpi_card(
-                title="Ставка: расход / доход",
+                title="Средняя ставка",
                 value_id=KPI_WEIGHTED_RATE_ID,
                 subtitle="полученные / выданные",
                 icon="solar:graph-up-linear",
                 accent=COLORS["green"],
             ),
             kpi_card(
-                title="До 30 дней: платить / получить",
+                title="Погашение до 30 дней",
                 value_id=KPI_DUE_30_ID,
                 subtitle="полученные / выданные",
                 icon="solar:calendar-minimalistic-linear",
                 accent=COLORS["yellow"],
             ),
             kpi_card(
-                title="Просрочено: платить / получить",
+                title="Просрочено",
                 value_id=KPI_OVERDUE_ID,
                 subtitle="наша просрочка / просрочка нам",
                 icon="solar:danger-triangle-linear",
                 accent=COLORS["red"],
             ),
             kpi_card(
-                title="Привлечено / выдано",
+                title="Привлечено и выдано за всё время",
                 value_id=KPI_TOTAL_DRAWNDOWN_ID,
                 subtitle="раздельный денежный поток",
                 icon="solar:inbox-in-linear",
@@ -1068,8 +1051,8 @@ def build_registry():
             section_header(
                 "Реестр договоров",
                 (
-                    "Выберите договор через checkbox — "
-                    "ниже откроется история"
+                    "Отметьте договор галочкой — "
+                    "ниже откроется история операций"
                 ),
             ),
             html.Div(style={"height": "10px"}),
@@ -1141,6 +1124,7 @@ layout = dmc.MantineProvider(
 
         html.Div(
             style=PAGE_STYLE,
+            className="mp-page ln-page",
             children=[
                 build_header(),
                 build_filter_panel(),
@@ -1148,7 +1132,8 @@ layout = dmc.MantineProvider(
 
                 dcc.Loading(
                     id=DASHBOARD_LOADING_ID,
-                    type="cube",
+                    type="dot",
+                    color="#2F6656",
                     children=html.Div(
                         children=[
                             html.Div(

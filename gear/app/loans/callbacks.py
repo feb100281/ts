@@ -1390,6 +1390,7 @@ from .data import (
     
 )
 from .export import build_excel_bytes
+from .components import kpi_pair
 from .filters import (
     normalise_history_range,
     register_filter_callbacks,
@@ -1478,25 +1479,15 @@ def _format_money(value) -> str:
         return "—"
 
     abs_value = abs(numeric)
-
     if abs_value >= 1_000_000_000:
-        return (
-            f"{numeric / 1_000_000_000:,.2f}"
-            .replace(",", " ")
-            + " млрд"
-        )
-
-    if abs_value >= 1_000_000:
-        return (
-            f"{numeric / 1_000_000:,.2f}"
-            .replace(",", " ")
-            + " млн"
-        )
-
-    return (
-        f"{numeric:,.2f}"
-        .replace(",", " ")
-    )
+        text = f"{numeric / 1_000_000_000:.2f} млрд"
+    elif abs_value >= 1_000_000:
+        text = f"{numeric / 1_000_000:.1f} млн"
+    elif abs_value >= 1_000:
+        text = f"{numeric / 1_000:.0f} тыс"
+    else:
+        text = f"{numeric:.0f}"
+    return text.replace(".", ",").replace("-", "−") + " ₽"
 
 
 def _format_percent(value) -> str:
@@ -1504,17 +1495,14 @@ def _format_percent(value) -> str:
         return "—"
 
     try:
-        return (
-            f"{float(value):,.2f}%"
-            .replace(",", " ")
-        )
+        return f"{float(value):.1f}%".replace(".", ",")
     except (TypeError, ValueError):
         return "—"
 
 
-def _pair(left, right, formatter) -> str:
-    """Полученные / выданные без взаимозачёта показателей."""
-    return f"{formatter(left)} / {formatter(right)}"
+def _pair(left, right, formatter, left_label="мы должны", right_label="нам должны"):
+    """Полученные и выданные раздельно, без взаимозачёта."""
+    return kpi_pair(formatter(left), formatter(right), left_label, right_label)
 
 
 def _filtered_snapshot(
@@ -1883,10 +1871,6 @@ def register_loans_callbacks(app):
                 borrowed_kpis["active_loans"],
                 issued_kpis["active_loans"],
                 _format_integer,
-            ) + (
-                f" · ? {_format_integer(len(unknown))}"
-                if not unknown.empty
-                else ""
             ),
             _pair(
                 borrowed_kpis["total_debt"],
@@ -1902,26 +1886,31 @@ def register_loans_callbacks(app):
                 borrowed_kpis["interest_debt"],
                 issued_kpis["interest_debt"],
                 _format_money,
+                "к оплате", "к получению",
             ),
             _pair(
                 borrowed_kpis["weighted_rate"],
                 issued_kpis["weighted_rate"],
                 _format_percent,
+                "по полученным", "по выданным",
             ),
             _pair(
                 borrowed_kpis["due_30"],
                 issued_kpis["due_30"],
                 _format_integer,
+                "договоров к оплате", "к получению",
             ),
             _pair(
                 borrowed_kpis["overdue"],
                 issued_kpis["overdue"],
                 _format_integer,
+                "договоров у нас", "у должников",
             ),
             _pair(
                 borrowed_kpis["total_drawdown"],
                 issued_kpis["total_drawdown"],
                 _format_money,
+                "привлечено", "выдано",
             ),
             
             build_debt_dynamics_chart(dynamics_df),

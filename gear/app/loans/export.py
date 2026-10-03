@@ -440,86 +440,106 @@ def _style_workbook(writer) -> None:
             )
 
 
+TX_COLUMNS = {
+    "date_from": "Дата",
+    "loan_direction_label": "Направление",
+    "operation_description": "Операция",
+    "interest_description": "Описание процентов",
+    "drawdown_amount": "Выдача / привлечение, ₽",
+    "principal_repayment": "Погашение тела, ₽",
+    "interest_accrued": "Начислено процентов, ₽",
+    "interest_repayment": "Погашено процентов, ₽",
+    "ending_balance": "Основной долг, ₽",
+    "interest_balance": "Проценты к оплате, ₽",
+    "total_debt": "Общий долг, ₽",
+    "rate": "Ставка, %",
+}
+
+# порядок колонок реестра: контрагент первым — он закреплён при прокрутке
+REGISTRY_ORDER = [
+    "Контрагент", "ИНН", "Договор", "Дата договора", "Тип договора", "Статус", "Валюта",
+    "Ставка, %", "Сумма договора", "Выдано / привлечено", "Погашено", "Основной долг",
+    "Долг по процентам", "Задолженность по договору", "Начислено процентов",
+    "Погашено процентов", "Дата погашения", "Дней до погашения", "Профиль погашения",
+    "Компаундинг", "Штрафная ставка, %",
+]
+
+
+def _clean(value):
+    if value is None or value is pd.NaT:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, bool):
+        return "Да" if value else "Нет"
+    if hasattr(value, "item"):
+        value = value.item()
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    return value
+
+
+def _rows(frame: pd.DataFrame) -> list[list]:
+    return [[_clean(v) for v in row] for row in frame.itertuples(index=False, name=None)]
+
+
+def _registry_table(part: pd.DataFrame):
+    reg = _prepare_registry(part)
+    if "Дней до погашения" in reg.columns:
+        reg = reg.rename(columns={"Дней до погашения": "Дней до погашения, шт"})
+    order = [c if c != "Дней до погашения" else "Дней до погашения, шт" for c in REGISTRY_ORDER]
+    cols = [c for c in order if c in reg.columns]
+    if "Задолженность по договору" in reg.columns:
+        reg = reg.sort_values("Задолженность по договору", ascending=False)
+    return cols, _rows(reg[cols])
+
+
 def build_excel_bytes(
     registry_df: pd.DataFrame,
     transactions_df: pd.DataFrame | None = None,
 ) -> bytes:
-    output = BytesIO()
+    """Реестр займов в оформлении мэн пака. Погашенные договоры (долг 0) не выводятся."""
+    from ..manpack.excel import tables_xlsx
+
     work = registry_df.copy()
+    if "total_debt" in work.columns:
+        debt = pd.to_numeric(work["total_debt"], errors="coerce").fillna(0)
+        work = work[debt.round(2).ne(0)].copy()
 
     direction = work.get(
         "loan_direction",
         pd.Series("unknown", index=work.index),
     ).fillna("unknown").astype(str)
 
-    with pd.ExcelWriter(
-        output,
-        engine="openpyxl",
-    ) as writer:
-        _summary(work).to_excel(
-            writer,
-            sheet_name="Саммари",
-            index=False,
-        )
+    summary = _summary(work).rename(columns={"Договоров": "Договоров, шт"})
+    tables = [(
+        "Саммари", "Займы и кредиты", "задолженность по договорам с остатком долга",
+        list(summary.columns), _rows(summary), {"totals": False},
+    )]
 
-        # Лист «Не определено» больше не создаём.
-        for direction_code, sheet_name in (
-            ("borrowed", "Полученные займы"),
-            ("issued", "Выданные займы"),
-        ):
-            part = work[
-                direction.eq(direction_code)
-            ].copy()
+    for code, sheet, title in (
+        ("borrowed", "Полученные займы", "Полученные займы — мы должны"),
+        ("issued", "Выданные займы", "Выданные займы — нам должны"),
+    ):
+        cols, rows = _registry_table(work[direction.eq(code)])
+        tables.append((sheet, title, "только договоры с остатком долга", cols, rows))
 
-            _prepare_registry(part).to_excel(
-                writer,
-                sheet_name=sheet_name,
-                index=False,
-            )
+    if transactions_df is not None and not transactions_df.empty:
+        tx = transactions_df.copy()
+        if ("contract_id" in tx.columns
+                and {"contract_id", "loan_direction_label"}.issubset(registry_df.columns)
+                and "loan_direction_label" not in tx.columns):
+            tx = tx.merge(
+                registry_df[["contract_id", "loan_direction_label"]].drop_duplicates("contract_id"),
+                on="contract_id", how="left")
+        if "date_from" in tx.columns:
+            tx["date_from"] = pd.to_datetime(tx["date_from"], errors="coerce").dt.date
+        keep = [c for c in TX_COLUMNS if c in tx.columns]
+        tx = tx[keep].rename(columns=TX_COLUMNS)
+        tables.append(("Операции", "Операции по выбранному договору", "",
+                       list(tx.columns), _rows(tx), {"totals": False}))
 
-        if (
-            transactions_df is not None
-            and not transactions_df.empty
-        ):
-            transactions = transactions_df.copy()
-
-            if {
-                "contract_id",
-                "loan_direction_label",
-            }.issubset(work.columns):
-                mapping = (
-                    work[
-                        [
-                            "contract_id",
-                            "loan_direction_label",
-                        ]
-                    ]
-                    .drop_duplicates("contract_id")
-                )
-
-                if "contract_id" in transactions.columns:
-                    transactions = transactions.merge(
-                        mapping,
-                        on="contract_id",
-                        how="left",
-                    )
-
-            if "date_from" in transactions.columns:
-                transactions["date_from"] = (
-                    pd.to_datetime(
-                        transactions["date_from"],
-                        errors="coerce",
-                    )
-                    .dt.date
-                )
-
-            transactions.to_excel(
-                writer,
-                sheet_name="Операции",
-                index=False,
-            )
-
-        _style_workbook(writer)
-
-    output.seek(0)
-    return output.getvalue()
+    return tables_xlsx(tables)

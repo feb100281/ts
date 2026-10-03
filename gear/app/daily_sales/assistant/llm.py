@@ -1,0 +1,168 @@
+# gear/app/daily_sales/assistant/llm.py
+"""Вызов Claude API без внешних пакетов (urllib) + цикл инструментов."""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
+
+from .prompt import system_prompt
+from .tools import allowed, call_tool, tools_for
+
+log = logging.getLogger(__name__)
+
+API_URL = "https://api.anthropic.com/v1/messages"
+DEFAULT_MODEL = "claude-sonnet-4-5"
+MAX_TOOL_ROUNDS = 8
+MAX_TOKENS = 2000
+HTTP_TIMEOUT = 90
+
+# $ за 1 млн токенов (вход, выход) — для оценки стоимости ответа
+PRICES = {
+    "claude-sonnet-4-5": (3.0, 15.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+
+
+class AssistantError(Exception):
+    pass
+
+
+def _model() -> str:
+    return os.getenv("ASSISTANT_MODEL", DEFAULT_MODEL)
+
+
+def _opener():
+    """Подключение к API: напрямую, через HTTP-прокси или через SOCKS5.
+
+    ANTHROPIC_PROXY=http://user:pass@host:port   — HTTP(S)-прокси
+    ANTHROPIC_PROXY=socks5://127.0.0.1:1080      — SOCKS5, например ssh -D 1080
+    """
+    proxy = (os.getenv("ANTHROPIC_PROXY") or "").strip()
+    if not proxy:
+        return urllib.request.build_opener()
+    if proxy.startswith("socks"):
+        try:
+            import socks
+            from sockshandler import SocksiPyHandler
+        except ImportError as e:
+            raise AssistantError(
+                "Для SOCKS-прокси нужен пакет PySocks: pip install pysocks") from e
+        u = urllib.parse.urlparse(proxy)
+        return urllib.request.build_opener(SocksiPyHandler(
+            socks.SOCKS5, u.hostname or "127.0.0.1", u.port or 1080,
+            rdns=True, username=u.username, password=u.password))
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({"https": proxy, "http": proxy}))
+
+
+def _post(payload: dict) -> dict:
+    key = os.getenv("ANTHROPIC_API_KEY")
+    if not key:
+        raise AssistantError(
+            "Не задан ключ ANTHROPIC_API_KEY в .env — добавьте его и "
+            "перезапустите дашборд.")
+    req = urllib.request.Request(
+        API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+    opener = _opener()
+    try:
+        with opener.open(req, timeout=HTTP_TIMEOUT) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "ignore")[:500]
+        if e.code == 403:
+            raise AssistantError(
+                "Claude API недоступен из текущего региона (403). Включите VPN "
+                "на компьютере или задайте ANTHROPIC_PROXY в .env и перезапустите "
+                "дашборд.") from e
+        if e.code == 401:
+            raise AssistantError("Ключ ANTHROPIC_API_KEY не принят (401) — "
+                                 "проверьте, что он вставлен полностью.") from e
+        raise AssistantError(f"Claude API ответил {e.code}: {body}") from e
+    except urllib.error.URLError as e:
+        hint = (" Проверьте, что туннель запущен: ssh -D 1080 -N …"
+                if (os.getenv("ANTHROPIC_PROXY") or "").startswith("socks") else "")
+        raise AssistantError(f"Нет связи с Claude API: {e.reason}.{hint}") from e
+
+
+def ask(history: list[dict], profile: str = "sales") -> dict:
+    """history: [{"role": "user"|"assistant", "content": str}, ...]
+
+    Возвращает {"text", "sql": [..], "usage": {...}, "cost_usd"}.
+    """
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    usage = {"input": 0, "output": 0, "cache_read": 0}
+    sql_log: list[str] = []
+    files: list[dict] = []
+    question = next((m["content"] for m in reversed(history)
+                     if m["role"] == "user"), "")
+    model = _model()
+
+    for _ in range(MAX_TOOL_ROUNDS + 1):
+        resp = _post({
+            "model": model,
+            "max_tokens": MAX_TOKENS,
+            "system": [{"type": "text", "text": system_prompt(profile),
+                        "cache_control": {"type": "ephemeral"}}],
+            "tools": tools_for(profile),
+            "messages": messages,
+        })
+        u = resp.get("usage", {})
+        usage["input"] += u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+        usage["cache_read"] += u.get("cache_read_input_tokens", 0)
+        usage["output"] += u.get("output_tokens", 0)
+
+        content = resp.get("content", [])
+        messages.append({"role": "assistant", "content": content})
+
+        tool_uses = [b for b in content if b.get("type") == "tool_use"]
+        if resp.get("stop_reason") != "tool_use" or not tool_uses:
+            text = "\n\n".join(b["text"] for b in content if b.get("type") == "text")
+            break
+
+        results = []
+        for b in tool_uses:
+            if b["name"] == "run_sql":
+                sql_log.append(b["input"].get("sql", ""))
+                print("[assistant] SQL:\n" + sql_log[-1], flush=True)
+            if not allowed(profile, b["name"]):
+                out, is_err = "Инструмент недоступен в этом помощнике.", True
+            elif b["name"] == "export_excel":
+                try:
+                    from .excel import export
+                    args = dict(b.get("input", {}))
+                    if profile != "finance":
+                        args.pop("pl", None)
+                    out, info = export(args, question)
+                    files.append(info)
+                    is_err = False
+                except Exception as e:
+                    log.exception("export_excel")
+                    out, is_err = f"Ошибка выгрузки: {e}"[:2000], True
+            else:
+                out, is_err = call_tool(b["name"], b.get("input", {}))
+            log.info("assistant tool %s err=%s", b["name"], is_err)
+            results.append({"type": "tool_result", "tool_use_id": b["id"],
+                            "content": out, "is_error": is_err})
+        messages.append({"role": "user", "content": results})
+    else:
+        text = "Не успел уложиться в лимит шагов — уточните вопрос."
+
+    pin, pout = PRICES.get(model, (None, None))
+    cost = None
+    if pin is not None:
+        cost = (usage["input"] * pin + usage["cache_read"] * pin * 0.1
+                + usage["output"] * pout) / 1_000_000
+    return {"text": text or "(пустой ответ)", "sql": sql_log, "files": files,
+            "usage": usage, "cost_usd": cost}

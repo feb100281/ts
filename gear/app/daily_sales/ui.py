@@ -9,6 +9,8 @@ from dash_iconify import DashIconify
 
 from .wb_plan_monitor import wb_plan_button, wb_plan_modal
 from .ai_analysis import ai_analysis_button, ai_analysis_modal
+from .assistant import assistant_widget
+from .wb_sales_export import wb_sales_menu_item, wb_sales_modal, wb_sales_download
 from .price_analysis.config import (
     PRICE_ANALYSIS_EXPORT_BTN_ID,
     PRICE_ANALYSIS_DOWNLOAD_ID,
@@ -79,7 +81,12 @@ BLUE_BG = "#E7F5FF"
 # ИКОНКА РАЗДЕЛА
 # ============================================================
 
+SHOW_SECTION_ICONS = False  # декоративные иконки перед заголовками блоков
+
+
 def section_icon(icon, color, background_color):
+    if not SHOW_SECTION_ICONS:
+        return None
     return dmc.Center(
         w=34,
         h=34,
@@ -131,6 +138,7 @@ def section_title(title, subtitle=None):
 
     return dmc.Stack(
         gap=0,
+        className="panel-title",
         children=children,
     )
 
@@ -222,6 +230,9 @@ def csv_action_icon(
 # БЛОК ПАНЕЛИ
 # ============================================================
 
+BLOCK_MIN_WIDTH = None  # ширина блока панели — по содержимому
+
+
 def panel_block(
     children,
     min_width=None,
@@ -243,12 +254,13 @@ def panel_block(
     if min_width:
         style["minWidth"] = min_width
 
-    if grow:
-        style["flex"] = "1 1 auto"
+    # все блоки делят ширину панели; заголовок слева, кнопки справа
+    style["flex"] = "1 1 auto"
 
     return html.Div(
         children=children,
         style=style,
+        className="panel-block",
     )
 
 
@@ -302,7 +314,7 @@ def export_panel_main():
                     # 1. ОСТАТКИ
                     # =================================================
 panel_block(
-    min_width="450px",
+    min_width=BLOCK_MIN_WIDTH,
     children=dmc.Group(
         gap="sm",
         align="center",
@@ -380,7 +392,7 @@ panel_block(
                     # 2. АНАЛИЗ СЕБЕСТОИМОСТИ
                     # =================================================
                     panel_block(
-                        min_width="250px",
+                        min_width=BLOCK_MIN_WIDTH,
                         children=dmc.Group(
                             gap="sm",
                             align="center",
@@ -425,7 +437,7 @@ panel_block(
                     # 3. ПЛАН WB
                     # =================================================
                     panel_block(
-                        min_width="245px",
+                        min_width=BLOCK_MIN_WIDTH,
                         children=dmc.Group(
                             gap="sm",
                             align="center",
@@ -451,7 +463,7 @@ panel_block(
                     # 4. AI-АНАЛИЗ
                     # =================================================
                     panel_block(
-                        min_width="235px",
+                        min_width=BLOCK_MIN_WIDTH,
                         children=dmc.Group(
                             gap="sm",
                             align="center",
@@ -477,7 +489,7 @@ panel_block(
                     # 5. ЭКСПОРТ ТАБЛИЦЫ
                     # =================================================
                     panel_block(
-                        min_width="245px",
+                        min_width=BLOCK_MIN_WIDTH,
                         grow=True,
                         border_right=False,
                         children=dmc.Group(
@@ -576,6 +588,9 @@ panel_block(
                                                 *export_menu_dropdown_items(),
                                                 *top_cards_menu_items(),
                                                 *ad_campaigns_menu_items(),
+                                                dmc.MenuDivider(),
+                                                dmc.MenuLabel("Выгрузки"),
+                                                wb_sales_menu_item(),
                                             ]
                                         ),
                                     ],
@@ -676,6 +691,9 @@ panel_block(
 
             wb_plan_modal(),
             ai_analysis_modal(),
+            assistant_widget(),
+            wb_sales_modal(),
+            wb_sales_download(),
         ],
     )
 

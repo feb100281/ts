@@ -38,6 +38,13 @@ class Loans(models.Model):
         verbose_name_plural = "Займы и кредиты"
 
 
+class ManPack(models.Model):
+    class Meta:
+        managed = False
+        verbose_name = "Управленческий пакет"
+        verbose_name_plural = "Управленческий пакет"
+
+
 class Exports(models.Model):
     """Заглушка: держит права на выгрузки из верхнего меню админки.
 

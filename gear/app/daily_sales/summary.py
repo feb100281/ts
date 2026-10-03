@@ -32,26 +32,29 @@ PROGRESS_BACKGROUND = "#E9ECEF"
 TEXT_COLOR = "#212529"
 MUTED_TEXT_COLOR = "#868E96"
 
-BLUE = "#228BE6"
-BLUE_BG = "#E7F5FF"
+# Сдержанная палитра в фирменном зелёном (как в мэн паке):
+# основной акцент — зелёный, вспомогательный — графитовый, расходы —
+# приглушённый терракотовый; зелёный/красный — только для смысла (+ / −).
+BLUE = "#2F6656"
+BLUE_BG = "#EEF5F2"
 
-CYAN = "#15AABF"
-CYAN_BG = "#E3FAFC"
+CYAN = "#3D7A67"
+CYAN_BG = "#F0F6F3"
 
-GREEN = "#2FB344"
-GREEN_BG = "#EBFBEE"
+GREEN = "#2F8F5B"
+GREEN_BG = "#EDF7F1"
 
-RED = "#FA5252"
-RED_BG = "#FFF5F5"
+RED = "#C0392B"
+RED_BG = "#FBEFEE"
 
-ORANGE = "#F76707"
-ORANGE_BG = "#FFF4E6"
+ORANGE = "#A15C38"
+ORANGE_BG = "#FAF1EC"
 
-VIOLET = "#7950F2"
-VIOLET_BG = "#F3F0FF"
+VIOLET = "#5B6770"
+VIOLET_BG = "#F1F3F4"
 
-TEAL = "#12B886"
-TEAL_BG = "#E6FCF5"
+TEAL = "#2F6656"
+TEAL_BG = "#EEF5F2"
 
 GRAY = "#868E96"
 GRAY_BG = "#F1F3F5"
@@ -773,8 +776,8 @@ def _quality_control_export_button():
                 height=16,
             ),
             id=QUALITY_CONTROL_EXPORT_BTN_ID,
-            variant="light",
-            color="red",
+            variant="default",
+            className="ks-q-btn",
             size=30,
             radius=0,
         ),
@@ -976,7 +979,7 @@ def _filter_chip(label, value, color, background_color):
             "alignItems": "baseline",
             "gap": "6px",
             "padding": "3px 10px",
-            "borderRadius": "4px",
+            "borderRadius": 0,
             "backgroundColor": background_color,
             "border": f"1px solid {color}33",
             "whiteSpace": "nowrap",
@@ -1090,7 +1093,7 @@ def _applied_filters_strip(
             "gap": "8px",
             "padding": "8px 10px",
             "marginBottom": "10px",
-            "borderRadius": "4px",
+            "borderRadius": 0,
             "backgroundColor": PAGE_BACKGROUND,
             "border": f"1px solid {BLOCK_BORDER}",
         },
@@ -1353,224 +1356,189 @@ def get_sales_summary(
     )
 
     # ========================================================
-    # UI
+    # UI — компактная раскладка
     # ========================================================
 
-    return dmc.Paper(
-        withBorder=True,
-        radius=0,
-        shadow="xs",
-        p=0,
-        mb="md",
-        style={
-            "width": "100%",
-            "backgroundColor": PAGE_BACKGROUND,
-            "borderColor": PANEL_BORDER,
-            "overflow": "hidden",
-        },
-        children=[
-            # =================================================
-            # ЗАГОЛОВОК SUMMARY
-            # =================================================
-
-            html.Div(
-                style={
-                    "padding": "12px 14px",
-                    "backgroundColor": PANEL_BACKGROUND,
-                    "borderBottom": f"1px solid {PANEL_BORDER}",
-                },
-                children=dmc.Group(
-                    justify="space-between",
-                    align="center",
-                    gap="md",
-                    wrap="nowrap",
-                    children=[
-                        dmc.Group(
-                            gap=9,
-                            align="center",
-                            wrap="nowrap",
-                            children=[
-                                _section_icon(
-                                    icon="solar:chart-2-linear",
-                                    color=BLUE,
-                                    background_color=BLUE_BG,
-                                    size=34,
-                                    icon_size=18,
-                                ),
-                                dmc.Stack(
-                                    gap=1,
-                                    children=[
-                                        dmc.Text(
-                                            "Ключевые показатели",
-                                            fw=800,
-                                            size="md",
-                                            c=TEXT_COLOR,
-                                            lh=1.15,
-                                        ),
-                                        dmc.Text(
-                                            "Результаты по текущим фильтрам",
-                                            size="11px",
-                                            c=MUTED_TEXT_COLOR,
-                                            lh=1.15,
-                                        ),
-                                    ],
-                                ),
-                            ],
-                        ),
-                        methodology_button(),
-                    ],
-                ),
+    return _compact_summary(
+        filters_strip=_applied_filters_strip(
+            start,
+            end,
+            cat_list,
+            brand_list,
+            gender_list,
+            days_count,
+            period_selected,
+        ),
+        kpis=[
+            _kpi_compact(
+                "Выручка с НДС", _money(amount),
+                f"без НДС {_money(amount_vatless)} · НДС {_money(vat_amount)}",
             ),
+            _kpi_compact(
+                "WB реализовал с НДС", _money(retail_amount),
+                f"в среднем в день {_money(avg_daily_amount)}",
+            ),
+            _kpi_compact(
+                "Скидка WB", _pct(wb_discount_percent),
+                f"{_money(wb_discount_amount)} от выручки с НДС",
+            ),
+            _kpi_compact(
+                "Продажи, шт.", _num(qty),
+                f"дней с продажами: {days_count}",
+            ),
+            _kpi_compact(
+                "Расходы WB", _money(wb_total_costs),
+                f"{_pct(wb_total_costs_percent)} от выручки без НДС",
+                tooltip=WB_EXPENSES_TOOLTIP, tone="expense",
+            ),
+        ],
+        compare=_compare_table([
+            ("Себестоимость", None,
+             (cogs_percent, cogs), (cogs_man_percent, cogs_man), "cost"),
+            ("Маржинальность", MARGIN_TOOLTIP,
+             (margin_percent, margin), (margin_man_percent, margin_man), "result"),
+            ("Финансовый результат", FIN_RESULT_TOOLTIP,
+             (fin_result_buh_percent, fin_result_buh),
+             (fin_result_man_percent, fin_result_man), "result"),
+        ]),
+        quality=_quality_strip([
+            ("Без себестоимости", no_cost, no_cost_share),
+            ("Нет на складе", no_stocks, no_stocks_share),
+            ("Нет прихода", no_income, no_income_share),
+        ]),
+    )
 
-            # =================================================
-            # ОСНОВНОЕ СОДЕРЖИМОЕ
-            # =================================================
 
+# ============================================================
+# КОМПАКТНЫЕ ЭЛЕМЕНТЫ
+# ============================================================
+
+def _kpi_compact(title, value, note, tooltip=None, tone=None):
+    head = [html.Span(title, className="ks-kpi-title")]
+    if tooltip:
+        head.append(_info_tooltip(text=tooltip))
+    return html.Div(
+        className="ks-kpi" + (f" {tone}" if tone else ""),
+        children=[
+            html.Div(head, className="ks-kpi-head"),
+            html.Div(value, className="ks-kpi-value"),
+            html.Div(note, className="ks-kpi-note"),
+        ],
+    )
+
+
+def _bar(pct, kind):
+    width = _clamp_progress(abs(pct))
+    cls = "ks-bar-fill " + (
+        "cost" if kind == "cost" else ("neg" if pct < 0 else "pos")
+    )
+    return html.Div(
+        className="ks-bar",
+        children=html.Div(className=cls, style={"width": f"{width}%"}),
+    )
+
+
+def _compare_cell(pct, amount, kind):
+    if kind == "cost":
+        txt_cls = "ks-num"
+        pct_txt = _pct(pct)
+    else:
+        txt_cls = "ks-num " + ("neg" if amount < 0 else "pos")
+        pct_txt = _signed_pct(pct)
+    return html.Td(
+        className="ks-cell",
+        children=[
             html.Div(
-                style={
-                    "padding": "12px",
-                },
+                className="ks-cell-row",
                 children=[
-                    _applied_filters_strip(
-                        start,
-                        end,
-                        cat_list,
-                        brand_list,
-                        gender_list,
-                        days_count,
-                        period_selected,
+                    html.Span(pct_txt, className=txt_cls),
+                    html.Span(_money(amount), className="ks-amount"),
+                ],
+            ),
+            _bar(pct, kind),
+        ],
+    )
+
+
+def _compare_table(rows):
+    body = []
+    for label, tip, buh, man, kind in rows:
+        name = [html.Span(label)]
+        if tip:
+            name.append(_info_tooltip(text=tip))
+        body.append(html.Tr([
+            html.Td(html.Div(name, className="ks-row-name")),
+            _compare_cell(buh[0], buh[1], kind),
+            _compare_cell(man[0], man[1], kind),
+        ]))
+    return html.Table(
+        className="ks-table",
+        children=[
+            html.Thead(html.Tr([
+                html.Th("% от выручки без НДС"),
+                html.Th("Бухгалтерский учёт"),
+                html.Th("Управленческий учёт"),
+            ])),
+            html.Tbody(body),
+        ],
+    )
+
+
+def _quality_strip(items):
+    has_issue = any(q for _, q, _ in items)
+    parts = []
+    for label, qty_, share in items:
+        parts.append(html.Span(
+            className="ks-q-item" + (" warn" if qty_ else ""),
+            children=[
+                html.Span(label + ": ", className="ks-q-label"),
+                html.B(f"{_num(qty_)} шт."),
+                html.Span(f" ({_pct(share)})", className="ks-q-share"),
+            ],
+        ))
+    return html.Div(
+        className="ks-quality" + (" warn" if has_issue else ""),
+        children=[
+            html.Div(
+                className="ks-q-title",
+                children=[
+                    DashIconify(
+                        icon="solar:danger-triangle-linear"
+                        if has_issue else "solar:check-circle-linear",
+                        width=16,
                     ),
+                    html.Span("Контроль данных"),
+                    _info_tooltip(text=DATA_CONTROL_TOOLTIP),
+                ],
+            ),
+            html.Div(parts, className="ks-q-items"),
+            _quality_control_export_button(),
+        ],
+    )
 
-                    # =========================================
-                    # ВЕРХНИЕ KPI
-                    # =========================================
 
-                    html.Div(
-                        style={
-                            "display": "grid",
-                            "gridTemplateColumns": (
-                                "repeat(4, minmax(220px, 1fr))"
-                            ),
-                            "gap": "10px",
-                            "overflowX": "auto",
-                        },
-                        children=[
-                            _kpi_card(
-                                title="Выручка с НДС",
-                                value=_money(amount),
-                                note=(
-                                    "Среднее в день: "
-                                    f"{_money(avg_daily_amount)}"
-                                ),
-                                icon="solar:wallet-money-linear",
-                                color=BLUE,
-                                background_color=BLUE_BG,
-                                extra=_revenue_breakdown(
-                                    amount_vatless=amount_vatless,
-                                    vat_amount=vat_amount,
-                                ),
-                            ),
-                            _kpi_card(
-                                title="WB реализовал с НДС",
-                                value=_money(retail_amount),
-                                note=(
-                                    "Скидка WB: "
-                                    f"{_money(wb_discount_amount)}"
-                                ),
-                                icon="solar:tag-price-linear",
-                                color=CYAN,
-                                background_color=CYAN_BG,
-                            ),
-                            _kpi_card(
-                                title="Скидка WB",
-                                value=_pct(wb_discount_percent),
-                                note="От выручки с НДС",
-                                icon="solar:sale-linear",
-                                color=ORANGE,
-                                background_color=ORANGE_BG,
-                            ),
-                            _kpi_card(
-                                title="Продажи, шт.",
-                                value=_num(qty),
-                                note=f"Дней с продажами: {days_count}",
-                                icon="solar:cart-large-linear",
-                                color=TEAL,
-                                background_color=TEAL_BG,
-                            ),
-                        ],
-                    ),
-
-                    # =========================================
-                    # БУХГАЛТЕРСКИЕ / УПРАВЛЕНЧЕСКИЕ
-                    # =========================================
-
-                    html.Div(
-                        style={
-                            "display": "grid",
-                            "gridTemplateColumns": (
-                                "repeat(2, minmax(420px, 1fr))"
-                            ),
-                            "gap": "10px",
-                            "marginTop": "10px",
-                            "overflowX": "auto",
-                        },
-                        children=[
-                            _accounting_column(
-                                cogs_percent=cogs_percent,
-                                cogs=cogs,
-                                margin_percent=margin_percent,
-                                margin=margin,
-                                fin_result_percent=(
-                                    fin_result_buh_percent
-                                ),
-                                fin_result=fin_result_buh,
-                            ),
-                            _management_column(
-                                cogs_percent=cogs_man_percent,
-                                cogs=cogs_man,
-                                margin_percent=margin_man_percent,
-                                margin=margin_man,
-                                fin_result_percent=(
-                                    fin_result_man_percent
-                                ),
-                                fin_result=fin_result_man,
-                            ),
-                        ],
-                    ),
-
-                    # =========================================
-                    # РАСХОДЫ WB / КОНТРОЛЬ ДАННЫХ
-                    # =========================================
-
-                    html.Div(
-                        style={
-                            "display": "grid",
-                            "gridTemplateColumns": (
-                                "minmax(350px, 0.75fr) "
-                                "minmax(720px, 2fr)"
-                            ),
-                            "gap": "10px",
-                            "marginTop": "10px",
-                            "overflowX": "auto",
-                            "alignItems": "stretch",
-                        },
-                        children=[
-                            _wb_expenses_block(
-                                total_percent=(
-                                    wb_total_costs_percent
-                                ),
-                                total_amount=wb_total_costs,
-                            ),
-                            _quality_control_block(
-                                no_cost=no_cost,
-                                no_cost_share=no_cost_share,
-                                no_stocks=no_stocks,
-                                no_stocks_share=no_stocks_share,
-                                no_income=no_income,
-                                no_income_share=no_income_share,
-                            ),
-                        ],
-                    ),
+def _compact_summary(filters_strip, kpis, compare, quality):
+    return html.Details(
+        open=True,
+        className="ks-root",
+        children=[
+            html.Summary(
+                className="ks-head",
+                children=[
+                    DashIconify(icon="solar:alt-arrow-down-linear",
+                                width=16, className="ks-chevron"),
+                    html.Span("Ключевые показатели", className="ks-head-title"),
+                    html.Span("по текущим фильтрам", className="ks-head-sub"),
+                ],
+            ),
+            html.Div(methodology_button(), className="ks-head-actions"),
+            html.Div(
+                className="ks-body",
+                children=[
+                    filters_strip,
+                    html.Div(kpis, className="ks-kpis"),
+                    compare,
+                    quality,
                 ],
             ),
         ],

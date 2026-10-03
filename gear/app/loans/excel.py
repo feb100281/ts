@@ -3413,7 +3413,7 @@ def build_reconciliation_excel(
                     "font_name": "Helvetica Light",
                     "font_size": 10,
                     "bold": True,
-                    "font_color": "#111827",
+                    "font_color": "#1F1F1F",
                     "align": "left",
                     "valign": "vcenter",
                 }
@@ -3425,7 +3425,7 @@ def build_reconciliation_excel(
                 {
                     "font_name": "Helvetica Light",
                     "font_size": 10,
-                    "font_color": "#6B7280",
+                    "font_color": "#8A8A8A",
                     "align": "left",
                     "valign": "vcenter",
                 }
@@ -3438,11 +3438,11 @@ def build_reconciliation_excel(
                     "font_name": "Helvetica Light",
                     "font_size": 10,
                     "bold": True,
-                    "font_color": "#22312D",
+                    "font_color": "#1F1F1F",
                     "bg_color": "#E7F1ED",
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "left",
                     "valign": "vcenter",
@@ -3456,11 +3456,11 @@ def build_reconciliation_excel(
                     "font_name": "Helvetica Light",
                     "font_size": 10,
 
-                    "font_color": "#6B7280",
-                    "bg_color": "#F8FAF9",
+                    "font_color": "#8A8A8A",
+                    "bg_color": "#F7F7F7",
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "left",
                     "valign": "vcenter",
@@ -3474,11 +3474,11 @@ def build_reconciliation_excel(
                     "font_name": "Helvetica Light",
                     "font_size": 10,
 
-                    "font_color": "#111827",
+                    "font_color": "#1F1F1F",
                     "bold": True,
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "left",
                     "valign": "vcenter",
@@ -3504,7 +3504,7 @@ def build_reconciliation_excel(
                     ),
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "right",
                     "valign": "vcenter",
@@ -3519,7 +3519,7 @@ def build_reconciliation_excel(
                     "font_size": 10,
                     "bold": True,
 
-                    "font_color": "#22312D",
+                    "font_color": "#1F1F1F",
                     "bg_color": "#E7F1ED",
 
                     "num_format": (
@@ -3528,7 +3528,7 @@ def build_reconciliation_excel(
                     ),
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "right",
                     "valign": "vcenter",
@@ -3543,8 +3543,8 @@ def build_reconciliation_excel(
                     "font_size": 10,
                     "bold": True,
 
-                    "font_color": "#B45309",
-                    "bg_color": "#FEF3E7",
+                    "font_color": "#7B4437",
+                    "bg_color": "#F6E9E4",
 
                     "num_format": (
                         '#,##0.00;'
@@ -3552,7 +3552,7 @@ def build_reconciliation_excel(
                     ),
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "right",
                     "valign": "vcenter",
@@ -3571,7 +3571,7 @@ def build_reconciliation_excel(
                     "num_format": '0.00"%"',
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "right",
                     "valign": "vcenter",
@@ -3588,7 +3588,7 @@ def build_reconciliation_excel(
                     "num_format": "dd.mm.yyyy",
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "left",
                     "valign": "vcenter",
@@ -3607,7 +3607,7 @@ def build_reconciliation_excel(
                     "bg_color": "#2F6656",
 
                     "border": 1,
-                    "border_color": "#D9DEE2",
+                    "border_color": "#D9D9D9",
 
                     "align": "center",
                     "valign": "vcenter",
@@ -3624,7 +3624,7 @@ def build_reconciliation_excel(
                     "font_size": 10,
 
                     "border": 1,
-                    "border_color": "#E5E7EB",
+                    "border_color": "#D9D9D9",
 
                     "align": "left",
                     "valign": "top",
@@ -3639,9 +3639,9 @@ def build_reconciliation_excel(
                 {
                     "font_name": "Helvetica Light",
                     "font_size": 10,
-                    "font_color": "#22312D",
+                    "font_color": "#1F1F1F",
                     "border": 1,
-                    "border_color": "#E5E7EB",
+                    "border_color": "#D9D9D9",
                     "align": "left",
                     "valign": "vcenter",
                 }
@@ -3653,14 +3653,14 @@ def build_reconciliation_excel(
                 {
                     "font_name": "Helvetica Light",
                     "font_size": 10,
-                    "font_color": "#166534",
-                    "bg_color": "#F0FDF4",
+                    "font_color": "#1F5E4E",
+                    "bg_color": "#E7F1ED",
                     "num_format": (
                         '#,##0.00;'
                         '[Red]-#,##0.00'
                     ),
                     "border": 1,
-                    "border_color": "#E5E7EB",
+                    "border_color": "#D9D9D9",
                     "align": "right",
                     "valign": "vcenter",
                 }
@@ -3673,15 +3673,15 @@ def build_reconciliation_excel(
                     "font_name": "Helvetica Light",
                     "font_size": 10,
                     "bold": True,
-                    "font_color": "#B45309",
-                    "bg_color": "#FFF7ED",
+                    "font_color": "#7B4437",
+                    "bg_color": "#F6E9E4",
                     "num_format": (
                         '+#,##0.00;'
                         '[Red]-#,##0.00;'
                         '0.00'
                     ),
                     "border": 1,
-                    "border_color": "#E5E7EB",
+                    "border_color": "#D9D9D9",
                     "align": "right",
                     "valign": "vcenter",
                 }
@@ -3694,15 +3694,15 @@ def build_reconciliation_excel(
                     "font_name": "Helvetica Light",
                     "font_size": 10,
                     "bold": True,
-                    "font_color": "#166534",
-                    "bg_color": "#F0FDF4",
+                    "font_color": "#1F5E4E",
+                    "bg_color": "#E7F1ED",
                     "num_format": (
                         '+#,##0.00;'
                         '-#,##0.00;'
                         '0.00'
                     ),
                     "border": 1,
-                    "border_color": "#E5E7EB",
+                    "border_color": "#D9D9D9",
                     "align": "right",
                     "valign": "vcenter",
                 }
@@ -3715,16 +3715,16 @@ def build_reconciliation_excel(
                     "font_name": "Helvetica Light",
                     "font_size": 10,
                     "bold": True,
-                    "font_color": "#22312D",
+                    "font_color": "#1F1F1F",
                     "bg_color": "#E7F1ED",
                     "top": 2,
                     "top_color": "#2F6656",
                     "bottom": 1,
-                    "bottom_color": "#D9DEE2",
+                    "bottom_color": "#D9D9D9",
                     "left": 1,
-                    "left_color": "#D9DEE2",
+                    "left_color": "#D9D9D9",
                     "right": 1,
-                    "right_color": "#D9DEE2",
+                    "right_color": "#D9D9D9",
                     "align": "left",
                     "valign": "vcenter",
                 }

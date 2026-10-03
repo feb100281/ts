@@ -38,8 +38,9 @@ def commercial_review_controls():
                 id=CR_OPEN_BTN_ID,
                 radius=0,
                 variant="filled",
-                color="teal",
+                color="#2F6656",
                 size="sm",
+                className="ds-head-btn primary",
                 leftSection=DashIconify(
                     icon=(
                         "material-symbols:"

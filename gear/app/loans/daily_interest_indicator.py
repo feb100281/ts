@@ -1144,8 +1144,12 @@ def _float(value: Any) -> float:
         return 0.0
 
 
+def _ru(text: str) -> str:
+    return text.replace(",", " ").replace(".", ",")
+
+
 def _money(value: Any) -> str:
-    return f"{_float(value):,.2f}".replace(",", " ")
+    return _ru(f"{_float(value):,.2f}")
 
 
 def _money_short(value: Any) -> str:
@@ -1153,13 +1157,13 @@ def _money_short(value: Any) -> str:
     absolute = abs(value)
 
     if absolute >= 1_000_000_000:
-        return f"{value / 1_000_000_000:,.2f}".replace(",", " ") + " млрд"
+        return _ru(f"{value / 1_000_000_000:,.2f}") + " млрд"
     if absolute >= 1_000_000:
-        return f"{value / 1_000_000:,.2f}".replace(",", " ") + " млн"
-    if absolute >= 100_000:
-        return f"{value / 1_000:,.2f}".replace(",", " ") + " тыс."
+        return _ru(f"{value / 1_000_000:,.1f}") + " млн"
+    if absolute >= 1_000:
+        return _ru(f"{value / 1_000:,.0f}") + " тыс."
 
-    return _money(value)
+    return _ru(f"{value:,.0f}")
 
 
 def _pct(value: float | None) -> str:

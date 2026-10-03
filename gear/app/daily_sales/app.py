@@ -17,6 +17,8 @@ scripts = [
 styles = [
     "/static/css/dash/aggrid_compact.css",
      "/static/css/dash/compact_tree.css",
+    "/static/css/dash/assistant.css",
+    "/static/css/dash/daily_sales_panel.css",
 ]
 app = DjangoDash(
     "dayly_sales_app",

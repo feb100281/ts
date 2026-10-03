@@ -183,13 +183,13 @@ class WbFilters:
                                     icon="solar:filter-linear",
                                     width=20,
                                     height=20,
-                                    color="#228be6",
+                                    color="#2F6656",
                                 ),
                                 dmc.Text(
-                                    "Фильтры отчета",
-                                    fw=800,
+                                    "Фильтры отчёта",
+                                    fw=700,
                                     size="md",
-                                    c="#228be6",
+                                    c="#1F5E4E",
                                 ),
                                 dmc.Text(
                                     "· период, бренд, категория и пол",

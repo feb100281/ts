@@ -685,7 +685,7 @@
 #                 "Выручка",
 #                 145,
 #                 {
-#                     "backgroundColor": "#eff6ff",
+#                     "backgroundColor": "#F4F8F6",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -694,7 +694,7 @@
 #                 "WB реализовал",
 #                 150,
 #                 {
-#                     "backgroundColor": "#ecfeff",
+#                     "backgroundColor": "#F4F8F6",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -703,7 +703,7 @@
 #                 "WB дисконт",
 #                 130,
 #                 {
-#                     "backgroundColor": "#fff7ed",
+#                     "backgroundColor": "#FBF5F1",
 #                     "fontWeight": "600",
 #                 },
 #             ),
@@ -716,7 +716,7 @@
 #                 "Бух с/с",
 #                 145,
 #                 {
-#                     "backgroundColor": "#f5f3ff",
+#                     "backgroundColor": "#F6F7F8",
 #                     "fontWeight": "600",
 #                 },
 #             ),
@@ -725,7 +725,7 @@
 #                 "Упр с/с",
 #                 145,
 #                 {
-#                     "backgroundColor": "#eef2ff",
+#                     "backgroundColor": "#F6F7F8",
 #                     "fontWeight": "600",
 #                 },
 #             ),
@@ -734,7 +734,7 @@
 #                 "Комиссия WB",
 #                 145,
 #                 {
-#                     "backgroundColor": "#fff7ed",
+#                     "backgroundColor": "#FBF5F1",
 #                     "fontWeight": "600",
 #                 },
 #             ),
@@ -744,7 +744,7 @@
 #                 "Бух маржа",
 #                 145,
 #                 {
-#                     "backgroundColor": "#f0fdf4",
+#                     "backgroundColor": "#EEF5F1",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -753,7 +753,7 @@
 #                 "Упр маржа",
 #                 145,
 #                 {
-#                     "backgroundColor": "#ecfdf5",
+#                     "backgroundColor": "#EEF5F1",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -765,7 +765,7 @@
 #                 "Q без себест.",
 #                 130,
 #                 {
-#                     "backgroundColor": "#fff1f2",
+#                     "backgroundColor": "#FBF5F1",
 #                     "fontWeight": "700",
 #                     "color": "#dc2626",
 #                 },
@@ -775,7 +775,7 @@
 #                 "Нет на складе",
 #                 130,
 #                 {
-#                     "backgroundColor": "#fff1f2",
+#                     "backgroundColor": "#FBF5F1",
 #                     "fontWeight": "700",
 #                     "color": "#dc2626",
 #                 },
@@ -785,7 +785,7 @@
 #                 "Нет прихода",
 #                 130,
 #                 {
-#                     "backgroundColor": "#fff1f2",
+#                     "backgroundColor": "#FBF5F1",
 #                     "fontWeight": "700",
 #                     "color": "#dc2626",
 #                 },
@@ -798,7 +798,7 @@
 #                 "Марж. %",
 #                 130,
 #                 {
-#                     "backgroundColor": "#f0fdf4",
+#                     "backgroundColor": "#EEF5F1",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -807,7 +807,7 @@
 #                 "WB расходы руб / ед",
 #                 145,
 #                 {
-#                     "backgroundColor": "#e5eedd",
+#                     "backgroundColor": "#EEF5F1",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -816,7 +816,7 @@
 #                 "WB расходы руб",
 #                 145,
 #                 {
-#                     "backgroundColor": "#f8fdec",
+#                     "backgroundColor": "#EEF5F1",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -825,7 +825,7 @@
 #                 "Фин результат WB",
 #                 145,
 #                 {
-#                     "backgroundColor": "#E1F4F3",
+#                     "backgroundColor": "#EEF5F1",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -881,7 +881,7 @@
 #             "Выручка",
 #             145,
 #             {
-#                 "backgroundColor": "#eff6ff",
+#                 "backgroundColor": "#F4F8F6",
 #                 "fontWeight": "700",
 #             },
 #         ),
@@ -890,7 +890,7 @@
 #             "WB реализовал",
 #             150,
 #             {
-#                 "backgroundColor": "#ecfeff",
+#                 "backgroundColor": "#F4F8F6",
 #                 "fontWeight": "700",
 #             },
 #         ),
@@ -899,7 +899,7 @@
 #             "WB дисконт",
 #             130,
 #             {
-#                 "backgroundColor": "#fff7ed",
+#                 "backgroundColor": "#FBF5F1",
 #                 "fontWeight": "600",
 #             },
 #         ),
@@ -912,7 +912,7 @@
 #             "Бух с/с",
 #             145,
 #             {
-#                 "backgroundColor": "#f5f3ff",
+#                 "backgroundColor": "#F6F7F8",
 #                 "fontWeight": "600",
 #             },
 #         ),
@@ -921,7 +921,7 @@
 #             "Упр с/с",
 #             145,
 #             {
-#                 "backgroundColor": "#eef2ff",
+#                 "backgroundColor": "#F6F7F8",
 #                 "fontWeight": "600",
 #             },
 #         ),
@@ -930,7 +930,7 @@
 #             "Комиссия WB",
 #             145,
 #             {
-#                 "backgroundColor": "#fff7ed",
+#                 "backgroundColor": "#FBF5F1",
 #                 "fontWeight": "600",
 #             },
 #         ),
@@ -940,7 +940,7 @@
 #             "Бух маржа",
 #             145,
 #             {
-#                 "backgroundColor": "#f0fdf4",
+#                 "backgroundColor": "#EEF5F1",
 #                 "fontWeight": "700",
 #             },
 #         ),
@@ -949,7 +949,7 @@
 #             "Упр маржа",
 #             145,
 #             {
-#                 "backgroundColor": "#ecfdf5",
+#                 "backgroundColor": "#EEF5F1",
 #                 "fontWeight": "700",
 #             },
 #         ),
@@ -961,7 +961,7 @@
 #             "Q без себест.",
 #             130,
 #             {
-#                 "backgroundColor": "#fff1f2",
+#                 "backgroundColor": "#FBF5F1",
 #                 "fontWeight": "700",
 #                 "color": "#dc2626",
 #             },
@@ -971,7 +971,7 @@
 #             "Нет на складе",
 #             130,
 #             {
-#                 "backgroundColor": "#fff1f2",
+#                 "backgroundColor": "#FBF5F1",
 #                 "fontWeight": "700",
 #                 "color": "#dc2626",
 #             },
@@ -981,7 +981,7 @@
 #             "Нет прихода",
 #             130,
 #             {
-#                 "backgroundColor": "#fff1f2",
+#                 "backgroundColor": "#FBF5F1",
 #                 "fontWeight": "700",
 #                 "color": "#dc2626",
 #             },
@@ -994,7 +994,7 @@
 #             "Марж. %",
 #             130,
 #             {
-#                 "backgroundColor": "#f0fdf4",
+#                 "backgroundColor": "#EEF5F1",
 #                 "fontWeight": "700",
 #             },
 #         ),
@@ -1141,7 +1141,7 @@
 #                 "Оборачиваемость, дней",
 #                 175,
 #                 {
-#                     "backgroundColor": "#ecfdf5",
+#                     "backgroundColor": "#EEF5F1",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -1151,7 +1151,7 @@
 #                 "Остаток на конец периода",
 #                 190,
 #                 {
-#                     "backgroundColor": "#e0f2fe",
+#                     "backgroundColor": "#EEF5F2",
 #                     "fontWeight": "700",
 #                 },
 #             ),
@@ -1161,7 +1161,7 @@
 #                 "На складе на конец",
 #                 165,
 #                 {
-#                     "backgroundColor": "#eff6ff",
+#                     "backgroundColor": "#F4F8F6",
 #                     "fontWeight": "600",
 #                 },
 #             ),
@@ -1171,7 +1171,7 @@
 #                 "В пути на конец",
 #                 155,
 #                 {
-#                     "backgroundColor": "#f5f3ff",
+#                     "backgroundColor": "#F6F7F8",
 #                     "fontWeight": "600",
 #                 },
 #             ),
@@ -1392,7 +1392,7 @@ def _stock_columns():
             "Остаток всего",
             145,
             {
-                "backgroundColor": "#e0f2fe",
+                "backgroundColor": "#EEF5F2",
                 "fontWeight": "700",
             },
         ),
@@ -1402,7 +1402,7 @@ def _stock_columns():
             "На WB",
             125,
             {
-                "backgroundColor": "#eff6ff",
+                "backgroundColor": "#F4F8F6",
                 "fontWeight": "600",
             },
         ),
@@ -1412,7 +1412,7 @@ def _stock_columns():
             "FBS",
             110,
             {
-                "backgroundColor": "#ecfdf5",
+                "backgroundColor": "#EEF5F1",
                 "fontWeight": "700",
             },
         ),
@@ -1422,7 +1422,7 @@ def _stock_columns():
             "В пути",
             125,
             {
-                "backgroundColor": "#f5f3ff",
+                "backgroundColor": "#F6F7F8",
                 "fontWeight": "600",
             },
         ),
@@ -1473,7 +1473,7 @@ def _daily_columns(
                 "Выручка",
                 145,
                 {
-                    "backgroundColor": "#eff6ff",
+                    "backgroundColor": "#F4F8F6",
                     "fontWeight": "700",
                 },
             ),
@@ -1483,7 +1483,7 @@ def _daily_columns(
                 "WB реализовал",
                 150,
                 {
-                    "backgroundColor": "#ecfeff",
+                    "backgroundColor": "#F4F8F6",
                     "fontWeight": "700",
                 },
             ),
@@ -1493,7 +1493,7 @@ def _daily_columns(
                 "WB дисконт",
                 130,
                 {
-                    "backgroundColor": "#fff7ed",
+                    "backgroundColor": "#FBF5F1",
                     "fontWeight": "600",
                 },
             ),
@@ -1515,7 +1515,7 @@ def _daily_columns(
                 "Бух с/с",
                 145,
                 {
-                    "backgroundColor": "#f5f3ff",
+                    "backgroundColor": "#F6F7F8",
                     "fontWeight": "600",
                 },
             ),
@@ -1525,7 +1525,7 @@ def _daily_columns(
                 "Упр с/с",
                 145,
                 {
-                    "backgroundColor": "#eef2ff",
+                    "backgroundColor": "#F6F7F8",
                     "fontWeight": "600",
                 },
             ),
@@ -1535,7 +1535,7 @@ def _daily_columns(
                 "Комиссия WB",
                 145,
                 {
-                    "backgroundColor": "#fff7ed",
+                    "backgroundColor": "#FBF5F1",
                     "fontWeight": "600",
                 },
             ),
@@ -1545,7 +1545,7 @@ def _daily_columns(
                 "Бух маржа",
                 145,
                 {
-                    "backgroundColor": "#f0fdf4",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1555,7 +1555,7 @@ def _daily_columns(
                 "Упр маржа",
                 145,
                 {
-                    "backgroundColor": "#ecfdf5",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1571,7 +1571,7 @@ def _daily_columns(
                 "Q без себест.",
                 130,
                 {
-                    "backgroundColor": "#fff1f2",
+                    "backgroundColor": "#FBF5F1",
                     "fontWeight": "700",
                     "color": "#dc2626",
                 },
@@ -1582,7 +1582,7 @@ def _daily_columns(
                 "Нет на складе",
                 130,
                 {
-                    "backgroundColor": "#fff1f2",
+                    "backgroundColor": "#FBF5F1",
                     "fontWeight": "700",
                     "color": "#dc2626",
                 },
@@ -1593,7 +1593,7 @@ def _daily_columns(
                 "Нет прихода",
                 130,
                 {
-                    "backgroundColor": "#fff1f2",
+                    "backgroundColor": "#FBF5F1",
                     "fontWeight": "700",
                     "color": "#dc2626",
                 },
@@ -1616,7 +1616,7 @@ def _daily_columns(
                 "Марж. %",
                 130,
                 {
-                    "backgroundColor": "#f0fdf4",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1626,7 +1626,7 @@ def _daily_columns(
                 "WB расходы руб / ед",
                 155,
                 {
-                    "backgroundColor": "#e5eedd",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1636,7 +1636,7 @@ def _daily_columns(
                 "WB расходы руб",
                 145,
                 {
-                    "backgroundColor": "#f8fdec",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1646,7 +1646,7 @@ def _daily_columns(
                 "Фин результат WB",
                 155,
                 {
-                    "backgroundColor": "#E1F4F3",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1658,7 +1658,7 @@ def _daily_columns(
                 "Запас при темпе дня, дней",
                 190,
                 {
-                    "backgroundColor": "#ecfdf5",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1719,7 +1719,7 @@ def _details_columns():
             "Выручка",
             145,
             {
-                "backgroundColor": "#eff6ff",
+                "backgroundColor": "#F4F8F6",
                 "fontWeight": "700",
             },
         ),
@@ -1729,7 +1729,7 @@ def _details_columns():
             "WB реализовал",
             150,
             {
-                "backgroundColor": "#ecfeff",
+                "backgroundColor": "#F4F8F6",
                 "fontWeight": "700",
             },
         ),
@@ -1739,7 +1739,7 @@ def _details_columns():
             "WB дисконт",
             130,
             {
-                "backgroundColor": "#fff7ed",
+                "backgroundColor": "#FBF5F1",
                 "fontWeight": "600",
             },
         ),
@@ -1761,7 +1761,7 @@ def _details_columns():
             "Бух с/с",
             145,
             {
-                "backgroundColor": "#f5f3ff",
+                "backgroundColor": "#F6F7F8",
                 "fontWeight": "600",
             },
         ),
@@ -1771,7 +1771,7 @@ def _details_columns():
             "Упр с/с",
             145,
             {
-                "backgroundColor": "#eef2ff",
+                "backgroundColor": "#F6F7F8",
                 "fontWeight": "600",
             },
         ),
@@ -1781,7 +1781,7 @@ def _details_columns():
             "Комиссия WB",
             145,
             {
-                "backgroundColor": "#fff7ed",
+                "backgroundColor": "#FBF5F1",
                 "fontWeight": "600",
             },
         ),
@@ -1791,7 +1791,7 @@ def _details_columns():
             "Бух маржа",
             145,
             {
-                "backgroundColor": "#f0fdf4",
+                "backgroundColor": "#EEF5F1",
                 "fontWeight": "700",
             },
         ),
@@ -1801,7 +1801,7 @@ def _details_columns():
             "Упр маржа",
             145,
             {
-                "backgroundColor": "#ecfdf5",
+                "backgroundColor": "#EEF5F1",
                 "fontWeight": "700",
             },
         ),
@@ -1817,7 +1817,7 @@ def _details_columns():
             "Q без себест.",
             130,
             {
-                "backgroundColor": "#fff1f2",
+                "backgroundColor": "#FBF5F1",
                 "fontWeight": "700",
                 "color": "#dc2626",
             },
@@ -1828,7 +1828,7 @@ def _details_columns():
             "Нет на складе",
             130,
             {
-                "backgroundColor": "#fff1f2",
+                "backgroundColor": "#FBF5F1",
                 "fontWeight": "700",
                 "color": "#dc2626",
             },
@@ -1839,7 +1839,7 @@ def _details_columns():
             "Нет прихода",
             130,
             {
-                "backgroundColor": "#fff1f2",
+                "backgroundColor": "#FBF5F1",
                 "fontWeight": "700",
                 "color": "#dc2626",
             },
@@ -1862,7 +1862,7 @@ def _details_columns():
             "Марж. %",
             130,
             {
-                "backgroundColor": "#f0fdf4",
+                "backgroundColor": "#EEF5F1",
                 "fontWeight": "700",
             },
         ),
@@ -1881,7 +1881,7 @@ def _day_details_columns():
                 "Запас при темпе дня, дней",
                 190,
                 {
-                    "backgroundColor": "#ecfdf5",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),
@@ -1975,7 +1975,7 @@ def _period_details_columns():
                 "Оборачиваемость, дней",
                 175,
                 {
-                    "backgroundColor": "#ecfdf5",
+                    "backgroundColor": "#EEF5F1",
                     "fontWeight": "700",
                 },
             ),

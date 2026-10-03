@@ -4757,10 +4757,47 @@ def build_selected_loan_chart(
 
 
 # =====================================================================
-# DIRECTION-AWARE PORTFOLIO CHARTS
-# Эти определения намеренно расположены в конце файла: они заменяют
-# прежние версии, которые складывали наши обязательства и требования.
+# Графики портфеля: мы должны / нам должны
 # =====================================================================
+
+from .config import OWE_COLOR, OWE_LIGHT, RECV_COLOR, RECV_LIGHT  # noqa: E402
+
+_MONTHS_SHORT = ("янв", "фев", "мар", "апр", "май", "июн",
+                 "июл", "авг", "сен", "окт", "ноя", "дек")
+_GRID = "#EEF1F0"
+
+
+def _portfolio_layout(fig: go.Figure, *, unified: bool = True, left: int = 55) -> go.Figure:
+    fig.update_layout(
+        **base_layout(margin={"l": left, "r": 16, "t": 10, "b": 10}),
+        hovermode="x unified" if unified else "closest",
+        legend={"orientation": "h", "y": -0.12, "yanchor": "top", "x": 0,
+                "font": {"size": 11.5}},
+        separators=", ",
+        bargap=0.3,
+    )
+    fig.update_xaxes(showgrid=False, linecolor="#E3E8E6", tickfont={"size": 11})
+    fig.update_yaxes(gridcolor=_GRID, zerolinecolor="#C9D2CE", tickfont={"size": 11})
+    return fig
+
+
+def _money_axis(fig: go.Figure, max_value: float, axis: str = "y") -> None:
+    """Подписи оси в млн ₽ — без английских M и G."""
+    if max_value >= 1e9:
+        div, suffix = 1e9, " млрд"
+    elif max_value >= 1e6:
+        div, suffix = 1e6, " млн"
+    elif max_value >= 1e3:
+        div, suffix = 1e3, " тыс"
+    else:
+        return
+    step = max_value / 5
+    magnitude = 10 ** np.floor(np.log10(step)) if step > 0 else 1
+    step = float(np.ceil(step / magnitude) * magnitude)
+    ticks = [step * k for k in range(0, int(max_value / step) + 2)]
+    text = [f"{t / div:g}".replace(".", ",") + suffix if t else "0" for t in ticks]
+    (fig.update_xaxes if axis == "x" else fig.update_yaxes)(
+        tickmode="array", tickvals=ticks, ticktext=text)
 
 
 def build_debt_dynamics_chart(df: pd.DataFrame) -> go.Figure:
@@ -4771,39 +4808,31 @@ def build_debt_dynamics_chart(df: pd.DataFrame) -> go.Figure:
     work["date_from"] = pd.to_datetime(work["date_from"], errors="coerce")
     work["total_debt"] = pd.to_numeric(work["total_debt"], errors="coerce").fillna(0)
     pivot = work.pivot_table(
-        index="date_from",
-        columns="loan_direction",
-        values="total_debt",
-        aggfunc="sum",
-        fill_value=0,
+        index="date_from", columns="loan_direction", values="total_debt",
+        aggfunc="sum", fill_value=0,
     ).sort_index()
 
-    fig = go.Figure()
-    for direction, title, color in (
-        ("borrowed", "Наши обязательства", COLORS["red"]),
-        ("issued", "Нам должны", COLORS["blue"]),
-    ):
-        values = pivot[direction] if direction in pivot else pd.Series(0, index=pivot.index)
-        fig.add_trace(go.Scatter(
-            x=pivot.index,
-            y=values,
-            name=title,
-            mode="lines",
-            line={"color": color, "width": 2.4},
-            hovertemplate=f"<b>{title}</b><br>%{{x|%d.%m.%Y}}<br>%{{y:,.2f}} ₽<extra></extra>",
-        ))
+    zero = pd.Series(0.0, index=pivot.index)
+    borrowed = pivot["borrowed"] if "borrowed" in pivot else zero
+    issued = pivot["issued"] if "issued" in pivot else zero
 
-    borrowed = pivot["borrowed"] if "borrowed" in pivot else 0
-    issued = pivot["issued"] if "issued" in pivot else 0
+    fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=pivot.index,
-        y=borrowed - issued,
-        name="Чистые обязательства",
-        mode="lines",
-        line={"color": COLORS["dark"], "width": 1.8, "dash": "dot"},
-        hovertemplate="<b>Чистые обязательства</b><br>%{x|%d.%m.%Y}<br>%{y:,.2f} ₽<extra></extra>",
-    ))
-    fig.update_layout(**base_layout(), hovermode="x unified", legend={"orientation": "h", "y": 1.08})
+        x=pivot.index, y=borrowed, name="Мы должны", mode="lines",
+        line={"color": OWE_COLOR, "width": 2.4, "shape": "hv"},
+        fill="tozeroy", fillcolor="rgba(161,92,56,0.07)",
+        hovertemplate="%{y:,.0f} ₽<extra>Мы должны</extra>"))
+    fig.add_trace(go.Scatter(
+        x=pivot.index, y=issued, name="Нам должны", mode="lines",
+        line={"color": RECV_COLOR, "width": 2.4, "shape": "hv"},
+        hovertemplate="%{y:,.0f} ₽<extra>Нам должны</extra>"))
+    fig.add_trace(go.Scatter(
+        x=pivot.index, y=borrowed - issued, name="Чистые обязательства", mode="lines",
+        line={"color": "#5B6770", "width": 1.5, "dash": "dot", "shape": "hv"},
+        hovertemplate="%{y:,.0f} ₽<extra>Чистые обязательства</extra>"))
+    _portfolio_layout(fig)
+    fig.update_xaxes(tickformat="%d.%m.%y", hoverformat="%d.%m.%Y")
+    _money_axis(fig, float(max(borrowed.max(), issued.max(), 0)))
     return fig
 
 
@@ -4812,30 +4841,32 @@ def build_counterparty_debt_chart(df: pd.DataFrame) -> go.Figure:
         return empty_figure()
     work = df.copy()
     work["total_debt"] = pd.to_numeric(work["total_debt"], errors="coerce").fillna(0)
-    summary = work.groupby(
-        ["counterparty_name", "loan_direction"],
-        dropna=False,
-        as_index=False,
-    )["total_debt"].sum()
+    work["counterparty_name"] = work["counterparty_name"].fillna("Без контрагента")
+    summary = work.groupby(["counterparty_name", "loan_direction"], as_index=False)["total_debt"].sum()
     summary = summary[summary["total_debt"].gt(0.01)]
     if summary.empty:
         return empty_figure()
 
+    order = (summary.groupby("counterparty_name")["total_debt"].sum()
+             .sort_values(ascending=True).tail(12).index.tolist())
+    short = {n: (n if len(n) <= 30 else n[:29] + "…") for n in order}
+
     fig = go.Figure()
     for direction, title, color in (
-        ("borrowed", "Мы должны", COLORS["red"]),
-        ("issued", "Нам должны", COLORS["blue"]),
+        ("borrowed", "Мы должны", OWE_COLOR),
+        ("issued", "Нам должны", RECV_COLOR),
     ):
-        part = summary[summary["loan_direction"].eq(direction)].sort_values("total_debt")
+        part = (summary[summary["loan_direction"].eq(direction)]
+                .set_index("counterparty_name")["total_debt"].reindex(order))
         fig.add_trace(go.Bar(
-            x=part["total_debt"],
-            y=part["counterparty_name"].fillna("Без контрагента"),
-            orientation="h",
-            name=title,
-            marker_color=color,
-            hovertemplate=f"<b>{title}</b><br>%{{y}}<br>%{{x:,.2f}} ₽<extra></extra>",
-        ))
-    fig.update_layout(**base_layout(), barmode="group", legend={"orientation": "h", "y": 1.08})
+            x=part.values, y=[short[n] for n in order], orientation="h", name=title,
+            marker_color=color, customdata=order,
+            hovertemplate=f"%{{customdata}}<br>%{{x:,.0f}} ₽<extra>{title}</extra>"))
+    _portfolio_layout(fig, unified=False, left=10)
+    fig.update_layout(barmode="stack")
+    fig.update_yaxes(automargin=True, showgrid=False)
+    fig.update_xaxes(showgrid=True, gridcolor=_GRID)
+    _money_axis(fig, float(summary.groupby("counterparty_name")["total_debt"].sum().max()), "x")
     return fig
 
 
@@ -4843,21 +4874,21 @@ def build_maturity_chart(df: pd.DataFrame) -> go.Figure:
     if df.empty or "loan_direction" not in df.columns:
         return empty_figure()
     fig = go.Figure()
+    top = 0.0
     for direction, title, color in (
-        ("borrowed", "К оплате", COLORS["red"]),
-        ("issued", "К получению", COLORS["blue"]),
+        ("borrowed", "К оплате", OWE_COLOR),
+        ("issued", "К получению", RECV_COLOR),
     ):
-        part = df[df["loan_direction"].eq(direction)]
-        summary = build_maturity_summary(part)
+        summary = build_maturity_summary(df[df["loan_direction"].eq(direction)])
+        values = pd.to_numeric(summary["total_debt"], errors="coerce").fillna(0)
+        top = max(top, float(values.max()) if len(values) else 0.0)
         fig.add_trace(go.Bar(
-            x=summary["maturity_bucket"],
-            y=summary["total_debt"],
-            name=title,
-            marker_color=color,
+            x=summary["maturity_bucket"], y=values, name=title, marker_color=color,
             customdata=summary["contracts"],
-            hovertemplate=f"<b>{title}</b><br>%{{x}}<br>%{{y:,.2f}} ₽<br>Договоров: %{{customdata}}<extra></extra>",
-        ))
-    fig.update_layout(**base_layout(), barmode="group", legend={"orientation": "h", "y": 1.08})
+            hovertemplate=f"%{{y:,.0f}} ₽ · договоров: %{{customdata}}<extra>{title}</extra>"))
+    _portfolio_layout(fig)
+    fig.update_layout(barmode="group")
+    _money_axis(fig, top)
     return fig
 
 
@@ -4866,24 +4897,31 @@ def build_interest_flow_chart(df: pd.DataFrame) -> go.Figure:
         return empty_figure()
     work = df.copy()
     work["month"] = pd.to_datetime(work["month"], errors="coerce")
+    work = work.dropna(subset=["month"])
     for column in ("interest_accrued", "interest_repaid"):
         work[column] = pd.to_numeric(work[column], errors="coerce").fillna(0)
+    if work.empty:
+        return empty_figure()
+
+    months = sorted(work["month"].dt.to_period("M").unique())
+    labels = [f"{_MONTHS_SHORT[m.month - 1]} {str(m.year)[2:]}" for m in months]
+    work["period"] = work["month"].dt.to_period("M")
 
     fig = go.Figure()
-    series = (
-        ("borrowed", "interest_accrued", "Процентный расход", COLORS["red"]),
-        ("borrowed", "interest_repaid", "Проценты оплачены", COLORS["orange"]),
-        ("issued", "interest_accrued", "Процентный доход", COLORS["blue"]),
-        ("issued", "interest_repaid", "Проценты получены", COLORS["green"]),
-    )
-    for direction, column, title, color in series:
-        part = work[work["loan_direction"].eq(direction)]
+    top = 0.0
+    for direction, column, title, color in (
+        ("borrowed", "interest_accrued", "Начислено к оплате", OWE_COLOR),
+        ("borrowed", "interest_repaid", "Оплачено нами", OWE_LIGHT),
+        ("issued", "interest_accrued", "Начислено к получению", RECV_COLOR),
+        ("issued", "interest_repaid", "Получено нами", RECV_LIGHT),
+    ):
+        part = (work[work["loan_direction"].eq(direction)].groupby("period")[column].sum()
+                .reindex(months, fill_value=0))
+        top = max(top, float(part.max()) if len(part) else 0.0)
         fig.add_trace(go.Bar(
-            x=part["month"],
-            y=part[column],
-            name=title,
-            marker_color=color,
-            hovertemplate=f"<b>{title}</b><br>%{{x|%m.%Y}}<br>%{{y:,.2f}} ₽<extra></extra>",
-        ))
-    fig.update_layout(**base_layout(), barmode="group", hovermode="x unified", legend={"orientation": "h", "y": 1.12})
+            x=labels, y=part.values, name=title, marker_color=color,
+            hovertemplate=f"%{{y:,.0f}} ₽<extra>{title}</extra>"))
+    _portfolio_layout(fig)
+    fig.update_layout(barmode="group", bargap=0.2)
+    _money_axis(fig, top)
     return fig

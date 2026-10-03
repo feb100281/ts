@@ -13,7 +13,7 @@ def section_header(title: str, subtitle: str | None = None):
         dmc.Text(
             title,
             fw=700,
-            size="sm",
+            size="15px",
             c=COLORS["text"],
         ),
     ]
@@ -45,11 +45,11 @@ def action_button(
             icon=icon,
             width=16,
         ),
-        color=color,
-        variant=variant,
+        color="#2F6656",
+        variant="filled" if color == "green" else "default",
         radius=0,
-        size="xs",
-        h=34,
+        size="sm",
+        className="ds-head-btn" + (" primary" if color == "green" else ""),
     )
 
 
@@ -61,48 +61,30 @@ def kpi_card(
     icon: str,
     accent: str,
 ):
+    """Карточка: крупно — «мы должны», строкой ниже — «нам должны»."""
     return html.Div(
-        style={
-            "backgroundColor": COLORS["white"],
-            "border": f"1px solid {COLORS['border']}",
-            "borderLeft": f"3px solid {accent}",
-            "padding": "12px 14px",
-            "minHeight": "104px",
-        },
+        className="ln-kpi",
+        title=subtitle,
         children=[
-            dmc.Group(
-                justify="space-between",
-                align="center",
-                children=[
-                    dmc.Text(
-                        title,
-                        size="xs",
-                        fw=600,
-                        c=COLORS["muted"],
-                    ),
-                    DashIconify(
-                        icon=icon,
-                        width=18,
-                        color=accent,
-                    ),
-                ],
-            ),
-            dmc.Text(
-                id=value_id,
-                children="—",
-                fw=700,
-                size="xl",
-                c=COLORS["text"],
-                mt=5,
-            ),
-            dmc.Text(
-                subtitle,
-                size="xs",
-                c=COLORS["muted"],
-                mt=2,
-            ),
+            html.Div(title, className="ln-kpi-title"),
+            html.Div(id=value_id, children="—", className="ln-kpi-body"),
         ],
     )
+
+
+def kpi_pair(left: str, right: str, left_label: str, right_label: str):
+    return [
+        html.Div(left, className="ln-kpi-value"),
+        html.Div(
+            [
+                html.Span(left_label, className="ln-kpi-cap"),
+                html.Span(" · "),
+                html.Span(f"{right_label} "),
+                html.B(right),
+            ],
+            className="ln-kpi-foot",
+        ),
+    ]
 
 
 def chart_panel(

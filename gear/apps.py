@@ -15,6 +15,7 @@ class GearConfig(AppConfig):
             from .app.costs_control import app as costs_control_app
             from .app.stats import app as stats_app
             from .app.loans import app as loans_app
+            from .app.manpack import app as manpack_app
             
             
   
