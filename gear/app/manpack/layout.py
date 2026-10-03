@@ -35,8 +35,7 @@ def _months():
 
 def layout():
     months = _months()
-    # в первые дни месяца данных за него ещё нет — открываем прошлый месяц
-    default = months[1] if date.today().day <= 5 and len(months) > 1 else months[0]
+    default = months[0]          # текущий месяц
     return dmc.MantineProvider(
         withCssVariables=True, withGlobalClasses=True,
         children=html.Div(className="mp-page", children=[
