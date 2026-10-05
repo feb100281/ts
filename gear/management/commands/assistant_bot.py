@@ -125,6 +125,7 @@ class Bot:
     def __init__(self, token: str, profile: str):
         self.token, self.profile = token, profile
         self.history: dict[int, tuple[float, list]] = {}
+        self.menu_shown: set[int] = set()        # кому уже показали нижнее меню
         self.opener = self._opener()
 
     # ---------------------------------------------------------------- сеть
@@ -288,12 +289,16 @@ class Bot:
                 "Доступ пока не подтверждён. Если ждёте давно — напишите Дарье."), raw=True)
             return
         text = {v: "/" + k for k, v in MENU.items()}.get(text, text)
+        if chat_id not in self.menu_shown and text != "/start":
+            self.menu_shown.add(chat_id)         # после обновления бота меню ставим сами
+            self.say(chat_id, "Меню — на кнопках внизу.", keyboard(self.profile), raw=True)
         if text == "/start":
             self.say(chat_id, (
                 f"{hello} Я <b>{NAMES[self.profile]}</b>.\n\n{html.escape(ABOUT[self.profile])}"
                 "\n\nНапишите вопрос обычными словами — или начните с примера:"),
                 examples_kb(self.profile), raw=True)
             self.say(chat_id, "Меню — на кнопках внизу.", keyboard(self.profile), raw=True)
+            self.menu_shown.add(chat_id)
             return
         if text == "/help":
             self.say(chat_id, HELP[self.profile], keyboard(self.profile), raw=True)

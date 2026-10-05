@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 import re
 import logging
 import os
@@ -105,6 +106,22 @@ def _has_figures(text: str) -> bool:
     return bool(_FIG.search(text or ""))
 
 
+_YEAR_HINT = re.compile(r"20\d\d|год|\bлет\b|\d+\s*месяц|за\s+вс[её]\s+время|позапрошл", re.I)
+_ISO = re.compile(r"^(20\d\d)-(\d\d)")
+
+
+def _stale_year(args: dict, asked: str) -> int | None:
+    """Год в параметрах инструмента старше 12 месяцев, хотя в диалоге год не называли."""
+    if _YEAR_HINT.search(asked or ""):
+        return None
+    t = date.today()
+    for v in (args or {}).values():
+        m = _ISO.match(v) if isinstance(v, str) else None
+        if m and (t.year - int(m[1])) * 12 + t.month - int(m[2]) > 12:
+            return int(m[1])
+    return None
+
+
 def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
@@ -116,6 +133,8 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
     files: list[dict] = []
     question = next((m["content"] for m in reversed(history)
                      if m["role"] == "user"), "")
+    asked = " ".join(m["content"] for m in history
+                     if m["role"] == "user" and isinstance(m["content"], str))
     model = _model()
 
     tools_called = 0        # сколько раз за этот ответ помощник обращался к данным
@@ -182,6 +201,12 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
                 except Exception as e:
                     log.exception("export_excel")
                     out, is_err = f"Ошибка выгрузки: {e}"[:2000], True
+            elif b["name"] != "run_sql" and _stale_year(b.get("input", {}), asked):
+                y = _stale_year(b.get("input", {}), asked)
+                out, is_err = (f"Год в вопросе не назван, значит нужен текущий — "
+                               f"{date.today().year}, а запрошен {y}. Повтори вызов с датами "
+                               f"{date.today().year} года (месяц, который ещё не наступил, — "
+                               "последний прошедший)."), True
             else:
                 out, is_err = call_tool(b["name"], b.get("input", {}))
             log.info("assistant tool %s err=%s", b["name"], is_err)
