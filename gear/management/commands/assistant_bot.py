@@ -30,6 +30,7 @@ API = "https://api.telegram.org/bot{token}/{method}"
 HISTORY_TURNS = 8            # сколько последних реплик помнить в диалоге
 HISTORY_TTL = 2 * 60 * 60    # через сколько секунд тишины диалог начинается заново
 LIMIT = 3900                 # запас до лимита Telegram 4096 символов
+QUIET = ((23, 20), (23, 57))  # МСК: ночная загрузка данных, вопросы не принимаем
 NAMES = {"sales": "помощник по продажам", "finance": "финансовый помощник"}
 
 ABOUT = {
@@ -100,6 +101,13 @@ HELP = {
                "• Кнопки внизу: примеры вопросов и «Новый разговор» — когда меняете тему.\n\n"
                "Важные цифры сверяйте с дашбордом. Если я ошибся — напишите Дарье.",
 }
+
+
+def quiet_now() -> bool:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    t = datetime.now(ZoneInfo("Europe/Moscow"))
+    return QUIET[0] <= (t.hour, t.minute) < QUIET[1]
 
 
 def keyboard(profile: str) -> dict:
@@ -314,6 +322,12 @@ class Bot:
         if text.startswith("/"):
             self.say(chat_id, "Такой команды нет. Напишите вопрос обычными словами.",
                      keyboard(self.profile))
+            return
+
+        if quiet_now():
+            self.say(chat_id, "Сейчас обновляются данные — с {0:02d}:{1:02d} до {2:02d}:{3:02d} "
+                              "по Москве я не отвечаю на вопросы. Напишите, пожалуйста, "
+                              "после {2:02d}:{3:02d}.".format(*QUIET[0], *QUIET[1]))
             return
 
         from gear.app.daily_sales.assistant.excel import file_path
