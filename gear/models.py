@@ -95,3 +95,27 @@ class TelegramAccess(models.Model):
 
     def __str__(self):
         return f"{self.full_name or self.username or self.tg_id} · {self.get_bot_display()}"
+
+
+class TelegramQuestion(models.Model):
+    """Журнал вопросов к помощнику в Telegram. Ответы не хранятся; срок — KEEP_DAYS."""
+
+    KEEP_DAYS = 30
+
+    access = models.ForeignKey(TelegramAccess, on_delete=models.CASCADE,
+                               related_name="questions", verbose_name="Кто")
+    bot = models.CharField("Помощник", max_length=16, choices=TelegramAccess.BOTS)
+    asked_at = models.DateTimeField("Когда", auto_now_add=True, db_index=True)
+    text = models.TextField("Вопрос")
+    seconds = models.FloatField("Ответ, с", default=0)
+    cost_usd = models.FloatField("Стоимость, $", null=True, blank=True)
+    has_file = models.BooleanField("Excel", default=False)
+    is_error = models.BooleanField("Ошибка", default=False)
+
+    class Meta:
+        verbose_name = "Вопрос помощнику в Telegram"
+        verbose_name_plural = "Помощник в Telegram: вопросы"
+        ordering = ("-asked_at",)
+
+    def __str__(self):
+        return self.text[:60]

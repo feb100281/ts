@@ -16,23 +16,22 @@
     .head h1 { margin: 4px 0 0; font-size: 22px; font-weight: 800; }
     .head .meta { font-size: 12px; text-align: right; opacity: .85; white-space: nowrap; }
     .body { padding: 20px 28px 26px; }
-    h2 { font-size: 14px; margin: 18px 0 8px; padding-left: 10px; border-left: 3px solid #2F6656; }
-    h2 span { color: #6B7280; font-weight: 400; }
-    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    th { background: #2F6656; color: #fff; text-align: left; padding: 7px 9px; font-weight: 600; font-size: 11.5px; }
-    td { padding: 7px 9px; border-bottom: 1px solid #E3E8E6; vertical-align: top; }
-    tr:nth-child(even) td { background: #F7FAF9; }
-    .n { width: 34px; color: #6B7280; }
-    .r { text-align: right; white-space: nowrap; }
-    .muted { color: #8A8A8A; }
+    h2 { font-size: 15px; font-weight: 700; margin: 22px 0 8px; display: flex; align-items: baseline; gap: 8px; }
+    h2 span { color: #8A8A8A; font-weight: 400; font-size: 12.5px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+    th { text-align: left; padding: 8px 10px; font-weight: 600; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: #1F5E4E; border-top: 2px solid #1F5E4E; border-bottom: 1px solid #1F5E4E; white-space: nowrap; }
+    td { padding: 9px 10px; border-bottom: 1px solid #E3E8E6; vertical-align: top; overflow-wrap: anywhere; }
+    .n { width: 36px; }
+    .d { width: 96px; }
+    .q { width: 80px; }
+    .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .who { font-weight: 600; }
-    .foot { margin-top: 18px; font-size: 11.5px; color: #6B7280; }
     .empty { padding: 30px 0; text-align: center; color: #6B7280; }
     @media print {
       body { background: #fff; padding: 0; }
       .bar { display: none; }
       .sheet { border: 0; max-width: none; }
-      .head, th, tr:nth-child(even) td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .head { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       tr { page-break-inside: avoid; }
       @page { size: A4; margin: 12mm; }
     }
@@ -57,13 +56,13 @@
       <table>
         <thead><tr>
           <th class="n">№</th><th>Сотрудник</th><th>Имя в Telegram</th><th>Ник</th>
-          <th class="r">Первое обращение</th><th class="r">Последнее</th><th class="r">Вопросов</th>
+          <th class="r d">Первое</th><th class="r d">Последнее</th><th class="r q">Вопросов</th>
         </tr></thead>
         <tbody>
           {% for p in g.people %}
           <tr>
             <td class="n">{{ forloop.counter }}</td>
-            <td class="who">{% if p.comment %}{{ p.comment }}{% else %}<span class="muted">не подписан</span>{% endif %}</td>
+            <td class="who">{{ p.comment|default:"—" }}</td>
             <td>{{ p.full_name|default:"—" }}</td>
             <td>{% if p.username %}@{{ p.username }}{% else %}—{% endif %}</td>
             <td class="r">{{ p.created_at|date:"d.m.Y" }}</td>
@@ -76,7 +75,6 @@
       {% empty %}
       <div class="empty">Доступ пока никому не открыт.</div>
       {% endfor %}
-      <div class="foot">В список входят только те, кому доступ разрешён. «Сотрудник» — поле «Кто это» в админке.</div>
     </div>
   </div>
 </body>

@@ -133,6 +133,7 @@ class Bot:
     def __init__(self, token: str, profile: str):
         self.token, self.profile = token, profile
         self.history: dict[int, tuple[float, list]] = {}
+        self.purged = 0.0                        # когда последний раз чистили журнал
         self.menu_shown: set[int] = set()        # кому уже показали нижнее меню
         self.opener = self._opener()
 
@@ -240,6 +241,23 @@ class Bot:
             self.say(chat["id"], f"<b>Вопрос:</b> {html.escape(text)}", raw=True)
         self.handle({"chat": chat, "from": cq.get("from") or {}, "text": text})
 
+    def log(self, obj, text: str, started: float, res: dict | None = None):
+        """Журнал вопросов: без ответа бота; старше KEEP_DAYS — удаляем раз в сутки."""
+        from datetime import timedelta
+        from gear.models import TelegramQuestion
+        try:
+            TelegramQuestion.objects.create(
+                access=obj, bot=self.profile, text=text[:4000],
+                seconds=round(time.time() - started, 1),
+                cost_usd=(res or {}).get("cost_usd"),
+                has_file=bool((res or {}).get("files")), is_error=res is None)
+            if time.time() - self.purged > 24 * 3600:
+                self.purged = time.time()
+                TelegramQuestion.objects.filter(asked_at__lt=timezone.now() - timedelta(
+                    days=TelegramQuestion.KEEP_DAYS)).delete()
+        except Exception as e:
+            print(f"[bot {self.profile}] журнал: {type(e).__name__}: {e}", flush=True)
+
     def typing(self, chat_id: int, stop):
         """Показываем «печатает…», пока считается ответ."""
         while not stop.is_set():
@@ -337,6 +355,7 @@ class Bot:
         if time.time() - seen > HISTORY_TTL:
             turns = []
         turns = turns + [{"role": "user", "content": text}]
+        started = time.time()
         stop = threading.Event()
         threading.Thread(target=self.typing, args=(chat_id, stop), daemon=True).start()
         note = {"id": self.status(chat_id, "Думаю над вопросом"), "text": ""}
@@ -355,13 +374,16 @@ class Bot:
         except AssistantError as e:
             done()
             self.say(chat_id, f"Не получилось ответить: {e}")
+            self.log(obj, text, started)
             return
         except Exception as e:
             done()
             self.say(chat_id, "Не получилось ответить — попробуйте переформулировать вопрос.")
             print(f"[bot {self.profile}] ошибка: {type(e).__name__}: {e}", flush=True)
+            self.log(obj, text, started)
             return
         done()
+        self.log(obj, text, started, res)
         answer = res.get("text") or "(пустой ответ)"
         self.say(chat_id, answer, None if res.get("files") else ANSWER_KB)
         for f in res.get("files") or []:

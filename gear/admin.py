@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import SegmentsSales, DailySales, CostsControl, Stats, Loans, ManPack, TelegramAccess
+from .models import SegmentsSales, DailySales, CostsControl, Stats, Loans, ManPack, TelegramAccess, TelegramQuestion
 
 
 @admin.register(SegmentsSales)
@@ -270,3 +270,80 @@ class TelegramAccessAdmin(admin.ModelAdmin):
     def revoke(self, request, queryset):
         for obj in queryset.filter(is_allowed=True):
             self._set(obj, False)
+
+
+@admin.register(TelegramQuestion)
+class TelegramQuestionAdmin(admin.ModelAdmin):
+    """Журнал вопросов к ботам. Только чтение, только суперпользователь."""
+
+    change_list_template = "admin/gear/telegramquestion/change_list.html"
+    list_display = ("asked_at", "who", "bot_badge", "question", "seconds", "cost", "has_file",
+                    "is_error")
+    list_display_links = None
+    list_filter = ("bot", ("asked_at", admin.DateFieldListFilter), "is_error", "has_file",
+                   "access")
+    search_fields = ("text", "access__comment", "access__full_name", "access__username")
+    date_hierarchy = "asked_at"
+    list_select_related = ("access",)
+    list_per_page = 100
+    actions = None
+
+    def has_module_permission(self, request):
+        return request.user.is_active and request.user.is_superuser
+
+    has_view_permission = lambda self, request, obj=None: self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @staticmethod
+    def _name(a):
+        return a.comment or a.full_name or a.username or f"ID {a.tg_id}"
+
+    @admin.display(description="Кто", ordering="access__comment")
+    def who(self, obj):
+        a = obj.access
+        nick = format_html('<span class="tga-nick">@{}</span>', a.username) if a.username else ""
+        return format_html('<span class="tga-name">{}</span>{}', self._name(a), nick)
+
+    @admin.display(description="Помощник", ordering="bot")
+    def bot_badge(self, obj):
+        return format_html('<span class="tga-bot tga-bot-{}">{}</span>', obj.bot,
+                           obj.get_bot_display())
+
+    @admin.display(description="Вопрос")
+    def question(self, obj):
+        return format_html('<span class="tgq-text">{}</span>', obj.text)
+
+    @admin.display(description="Стоимость, $", ordering="cost_usd")
+    def cost(self, obj):
+        return "—" if obj.cost_usd is None else f"{obj.cost_usd:.3f}"
+
+    def changelist_view(self, request, extra_context=None):
+        """Сводка по людям — по тем же фильтрам, что и список."""
+        from django.db.models import Count, Q, Sum
+        resp = super().changelist_view(request, extra_context=extra_context)
+        try:
+            qs = resp.context_data["cl"].queryset
+        except (AttributeError, KeyError):
+            return resp
+        rows = (qs.order_by().values("access_id", "bot")
+                .annotate(n=Count("id"), err=Count("id", filter=Q(is_error=True)),
+                          files=Count("id", filter=Q(has_file=True)), cost=Sum("cost_usd"))
+                .order_by("-n"))
+        people = {a.pk: a for a in TelegramAccess.objects.filter(
+            pk__in=[r["access_id"] for r in rows])}
+        bots = dict(TelegramAccess.BOTS)
+        summary = [{"name": self._name(people[r["access_id"]]), "bot": bots.get(r["bot"]),
+                    "code": r["bot"], "n": r["n"], "err": r["err"], "files": r["files"],
+                    "cost": r["cost"] or 0} for r in rows if r["access_id"] in people]
+        resp.context_data.update(
+            tgq_rows=summary, tgq_total=sum(r["n"] for r in summary),
+            tgq_cost=sum(r["cost"] for r in summary), tgq_days=TelegramQuestion.KEEP_DAYS)
+        return resp
