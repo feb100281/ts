@@ -136,6 +136,8 @@ def scenario_report(month=None, base="3", revenue_pct=0, kmd_pp=0, fixed_add=0,
         f, _ = forecast.base(me, "me")
         fact = (f or {}).get("rev") or 0.0
         lines.append(
+            f"НАЧНИ ОТВЕТ С ФРАЗЫ: «Месяц {me:%m.%Y} ещё не закрыт, поэтому ТБУ посчитана "
+            f"по среднему за {label}; факт месяца — на {rd:%d.%m.%Y}». "
             f"ВНИМАНИЕ: {me:%m.%Y} не закрыт. Выручка и запас прочности выше — это НЕ факт "
             f"{me:%m.%Y}, а средний месяц базы ({label}). ФАКТ {me:%m.%Y} на {rd:%d.%m.%Y}: "
             f"выручка {_f(fact)} ₽"

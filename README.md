@@ -28,8 +28,7 @@ python manage.py check
 ────────────────────────
 sudo systemctl restart gunicorn-ts
 
-sudo systemctl restart ts-bot@sales && sleep 15 && 
-sudo systemctl restart ts-bot@finance
+sudo systemctl restart ts-bot@sales && sleep 15 && sudo systemctl restart ts-bot@finance
 
 _________
 

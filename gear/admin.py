@@ -172,14 +172,76 @@ class ManPackDashboardAdmin(admin.ModelAdmin):
 class TelegramAccessAdmin(admin.ModelAdmin):
     """Заявки появляются сами, когда человек пишет боту. Доступ — галочкой."""
 
-    list_display = ("full_name", "username", "bot", "is_allowed", "comment", "requests",
-                    "last_seen", "tg_id")
+    change_list_template = "admin/gear/telegramaccess/change_list.html"
+    list_display = ("person", "bot_badge", "status", "is_allowed", "comment", "requests",
+                    "last_seen")
+    list_display_links = ("person",)
     list_editable = ("is_allowed", "comment")
     list_filter = ("bot", "is_allowed")
     search_fields = ("full_name", "username", "comment", "tg_id")
     readonly_fields = ("tg_id", "bot", "full_name", "username", "requests", "created_at",
                        "last_seen")
-    actions = ("allow", "revoke")
+    actions = ("allow", "revoke", "print_selected")
+    list_per_page = 100
+
+    @admin.display(description="Telegram", ordering="full_name")
+    def person(self, obj):
+        nick = format_html('<span class="tga-nick">@{}</span>', obj.username) if obj.username else ""
+        return format_html('<span class="tga-name">{}</span>{}',
+                           obj.full_name or f"ID {obj.tg_id}", nick)
+
+    @admin.display(description="Помощник", ordering="bot")
+    def bot_badge(self, obj):
+        return format_html('<span class="tga-bot tga-bot-{}">{}</span>', obj.bot,
+                           obj.get_bot_display())
+
+    @admin.display(description="Статус", ordering="is_allowed")
+    def status(self, obj):
+        return format_html('<span class="tga-st tga-st-{}">{}</span>',
+                           "on" if obj.is_allowed else "wait",
+                           "Доступ есть" if obj.is_allowed else "Ждёт решения")
+
+    # ---- сводка над списком
+    def changelist_view(self, request, extra_context=None):
+        import os
+        rows = []
+        for code, title in TelegramAccess.BOTS:
+            qs = TelegramAccess.objects.filter(bot=code)
+            rows.append({
+                "title": title, "code": code,
+                "allowed": qs.filter(is_allowed=True).count(),
+                "waiting": qs.filter(is_allowed=False).count(),
+                "username": os.getenv(f"TELEGRAM_BOT_USERNAME_{code.upper()}",
+                                      f"tr_{code}_bot"),
+            })
+        ctx = {"tga_bots": rows, "tga_waiting": sum(r["waiting"] for r in rows)}
+        return super().changelist_view(request, extra_context={**(extra_context or {}), **ctx})
+
+    # ---- печать списка
+    def get_urls(self):
+        from django.urls import path
+        return [path("print/", self.admin_site.admin_view(self.print_view),
+                     name="gear_telegramaccess_print")] + super().get_urls()
+
+    def _print(self, request, queryset):
+        from django.shortcuts import render
+        from django.utils import timezone
+        groups = []
+        for code, title in TelegramAccess.BOTS:
+            people = list(queryset.filter(bot=code, is_allowed=True)
+                          .order_by("comment", "full_name"))
+            if people:
+                groups.append({"title": title, "people": people})
+        return render(request, "admin/gear/telegramaccess/print.html", {
+            "groups": groups, "now": timezone.localtime(),
+            "total": sum(len(g["people"]) for g in groups)})
+
+    def print_view(self, request):
+        return self._print(request, TelegramAccess.objects.all())
+
+    @admin.action(description="Печать списка: у кого есть доступ (из выбранных)")
+    def print_selected(self, request, queryset):
+        return self._print(request, queryset)
 
     def has_add_permission(self, request):
         return False

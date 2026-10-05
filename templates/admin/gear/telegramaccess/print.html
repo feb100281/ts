@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Доступ к ИИ-помощнику в Telegram</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 12px; background: #F1F4F3; font-family: Inter, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1F1F1F; }
+    .sheet { max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #E3E8E6; }
+    .bar { max-width: 900px; margin: 0 auto 12px; display: flex; gap: 10px; }
+    .bar a, .bar button { height: 36px; padding: 0 18px; font-size: 13px; font-weight: 700; border: 1px solid #2F6656; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; font-family: inherit; }
+    .bar button { background: #2F6656; color: #fff; }
+    .bar a { background: #fff; color: #1F5E4E; }
+    .head { background: #1F5E4E; color: #fff; padding: 22px 28px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+    .head .kicker { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+    .head h1 { margin: 4px 0 0; font-size: 22px; font-weight: 800; }
+    .head .meta { font-size: 12px; text-align: right; opacity: .85; white-space: nowrap; }
+    .body { padding: 20px 28px 26px; }
+    h2 { font-size: 14px; margin: 18px 0 8px; padding-left: 10px; border-left: 3px solid #2F6656; }
+    h2 span { color: #6B7280; font-weight: 400; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th { background: #2F6656; color: #fff; text-align: left; padding: 7px 9px; font-weight: 600; font-size: 11.5px; }
+    td { padding: 7px 9px; border-bottom: 1px solid #E3E8E6; vertical-align: top; }
+    tr:nth-child(even) td { background: #F7FAF9; }
+    .n { width: 34px; color: #6B7280; }
+    .r { text-align: right; white-space: nowrap; }
+    .muted { color: #8A8A8A; }
+    .who { font-weight: 600; }
+    .foot { margin-top: 18px; font-size: 11.5px; color: #6B7280; }
+    .empty { padding: 30px 0; text-align: center; color: #6B7280; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .bar { display: none; }
+      .sheet { border: 0; max-width: none; }
+      .head, th, tr:nth-child(even) td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      tr { page-break-inside: avoid; }
+      @page { size: A4; margin: 12mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <button onclick="window.print()">Печать / сохранить в PDF</button>
+    <a href="{% url 'admin:gear_telegramaccess_changelist' %}">Назад к списку</a>
+  </div>
+  <div class="sheet">
+    <div class="head">
+      <div>
+        <div class="kicker">ИИ-помощник в Telegram</div>
+        <h1>Список сотрудников с доступом</h1>
+      </div>
+      <div class="meta">на {{ now|date:"d.m.Y H:i" }}<br>всего: {{ total }}</div>
+    </div>
+    <div class="body">
+      {% for g in groups %}
+      <h2>{{ g.title }} <span>— {{ g.people|length }}</span></h2>
+      <table>
+        <thead><tr>
+          <th class="n">№</th><th>Сотрудник</th><th>Имя в Telegram</th><th>Ник</th>
+          <th class="r">Первое обращение</th><th class="r">Последнее</th><th class="r">Вопросов</th>
+        </tr></thead>
+        <tbody>
+          {% for p in g.people %}
+          <tr>
+            <td class="n">{{ forloop.counter }}</td>
+            <td class="who">{% if p.comment %}{{ p.comment }}{% else %}<span class="muted">не подписан</span>{% endif %}</td>
+            <td>{{ p.full_name|default:"—" }}</td>
+            <td>{% if p.username %}@{{ p.username }}{% else %}—{% endif %}</td>
+            <td class="r">{{ p.created_at|date:"d.m.Y" }}</td>
+            <td class="r">{% if p.last_seen %}{{ p.last_seen|date:"d.m.Y" }}{% else %}—{% endif %}</td>
+            <td class="r">{{ p.requests }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% empty %}
+      <div class="empty">Доступ пока никому не открыт.</div>
+      {% endfor %}
+      <div class="foot">В список входят только те, кому доступ разрешён. «Сотрудник» — поле «Кто это» в админке.</div>
+    </div>
+  </div>
+</body>
+</html>
