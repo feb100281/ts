@@ -15,6 +15,7 @@ import html
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -30,6 +31,64 @@ HISTORY_TURNS = 8            # сколько последних реплик п
 HISTORY_TTL = 2 * 60 * 60    # через сколько секунд тишины диалог начинается заново
 LIMIT = 3900                 # запас до лимита Telegram 4096 символов
 NAMES = {"sales": "помощник по продажам", "finance": "финансовый помощник"}
+
+ABOUT = {
+    "sales": "Продажи на Wildberries: штуки, возвраты, маржа, убыточные товары. "
+             "Отвечаю по данным компании и присылаю Excel.",
+    "finance": "Финансы компании: прибыль, деньги, займы, договоры, прогноз. "
+               "Отвечаю по данным компании и присылаю Excel.",
+}
+DESCRIPTION = {
+    "sales": "ИИ-помощник по продажам.\n\nСпросите обычными словами: продажи и возвраты, "
+             "бренды и артикулы, маржа, что продаётся в убыток. Любой расчёт пришлю "
+             "файлом Excel.\n\nДоступ — только для сотрудников, по подтверждению.",
+    "finance": "Финансовый ИИ-помощник.\n\nСпросите обычными словами: прибыль и точка "
+               "безубыточности, деньги на счетах, движение денег, займы, договоры, "
+               "прогноз. Любой расчёт пришлю файлом Excel.\n\nДоступ — только для "
+               "сотрудников, по подтверждению.",
+}
+COMMANDS = [
+    {"command": "examples", "description": "Примеры вопросов"},
+    {"command": "new", "description": "Начать разговор заново"},
+    {"command": "help", "description": "Как пользоваться"},
+]
+EXAMPLES = {
+    "sales": ["Продажи и возвраты за вчера как на сайте WB",
+              "Топ-10 брендов за прошлую неделю",
+              "Какие бренды продаются в убыток в этом месяце?",
+              "Маржинальность по категориям за прошлый месяц — в Excel"],
+    "finance": ["Сколько денег на счетах?",
+                "Чистая прибыль и ТБУ за последние 3 месяца",
+                "Сколько пришло от WB в этом месяце?",
+                "Сколько мы должны по займам и когда гасить?"],
+}
+HELP = {
+    "sales": "<b>Как пользоваться</b>\n"
+             "• Пишите обычными словами и указывайте период: «вчера», «прошлая неделя», "
+             "«с 1 по 15 октября».\n"
+             "• Продажи считаются двумя способами: <b>как на сайте WB</b> (с НДС, как в "
+             "кабинете) и <b>управленческие</b> (без НДС, с маржой). Напишите, какой нужен, "
+             "— иначе я уточню.\n"
+             "• Нужен файл — добавьте «пришли в Excel».\n"
+             "• Уточняйте по ходу: «а по брендам?», «распиши по артикулам».\n"
+             "• /new — начать разговор заново, /examples — примеры вопросов.\n\n"
+             "Важные цифры сверяйте с дашбордом. Если я ошибся — напишите Дарье.",
+    "finance": "<b>Как пользоваться</b>\n"
+               "• Пишите обычными словами и указывайте период или дату.\n"
+               "• Прибыль считается по начислению (P&amp;L), деньги — по факту оплаты. "
+               "Я всегда пишу, по какой базе отвечаю.\n"
+               "• Нужен файл — добавьте «пришли в Excel».\n"
+               "• Уточняйте по ходу: «а почему?», «по каким контрагентам?».\n"
+               "• /new — начать разговор заново, /examples — примеры вопросов.\n\n"
+               "Важные цифры сверяйте с дашбордом. Если я ошибся — напишите Дарье.",
+}
+
+
+def keyboard(profile: str) -> dict:
+    """Кнопки с примерами вопросов под полем ввода."""
+    return {"keyboard": [[{"text": q}] for q in EXAMPLES[profile]],
+            "resize_keyboard": True, "is_persistent": False,
+            "input_field_placeholder": "Напишите вопрос…"}
 
 
 class Bot:
@@ -78,15 +137,38 @@ class Bot:
         with self.opener.open(req, timeout=120) as r:
             return json.loads(r.read().decode("utf-8"))
 
-    def say(self, chat_id: int, text: str):
-        for part in split(to_html(text)):
+    def say(self, chat_id: int, text: str, markup: dict | None = None, raw: bool = False):
+        parts = split(text if raw else to_html(text))
+        for k, part in enumerate(parts):
+            extra = {"reply_markup": markup} if markup and k == len(parts) - 1 else {}
             try:
                 self.call("sendMessage", chat_id=chat_id, text=part, parse_mode="HTML",
-                          disable_web_page_preview=True)
+                          disable_web_page_preview=True, **extra)
             except urllib.error.HTTPError:
                 # разметка не прошла — отправляем простым текстом
                 self.call("sendMessage", chat_id=chat_id,
                           text=re.sub(r"<[^>]+>", "", html.unescape(part))[:4000])
+
+    def setup(self):
+        """Меню команд и описание бота — задаются при каждом запуске."""
+        for method, params in (
+            ("setMyCommands", {"commands": COMMANDS}),
+            ("setMyDescription", {"description": DESCRIPTION[self.profile]}),
+            ("setMyShortDescription", {"short_description": ABOUT[self.profile]}),
+        ):
+            try:
+                self.call(method, **params)
+            except Exception as e:
+                print(f"[bot {self.profile}] {method}: {e}", flush=True)
+
+    def typing(self, chat_id: int, stop):
+        """Показываем «печатает…», пока считается ответ."""
+        while not stop.is_set():
+            try:
+                self.call("sendChatAction", chat_id=chat_id, action="typing")
+            except Exception:
+                pass
+            stop.wait(4)
 
     # ---------------------------------------------------------------- доступ
     def access(self, user: dict):
@@ -126,19 +208,37 @@ class Bot:
         obj, created = self.access(user)
         if created:
             self.notify_admin(obj)
+        first = (user.get("first_name") or "").strip()
+        hello = f"Здравствуйте, {html.escape(first)}!" if first else "Здравствуйте!"
         if not obj.is_allowed:
-            self.say(chat_id, "Заявка на доступ отправлена. Как только её подтвердят, "
-                              "я начну отвечать." if created else
-                              "Доступ пока не подтверждён. Напишите Дарье.")
+            self.say(chat_id, (
+                f"{hello} Я {NAMES[self.profile]} компании.\n\n"
+                "Заявка на доступ отправлена. Как только её подтвердят, я напишу вам сам."
+                if created or text == "/start" else
+                "Доступ пока не подтверждён. Если ждёте давно — напишите Дарье."), raw=True)
             return
-        if text in ("/start", "/help"):
-            self.say(chat_id, f"Здравствуйте! Я {NAMES[self.profile]}. Спрашивайте обычными "
-                              "словами и указывайте период. Любой расчёт пришлю файлом — "
-                              "напишите «пришли в Excel».\n/new — начать разговор заново.")
+        if text == "/start":
+            self.say(chat_id, (
+                f"{hello} Я <b>{NAMES[self.profile]}</b>.\n\n{html.escape(ABOUT[self.profile])}"
+                "\n\nНажмите на пример ниже или напишите свой вопрос. "
+                "Подсказки — /help."), keyboard(self.profile), raw=True)
+            return
+        if text == "/help":
+            self.say(chat_id, HELP[self.profile], keyboard(self.profile), raw=True)
+            return
+        if text == "/examples":
+            self.say(chat_id, "<b>Примеры вопросов</b>\n" + "\n".join(
+                f"• {html.escape(q)}" for q in EXAMPLES[self.profile])
+                + "\n\nНажмите кнопку ниже или напишите своими словами.",
+                keyboard(self.profile), raw=True)
             return
         if text == "/new":
             self.history.pop(chat_id, None)
-            self.say(chat_id, "Начинаем заново. Что посчитать?")
+            self.say(chat_id, "Начинаем заново. Что посчитать?", keyboard(self.profile))
+            return
+        if text.startswith("/"):
+            self.say(chat_id, "Такой команды нет. Напишите вопрос обычными словами "
+                              "или откройте /help.")
             return
 
         from gear.app.daily_sales.assistant.excel import file_path
@@ -148,19 +248,20 @@ class Bot:
         if time.time() - seen > HISTORY_TTL:
             turns = []
         turns = turns + [{"role": "user", "content": text}]
-        try:
-            self.call("sendChatAction", chat_id=chat_id, action="typing")
-        except Exception:
-            pass
+        stop = threading.Event()
+        threading.Thread(target=self.typing, args=(chat_id, stop), daemon=True).start()
         try:
             res = ask(turns, self.profile)
         except AssistantError as e:
+            stop.set()
             self.say(chat_id, f"Не получилось ответить: {e}")
             return
         except Exception as e:
+            stop.set()
             self.say(chat_id, "Не получилось ответить — попробуйте переформулировать вопрос.")
             print(f"[bot {self.profile}] ошибка: {type(e).__name__}: {e}", flush=True)
             return
+        stop.set()
         answer = res.get("text") or "(пустой ответ)"
         self.say(chat_id, answer)
         for f in res.get("files") or []:
@@ -177,6 +278,7 @@ class Bot:
 
     def run(self):
         me = self.call("getMe")["result"]
+        self.setup()
         print(f"[bot {self.profile}] запущен: @{me.get('username')}", flush=True)
         offset = None
         while True:

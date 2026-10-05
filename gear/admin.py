@@ -184,10 +184,27 @@ class TelegramAccessAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
+    def _set(self, obj, allowed):
+        """Меняет доступ и сообщает человеку в Telegram."""
+        from .telegram_notify import access_changed
+        if obj.is_allowed != allowed:
+            obj.is_allowed = allowed
+            obj.save(update_fields=["is_allowed"])
+        access_changed(obj.tg_id, obj.bot, allowed)
+
+    def save_model(self, request, obj, form, change):
+        changed = change and "is_allowed" in getattr(form, "changed_data", [])
+        super().save_model(request, obj, form, change)
+        if changed:
+            from .telegram_notify import access_changed
+            access_changed(obj.tg_id, obj.bot, obj.is_allowed)
+
     @admin.action(description="Разрешить доступ")
     def allow(self, request, queryset):
-        queryset.update(is_allowed=True)
+        for obj in queryset.filter(is_allowed=False):
+            self._set(obj, True)
 
     @admin.action(description="Закрыть доступ")
     def revoke(self, request, queryset):
-        queryset.update(is_allowed=False)
+        for obj in queryset.filter(is_allowed=True):
+            self._set(obj, False)
