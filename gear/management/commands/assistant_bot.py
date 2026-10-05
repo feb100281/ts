@@ -54,12 +54,12 @@ class Bot:
         return urllib.request.build_opener(
             urllib.request.ProxyHandler({"https": proxy, "http": proxy}))
 
-    def call(self, method: str, timeout=40, **params):
+    def call(self, method: str, _wait=40, **params):
         req = urllib.request.Request(
             API.format(token=self.token, method=method),
             data=json.dumps(params).encode("utf-8"),
             headers={"content-type": "application/json"}, method="POST")
-        with self.opener.open(req, timeout=timeout) as r:
+        with self.opener.open(req, timeout=_wait) as r:
             return json.loads(r.read().decode("utf-8"))
 
     def send_document(self, chat_id: int, path, name: str):
@@ -184,7 +184,7 @@ class Bot:
                 params = {"timeout": 25, "allowed_updates": ["message"]}
                 if offset is not None:
                     params["offset"] = offset
-                updates = self.call("getUpdates", timeout=40, **params).get("result", [])
+                updates = self.call("getUpdates", _wait=40, **params).get("result", [])
             except Exception as e:
                 print(f"[bot {self.profile}] нет связи с Telegram: {e}", flush=True)
                 time.sleep(5)
