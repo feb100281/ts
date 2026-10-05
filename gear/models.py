@@ -70,3 +70,28 @@ class Exports(models.Model):
             ("export_stocks", "Выгрузка: остатки на складах"),
             ("export_budget_analysis", "Выгрузка: контроль выручки"),
         ]
+
+
+class TelegramAccess(models.Model):
+    """Доступ к ИИ-помощнику в Telegram: кто написал боту и разрешено ли отвечать."""
+
+    BOTS = (("sales", "Продажи"), ("finance", "Финансы"))
+
+    tg_id = models.BigIntegerField("Telegram ID")
+    bot = models.CharField("Помощник", max_length=16, choices=BOTS)
+    full_name = models.CharField("Имя в Telegram", max_length=255, blank=True)
+    username = models.CharField("Ник", max_length=255, blank=True)
+    is_allowed = models.BooleanField("Доступ разрешён", default=False)
+    comment = models.CharField("Кто это (для себя)", max_length=255, blank=True)
+    requests = models.PositiveIntegerField("Вопросов", default=0)
+    created_at = models.DateTimeField("Первое обращение", auto_now_add=True)
+    last_seen = models.DateTimeField("Последнее обращение", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Доступ к помощнику в Telegram"
+        verbose_name_plural = "Помощник в Telegram: доступ"
+        unique_together = (("tg_id", "bot"),)
+        ordering = ("is_allowed", "-created_at")
+
+    def __str__(self):
+        return f"{self.full_name or self.username or self.tg_id} · {self.get_bot_display()}"

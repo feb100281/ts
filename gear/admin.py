@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import SegmentsSales, DailySales, CostsControl, Stats, Loans, ManPack
+from .models import SegmentsSales, DailySales, CostsControl, Stats, Loans, ManPack, TelegramAccess
 
 
 @admin.register(SegmentsSales)
@@ -166,3 +166,28 @@ class ManPackDashboardAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return self.model.objects.none()
+
+
+@admin.register(TelegramAccess)
+class TelegramAccessAdmin(admin.ModelAdmin):
+    """Заявки появляются сами, когда человек пишет боту. Доступ — галочкой."""
+
+    list_display = ("full_name", "username", "bot", "is_allowed", "comment", "requests",
+                    "last_seen", "tg_id")
+    list_editable = ("is_allowed", "comment")
+    list_filter = ("bot", "is_allowed")
+    search_fields = ("full_name", "username", "comment", "tg_id")
+    readonly_fields = ("tg_id", "bot", "full_name", "username", "requests", "created_at",
+                       "last_seen")
+    actions = ("allow", "revoke")
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Разрешить доступ")
+    def allow(self, request, queryset):
+        queryset.update(is_allowed=True)
+
+    @admin.action(description="Закрыть доступ")
+    def revoke(self, request, queryset):
+        queryset.update(is_allowed=False)
