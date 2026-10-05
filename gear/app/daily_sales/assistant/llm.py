@@ -21,6 +21,8 @@ DEFAULT_MODEL = "claude-sonnet-4-5"
 MAX_TOOL_ROUNDS = 8
 MAX_TOKENS = 2000
 HTTP_TIMEOUT = 90
+CACHE_TTL = "1h"             # сколько Claude помнит инструкцию: "1h" или "5m"
+_cache_ttl = [CACHE_TTL]     # сбрасывается в "5m", если API не принял часовой кэш
 
 # $ за 1 млн токенов (вход, выход) — для оценки стоимости ответа
 PRICES = {
@@ -101,6 +103,13 @@ def _post(payload: dict) -> dict:
 _FIG = re.compile(r"\d[\d\s .,]*\s?(₽|руб|тыс|млн|млрд|шт\b|%)|\|\s*[−-]?\d", re.I)
 
 
+def _cache_control() -> dict:
+    cc = {"type": "ephemeral"}
+    if _cache_ttl[0] == "1h":
+        cc["ttl"] = "1h"
+    return cc
+
+
 def _has_figures(text: str) -> bool:
     """В тексте есть суммы, штуки, проценты или таблица с числами."""
     return bool(_FIG.search(text or ""))
@@ -128,7 +137,7 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
     Возвращает {"text", "sql": [..], "usage": {...}, "cost_usd"}.
     """
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
-    usage = {"input": 0, "output": 0, "cache_read": 0}
+    usage = {"input": 0, "output": 0, "cache_read": 0, "write_extra": 0.0}
     sql_log: list[str] = []
     files: list[dict] = []
     question = next((m["content"] for m in reversed(history)
@@ -145,15 +154,26 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
             "model": model,
             "max_tokens": MAX_TOKENS,
             "system": [{"type": "text", "text": system_prompt(profile),
-                        "cache_control": {"type": "ephemeral"}}],
+                        "cache_control": _cache_control()}],
             "tools": tools_for(profile),
             "messages": messages,
         }
         if forced and tools_called == 0:
             payload["tool_choice"] = {"type": "any"}
-        resp = _post(payload)
+        try:
+            resp = _post(payload)
+        except AssistantError as e:
+            if _cache_ttl[0] == "5m" or "ttl" not in str(e).lower():
+                raise
+            print("[assistant] часовой кэш не принят — работаем с 5 минутами", flush=True)
+            _cache_ttl[0] = "5m"
+            payload["system"][0]["cache_control"] = _cache_control()
+            resp = _post(payload)
         u = resp.get("usage", {})
-        usage["input"] += u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+        written = u.get("cache_creation_input_tokens", 0)
+        usage["input"] += u.get("input_tokens", 0) + written
+        # запись в кэш дороже обычного входа: ×2 на час, ×1,25 на 5 минут
+        usage["write_extra"] += written * (1.0 if _cache_ttl[0] == "1h" else 0.25)
         usage["cache_read"] += u.get("cache_read_input_tokens", 0)
         usage["output"] += u.get("output_tokens", 0)
 
@@ -222,7 +242,7 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
     pin, pout = PRICES.get(model, (None, None))
     cost = None
     if pin is not None:
-        cost = (usage["input"] * pin + usage["cache_read"] * pin * 0.1
+        cost = ((usage["input"] + usage["write_extra"]) * pin + usage["cache_read"] * pin * 0.1
                 + usage["output"] * pout) / 1_000_000
     return {"text": text or "(пустой ответ)", "sql": sql_log, "files": files,
             "usage": usage, "cost_usd": cost}
