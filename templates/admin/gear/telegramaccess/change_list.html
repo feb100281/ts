@@ -25,6 +25,20 @@
   .model-telegramaccess #result_list input[type=text] { width: 100%; min-width: 220px; height: 32px; border: 1px solid #D5DCD9; border-radius: 0; padding: 0 8px; font-size: 13px; }
   .model-telegramaccess #result_list input[type=text]:focus { border-color: #2F6656; outline: 0; box-shadow: none; }
   .model-telegramaccess #result_list input[type=checkbox] { width: 18px; height: 18px; accent-color: #2F6656; }
+  /* крошки: одной строкой, без рамки */
+  .model-telegramaccess .content.border-bottom .breadcrumb { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; font-size: 12px !important; letter-spacing: .04em; text-transform: none !important; }
+  .model-telegramaccess .content.border-bottom .breadcrumb-item, .model-telegramaccess .content.border-bottom .breadcrumb-item.active { color: #8A8A8A !important; background: transparent !important; font-weight: 400 !important; }
+  .model-telegramaccess .content.border-bottom .breadcrumb-item a { color: #1F5E4E !important; text-decoration: none; }
+  .model-telegramaccess .content.border-bottom .breadcrumb-item a:hover { text-decoration: underline; }
+  .model-telegramaccess .content.border-bottom .breadcrumb-item + .breadcrumb-item::before { content: "›"; color: #C2C8C5; }
+
+  /* низ списка: счётчик слева, «Сохранить» — заметной кнопкой */
+  .model-telegramaccess .dataTables_info { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 0 !important; font-size: 0; }
+  .model-telegramaccess .dataTables_info::after { content: "Изменения в галочках и подписях применяются после сохранения"; font-size: 12.5px; color: #8A8A8A; }
+  .model-telegramaccess .dataTables_info input[name=_save] { order: -1; height: 40px; padding: 0 28px; background: #2F6656 !important; border: 0 !important; border-radius: 0 !important; color: #fff !important; font-size: 14px; font-weight: 700; box-shadow: none !important; }
+  .model-telegramaccess .dataTables_info input[name=_save]:hover { background: #1F5E4E !important; }
+  .model-telegramaccess #result_list td.field-comment { padding-right: 24px; }
+  .model-telegramaccess #result_list td.field-requests { font-variant-numeric: tabular-nums; }
   .tga-name { font-weight: 600; color: #1F1F1F; }
   .tga-nick { display: block; font-size: 12px; font-weight: 400; color: #8A8A8A; }
   .tga-bot, .tga-st { display: inline-block; padding: 2px 9px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }

@@ -225,7 +225,7 @@ class TelegramAccessAdmin(admin.ModelAdmin):
 
     def _print(self, request, queryset):
         from django.shortcuts import render
-        from django.utils import timezone
+        from datetime import datetime
         groups = []
         for code, title in TelegramAccess.BOTS:
             people = list(queryset.filter(bot=code, is_allowed=True)
@@ -233,7 +233,7 @@ class TelegramAccessAdmin(admin.ModelAdmin):
             if people:
                 groups.append({"title": title, "people": people})
         return render(request, "admin/gear/telegramaccess/print.html", {
-            "groups": groups, "now": timezone.localtime(),
+            "groups": groups, "now": datetime.now(),
             "total": sum(len(g["people"]) for g in groups)})
 
     def print_view(self, request):
