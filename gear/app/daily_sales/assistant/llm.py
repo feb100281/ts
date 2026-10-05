@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 import urllib.error
@@ -96,6 +97,14 @@ def _post(payload: dict) -> dict:
         raise AssistantError(f"Нет связи с Claude API: {e.reason}.{hint}") from e
 
 
+_FIG = re.compile(r"\d[\d\s .,]*\s?(₽|руб|тыс|млн|млрд|шт\b|%)|\|\s*[−-]?\d", re.I)
+
+
+def _has_figures(text: str) -> bool:
+    """В тексте есть суммы, штуки, проценты или таблица с числами."""
+    return bool(_FIG.search(text or ""))
+
+
 def ask(history: list[dict], profile: str = "sales") -> dict:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
@@ -109,15 +118,21 @@ def ask(history: list[dict], profile: str = "sales") -> dict:
                      if m["role"] == "user"), "")
     model = _model()
 
-    for _ in range(MAX_TOOL_ROUNDS + 1):
-        resp = _post({
+    tools_called = 0        # сколько раз за этот ответ помощник обращался к данным
+    forced = False          # повторный запрос с обязательным вызовом инструмента
+
+    for _ in range(MAX_TOOL_ROUNDS + 2):
+        payload = {
             "model": model,
             "max_tokens": MAX_TOKENS,
             "system": [{"type": "text", "text": system_prompt(profile),
                         "cache_control": {"type": "ephemeral"}}],
             "tools": tools_for(profile),
             "messages": messages,
-        })
+        }
+        if forced and tools_called == 0:
+            payload["tool_choice"] = {"type": "any"}
+        resp = _post(payload)
         u = resp.get("usage", {})
         usage["input"] += u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
         usage["cache_read"] += u.get("cache_read_input_tokens", 0)
@@ -129,7 +144,19 @@ def ask(history: list[dict], profile: str = "sales") -> dict:
         tool_uses = [b for b in content if b.get("type") == "tool_use"]
         if resp.get("stop_reason") != "tool_use" or not tool_uses:
             text = "\n\n".join(b["text"] for b in content if b.get("type") == "text")
+            # цифры без обращения к данным — выдумка: заставляем вызвать инструмент
+            if tools_called == 0 and not forced and _has_figures(text):
+                print("[assistant] ответ с цифрами без инструмента — повтор с обязательным "
+                      "вызовом", flush=True)
+                forced = True
+                messages.pop()                       # выдуманный ответ в диалог не идёт
+                messages.append({"role": "assistant", "content": "Сейчас посмотрю по данным."})
+                messages.append({"role": "user", "content":
+                                 "Вызови подходящий инструмент и ответь только по его "
+                                 "результату. Если данных нет — так и скажи."})
+                continue
             break
+        tools_called += len(tool_uses)
 
         results = []
         for b in tool_uses:
@@ -153,6 +180,9 @@ def ask(history: list[dict], profile: str = "sales") -> dict:
             else:
                 out, is_err = call_tool(b["name"], b.get("input", {}))
             log.info("assistant tool %s err=%s", b["name"], is_err)
+            # в консоль: что вызвал помощник и начало ответа инструмента — для сверки
+            print(f"[assistant] {b['name']} {b.get('input', {})}\n"
+                  f"{str(out)[:1500]}\n[assistant] --- конец ответа инструмента", flush=True)
             results.append({"type": "tool_result", "tool_use_id": b["id"],
                             "content": out, "is_error": is_err})
         messages.append({"role": "user", "content": results})
