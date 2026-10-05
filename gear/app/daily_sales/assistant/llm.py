@@ -105,7 +105,7 @@ def _has_figures(text: str) -> bool:
     return bool(_FIG.search(text or ""))
 
 
-def ask(history: list[dict], profile: str = "sales") -> dict:
+def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Возвращает {"text", "sql": [..], "usage": {...}, "cost_usd"}.
@@ -160,6 +160,11 @@ def ask(history: list[dict], profile: str = "sales") -> dict:
 
         results = []
         for b in tool_uses:
+            if on_step:                                  # индикатор работы (Telegram)
+                try:
+                    on_step(b["name"])
+                except Exception:
+                    pass
             if b["name"] == "run_sql":
                 sql_log.append(b["input"].get("sql", ""))
                 print("[assistant] SQL:\n" + sql_log[-1], flush=True)

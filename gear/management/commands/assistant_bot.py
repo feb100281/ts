@@ -47,21 +47,39 @@ DESCRIPTION = {
                "прогноз. Любой расчёт пришлю файлом Excel.\n\nДоступ — только для "
                "сотрудников, по подтверждению.",
 }
-COMMANDS = [
-    {"command": "examples", "description": "Примеры вопросов"},
-    {"command": "new", "description": "Начать разговор заново"},
-    {"command": "help", "description": "Как пользоваться"},
-]
+MENU = {"examples": "Примеры вопросов", "new": "Новый разговор", "help": "Как пользоваться"}
+# (подпись кнопки, вопрос помощнику)
 EXAMPLES = {
-    "sales": ["Продажи и возвраты за вчера как на сайте WB",
-              "Топ-10 брендов за прошлую неделю",
-              "Какие бренды продаются в убыток в этом месяце?",
-              "Маржинальность по категориям за прошлый месяц — в Excel"],
-    "finance": ["Сколько денег на счетах?",
-                "Чистая прибыль и ТБУ за последние 3 месяца",
-                "Сколько пришло от WB в этом месяце?",
-                "Сколько мы должны по займам и когда гасить?"],
+    "sales": [("Продажи за вчера", "Продажи и возвраты за вчера как на сайте WB"),
+              ("Топ-10 брендов", "Топ-10 брендов за прошлую неделю"),
+              ("Что в убытке", "Какие бренды продаются в убыток в этом месяце?"),
+              ("Маржа в Excel", "Маржинальность по категориям за прошлый месяц — в Excel")],
+    "finance": [("Деньги на счетах", "Сколько денег на счетах?"),
+                ("Прибыль и ТБУ", "Чистая прибыль и ТБУ за последние 3 месяца"),
+                ("Поступления от WB", "Сколько пришло от WB в этом месяце?"),
+                ("Займы и сроки", "Сколько мы должны по займам и когда гасить?")],
 }
+# что показывать, пока помощник работает с данными
+STEPS = {
+    "pl_report": "Считаю прибыль и убытки",
+    "margin_report": "Считаю маржу",
+    "wb_sales": "Смотрю продажи Wildberries",
+    "cards_check": "Проверяю карточки товаров",
+    "cash_report": "Смотрю остатки на счетах",
+    "cf_report": "Смотрю движение денег",
+    "wb_payouts_report": "Смотрю поступления от Wildberries",
+    "interest_report": "Считаю проценты по займам",
+    "loans_report": "Смотрю займы и кредиты",
+    "fx_report": "Смотрю курсы валют",
+    "upd_report": "Смотрю приходы товара",
+    "month_conclusions": "Собираю выводы за месяц",
+    "scenario_report": "Считаю сценарий и точку безубыточности",
+    "profit_vs_cash_report": "Сравниваю прибыль и деньги",
+    "contracts_ending_report": "Смотрю сроки договоров",
+    "counterparty_info": "Смотрю данные по контрагенту",
+    "export_excel": "Готовлю файл Excel",
+}
+STEP_DEFAULT = "Смотрю данные"
 HELP = {
     "sales": "<b>Как пользоваться</b>\n"
              "• Пишите обычными словами и указывайте период: «вчера», «прошлая неделя», "
@@ -71,7 +89,7 @@ HELP = {
              "— иначе я уточню.\n"
              "• Нужен файл — добавьте «пришли в Excel».\n"
              "• Уточняйте по ходу: «а по брендам?», «распиши по артикулам».\n"
-             "• /new — начать разговор заново, /examples — примеры вопросов.\n\n"
+             "• Кнопки внизу: примеры вопросов и «Новый разговор» — когда меняете тему.\n\n"
              "Важные цифры сверяйте с дашбордом. Если я ошибся — напишите Дарье.",
     "finance": "<b>Как пользоваться</b>\n"
                "• Пишите обычными словами и указывайте период или дату.\n"
@@ -79,16 +97,28 @@ HELP = {
                "Я всегда пишу, по какой базе отвечаю.\n"
                "• Нужен файл — добавьте «пришли в Excel».\n"
                "• Уточняйте по ходу: «а почему?», «по каким контрагентам?».\n"
-               "• /new — начать разговор заново, /examples — примеры вопросов.\n\n"
+               "• Кнопки внизу: примеры вопросов и «Новый разговор» — когда меняете тему.\n\n"
                "Важные цифры сверяйте с дашбордом. Если я ошибся — напишите Дарье.",
 }
 
 
 def keyboard(profile: str) -> dict:
-    """Кнопки с примерами вопросов под полем ввода."""
-    return {"keyboard": [[{"text": q}] for q in EXAMPLES[profile]],
-            "resize_keyboard": True, "is_persistent": False,
+    """Постоянное меню под полем ввода."""
+    return {"keyboard": [[{"text": MENU["examples"]}, {"text": MENU["new"]}],
+                         [{"text": MENU["help"]}]],
+            "resize_keyboard": True, "is_persistent": True,
             "input_field_placeholder": "Напишите вопрос…"}
+
+
+def examples_kb(profile: str) -> dict:
+    """Примеры вопросов кнопками под сообщением, по две в ряд."""
+    btn = [{"text": label, "callback_data": f"ex:{i}"}
+           for i, (label, _) in enumerate(EXAMPLES[profile])]
+    return {"inline_keyboard": [btn[i:i + 2] for i in range(0, len(btn), 2)]}
+
+
+ANSWER_KB = {"inline_keyboard": [[{"text": "Прислать в Excel", "callback_data": "xl"},
+                                  {"text": "Новый разговор", "callback_data": "new"}]]}
 
 
 class Bot:
@@ -152,7 +182,8 @@ class Bot:
     def setup(self):
         """Меню команд и описание бота — задаются при каждом запуске."""
         for method, params in (
-            ("setMyCommands", {"commands": COMMANDS}),
+            ("deleteMyCommands", {}),                       # управление — кнопками
+            ("setChatMenuButton", {"menu_button": {"type": "default"}}),
             ("setMyDescription", {"description": DESCRIPTION[self.profile]}),
             ("setMyShortDescription", {"short_description": ABOUT[self.profile]}),
         ):
@@ -160,6 +191,45 @@ class Bot:
                 self.call(method, **params)
             except Exception as e:
                 print(f"[bot {self.profile}] {method}: {e}", flush=True)
+
+    def status(self, chat_id: int, text: str, message_id: int | None = None):
+        """Строка «что сейчас делаю»: создаём, затем правим на каждом шаге."""
+        body = f"<i>{html.escape(text)}…</i>"
+        try:
+            if message_id:
+                self.call("editMessageText", chat_id=chat_id, message_id=message_id,
+                          text=body, parse_mode="HTML")
+                return message_id
+            return self.call("sendMessage", chat_id=chat_id, text=body,
+                             parse_mode="HTML")["result"]["message_id"]
+        except Exception:
+            return message_id
+
+    def drop(self, chat_id: int, message_id: int | None):
+        if message_id:
+            try:
+                self.call("deleteMessage", chat_id=chat_id, message_id=message_id)
+            except Exception:
+                pass
+
+    def on_button(self, cq: dict):
+        """Нажатие кнопки под сообщением → тот же путь, что и обычный вопрос."""
+        try:
+            self.call("answerCallbackQuery", callback_query_id=cq["id"])
+        except Exception:
+            pass
+        chat = (cq.get("message") or {}).get("chat") or {}
+        data = cq.get("data") or ""
+        if data.startswith("ex:") and data[3:].isdigit():
+            ex = EXAMPLES[self.profile]
+            text = ex[int(data[3:]) % len(ex)][1]
+        else:
+            text = {"xl": "Пришли это в Excel", "new": MENU["new"]}.get(data)
+        if not chat.get("id") or not text:
+            return
+        if text != MENU["new"]:
+            self.say(chat["id"], f"<b>Вопрос:</b> {html.escape(text)}", raw=True)
+        self.handle({"chat": chat, "from": cq.get("from") or {}, "text": text})
 
     def typing(self, chat_id: int, stop):
         """Показываем «печатает…», пока считается ответ."""
@@ -217,28 +287,28 @@ class Bot:
                 if created or text == "/start" else
                 "Доступ пока не подтверждён. Если ждёте давно — напишите Дарье."), raw=True)
             return
+        text = {v: "/" + k for k, v in MENU.items()}.get(text, text)
         if text == "/start":
             self.say(chat_id, (
                 f"{hello} Я <b>{NAMES[self.profile]}</b>.\n\n{html.escape(ABOUT[self.profile])}"
-                "\n\nНажмите на пример ниже или напишите свой вопрос. "
-                "Подсказки — /help."), keyboard(self.profile), raw=True)
+                "\n\nНапишите вопрос обычными словами — или начните с примера:"),
+                examples_kb(self.profile), raw=True)
+            self.say(chat_id, "Меню — на кнопках внизу.", keyboard(self.profile), raw=True)
             return
         if text == "/help":
             self.say(chat_id, HELP[self.profile], keyboard(self.profile), raw=True)
             return
         if text == "/examples":
-            self.say(chat_id, "<b>Примеры вопросов</b>\n" + "\n".join(
-                f"• {html.escape(q)}" for q in EXAMPLES[self.profile])
-                + "\n\nНажмите кнопку ниже или напишите своими словами.",
-                keyboard(self.profile), raw=True)
+            self.say(chat_id, "<b>Примеры вопросов</b>\nНажмите кнопку или напишите "
+                              "своими словами.", examples_kb(self.profile), raw=True)
             return
         if text == "/new":
             self.history.pop(chat_id, None)
-            self.say(chat_id, "Начинаем заново. Что посчитать?", keyboard(self.profile))
+            self.say(chat_id, "Начинаем заново. Что посчитать?", examples_kb(self.profile))
             return
         if text.startswith("/"):
-            self.say(chat_id, "Такой команды нет. Напишите вопрос обычными словами "
-                              "или откройте /help.")
+            self.say(chat_id, "Такой команды нет. Напишите вопрос обычными словами.",
+                     keyboard(self.profile))
             return
 
         from gear.app.daily_sales.assistant.excel import file_path
@@ -250,20 +320,31 @@ class Bot:
         turns = turns + [{"role": "user", "content": text}]
         stop = threading.Event()
         threading.Thread(target=self.typing, args=(chat_id, stop), daemon=True).start()
-        try:
-            res = ask(turns, self.profile)
-        except AssistantError as e:
+        note = {"id": self.status(chat_id, "Думаю над вопросом"), "text": ""}
+
+        def step(tool):
+            label = STEPS.get(tool, STEP_DEFAULT)
+            if label != note["text"]:
+                note["text"] = label
+                note["id"] = self.status(chat_id, label, note["id"])
+
+        def done():
             stop.set()
+            self.drop(chat_id, note["id"])
+        try:
+            res = ask(turns, self.profile, on_step=step)
+        except AssistantError as e:
+            done()
             self.say(chat_id, f"Не получилось ответить: {e}")
             return
         except Exception as e:
-            stop.set()
+            done()
             self.say(chat_id, "Не получилось ответить — попробуйте переформулировать вопрос.")
             print(f"[bot {self.profile}] ошибка: {type(e).__name__}: {e}", flush=True)
             return
-        stop.set()
+        done()
         answer = res.get("text") or "(пустой ответ)"
-        self.say(chat_id, answer)
+        self.say(chat_id, answer, None if res.get("files") else ANSWER_KB)
         for f in res.get("files") or []:
             p = file_path(f.get("id", ""))
             if p:
@@ -283,7 +364,7 @@ class Bot:
         offset = None
         while True:
             try:
-                params = {"timeout": 25, "allowed_updates": ["message"]}
+                params = {"timeout": 25, "allowed_updates": ["message", "callback_query"]}
                 if offset is not None:
                     params["offset"] = offset
                 updates = self.call("getUpdates", _wait=40, **params).get("result", [])
@@ -293,11 +374,14 @@ class Bot:
                 continue
             for u in updates:
                 offset = u["update_id"] + 1
-                if "message" not in u:
+                if "message" not in u and "callback_query" not in u:
                     continue
                 close_old_connections()
                 try:
-                    self.handle(u["message"])
+                    if "message" in u:
+                        self.handle(u["message"])
+                    else:
+                        self.on_button(u["callback_query"])
                 except Exception as e:
                     print(f"[bot {self.profile}] {type(e).__name__}: {e}", flush=True)
 
@@ -305,7 +389,8 @@ class Bot:
 # -------------------------------------------------------------------- текст
 def _table(lines: list[str]) -> str:
     """Таблица Markdown → моноширинный блок с выровненными колонками."""
-    rows = [[c.strip() for c in ln.strip().strip("|").split("|")] for ln in lines]
+    clean = lambda c: re.sub(r"\*\*|__|`", "", c).strip()        # в <pre> разметка не работает
+    rows = [[clean(c) for c in ln.strip().strip("|").split("|")] for ln in lines]
     rows = [r for r in rows if not all(re.fullmatch(r":?-{2,}:?", c or "-") for c in r)]
     if not rows:
         return ""

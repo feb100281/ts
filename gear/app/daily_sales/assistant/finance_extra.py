@@ -105,9 +105,15 @@ def month_conclusions(month=None) -> str:
 def scenario_report(month=None, base="3", revenue_pct=0, kmd_pp=0, fixed_add=0,
                     ex_conv=False) -> str:
     """Сценарий «что будет, если»: тот же расчёт, что на вкладке «Прогноз и ТБУ»."""
+    from ...manpack import data
     from ...manpack.tabs import forecast
     me = _me(month)
-    d, label = forecast.base(me, str(base or "3"))
+    rd = data.pl_bundle()["report_date"]
+    partial = me > rd                                   # месяц ещё не закрыт
+    mode = str(base or "3")
+    if partial and mode == "me":
+        mode = "3"                                      # по неполному месяцу ТБУ не считаем
+    d, label = forecast.base(me, mode)
     if not d or not d.get("rev"):
         return "Нет данных P&L для расчёта сценария."
     b0 = forecast.scenario(d, ex_conv=bool(ex_conv))
@@ -120,12 +126,21 @@ def scenario_report(month=None, base="3", revenue_pct=0, kmd_pp=0, fixed_add=0,
                 f"{_f(x['ebt'])} ₽ в месяц ({_f(x['ebt'] * 12)} ₽ за 12 мес.), ТБУ "
                 + (f"{_f(x['tbu'])} ₽, запас прочности {_f(x['zfp_pct'], 1)}%"
                    if x["tbu"] is not None else "не определена (КМД ≤ 0)"))
-    lines = [f"СЦЕНАРИЙ (база: {label}, средний месяц; "
+    lines = [f"СЦЕНАРИЙ. ПЕРИОД ЦИФР: {label} (средний месяц базы; "
              f"{'без' if ex_conv else 'с'} процентов по конвертируемым займам)",
              block("База", b0), block("Сценарий", s),
              f"Изменение результата: {_f(s['ebt'] - b0['ebt'])} ₽ в месяц."]
     if s["tbu"] is not None and s["tbu"] > s["rev"]:
         lines.append(f"До безубыточности не хватает {_f(s['tbu'] - s['rev'])} ₽ выручки в месяц.")
+    if partial:
+        f, _ = forecast.base(me, "me")
+        fact = (f or {}).get("rev") or 0.0
+        lines.append(
+            f"ВНИМАНИЕ: {me:%m.%Y} не закрыт. Выручка и запас прочности выше — это НЕ факт "
+            f"{me:%m.%Y}, а средний месяц базы ({label}). ФАКТ {me:%m.%Y} на {rd:%d.%m.%Y}: "
+            f"выручка {_f(fact)} ₽"
+            + (f", это {_f(fact / s['tbu'] * 100, 1)}% от ТБУ, до ТБУ осталось "
+               f"{_f(max(0.0, s['tbu'] - fact))} ₽." if s["tbu"] else "."))
     lines.append("Расчёт линейный: КМД и постоянные затраты не зависят от объёма; прочие "
                  "доходы и расходы — как в базе. Это оценка, а не план.")
     return "\n".join(lines)
