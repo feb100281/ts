@@ -457,6 +457,48 @@ def _stocks(a):
                          a.get("top", 30))
 
 
+TOOLS.append({
+    "name": "incidents_report",
+    "description": "Происшествия на складах WB (пожары и др.): где, когда и сколько товара "
+                   "было на складе на день до события — штуки, карточки, бухгалтерская и "
+                   "управленческая стоимость. Для вопросов про пожары, инциденты, ущерб.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"warehouse": {"type": "string",
+                                     "description": "Склад (часть названия), необязательно"}},
+    },
+})
+TOOLS.append({
+    "name": "fbs_orders_report",
+    "description": "Заказы FBS (сборка на нашем складе): всего, закрыто, отменено, сколько "
+                   "сейчас на сборке и сколько из них за нормативом WB (48 ч), доля в "
+                   "нормативе, сроки. view: summary — сводка, overdue — список просроченных "
+                   "заказов, daily — динамика по дням. Период — по дате создания заказа, "
+                   "по умолчанию последние 30 дней.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "date_from": {"type": "string", "description": "YYYY-MM-DD"},
+            "date_to": {"type": "string", "description": "YYYY-MM-DD"},
+            "brand": {"type": "string", "description": "Точное название бренда"},
+            "view": {"type": "string", "enum": ["summary", "overdue", "daily"]},
+            "top": {"type": "integer"},
+        },
+    },
+})
+
+
+def _incidents(a):
+    from .ops import incidents_report
+    return incidents_report(a.get("warehouse"))
+
+
+def _fbs(a):
+    from .ops import fbs_orders_report
+    return fbs_orders_report(a.get("date_from"), a.get("date_to"), a.get("brand"),
+                             a.get("view", "summary"), a.get("top", 20))
+
+
 def _cards(a):
     from .cards import cards_check
     return cards_check(a.get("report_date"), a.get("view", "summary"), a.get("brand"),
@@ -478,6 +520,8 @@ def _pl(a):
 _DISPATCH = {
     "cards_check": _cards,
     "stocks_report": _stocks,
+    "incidents_report": _incidents,
+    "fbs_orders_report": _fbs,
     "wb_payouts_report": _wb_payouts,
     "cash_report": _cash,
     "interest_report": _interest,
@@ -564,7 +608,8 @@ def _fx_tool(fn_name):
 # Группы инструментов — чтобы потом развести помощников:
 # продажи/маркетинг и финансы (управленка, контрагенты, договоры).
 SALES_TOOLS = {"list_tables", "describe_table", "run_sql", "export_excel",
-               "wb_sales", "margin_report", "cards_check", "stocks_report"}
+               "wb_sales", "margin_report", "cards_check", "stocks_report",
+               "incidents_report", "fbs_orders_report"}
 FINANCE_TOOLS = {"pl_report", "counterparty_info", "cf_report", "interest_report",
                  "cash_report", "wb_payouts_report", "loans_report", "fx_report",
                  "upd_report", "month_conclusions", "scenario_report",
