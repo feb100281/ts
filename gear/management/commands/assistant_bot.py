@@ -282,7 +282,7 @@ class Bot:
                 return False                             # ответит обычный путь
             from gear.app.daily_sales.assistant import digest
             day = digest.loaded_date()
-            text = digest.build(day) if day else None
+            text = digest.build(day, day) if day else None
             if not text:
                 return False
             self.say(chat_id, text, raw=True)
@@ -315,7 +315,7 @@ class Bot:
         from gear.models import TelegramAccess
         day = now.date() - timedelta(days=1)
         loaded = digest.loaded_date()
-        text = digest.build(day) if loaded and loaded >= day else None
+        text = digest.build(day, loaded) if loaded and loaded >= day else None
         if not text:
             print(f"[bot sales] сводка: продаж за {day:%d.%m.%Y} ещё нет (в базе по "
                   f"{loaded or '—'}), повтор через час", flush=True)
@@ -601,7 +601,7 @@ class Command(BaseCommand):
             day = (date.fromisoformat(opts["digest_date"]) if opts.get("digest_date")
                    else loaded or date.today() - timedelta(days=1))
             self.stdout.write(f"В базе продажи по: {loaded}")
-            self.stdout.write(digest.build(day) or f"Продаж за {day:%d.%m.%Y} нет.")
+            self.stdout.write(digest.build(day, loaded) or f"Продаж за {day:%d.%m.%Y} нет.")
             return
         token = (os.getenv(f"TELEGRAM_BOT_TOKEN_{profile.upper()}") or "").strip()
         if not token:

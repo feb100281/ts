@@ -13,6 +13,7 @@ from conns import get_duckdb_conn_with_opt
 
 WD = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 QTY, RET, NET_QTY = "Продажи, шт", "Возвраты, шт", "Итого, шт"
+AFTER = "После СПП: итого, ₽"
 RUB, NET_RUB, PAY = "До СПП: продажи, ₽", "До СПП: итого, ₽", "К перечислению, ₽"
 
 
@@ -40,16 +41,21 @@ WB_COSTS = (
 )
 
 
-def wb_costs(day: date, prev: date) -> list[tuple[str, float, float]]:
-    """[(статья, расход за день, расход за день сравнения)], расход — положительный."""
+def wb_costs(day: date) -> list[tuple[str, float, float]]:
+    """[(статья, расход за 7 дней по day, расход за 7 дней до этого)], расход — положительный.
+
+    По одному дню не считаем: WB проводит логистику, хранение и удержания неравномерно.
+    """
     cols = ", ".join(
         f"SUM(CASE WHEN {cond} THEN (CASE WHEN oper = 'cr' THEN val ELSE -val END) END) / 100"
         for _, cond in WB_COSTS)
+    start = day - timedelta(days=13)
     with get_duckdb_conn_with_opt(with_pg=False) as con:
         rows = dict((r[0], r[1:]) for r in con.execute(
-            f"SELECT date_from::DATE, {cols} FROM sales.sales_long "
-            "WHERE date_from::DATE IN (?, ?) GROUP BY 1", [day, prev]).fetchall())
-    cur, old = rows.get(day) or [0] * len(WB_COSTS), rows.get(prev) or [0] * len(WB_COSTS)
+            f"SELECT date_from::DATE > ?::DATE AS cur, {cols} FROM sales.sales_long "
+            "WHERE date_from::DATE BETWEEN ? AND ? GROUP BY 1",
+            [day - timedelta(days=7), start, day]).fetchall())
+    cur, old = rows.get(True) or [0] * len(WB_COSTS), rows.get(False) or [0] * len(WB_COSTS)
     return [(name, float(cur[i] or 0), float(old[i] or 0))
             for i, (name, _) in enumerate(WB_COSTS)]
 
@@ -76,17 +82,17 @@ def _chg(cur, prev):
     return ("+" if p >= 0 else "−") + f"{abs(p):.1f}".replace(".", ",") + "%"
 
 
-def build(day: date) -> str | None:
+def build(day: date, loaded: date | None = None) -> str | None:
     """Текст сводки (HTML для Telegram) или None, если за день продаж нет."""
     import pandas as pd
     from ..wb_sales_export import fetch
 
-    df = fetch(day - timedelta(days=7), day, "brand_day", [])
+    df = fetch(day - timedelta(days=13), day, "brand_day", [])
     if df.empty:
         return None
     dcol, bcol = df.columns[0], df.columns[1]
     df[dcol] = pd.to_datetime(df[dcol]).dt.date
-    num = [c for c in (QTY, RET, NET_QTY, RUB, NET_RUB, PAY) if c in df.columns]
+    num = [c for c in (QTY, RET, NET_QTY, RUB, NET_RUB, PAY, AFTER) if c in df.columns]
     days = df.groupby(dcol)[num].sum()
     if day not in days.index or not days.at[day, QTY]:
         return None
@@ -95,7 +101,8 @@ def build(day: date) -> str | None:
 
     lines = [
         f"<b>Продажи за {day:%d.%m.%Y}</b> ({WD[day.weekday()]})",
-        f"Данные загружены по {day:%d.%m.%Y}. Продажи «как на сайте WB», с НДС, до СПП.",
+        f"Данные в базе по {(loaded or day):%d.%m.%Y}. Продажи «как на сайте WB», с НДС, "
+        "до СПП.",
         "",
         f"Продано: <b>{_n(t[QTY])} шт</b> на <b>{_rub(t[RUB])}</b>",
         f"Возвраты: {_n(t[RET])} шт"
@@ -105,6 +112,10 @@ def build(day: date) -> str | None:
     ]
     if PAY in days.columns:
         lines.append(f"К перечислению от WB: {_rub(t[PAY])}")
+    if AFTER in days.columns and t[NET_RUB]:
+        spp = (1 - float(t[AFTER]) / float(t[NET_RUB])) * 100
+        lines.append(f"<i>Справочно: WB продал покупателям на {_rub(t[AFTER])} — "
+                     f"скидка WB (СПП) {spp:.1f}".replace(".", ",") + "%</i>")
     lines += ["", "<b>Сравнение</b> (итого в рублях)"]
     for d, label in ((prev, "к предыдущему дню"), (week, "к тому же дню недели")):
         if d in days.index:
@@ -127,22 +138,25 @@ def build(day: date) -> str | None:
                 lines.append("Рост: " + "; ".join(up))
             if down:
                 lines.append("Падение: " + "; ".join(down))
-    # расходы WB за день
+    # расходы WB за 7 дней против предыдущих 7
+    w_from = day - timedelta(days=6)
     try:
-        costs = [c for c in wb_costs(day, week) if abs(c[1]) >= 1]
+        costs = [c for c in wb_costs(day) if abs(c[1]) >= 1]
     except Exception as e:
         costs = []
         print(f"[digest] расходы WB: {type(e).__name__}: {e}", flush=True)
     if costs:
-        total = sum(c[1] for c in costs)
-        share = (f" — {total / float(t[RUB]) * 100:.1f}".replace(".", ",") + "% от продаж"
-                 if t[RUB] else "")
-        lines += ["", f"<b>Расходы WB за день: {_rub(total)}</b>{share}"]
+        total, total_old = sum(c[1] for c in costs), sum(c[2] for c in costs)
+        sales7 = float(days.loc[[d for d in days.index if w_from <= d <= day], RUB].sum())
+        share = (f" — {total / sales7 * 100:.1f}".replace(".", ",") + "% от продаж"
+                 if sales7 else "")
+        lines += ["", f"<b>Расходы WB за 7 дней ({w_from:%d.%m}–{day:%d.%m}): "
+                      f"{_rub(total)}</b>{share}",
+                  f"К предыдущим 7 дням: {_chg(total, total_old)}"]
         for name, v, old in costs:
-            cmp_ = f" ({_chg(v, old)} к {week:%d.%m})" if abs(old) >= 1 else ""
+            cmp_ = f" ({_chg(v, old)})" if abs(old) >= 1 else ""
             lines.append(f"• {name}: {_rub(v)}{cmp_}")
-        lines.append("<i>С НДС, по дате операции в отчёте WB; за последние дни может "
-                     "дополниться.</i>")
+        lines.append("<i>С НДС, по дате операции в отчёте WB. Комиссия WB сюда не входит.</i>")
 
     # остатки: все места вместе
     try:
