@@ -81,6 +81,7 @@ STEPS = {
     "profit_vs_cash_report": "Сравниваю прибыль и деньги",
     "contracts_ending_report": "Смотрю сроки договоров",
     "counterparty_info": "Смотрю данные по контрагенту",
+    "new_counterparties_report": "Ищу новых контрагентов",
     "export_excel": "Готовлю файл Excel",
 }
 STEP_DEFAULT = "Смотрю данные"

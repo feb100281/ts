@@ -195,3 +195,36 @@ def profit_vs_cash_report(month=None) -> str:
         "счёт с задержкой. Называй только те причины, которые видны в цифрах выше.",
     ]
     return "\n".join(lines)
+
+
+def new_counterparties_report(month=None) -> str:
+    """Контрагенты, впервые появившиеся в движении денег в выбранном месяце."""
+    from ...manpack import data
+    from .cashflow import _mask
+    me = _me(month)
+    start = data.month_start(me)
+    df = data.cf_first_seen()
+    if df.empty:
+        return "Нет данных движения денег."
+    sal = df[df["salary"]].groupby("cp").agg(first=("first", "min")).reset_index()
+    staff = sal[(sal["first"] >= start) & (sal["first"] <= me)
+                & (sal["cp"] != "Без контрагента")]
+    oth = df[~df["salary"]].groupby("cp").agg(
+        first=("first", "min"), amount=("amount", "sum"), n=("n", "sum")).reset_index()
+    firms = oth[(oth["first"] >= start) & (oth["first"] <= me)
+                & (oth["cp"] != "Без контрагента") & ~oth["cp"].isin(sal["cp"])]
+    lines = [f"НОВЫЕ КОНТРАГЕНТЫ за {me:%m.%Y}: {len(firms)} "
+             "(первая операция в движении денег за всю историю)"]
+    if len(firms):
+        firms = firms.reindex(firms["amount"].abs().sort_values(ascending=False).index)
+        lines.append("Контрагент\tПервая операция\tОпераций\tСумма за всё время, ₽")
+        for r in firms.head(60).itertuples():
+            lines.append(f"{_mask(r.cp)}\t{r.first:%d.%m.%Y}\t{_f(r.n)}\t{_f(r.amount)}")
+        lines.append(f"Итого: поступления {_f(firms[firms['amount'] > 0]['amount'].sum())} ₽, "
+                     f"выплаты {_f(firms[firms['amount'] < 0]['amount'].sum())} ₽.")
+    lines.append(f"Новых сотрудников (первая выплата зарплаты в этом месяце): {len(staff)}. "
+                 "Имена и суммы по сотрудникам не раскрываются.")
+    lines.append("Сумма: плюс — поступление, минус — выплата. Источник — движение денег "
+                 "(ДДС); контрагент без оплат в этом списке не появится. Подробности по "
+                 "конкретному контрагенту — counterparty_info.")
+    return "\n".join(lines)

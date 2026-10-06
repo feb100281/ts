@@ -591,6 +591,9 @@ _fin("profit_vs_cash_report",
      "Сопоставление прибыли (P&L, начисление) и денежного потока (ДДС) за месяц одной "
      "таблицей: итог, выручка и поступления WB, проценты, налог, товар, ДДС по видам "
      "деятельности. Для вопросов «почему прибыль есть, а денег нет» и наоборот.", _MONTH)
+_fin("new_counterparties_report",
+     "Новые контрагенты месяца: кто впервые появился в движении денег, дата первой "
+     "операции, число операций, сумма; отдельно — число новых сотрудников.", _MONTH)
 _fin("contracts_ending_report",
      "Договоры, срок действия которых заканчивается в указанном месяце.", _MONTH)
 
@@ -618,9 +621,11 @@ SALES_TOOLS = {"list_tables", "describe_table", "run_sql", "export_excel",
 FINANCE_TOOLS = {"pl_report", "counterparty_info", "cf_report", "interest_report",
                  "cash_report", "wb_payouts_report", "loans_report", "fx_report",
                  "upd_report", "month_conclusions", "scenario_report",
-                 "contracts_ending_report", "profit_vs_cash_report"}
+                 "contracts_ending_report", "profit_vs_cash_report",
+                 "new_counterparties_report"}
 for _n in ("loans_report", "fx_report", "upd_report", "month_conclusions", "scenario_report",
-           "contracts_ending_report", "profit_vs_cash_report"):
+           "contracts_ending_report", "profit_vs_cash_report",
+                 "new_counterparties_report"):
     _DISPATCH[_n] = _fx_tool(_n)
 
 
