@@ -30,6 +30,11 @@ sudo systemctl restart gunicorn-ts
 
 sudo systemctl restart ts-bot@sales && sleep 15 && sudo systemctl restart ts-bot@finance
 
+
+
+Это превью продаж за вчерашний день в терминале 
+cd ~/ts
+python manage.py assistant_bot --profile sales --digest-preview
 _________
 
 

@@ -587,15 +587,20 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--profile", choices=["sales", "finance"], required=True)
         parser.add_argument("--digest-preview", action="store_true",
-                            help="Показать текст сводки продаж за вчера и выйти")
+                            help="Показать текст сводки продаж и выйти")
+        parser.add_argument("--digest-date",
+                            help="Дата для предпросмотра YYYY-MM-DD; по умолчанию — "
+                                 "последний загруженный день")
 
     def handle(self, *args, **opts):
         profile = opts["profile"]
         if opts.get("digest_preview"):
             from datetime import date, timedelta
             from gear.app.daily_sales.assistant import digest
-            day = date.today() - timedelta(days=1)
-            self.stdout.write(f"В базе продажи по: {digest.loaded_date()}")
+            loaded = digest.loaded_date()
+            day = (date.fromisoformat(opts["digest_date"]) if opts.get("digest_date")
+                   else loaded or date.today() - timedelta(days=1))
+            self.stdout.write(f"В базе продажи по: {loaded}")
             self.stdout.write(digest.build(day) or f"Продаж за {day:%d.%m.%Y} нет.")
             return
         token = (os.getenv(f"TELEGRAM_BOT_TOKEN_{profile.upper()}") or "").strip()
