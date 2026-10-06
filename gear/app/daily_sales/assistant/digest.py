@@ -96,11 +96,24 @@ def _ths(v):
 
 
 def _pre(rows) -> str:
-    """Таблица моноширинным блоком: первая колонка влево, остальные вправо."""
-    w = [max(len(str(r[i])) for r in rows) for i in range(len(rows[0]))]
-    return "<pre>" + escape("\n".join(
-        " ".join(str(c).ljust(w[i]) if i == 0 else str(c).rjust(w[i])
-                 for i, c in enumerate(r)).rstrip() for r in rows)) + "</pre>"
+    """Таблица моноширинным блоком: первая колонка влево, числа вправо, стрелки — в столбик."""
+    def split(c):
+        c = str(c)
+        return (c[0], c[2:]) if c[:2] in ("▲ ", "▼ ") else ("", c)
+    cells = [[split(c) for c in r] for r in rows]
+    n = len(rows[0])
+    arrow = [any(r[i][0] for r in cells) for i in range(n)]
+    w = [max(len(r[i][1]) for r in cells) for i in range(n)]
+    out = []
+    for r in cells:
+        line = []
+        for i, (a, v) in enumerate(r):
+            if i == 0:
+                line.append(v.ljust(w[i]))
+            else:
+                line.append((a or " " if arrow[i] else "") + v.rjust(w[i]))
+        out.append(" ".join(line).rstrip())
+    return "<pre>" + escape("\n".join(out)) + "</pre>"
 
 
 def build(day: date, loaded: date | None = None) -> str | None:
