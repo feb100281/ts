@@ -277,8 +277,8 @@ class TelegramQuestionAdmin(admin.ModelAdmin):
     """Журнал вопросов к ботам. Только чтение, только суперпользователь."""
 
     change_list_template = "admin/gear/telegramquestion/change_list.html"
-    list_display = ("asked_at", "who", "bot_badge", "question", "seconds", "cost", "has_file",
-                    "is_error")
+    list_display = ("asked_at", "who", "bot_badge", "question", "seconds", "cost", "excel",
+                    "error")
     list_display_links = None
     list_filter = ("bot", ("asked_at", admin.DateFieldListFilter), "is_error", "has_file",
                    "access")
@@ -320,6 +320,14 @@ class TelegramQuestionAdmin(admin.ModelAdmin):
     @admin.display(description="Вопрос")
     def question(self, obj):
         return format_html('<span class="tgq-text">{}</span>', obj.text)
+
+    @admin.display(description="Excel", ordering="has_file")
+    def excel(self, obj):
+        return format_html('<span class="tga-st tga-st-on">файл</span>') if obj.has_file else ""
+
+    @admin.display(description="Ошибка", ordering="is_error")
+    def error(self, obj):
+        return format_html('<span class="tga-st tga-st-wait">ошибка</span>') if obj.is_error else ""
 
     @admin.display(description="Стоимость, $", ordering="cost_usd")
     def cost(self, obj):
