@@ -130,10 +130,18 @@ SALES_SKILLS = """ДВА ВИДА ПРОДАЖ — ВСЕГДА РАЗЛИЧАЙ
   по field='retail_price'. Товар: JOIN inventories.wb_product p ON p.card_id = nm_id
   (brand, subject_name, sa_name, title); в sales_long также ts_name (размер), barcode.
   Другие field: comission, delivery_rub, storage_fee, penalty, deduction, acceptance …
-- stocks.unpacked_stocks, stocks.unpacked_fbs_stocks — остатки.
+- stocks.unpacked_stocks, stocks.unpacked_fbs_stocks — остатки (для обычных вопросов
+  бери готовый stocks_report, а не SQL).
 - inventories.wb_product — справочник товаров (артикулы, бренды, категории).
 - cards.product, cards.unpacked_cards, cards.sizes — карточки WB.
 - ads.* — рекламные кампании и расходы на рекламу.
+
+ТОВАРНЫЕ ОСТАТКИ
+«Сколько товара на остатке», «что на складе», «сколько в пути», «остатки по брендам» —
+инструмент stocks_report. Остаток — это ВСЕ места вместе: склады WB + в пути к клиенту
++ в пути от клиента + наш склад FBS. В ответе всегда показывай таблицу из этих четырёх
+строк и «Итого», даже если спросили коротко. Назвать только склады WB как «остаток» —
+ошибка. Пиши дату остатков. Разбивки: by=brand / category / article / warehouse.
 
 ПРОВЕРКА КАРТОЧЕК (GTIN, ТН ВЭД, ДОКУМЕНТЫ, ОКПД2)
 Вопросы о готовности карточек к требованиям WB, маркировке, штрихкодах, ТН ВЭД,

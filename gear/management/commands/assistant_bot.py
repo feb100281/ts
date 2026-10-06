@@ -66,6 +66,7 @@ STEPS = {
     "margin_report": "Считаю маржу",
     "wb_sales": "Смотрю продажи Wildberries",
     "cards_check": "Проверяю карточки товаров",
+    "stocks_report": "Смотрю остатки товара",
     "cash_report": "Смотрю остатки на счетах",
     "cf_report": "Смотрю движение денег",
     "wb_payouts_report": "Смотрю поступления от Wildberries",

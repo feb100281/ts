@@ -430,6 +430,33 @@ TOOLS.append({
 })
 
 
+TOOLS.append({
+    "name": "stocks_report",
+    "description": "Товарные остатки в штуках — ВСЕ места сразу: склады WB, в пути к "
+                   "клиенту, в пути от клиента, наш склад FBS и итог. Используй для любых "
+                   "вопросов «сколько товара на остатке / на складе / в пути / на FBS». "
+                   "by: total — только итог, brand — по брендам, category — по категориям, "
+                   "article — по артикулам, warehouse — по складам WB.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "report_date": {"type": "string",
+                            "description": "Дата остатков YYYY-MM-DD, по умолчанию вчера"},
+            "by": {"type": "string",
+                   "enum": ["total", "brand", "category", "article", "warehouse"]},
+            "brand": {"type": "string", "description": "Фильтр по бренду (часть названия)"},
+            "top": {"type": "integer", "description": "Сколько строк, по умолчанию 30"},
+        },
+    },
+})
+
+
+def _stocks(a):
+    from .stocks import stocks_report
+    return stocks_report(a.get("report_date"), a.get("by", "total"), a.get("brand"),
+                         a.get("top", 30))
+
+
 def _cards(a):
     from .cards import cards_check
     return cards_check(a.get("report_date"), a.get("view", "summary"), a.get("brand"),
@@ -450,6 +477,7 @@ def _pl(a):
 
 _DISPATCH = {
     "cards_check": _cards,
+    "stocks_report": _stocks,
     "wb_payouts_report": _wb_payouts,
     "cash_report": _cash,
     "interest_report": _interest,
@@ -536,7 +564,7 @@ def _fx_tool(fn_name):
 # Группы инструментов — чтобы потом развести помощников:
 # продажи/маркетинг и финансы (управленка, контрагенты, договоры).
 SALES_TOOLS = {"list_tables", "describe_table", "run_sql", "export_excel",
-               "wb_sales", "margin_report", "cards_check"}
+               "wb_sales", "margin_report", "cards_check", "stocks_report"}
 FINANCE_TOOLS = {"pl_report", "counterparty_info", "cf_report", "interest_report",
                  "cash_report", "wb_payouts_report", "loans_report", "fx_report",
                  "upd_report", "month_conclusions", "scenario_report",
