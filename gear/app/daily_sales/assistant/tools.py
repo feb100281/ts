@@ -183,7 +183,10 @@ TOOLS.append({
                    "(до 100 000 строк; давай колонкам понятные русские алиасы), "
                    "либо pl — P&L мэн пака по месяцам, либо margin — маржинальность "
                    "(те же параметры, что у margin_report), либо wb_sales — продажи как на "
-                   "сайте WB (те же параметры, что у инструмента wb_sales). Вызывай, когда просят "
+                   "сайте WB (те же параметры, что у инструмента wb_sales), либо report — любой "
+                   "другой готовый отчёт целиком: {tool: имя инструмента, args: его "
+                   "параметры} (остатки, происшествия, FBS, займы, деньги, ДДС и т. д.). "
+                   "Вызывай, когда просят "
                    "файл / Excel / выгрузку или таблица больше ~30 строк.",
     "input_schema": {
         "type": "object",
@@ -191,6 +194,8 @@ TOOLS.append({
             "title": {"type": "string", "description": "Короткое название отчёта"},
             "description": {"type": "string", "description": "Что в файле, период"},
             "sql": {"type": "string"},
+            "report": {"type": "object", "properties": {
+                "tool": {"type": "string"}, "args": {"type": "object"}}},
             "wb_sales": {"type": "object", "properties": {
                 "date_from": {"type": "string"}, "date_to": {"type": "string"},
                 "level": {"type": "string"},

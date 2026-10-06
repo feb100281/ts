@@ -103,6 +103,10 @@ def _post(payload: dict) -> dict:
 _FIG = re.compile(r"\d[\d\s .,]*\s?(₽|руб|тыс|млн|млрд|шт\b|%)|\|\s*[−-]?\d", re.I)
 
 
+_FILE_CLAIM = re.compile(r"выгруж|в файле|файл\w*\s+(готов|сформир|прилага|отправ)|"
+                         r"(прилагаю|отправляю|прикрепл\w+|сформировал\w*)\s+(файл|excel)", re.I)
+
+
 def _cache_control() -> dict:
     cc = {"type": "ephemeral"}
     if _cache_ttl[0] == "1h":
@@ -147,6 +151,7 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
     model = _model()
 
     tools_called = 0        # сколько раз за этот ответ помощник обращался к данным
+    file_nag = False        # уже напоминали про несозданный файл
     forced = False          # повторный запрос с обязательным вызовом инструмента
 
     for _ in range(MAX_TOOL_ROUNDS + 2):
@@ -194,6 +199,16 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
                                  "Вызови подходящий инструмент и ответь только по его "
                                  "результату. Если данных нет — так и скажи."})
                 continue
+            # написал про файл, а export_excel не вызывал — заставляем сделать или убрать
+            if not files and not file_nag and _FILE_CLAIM.search(text):
+                print("[assistant] обещан файл без export_excel — повтор", flush=True)
+                file_nag = True
+                messages.append({"role": "user", "content":
+                                 "Ты написал про файл, но export_excel не вызывал — файла "
+                                 "нет. Вызови export_excel сейчас (для готового отчёта — "
+                                 "параметр report) и затем дай тот же ответ. Если выгрузить "
+                                 "нельзя — перепиши ответ без упоминания файла."})
+                continue
             break
         tools_called += len(tool_uses)
 
@@ -215,6 +230,9 @@ def ask(history: list[dict], profile: str = "sales", on_step=None) -> dict:
                     args = dict(b.get("input", {}))
                     if profile != "finance":
                         args.pop("pl", None)
+                    rep = args.get("report")
+                    if isinstance(rep, dict) and not allowed(profile, rep.get("tool", "")):
+                        raise ValueError("Этот отчёт недоступен в данном помощнике")
                     out, info = export(args, question)
                     files.append(info)
                     is_err = False

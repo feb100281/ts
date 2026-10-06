@@ -232,6 +232,44 @@ def _pl_table(a):
 
 
 # ------------------------------------------------------------ точка входа
+def _num(v: str):
+    """«68 410», «15,4», «−3.5» → число; иначе исходная строка."""
+    t = v.replace("\u00a0", "").replace(" ", "").replace("−", "-").replace(",", ".")
+    if re.fullmatch(r"-?\d+(\.\d+)?", t):
+        return float(t) if "." in t else int(t)
+    return v
+
+
+def _report_table(tool: str, tool_args: dict):
+    """Текстовый отчёт инструмента → самая большая таблица в нём + примечания."""
+    from .tools import call_tool
+    if tool in ("export_excel", "run_sql", "list_tables", "describe_table"):
+        raise ValueError("Для этого инструмента используй sql")
+    text, is_err = call_tool(tool, tool_args)
+    if is_err:
+        raise ValueError(text)
+    blocks, cur, notes = [], [], []
+    for ln in str(text).split("\n"):
+        if "\t" in ln:
+            cur.append(ln.split("\t"))
+            continue
+        if cur:
+            blocks.append(cur)
+            cur = []
+        if ln.strip():
+            notes.append(ln.strip())
+    if cur:
+        blocks.append(cur)
+    if not blocks:
+        raise ValueError("В отчёте нет таблицы для выгрузки")
+    best = max(blocks, key=len)
+    cols = [c.strip() or f"Колонка {i + 1}" for i, c in enumerate(best[0])]
+    rows = [[_num(c.strip()) if c.strip() else None for c in r]
+            + [None] * (len(cols) - len(r)) for r in best[1:]]
+    rows = [r[:len(cols)] for r in rows]
+    return cols, rows, notes
+
+
 def export(args: dict, question: str = "") -> tuple[str, dict]:
     from gear.management.commands import mp
 
@@ -304,6 +342,13 @@ def export(args: dict, question: str = "") -> tuple[str, dict]:
                      f"продвижение распределено {meta.get('promo_basis', '')}",
                      cols, rows)
         sql, cut, source = None, False, "Мэн пак: продажи, себестоимость FIFO, расходы WB"
+    elif args.get("report"):
+        r = args["report"] if isinstance(args["report"], dict) else {}
+        cols, rows, notes = _report_table(r.get("tool", ""), r.get("args") or {})
+        _write_table(ws, mp, title, desc or "Выгрузка ИИ-помощника",
+                     f"Сформировано {stamp} · строк: {len(rows)}", cols, rows, totals=False)
+        desc = (desc + "\n" if desc else "") + "\n".join(notes)
+        sql, cut, source = None, False, f"Отчёт помощника: {r.get('tool', '')}"
     elif args.get("sql"):
         sql, cols, rows, cut = _run_sql(args["sql"])
         _write_table(ws, mp, title, desc or "Выгрузка ИИ-помощника",
