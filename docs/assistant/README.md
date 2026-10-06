@@ -155,3 +155,13 @@ python pdf.py    # два .pdf: HTML → PDF через Playwright/Chromium, A4,
   реестра `stocks/dashboard_stock/warehouse_incidents.py` + оценка товара на складе.
 - `fbs_orders_report` (`assistant/ops.py`) — заказы FBS и норматив сборки 48 ч.
 Все три считают теми же функциями, что дашборды, и доступны обоим ботам.
+
+## 13. Утренняя сводка продаж
+
+Рассылка без Claude (0 токенов): `assistant/digest.py` собирает текст из базы, бот
+продаж рассылает его всем с доступом (`Bot.digest_tick()` в `assistant_bot.py`).
+Окно — `DIGEST_HOURS` (6:00–12:00 МСК): первая попытка в 6:00; если продаж за вчера
+в базе ещё нет — повтор раз в час; после 11:00 админу уходит «сводка не отправлена».
+Отметка об отправке — файл `data/.sales_digest_sent` (чтобы не было дубля после
+перезапуска). Посмотреть текст без рассылки:
+`python manage.py assistant_bot --profile sales --digest-preview`.

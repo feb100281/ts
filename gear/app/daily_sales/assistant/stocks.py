@@ -56,6 +56,20 @@ def _last_date(con, d: date):
     return row[0] if row and row[0] else None
 
 
+def totals(asked: date) -> dict | None:
+    """Итоги остатков на последнюю дату не позже запрошенной (для сводки)."""
+    with get_duckdb_conn_with_opt(ro=True) as con:
+        d = _last_date(con, asked)
+        if d is None:
+            return None
+        r = con.execute(BASE_SQL + """
+            SELECT SUM(wb_qty), SUM(to_client), SUM(from_client), SUM(fbs_qty) FROM s""",
+                        {"d": d}).fetchone()
+    wb, to_c, from_c, fbs = (int(x or 0) for x in r)
+    return {"date": d, "wb": wb, "to_client": to_c, "from_client": from_c, "fbs": fbs,
+            "total": wb + to_c + from_c + fbs}
+
+
 def stocks_report(report_date=None, by="total", brand=None, top=30) -> str:
     asked = (date.fromisoformat(str(report_date)[:10]) if report_date
              else date.today() - timedelta(days=1))

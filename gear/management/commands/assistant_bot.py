@@ -30,6 +30,7 @@ API = "https://api.telegram.org/bot{token}/{method}"
 HISTORY_TURNS = 8            # сколько последних реплик помнить в диалоге
 HISTORY_TTL = 2 * 60 * 60    # через сколько секунд тишины диалог начинается заново
 LIMIT = 3900                 # запас до лимита Telegram 4096 символов
+DIGEST_HOURS = (6, 12)        # МСК: сводку продаж шлём с 6:00, повтор раз в час до 12:00
 QUIET = ((23, 20), (23, 57))  # МСК: ночная загрузка данных, вопросы не принимаем
 NAMES = {"sales": "помощник по продажам", "finance": "финансовый помощник"}
 
@@ -137,6 +138,7 @@ class Bot:
     def __init__(self, token: str, profile: str):
         self.token, self.profile = token, profile
         self.history: dict[int, tuple[float, list]] = {}
+        self.digest_done, self.digest_try = "", 0.0     # сводка: дата отправки, время попытки
         self.purged = 0.0                        # когда последний раз чистили журнал
         self.menu_shown: set[int] = set()        # кому уже показали нижнее меню
         self.opener = self._opener()
@@ -234,6 +236,9 @@ class Bot:
             pass
         chat = (cq.get("message") or {}).get("chat") or {}
         data = cq.get("data") or ""
+        if self.profile == "sales" and data == "ex:0" and chat.get("id") \
+                and self.send_digest(chat["id"], cq.get("from") or {}):
+            return
         if data.startswith("ex:") and data[3:].isdigit():
             ex = EXAMPLES[self.profile]
             text = ex[int(data[3:]) % len(ex)][1]
@@ -261,6 +266,79 @@ class Bot:
                     days=TelegramQuestion.KEEP_DAYS)).delete()
         except Exception as e:
             print(f"[bot {self.profile}] журнал: {type(e).__name__}: {e}", flush=True)
+
+    # ---------------------------------------------------------------- сводка
+    @staticmethod
+    def _digest_mark():
+        from pathlib import Path
+        from django.conf import settings
+        return Path(settings.BASE_DIR) / "data" / ".sales_digest_sent"
+
+    def send_digest(self, chat_id: int, user: dict) -> bool:
+        """Кнопка «Продажи за вчера»: та же сводка, что в рассылке, без обращения к Claude."""
+        try:
+            obj, _ = self.access(user)
+            if not obj.is_allowed or quiet_now():
+                return False                             # ответит обычный путь
+            from gear.app.daily_sales.assistant import digest
+            day = digest.loaded_date()
+            text = digest.build(day) if day else None
+            if not text:
+                return False
+            self.say(chat_id, text, raw=True)
+            return True
+        except Exception as e:
+            print(f"[bot sales] сводка по кнопке: {type(e).__name__}: {e}", flush=True)
+            return False
+
+    def digest_tick(self):
+        """Раз в день рассылаем сводку продаж; данных нет — пробуем снова через час."""
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        if self.profile != "sales":
+            return
+        now = datetime.now(ZoneInfo("Europe/Moscow"))
+        today = now.date().isoformat()
+        if not DIGEST_HOURS[0] <= now.hour < DIGEST_HOURS[1] or self.digest_done == today:
+            return
+        if time.time() - self.digest_try < 3600:
+            return
+        mark = self._digest_mark()
+        try:
+            if mark.exists() and mark.read_text().strip() == today:
+                self.digest_done = today
+                return
+        except OSError:
+            pass
+        self.digest_try = time.time()
+        from gear.app.daily_sales.assistant import digest
+        from gear.models import TelegramAccess
+        day = now.date() - timedelta(days=1)
+        loaded = digest.loaded_date()
+        text = digest.build(day) if loaded and loaded >= day else None
+        if not text:
+            print(f"[bot sales] сводка: продаж за {day:%d.%m.%Y} ещё нет (в базе по "
+                  f"{loaded or '—'}), повтор через час", flush=True)
+            if now.hour == DIGEST_HOURS[1] - 1:              # последняя попытка дня
+                admin = (os.getenv("TELEGRAM_ADMIN_ID") or "").strip()
+                if admin.lstrip("-").isdigit():
+                    self.say(int(admin), f"Сводка продаж за {day:%d.%m.%Y} не отправлена: "
+                                         "данные так и не загрузились.", raw=True)
+            return
+        sent = 0
+        for a in TelegramAccess.objects.filter(bot="sales", is_allowed=True):
+            try:
+                self.say(a.tg_id, text, raw=True)
+                sent += 1
+            except Exception as e:
+                print(f"[bot sales] сводка → {a.tg_id}: {e}", flush=True)
+            time.sleep(0.1)
+        self.digest_done = today
+        try:
+            mark.write_text(today)
+        except OSError as e:
+            print(f"[bot sales] сводка: метка не записана: {e}", flush=True)
+        print(f"[bot sales] сводка за {day:%d.%m.%Y} отправлена: {sent}", flush=True)
 
     def typing(self, chat_id: int, stop):
         """Показываем «печатает…», пока считается ответ."""
@@ -409,6 +487,11 @@ class Bot:
         offset = None
         while True:
             try:
+                close_old_connections()
+                self.digest_tick()
+            except Exception as e:
+                print(f"[bot {self.profile}] сводка: {type(e).__name__}: {e}", flush=True)
+            try:
                 params = {"timeout": 25, "allowed_updates": ["message", "callback_query"]}
                 if offset is not None:
                     params["offset"] = offset
@@ -503,9 +586,18 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--profile", choices=["sales", "finance"], required=True)
+        parser.add_argument("--digest-preview", action="store_true",
+                            help="Показать текст сводки продаж за вчера и выйти")
 
     def handle(self, *args, **opts):
         profile = opts["profile"]
+        if opts.get("digest_preview"):
+            from datetime import date, timedelta
+            from gear.app.daily_sales.assistant import digest
+            day = date.today() - timedelta(days=1)
+            self.stdout.write(f"В базе продажи по: {digest.loaded_date()}")
+            self.stdout.write(digest.build(day) or f"Продаж за {day:%d.%m.%Y} нет.")
+            return
         token = (os.getenv(f"TELEGRAM_BOT_TOKEN_{profile.upper()}") or "").strip()
         if not token:
             raise CommandError(f"В .env нет TELEGRAM_BOT_TOKEN_{profile.upper()}")
