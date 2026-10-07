@@ -230,3 +230,64 @@ def margin_report(date_from=None, date_to=None, group_by="brand", search=None,
             "Расходы со знаком минус. Постоянные затраты (накладные, корпоративные, "
             "финансовые) в МД2 не входят.")
     return "\n".join(lines) + note
+
+
+# ---- маржа «как в дашборде продаж»: расходы WB за неделю делятся на проданные штуки
+DASH_SQL = """
+    WITH wk AS (
+        SELECT YEARWEEK(date_from::DATE) AS yw,
+               SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS n
+        FROM base WHERE cr_rev <> 0 GROUP BY 1
+    ),
+    cw AS (
+        SELECT yw, SUM(dt / (100 + vat_rate) * 100) - SUM(cr / (100 + vat_rate) * 100) AS costs
+        FROM wb_costs GROUP BY yw
+    ),
+    rate AS (
+        SELECT wk.yw, CASE WHEN COALESCE(wk.n, 0) = 0 THEN NULL ELSE ABS(cw.costs) / wk.n END AS r
+        FROM wk LEFT JOIN cw ON cw.yw = wk.yw
+    )
+    SELECT
+        COALESCE(NULLIF(TRIM({dim}), ''), 'Не указано') AS name,
+        SUM(CASE WHEN b.cr_rev > 0 THEN 1 WHEN b.cr_rev < 0 THEN -1 ELSE 0 END) AS qty,
+        SUM(b.cr_rev / (100 + b.vat_rate) * 100) / 100 AS rev,
+        SUM(b.adjusted_cogs_man) / 100 AS cogs,
+        SUM(b.net_comission) / 100 AS comm,
+        SUM((CASE WHEN b.cr_rev > 0 THEN 1 WHEN b.cr_rev < 0 THEN -1 ELSE 0 END)
+            * COALESCE(rate.r, 0)) / 100 AS wb
+    FROM base b
+    LEFT JOIN rate ON rate.yw = YEARWEEK(b.date_from::DATE)
+    WHERE b.cr_rev <> 0 AND b.date_from::DATE BETWEEN ? AND ?
+    GROUP BY 1
+"""
+_dash_cache: dict = {}
+
+
+def dashboard_margin(start: date, end: date, group_by: str = "brand") -> pd.DataFrame:
+    """Маржа по методике дашборда продаж: name, qty, rev, cogs, md1, wb, md2.
+
+    md1 = выручка без НДС − себестоимость − комиссия; md2 = md1 − расходы WB, где расходы
+    WB недели (без НДС) делятся поровну на каждую проданную за эту неделю штуку.
+    """
+    from gear.management.commands import mp
+
+    dim = {"brand": "b.brand", "category": "b.subject_name"}[group_by]
+    key = (start, end, group_by)
+    with _lock:
+        hit = _dash_cache.get(key)
+        if hit and time.time() - hit[0] < CACHE_TTL:
+            return hit[1].copy()
+    with get_duckdb_conn_with_opt(ro=True) as con:
+        con.execute(mp.read_sql("base.txt"))
+        con.execute(mp.read_sql("wb_costs.txt"))
+        d = con.execute(DASH_SQL.format(dim=dim), [start, end]).df()
+    if not d.empty:
+        for c in ("qty", "rev", "cogs", "comm", "wb"):
+            d[c] = pd.to_numeric(d[c], errors="coerce").fillna(0.0)
+        d["md1"] = d["rev"] - d["cogs"] + d["comm"]
+        d["md2"] = d["md1"] - d["wb"]
+    with _lock:
+        if len(_dash_cache) > 8:
+            _dash_cache.clear()
+        _dash_cache[key] = (time.time(), d)
+    return d.copy()

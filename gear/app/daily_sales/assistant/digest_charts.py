@@ -164,7 +164,8 @@ def margin(rows, avg, title, sub) -> bytes:
         p = cap(pct)
         ax.barh(y, p, height=0.58, color=GREEN if pct >= 0 else WARM)
         lab = _num(pct, 1) + "%"
-        money = ("+" if md >= 0 else "−") + _num(abs(md) / 1e6, 2) + " млн ₽"
+        money = ("+" if md >= 0 else "−") + (
+            _num(abs(md) / 1e6, 2) + " млн ₽" if abs(md) >= 1e6 else _num(abs(md) / 1e3) + " тыс ₽")
         name = name if len(name) <= 20 else name[:19] + "…"
         if pct >= 0:
             t = ax.text(p + span * 0.012, y, lab, va="center", ha="left", fontsize=15,

@@ -340,40 +340,38 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
     if b:
         out.append(b)
 
-    # ---- 4. маржинальность с начала месяца: после всех расходов WB, по брендам и категориям
-    def margin_block(group, col, title, whose, many):
-        from .margin import margin_table
-        m, start, end, _ = margin_table(m_start.isoformat(), day.isoformat(), group)
+    # ---- 4. маржинальность с начала месяца — по методике дашборда продаж
+    def margin_block(group, title, whose, many):
+        from .margin import dashboard_margin
+        m = dashboard_margin(m_start, day, group)
         if m is None or m.empty:
             return None
-        rev_c, md1_c, md_c = "Выручка без НДС, ₽", "МД1 после комиссии, ₽", "МД2 после расходов WB, ₽"
-        m = m[m[col].notna() & ~m[col].astype(str).str.startswith("Итого")]
-        rev, md, md1 = float(m[rev_c].sum()), float(m[md_c].sum()), float(m[md1_c].sum())
+        rev, md1, md = float(m["rev"].sum()), float(m["md1"].sum()), float(m["md2"].sum())
         if not rev:
             return None
         avg = md / rev * 100
-        big = m[m[rev_c] > 0].sort_values(rev_c, ascending=False).head(8)
-        rows = [(str(r[col]), float(r[md_c]) / float(r[rev_c]) * 100, float(r[md_c]))
+        big = m[m["rev"] > 0].sort_values("rev", ascending=False).head(8)
+        rows = [(str(r["name"]), float(r["md2"]) / float(r["rev"]) * 100, float(r["md2"]))
                 for _, r in big.iterrows()]
         best, worst = max(rows, key=lambda r: r[1]), min(rows, key=lambda r: r[1])
         loss = sorted([r for r in rows if r[2] < 0], key=lambda r: r[1])[:3]
 
         def reason(r):
-            """Главная причина убытка — по самой крупной статье."""
-            g = lambda c: abs(float(r.get(c) or 0))
-            if g("Себестоимость, ₽") >= float(r[rev_c]):
+            if float(r["cogs"]) >= float(r["rev"]):
                 return "цена ниже себестоимости"
-            if float(r[md1_c]) <= 0:
+            if float(r["md1"]) <= 0:
                 return "себестоимость и комиссия съедают всю выручку"
-            if g("Продвижение WB, ₽") >= g("Расходы WB (логистика, хранение, штрафы), ₽"):
-                return "маржу съедает реклама"
-            return "маржу съедают логистика и хранение"
-        why = {str(r[col]): reason(r) for _, r in big.iterrows() if float(r[md_c]) < 0}
-        period = f"За {_long(start)}" if start == end else f"С {start.day} по {_long(end)}"
+            return "маржи не хватает на расходы WB"
+        why = {str(r["name"]): reason(r) for _, r in big.iterrows() if float(r["md2"]) < 0}
+        period = (f"За {_long(m_start)}" if m_start == day
+                  else f"С {m_start.day} по {_long(day)}")
         lines = [f"<b>{title}</b>",
-                 _quote(f"{period} заработали <b>{_rub(md)}</b> маржи — это <b>{pc(avg)}</b> "
-                        "от выручки без НДС."),
-                 f"{UP} Самая высокая маржа {whose} {escape(best[0])} — <b>{pc(best[1])}</b>."]
+                 _quote(f"{period} заработали <b>{_rub(md)}</b> — это <b>{pc(avg)}</b> "
+                        "от выручки без НДС, после всех расходов WB.")]
+        if group == "brand":
+            lines.append(f"До расходов WB (логистика, реклама, штрафы) маржа — "
+                         f"<b>{pc(md1 / rev * 100)}</b>, {_rub(md1)}.")
+        lines.append(f"{UP} Самая высокая маржа {whose} {escape(best[0])} — <b>{pc(best[1])}</b>.")
         if loss:
             lines.append(f"{DOWN} В убыток продаём:")
             lines += [f"• {escape(r[0])} <b>{pc(r[1])}</b> — {why.get(r[0], 'расходы выше выручки')}"
@@ -383,11 +381,10 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
                          f"— <b>{pc(worst[1])}</b>.")
         return {"text": "\n".join(lines), "photo": pic(title, lambda: ch.margin(
             rows, avg, f"{title} — {pc(avg)}",
-            f"{rng(start, end)} · маржа после всех расходов WB, % от выручки без НДС"))}
-    for args in (("brand", "Бренд", "Маржинальность с начала месяца", "у", "брендов"),
-                 ("category", "Категория", "Маржинальность по категориям", "в категории",
-                  "категорий")):
-        b = _safe(args[2], lambda: margin_block(*args))
+            f"{rng(m_start, day)} · маржа после расходов WB, % от выручки без НДС"))}
+    for args in (("brand", "Маржинальность с начала месяца", "у", "брендов"),
+                 ("category", "Маржинальность по категориям", "в категории", "категорий")):
+        b = _safe(args[1], lambda: margin_block(*args))
         if b:
             out.append(b)
 
@@ -425,7 +422,7 @@ def greet(parts: list[dict], today: date, day: date | None = None) -> list[dict]
         extra = {0: " Хорошей недели!", 4: " Пятница!"}.get(today.weekday(), "")
         when = f" — <b>{WD_FULL[day.weekday()]}, {_long(day)}</b>" if day else ""
         parts.insert(0, {"photo": None, "text": (
-            f"Доброе утро, коллеги! ☀️{extra}\nВот как прошёл вчерашний день{when}.")})
+            f"Доброе утро! ☀️{extra}\nВот как прошёл вчерашний день{when}.")})
     return parts
 
 
