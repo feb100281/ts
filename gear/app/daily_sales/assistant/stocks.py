@@ -70,6 +70,27 @@ def totals(asked: date) -> dict | None:
             "total": wb + to_c + from_c + fbs}
 
 
+def series(day: date, n: int = 14) -> list[dict]:
+    """Остатки по дням за n дней по day включительно: все места и итог."""
+    with get_duckdb_conn_with_opt(ro=True) as con:
+        rows = con.execute("""
+            SELECT d, SUM(wb), SUM(tc), SUM(fc), SUM(fbs) FROM (
+                SELECT date_from::DATE AS d, COALESCE(quantity, 0) AS wb,
+                       COALESCE(in_way_to_client, 0) AS tc,
+                       COALESCE(in_way_from_client, 0) AS fc, 0 AS fbs
+                FROM stocks.unpacked_stocks WHERE date_from::DATE BETWEEN $a AND $b
+                UNION ALL
+                SELECT date_from::DATE, 0, 0, 0, COALESCE(quantity, 0)
+                FROM stocks.unpacked_fbs_stocks WHERE date_from::DATE BETWEEN $a AND $b
+            ) GROUP BY d ORDER BY d""", {"a": day - timedelta(days=n - 1), "b": day}).fetchall()
+    out = []
+    for d, wb, tc, fc, fbs in rows:
+        wb, tc, fc, fbs = (int(x or 0) for x in (wb, tc, fc, fbs))
+        out.append({"date": d, "wb": wb, "to_client": tc, "from_client": fc, "fbs": fbs,
+                    "total": wb + tc + fc + fbs})
+    return out
+
+
 def stocks_report(report_date=None, by="total", brand=None, top=30) -> str:
     asked = (date.fromisoformat(str(report_date)[:10]) if report_date
              else date.today() - timedelta(days=1))

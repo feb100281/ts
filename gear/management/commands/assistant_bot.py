@@ -183,10 +183,56 @@ class Bot:
         with self.opener.open(req, timeout=120) as r:
             return json.loads(r.read().decode("utf-8"))
 
-    def say(self, chat_id: int, text: str, markup: dict | None = None, raw: bool = False):
+    def send_photo(self, chat_id: int, photo, caption: str = "", silent: bool = False):
+        """photo — PNG (bytes) или file_id уже загруженной картинки. Возвращает file_id."""
+        fields = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML",
+                  "disable_notification": "true" if silent else "false"}
+        if isinstance(photo, str):
+            res = self.call("sendPhoto", photo=photo, **fields)
+        else:
+            boundary = uuid.uuid4().hex
+            body = b"".join(
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'
+                .encode("utf-8") for k, v in fields.items()) + (
+                f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; '
+                f'filename="chart.png"\r\nContent-Type: image/png\r\n\r\n').encode() \
+                + photo + f"\r\n--{boundary}--\r\n".encode()
+            req = urllib.request.Request(
+                API.format(token=self.token, method="sendPhoto"), data=body,
+                headers={"content-type": f"multipart/form-data; boundary={boundary}"},
+                method="POST")
+            with self.opener.open(req, timeout=120) as r:
+                res = json.loads(r.read().decode("utf-8"))
+        sizes = (res.get("result") or {}).get("photo") or []
+        return sizes[-1]["file_id"] if sizes else None
+
+    def send_blocks(self, chat_id: int, blocks: list[dict]):
+        """Сводка: картинка с подписью, затем следующая. Звук — только у первого сообщения."""
+        for k, b in enumerate(blocks):
+            silent, sent = k > 0, False
+            plain = re.sub(r"<[^>]+>", "", html.unescape(b["text"]))
+            if b.get("photo"):
+                try:
+                    cap = b["text"] if len(plain) <= 1000 else ""
+                    fid = self.send_photo(chat_id, b["photo"], cap, silent)
+                    if fid:
+                        b["photo"] = fid                 # дальше шлём без повторной загрузки
+                    sent = bool(cap)
+                    silent = True
+                except Exception as e:
+                    print(f"[bot {self.profile}] картинка сводки: {type(e).__name__}: {e}",
+                          flush=True)
+            if not sent:
+                self.say(chat_id, b["text"], raw=True, silent=silent)
+            time.sleep(0.15)
+
+    def say(self, chat_id: int, text: str, markup: dict | None = None, raw: bool = False,
+            silent: bool = False):
         parts = split(text if raw else to_html(text))
         for k, part in enumerate(parts):
             extra = {"reply_markup": markup} if markup and k == len(parts) - 1 else {}
+            if silent:
+                extra["disable_notification"] = True
             try:
                 self.call("sendMessage", chat_id=chat_id, text=part, parse_mode="HTML",
                           disable_web_page_preview=True, **extra)
@@ -282,10 +328,10 @@ class Bot:
                 return False                             # ответит обычный путь
             from gear.app.daily_sales.assistant import digest
             day = digest.loaded_date()
-            text = digest.build(day, day) if day else None
-            if not text:
+            parts = digest.blocks(day, day) if day else []
+            if not parts:
                 return False
-            self.say(chat_id, text, raw=True)
+            self.send_blocks(chat_id, parts)
             return True
         except Exception as e:
             print(f"[bot sales] сводка по кнопке: {type(e).__name__}: {e}", flush=True)
@@ -315,8 +361,9 @@ class Bot:
         from gear.models import TelegramAccess
         day = now.date() - timedelta(days=1)
         loaded = digest.loaded_date()
-        text = digest.build(day, loaded) if loaded and loaded >= day else None
-        if not text:
+        parts = digest.blocks(day, loaded) if loaded and loaded >= day else []
+        digest.greet(parts, now.date())
+        if not parts:
             print(f"[bot sales] сводка: продаж за {day:%d.%m.%Y} ещё нет (в базе по "
                   f"{loaded or '—'}), повтор через час", flush=True)
             if now.hour == DIGEST_HOURS[1] - 1:              # последняя попытка дня
@@ -328,7 +375,7 @@ class Bot:
         sent = 0
         for a in TelegramAccess.objects.filter(bot="sales", is_allowed=True):
             try:
-                self.say(a.tg_id, text, raw=True)
+                self.send_blocks(a.tg_id, parts)
                 sent += 1
             except Exception as e:
                 print(f"[bot sales] сводка → {a.tg_id}: {e}", flush=True)
@@ -588,12 +635,33 @@ class Command(BaseCommand):
         parser.add_argument("--profile", choices=["sales", "finance"], required=True)
         parser.add_argument("--digest-preview", action="store_true",
                             help="Показать текст сводки продаж и выйти")
+        parser.add_argument("--digest-test", action="store_true",
+                            help="Отправить сводку с картинками только на TELEGRAM_ADMIN_ID")
         parser.add_argument("--digest-date",
                             help="Дата для предпросмотра YYYY-MM-DD; по умолчанию — "
                                  "последний загруженный день")
 
     def handle(self, *args, **opts):
         profile = opts["profile"]
+        if opts.get("digest_test"):
+            from datetime import date, timedelta
+            from gear.app.daily_sales.assistant import digest
+            admin = (os.getenv("TELEGRAM_ADMIN_ID") or "").strip()
+            token = (os.getenv("TELEGRAM_BOT_TOKEN_SALES") or "").strip()
+            if not admin.lstrip("-").isdigit() or not token:
+                raise CommandError("Нужны TELEGRAM_ADMIN_ID и TELEGRAM_BOT_TOKEN_SALES в .env")
+            loaded = digest.loaded_date()
+            day = (date.fromisoformat(opts["digest_date"]) if opts.get("digest_date")
+                   else loaded or date.today() - timedelta(days=1))
+            parts = digest.greet(digest.blocks(day, loaded), date.today())
+            if not parts:
+                self.stdout.write(f"Продаж за {day:%d.%m.%Y} нет (в базе по {loaded}).")
+                return
+            Bot(token, "sales").send_blocks(int(admin), parts)
+            self.stdout.write(f"Сводка за {day:%d.%m.%Y} отправлена на {admin}: "
+                              f"блоков {len(parts)}, с картинкой "
+                              f"{sum(1 for b in parts if b.get('photo'))}.")
+            return
         if opts.get("digest_preview"):
             from datetime import date, timedelta
             from gear.app.daily_sales.assistant import digest
