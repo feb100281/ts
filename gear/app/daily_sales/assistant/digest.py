@@ -256,30 +256,49 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
     out.append({"text": "\n".join(lines), "photo": pic("продажи", lambda: ch.sales_days(
         d14, v14, f"Продажи за {day:%d.%m} — {_rub(t[NET_RUB])}", sub))})
 
-    # ---- 2. бренды: заметные изменения к тому же дню прошлой недели
-    if week in days.index:
-        cur = df[df[dcol] == day].groupby(bcol)[NET_RUB].sum()
-        old = df[df[dcol] == week].groupby(bcol)[NET_RUB].sum()
+    # ---- 2. бренды и категории: заметные изменения к тому же дню прошлой недели
+    def movers(cur, old, title, chart_title, what):
         diff = cur.sub(old, fill_value=0).sort_values()
         up, down = diff[diff >= BRAND_MIN].tail(3)[::-1], diff[diff <= -BRAND_MIN].head(3)
-        if len(up) or len(down):
-            top = max(list(up.items()) + list(down.items()), key=lambda x: abs(x[1]))
-            lines = ["<b>Бренды: кто вырос, кто просел</b>", _quote(
-                f"{UP if top[1] > 0 else DOWN} Сильнее всех {'вырос' if top[1] > 0 else 'просел'} "
-                f"<b>{escape(str(top[0]))}</b>: {'+' if top[1] > 0 else '−'}{_rub(abs(top[1]))} "
-                f"{WD_TO[week.weekday()]}.")]
-            if len(up):
-                lines.append(f"{UP} Выросли: " + ", ".join(
-                    f"{escape(str(b))} (<b>+{_rub(v)}</b>)" for b, v in up.items()) + ".")
-            if len(down):
-                lines.append(f"{DOWN} Просели: " + ", ".join(
-                    f"{escape(str(b))} (<b>−{_rub(abs(v))}</b>)" for b, v in down.items()) + ".")
-            lines.append("<i>Сравниваем вчерашний день с тем же днём прошлой недели, продажи "
-                         "за вычетом возвратов.</i>")
-            rows = [(str(b), float(v)) for b, v in list(up.items()) + list(down.items())]
-            out.append({"text": "\n".join(lines), "photo": pic("бренды", lambda: ch.brands(
-                rows, "Бренды: что выросло и что просело",
-                f"{day:%d.%m} к {wd_w} {week:%d.%m} · изменение продаж"))})
+        if not (len(up) or len(down)):
+            return None
+        top = max(list(up.items()) + list(down.items()), key=lambda x: abs(x[1]))
+        lines = [f"<b>{title}</b>", _quote(
+            f"{UP if top[1] > 0 else DOWN} Сильнее всего {'выросли' if top[1] > 0 else 'просели'} "
+            f"продажи {'в категории ' if 'категор' in what else ''}"
+            f"<b>{escape(str(top[0]))}</b>: {'+' if top[1] > 0 else '−'}"
+            f"{_rub(abs(top[1]))} {WD_TO[week.weekday()]}.")]
+        if len(up):
+            lines.append(f"{UP} Выросли: " + ", ".join(
+                f"{escape(str(k))} (<b>+{_rub(v)}</b>)" for k, v in up.items()) + ".")
+        if len(down):
+            lines.append(f"{DOWN} Просели: " + ", ".join(
+                f"{escape(str(k))} (<b>−{_rub(abs(v))}</b>)" for k, v in down.items()) + ".")
+        lines.append(f"<i>Сравниваем вчерашний день с тем же днём прошлой недели, {what}, "
+                     "продажи за вычетом возвратов.</i>")
+        rows = [(str(k), float(v)) for k, v in list(up.items()) + list(down.items())]
+        return {"text": "\n".join(lines), "photo": pic(title, lambda: ch.brands(
+            rows, chart_title, f"{day:%d.%m} к {wd_w} {week:%d.%m} · изменение продаж"))}
+
+    if week in days.index:
+        b = movers(df[df[dcol] == day].groupby(bcol)[NET_RUB].sum(),
+                   df[df[dcol] == week].groupby(bcol)[NET_RUB].sum(),
+                   "Бренды: кто вырос, кто просел", "Бренды: что выросло и что просело",
+                   "по брендам")
+        if b:
+            out.append(b)
+
+        def cat_block():
+            c1, c0 = fetch(day, day, "category", []), fetch(week, week, "category", [])
+            if c1.empty or c0.empty:
+                return None
+            return movers(c1.groupby(c1.columns[0])[NET_RUB].sum(),
+                          c0.groupby(c0.columns[0])[NET_RUB].sum(),
+                          "Категории: кто вырос, кто просел",
+                          "Категории: что выросло и что просело", "по категориям товара")
+        b = _safe("категории", cat_block)
+        if b:
+            out.append(b)
 
     # ---- 3. остатки: все места вместе, изменение за день и за неделю
     def stock_block():
@@ -321,45 +340,50 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
     if b:
         out.append(b)
 
-    # ---- 4. маржинальность с начала месяца: как в дашборде продаж (после комиссии WB)
-    def margin_block():
+    # ---- 4. маржинальность с начала месяца: после всех расходов WB, по брендам и категориям
+    def margin_block(group, col, title, whose, many):
         from .margin import margin_table
-        m, start, end, _ = margin_table(m_start.isoformat(), day.isoformat(), "brand")
+        m, start, end, _ = margin_table(m_start.isoformat(), day.isoformat(), group)
         if m is None or m.empty:
             return None
-        rev_c, md_c, md2_c = "Выручка без НДС, ₽", "МД1 после комиссии, ₽", "МД2 после расходов WB, ₽"
-        m = m[m["Бренд"].notna() & ~m["Бренд"].astype(str).str.startswith("Итого")]
-        rev, md, md2 = float(m[rev_c].sum()), float(m[md_c].sum()), float(m[md2_c].sum())
+        rev_c, md1_c, md_c = "Выручка без НДС, ₽", "МД1 после комиссии, ₽", "МД2 после расходов WB, ₽"
+        m = m[m[col].notna() & ~m[col].astype(str).str.startswith("Итого")]
+        rev, md, md1 = float(m[rev_c].sum()), float(m[md_c].sum()), float(m[md1_c].sum())
         if not rev:
             return None
         avg = md / rev * 100
         big = m[m[rev_c] > 0].sort_values(rev_c, ascending=False).head(8)
-        rows = [(str(r["Бренд"]), float(r[md_c]) / float(r[rev_c]) * 100, float(r[md_c]))
+        rows = [(str(r[col]), float(r[md_c]) / float(r[rev_c]) * 100, float(r[md_c]))
                 for _, r in big.iterrows()]
         best, worst = max(rows, key=lambda r: r[1]), min(rows, key=lambda r: r[1])
         loss = sorted([r for r in rows if r[2] < 0], key=lambda r: r[1])[:3]
-        period = (f"За {_long(start)}" if start == end
-                  else f"С {start.day} по {_long(end)}")
-        lines = ["<b>Маржинальность с начала месяца</b>",
+        period = f"За {_long(start)}" if start == end else f"С {start.day} по {_long(end)}"
+        lines = [f"<b>{title}</b>",
                  _quote(f"{period} заработали <b>{_rub(md)}</b> маржи — это <b>{pc(avg)}</b> "
                         "от выручки без НДС."),
-                 f"{UP} Самая высокая маржа у {escape(best[0])} — <b>{pc(best[1])}</b>."]
+                 f"{UP} Самая высокая маржа {whose} {escape(best[0])} — <b>{pc(best[1])}</b>."]
         if loss:
             lines.append(f"{DOWN} В убыток продаём: " + ", ".join(
                 f"{escape(r[0])} (<b>{pc(r[1])}</b>)" for r in loss) + ".")
         else:
-            lines.append(f"{UP} Убыточных среди крупных брендов нет; ниже всех {escape(worst[0])} "
+            lines.append(f"{UP} Убыточных среди крупных {many} нет; ниже всех {escape(worst[0])} "
                          f"— <b>{pc(worst[1])}</b>.")
-        lines.append(f"После логистики, хранения, штрафов и продвижения WB остаётся "
-                     f"<b>{_rub(md2)}</b> — {pc(md2 / rev * 100)}.")
-        lines.append("<i>Маржа — как в дашборде продаж: выручка без НДС минус себестоимость и "
-                     "комиссия WB. На графике 8 крупнейших брендов.</i>")
-        return {"text": "\n".join(lines), "photo": pic("маржа", lambda: ch.margin(
-            rows, avg, f"Маржинальность с начала месяца — {pc(avg)}",
-            f"{rng(start, end)} · маржа после себестоимости и комиссии WB, % от выручки без НДС"))}
-    b = _safe("маржа", margin_block)
-    if b:
-        out.append(b)
+        if group == "brand":
+            lines.append(f"В дашборде продаж маржа выше — <b>{pc(md1 / rev * 100)}</b>: там она "
+                         "считается только после себестоимости и комиссии WB.")
+            lines.append("<i>В начале месяца цифра ещё уточняется. На графике 8 крупнейших "
+                         "брендов.</i>")
+        else:
+            lines.append(f"<i>Тот же расчёт, что по брендам. На графике 8 крупнейших {many}.</i>")
+        return {"text": "\n".join(lines), "photo": pic(title, lambda: ch.margin(
+            rows, avg, f"{title} — {pc(avg)}",
+            f"{rng(start, end)} · маржа после всех расходов WB, % от выручки без НДС"))}
+    for args in (("brand", "Бренд", "Маржинальность с начала месяца", "у", "брендов"),
+                 ("category", "Категория", "Маржинальность по категориям", "в категории",
+                  "категорий")):
+        b = _safe(args[2], lambda: margin_block(*args))
+        if b:
+            out.append(b)
 
     # ---- 5. расходы WB: вчера и 7 дней против предыдущих 7
     w_from = day - timedelta(days=6)

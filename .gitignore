@@ -32,3 +32,4 @@ Thumbs.db
 *.zst
 **/pricing_strategy/_cache/
 data/.sales_digest_sent
+data/.sales_digest_off

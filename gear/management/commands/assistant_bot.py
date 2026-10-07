@@ -30,7 +30,7 @@ API = "https://api.telegram.org/bot{token}/{method}"
 HISTORY_TURNS = 8            # сколько последних реплик помнить в диалоге
 HISTORY_TTL = 2 * 60 * 60    # через сколько секунд тишины диалог начинается заново
 LIMIT = 3900                 # запас до лимита Telegram 4096 символов
-DIGEST_HOURS = (6, 12)        # МСК: сводку продаж шлём с 6:00, повтор раз в час до 12:00
+DIGEST_HOURS = (7, 12)        # МСК: сводку продаж шлём с 7:00, повтор раз в час до 12:00
 QUIET = ((23, 20), (23, 57))  # МСК: ночная загрузка данных, вопросы не принимаем
 NAMES = {"sales": "помощник по продажам", "finance": "финансовый помощник"}
 
@@ -350,6 +350,8 @@ class Bot:
         if time.time() - self.digest_try < 3600:
             return
         mark = self._digest_mark()
+        if mark.with_name(".sales_digest_off").exists():     # рассылка выключена вручную
+            return
         try:
             if mark.exists() and mark.read_text().strip() == today:
                 self.digest_done = today
