@@ -316,7 +316,7 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
         if st_w and st_w["total"] and st["total"] != st_w["total"]:
             dlt = st["total"] - st_w["total"]
             head += f" — {word(dlt)}, чем неделю назад ({pc(dlt / st_w['total'] * 100)})"
-        lines = [f"<b>Остатки на {st['date']:%d.%m}</b>", _quote(head + "."),
+        lines = [f"<b>Остатки товаров на {st['date']:%d.%m}</b>", _quote(head + "."),
                  "Где лежит товар: " + ", ".join(
                      f"{name} — <b>{_n(st[k])}</b>" for name, k in places) + "."]
         if st_w:
@@ -335,7 +335,7 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
             + "склады WB, в пути, наш склад FBS"
         return {"text": "\n".join(lines), "photo": pic("остатки", lambda: ch.stocks(
             [r["date"] for r in ser], [r["total"] for r in ser], parts,
-            f"Остатки на {st['date']:%d.%m} — {_n(st['total'])} шт", sub))}
+            f"Остатки товаров на {st['date']:%d.%m} — {_n(st['total'])} шт", sub))}
     b = _safe("остатки", stock_block)
     if b:
         out.append(b)
@@ -357,24 +357,30 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
                 for _, r in big.iterrows()]
         best, worst = max(rows, key=lambda r: r[1]), min(rows, key=lambda r: r[1])
         loss = sorted([r for r in rows if r[2] < 0], key=lambda r: r[1])[:3]
+
+        def reason(r):
+            """Главная причина убытка — по самой крупной статье."""
+            g = lambda c: abs(float(r.get(c) or 0))
+            if g("Себестоимость, ₽") >= float(r[rev_c]):
+                return "цена ниже себестоимости"
+            if float(r[md1_c]) <= 0:
+                return "себестоимость и комиссия съедают всю выручку"
+            if g("Продвижение WB, ₽") >= g("Расходы WB (логистика, хранение, штрафы), ₽"):
+                return "маржу съедает реклама"
+            return "маржу съедают логистика и хранение"
+        why = {str(r[col]): reason(r) for _, r in big.iterrows() if float(r[md_c]) < 0}
         period = f"За {_long(start)}" if start == end else f"С {start.day} по {_long(end)}"
         lines = [f"<b>{title}</b>",
                  _quote(f"{period} заработали <b>{_rub(md)}</b> маржи — это <b>{pc(avg)}</b> "
                         "от выручки без НДС."),
                  f"{UP} Самая высокая маржа {whose} {escape(best[0])} — <b>{pc(best[1])}</b>."]
         if loss:
-            lines.append(f"{DOWN} В убыток продаём: " + ", ".join(
-                f"{escape(r[0])} (<b>{pc(r[1])}</b>)" for r in loss) + ".")
+            lines.append(f"{DOWN} В убыток продаём:")
+            lines += [f"• {escape(r[0])} <b>{pc(r[1])}</b> — {why.get(r[0], 'расходы выше выручки')}"
+                      for r in loss]
         else:
             lines.append(f"{UP} Убыточных среди крупных {many} нет; ниже всех {escape(worst[0])} "
                          f"— <b>{pc(worst[1])}</b>.")
-        if group == "brand":
-            lines.append(f"В дашборде продаж маржа выше — <b>{pc(md1 / rev * 100)}</b>: там она "
-                         "считается только после себестоимости и комиссии WB.")
-            lines.append("<i>В начале месяца цифра ещё уточняется. На графике 8 крупнейших "
-                         "брендов.</i>")
-        else:
-            lines.append(f"<i>Тот же расчёт, что по брендам. На графике 8 крупнейших {many}.</i>")
         return {"text": "\n".join(lines), "photo": pic(title, lambda: ch.margin(
             rows, avg, f"{title} — {pc(avg)}",
             f"{rng(start, end)} · маржа после всех расходов WB, % от выручки без НДС"))}
