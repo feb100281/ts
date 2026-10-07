@@ -36,7 +36,10 @@ wb_price AS (
     SELECT
         rrd_id,
 
-        SUM(val) AS retail_amount
+        -- цена покупателя после СПП, со знаком: продажа (+), возврат (-)
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0)
+        -
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS retail_amount
 
     FROM sales.sales_long
 
@@ -49,52 +52,36 @@ wb_price AS (
 -- =========================================================
 -- Комиссия WB
 --
--- Повторяем ту же методологию, которая используется
--- в DAILY_SALES_AGG:
+-- comission = retail_price - ppvz_for_pay (брутто, с НДС),
+-- dt - cr, обычно отрицательная.
 --
--- dt - cr
+-- НДС с комиссии берём ФАКТИЧЕСКИЙ из отчёта WB (ppvz_vw_nds = vwNds),
+-- а не comission * 22/122: внутри comission сидят СПП, ПВЗ и эквайринг,
+-- на которые WB НДС не предъявляет. При большой СПП ppvz_vw_nds
+-- отрицательный -> комиссия без НДС больше брутто.
 --
--- Комиссия приводится к значению без НДС.
---
--- В результате net_comission обычно отрицательная,
--- поэтому прибыль считается:
---
--- revenue_vatless
--- - cogs
--- + net_comission
+-- net_comission = comission_gross - vat_in_wb
+-- прибыль: revenue_vatless - cogs + net_comission
 -- =========================================================
 
 commissions AS (
     SELECT
         rrd_id,
         max(vat_rate) as vat_rate,
-        
 
-        COALESCE(
-            SUM(
-                val
-                / (100 + vat_rate)
-                * 100
-            ) FILTER (
-                WHERE field = 'comission'
-                  AND oper = 'dt'
-            ),
-            0
-        )
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
         -
-        COALESCE(
-            SUM(
-                val
-                / (100 + vat_rate)
-                * 100
-            ) FILTER (
-                WHERE field = 'comission'
-                  AND oper = 'cr'
-            ),
-            0
-        ) AS net_comission
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
+            AS comission_gross,
+
+        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'dt'), 0)
+        -
+        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'cr'), 0)
+            AS vat_in_wb
 
     FROM sales.sales_long
+
+    WHERE field IN ('comission', 'ppvz_vw_nds')
 
     GROUP BY
         rrd_id
@@ -117,10 +104,11 @@ SELECT
         0
     ) AS retail_amount,
 
-    COALESCE(
-        c.net_comission,
-        0
-    ) AS net_comission,
+    COALESCE(c.comission_gross, 0)
+    - COALESCE(c.vat_in_wb, 0)
+        AS net_comission,
+
+    COALESCE(c.vat_in_wb, 0) AS vat_in_wb,
 
     -- =====================================================
     -- Себестоимость
