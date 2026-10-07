@@ -69,6 +69,7 @@ def insert_new_rows(con:DuckDBPyConnection):
     retail_amount,
     loyalty_discount,
     ppvz_for_pay,
+    ppvz_vw_nds,
     delivery_rub,
     storage_fee,
     acceptance,
@@ -106,6 +107,7 @@ def insert_new_rows(con:DuckDBPyConnection):
     retail_amount,
     loyalty_discount,
     ppvz_for_pay,
+    ppvz_vw_nds,
     delivery_rub,
     storage_fee,
     acceptance,
@@ -144,6 +146,7 @@ FROM (
         json_extract_string(payload, '$.retailAmount')::DOUBLE AS retail_amount,
         json_extract_string(payload, '$.loyaltyDiscount')::DOUBLE AS loyalty_discount,
         json_extract_string(payload, '$.forPay')::DOUBLE AS ppvz_for_pay,
+        json_extract_string(payload, '$.vwNds')::DOUBLE AS ppvz_vw_nds,
         json_extract_string(payload, '$.deliveryService')::DOUBLE AS delivery_rub,
         json_extract_string(payload, '$.paidStorage')::DOUBLE AS storage_fee,
         json_extract_string(payload, '$.paidAcceptance')::DOUBLE AS acceptance,
@@ -218,6 +221,7 @@ SELECT
     json_extract(j, '$.retailAmount')::DOUBLE AS retail_amount,
     json_extract(j, '$.loyaltyDiscount')::DOUBLE AS loyalty_discount,
     json_extract(j, '$.forPay')::DOUBLE AS ppvz_for_pay,
+    json_extract(j, '$.vwNds')::DOUBLE AS ppvz_vw_nds,
     json_extract(j, '$.deliveryService')::DOUBLE AS delivery_rub,
     json_extract(j, '$.paidStorage')::DOUBLE AS storage_fee,
     json_extract(j, '$.paidAcceptance')::DOUBLE AS acceptance,
@@ -249,6 +253,7 @@ COALESCE(retail_price::double) as retail_price,
 COALESCE(retail_amount::double) as retail_amount,
 COALESCE(ppvz_for_pay::double) as ppvz_for_pay,
 COALESCE(retail_price::double) - COALESCE(ppvz_for_pay::double) as comission,
+COALESCE(ppvz_vw_nds::double) as ppvz_vw_nds, -- НДС с вознаграждения WB (vwNds), уже внутри comission
 COALESCE(delivery_rub::double) as delivery_rub,
 COALESCE(storage_fee::double) as storage_fee,
 COALESCE(acceptance::double) as acceptance,
@@ -284,8 +289,8 @@ END AS val,
 CASE 
 WHEN x.field in ('retail_price', 'retail_amount', 'ppvz_for_pay') and x.dtn = 'Продажа' then 'dt'
 WHEN x.field in ('retail_price', 'retail_amount', 'ppvz_for_pay') and x.dtn = 'Возврат' then 'cr'
-WHEN x.field in ('comission','cashback_amount','cashback_commission_change') and x.dtn = 'Продажа' then 'cr'
-WHEN x.field in ('comission','cashback_amount','cashback_commission_change') and x.dtn = 'Возврат' then 'dt'
+WHEN x.field in ('comission','ppvz_vw_nds','cashback_amount','cashback_commission_change') and x.dtn = 'Продажа' then 'cr'
+WHEN x.field in ('comission','ppvz_vw_nds','cashback_amount','cashback_commission_change') and x.dtn = 'Возврат' then 'dt'
 WHEN x.field = 'additional_payment' and x.val < 0 then 'dt' 
 ELSE 'cr'
 END as oper,
@@ -327,6 +332,7 @@ field::text as field,
 val::bigint as val,
 case when oper = 'dt' then 'dt_wb' else 'cr_wb' end as oper
 from sales.sales_long
+where field <> 'ppvz_vw_nds' -- аналитическое поле, сидит внутри comission
 union all
 select 
 date_from::date as date_from,
@@ -335,6 +341,7 @@ field::text as field,
 round(val::bigint / (100+vat_rate) * 100,0)::bigint as val,
 case when oper = 'dt' then 'dt_pl' else 'cr_pl' end as oper
 from sales.sales_long
+where field <> 'ppvz_vw_nds' -- аналитическое поле, сидит внутри comission
 union all
 select 
 date_from::date as date_from,
@@ -343,6 +350,7 @@ field::text as field,
 round(val::bigint / (100+vat_rate) * vat_rate,0)::bigint as val,
 case when oper = 'dt' then 'dt_vat' else 'cr_vat' end as oper
 from sales.sales_long
+where field <> 'ppvz_vw_nds'
 )
 select 
 x.date_from,
