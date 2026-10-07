@@ -95,25 +95,60 @@ def _ths(v):
     return f"{float(v or 0) / 1000:.1f}".replace(".", ",")
 
 
-def _pre(rows) -> str:
-    """Таблица моноширинным блоком: первая колонка влево, числа вправо, стрелки — в столбик."""
+def _pre(rows, wide: bool = True) -> str:
+    """Таблица моноширинным блоком с границами колонок; стрелки стоят в столбик."""
     def split(c):
         c = str(c)
         return (c[0], c[2:]) if c[:2] in ("▲ ", "▼ ") else ("", c)
     cells = [[split(c) for c in r] for r in rows]
     n = len(rows[0])
     arrow = [any(r[i][0] for r in cells) for i in range(n)]
-    w = [max(len(r[i][1]) for r in cells) for i in range(n)]
+    w = [max(len(r[i][1]) for r in cells) + (1 if arrow[i] else 0) for i in range(n)]
+    sep, cross = (" │ ", "─┼─") if wide else ("│", "┼")
     out = []
-    for r in cells:
-        line = []
-        for i, (a, v) in enumerate(r):
-            if i == 0:
-                line.append(v.ljust(w[i]))
-            else:
-                line.append((a or " " if arrow[i] else "") + v.rjust(w[i]))
-        out.append(" ".join(line).rstrip())
+    for k, r in enumerate(cells):
+        line = [r[0][1].ljust(w[0])] + [
+            ((a or " ") if arrow[i] else "") + v.rjust(w[i] - (1 if arrow[i] else 0))
+            for i, (a, v) in enumerate(r) if i]
+        out.append(sep.join(line).rstrip())
+        if k == 0:
+            out.append(cross.join("─" * x for x in w))
     return "<pre>" + escape("\n".join(out)) + "</pre>"
+
+
+MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
+          "сентября", "октября", "ноября", "декабря")
+WD_FULL = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
+WD_IN = ("в понедельник", "во вторник", "в среду", "в четверг", "в пятницу", "в субботу",
+         "в воскресенье")
+WD_LAST = ("в прошлый понедельник", "в прошлый вторник", "в прошлую среду", "в прошлый четверг",
+           "в прошлую пятницу", "в прошлую субботу", "в прошлое воскресенье")
+WD_TO = ("к прошлому понедельнику", "к прошлому вторнику", "к прошлой среде",
+         "к прошлому четвергу", "к прошлой пятнице", "к прошлой субботе",
+         "к прошлому воскресенью")
+
+
+def _long(d: date) -> str:
+    return f"{d.day} {MONTHS[d.month - 1]}"
+
+
+def _span_long(a: date, b: date) -> str:
+    if a == b:
+        return _long(a)
+    return f"{a.day}–{_long(b)}" if a.month == b.month else f"{_long(a)} – {_long(b)}"
+
+
+UP, DOWN = "🟢", "🔴"          # цвет в тексте Telegram задать нельзя — только значком
+
+
+def _more(cur, prev) -> str:
+    """«на 12,3% больше» / «на 4,0% меньше» — для связного текста."""
+    if not prev:
+        return ""
+    p = (float(cur) - float(prev)) / abs(float(prev)) * 100
+    if abs(p) < 0.05:
+        return "столько же"
+    return f"на <b>{abs(p):.1f}".replace(".", ",") + ("% больше</b>" if p > 0 else "% меньше</b>")
 
 
 def _safe(what, fn):
@@ -168,38 +203,52 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
     wd, wd_w = WD[day.weekday()], WD[week.weekday()]
     week_val = span(week, week, NET_RUB)
     w_prev = (mon - timedelta(days=7), week)
+    pc = lambda v: f"{v:.1f}".replace(".", ",").replace("-", "−") + "%"
 
     # ---- 1. продажи
-    table = [("", "млн ₽", "шт", "изм."),
-             ("Вчера", _mln(t[NET_RUB]), _n(t[NET_QTY]), _chg(t[NET_RUB], week_val)),
-             ("Неделя", _mln(span(mon, day, NET_RUB)), _n(span(mon, day, NET_QTY)),
-              _chg(span(mon, day, NET_RUB), span(*w_prev, NET_RUB))),
-             ("Месяц", _mln(span(m_start, day, NET_RUB)), _n(span(m_start, day, NET_QTY)),
-              _chg(span(m_start, day, NET_RUB), span(pm_start, pm_to, NET_RUB)))]
-    head = f"<b>{_rub(t[NET_RUB])}</b> · {_n(t[NET_QTY])} шт"
+    wk, wk_old = span(mon, day, NET_RUB), span(*w_prev, NET_RUB)
+    mo, mo_old = span(m_start, day, NET_RUB), span(pm_start, pm_to, NET_RUB)
+    lines = [f"<b>Продажи · {wd} {day:%d.%m}</b>",
+             _quote((f"{UP if t[NET_RUB] >= week_val else DOWN} " if week_val else "")
+                    + f"Вчера продали на <b>{_rub(t[NET_RUB])}</b> — это <b>{_n(t[NET_QTY])} шт</b> "
+                    "за вычетом возвратов.")]
+    cmp_ = []
     if week_val:
-        head += f" — <b>{_chg(t[NET_RUB], week_val)}</b> к прошл. {wd_w}"
-    lines = [f"<b>Продажи · {wd} {day:%d.%m.%Y}</b>", _quote(head), _pre(table),
-             f"<i>Вчера — к {wd_w} {week:%d.%m} · Неделя {rng(mon, day)} — к {rng(*w_prev)} · "
-             f"Месяц {rng(m_start, day)} — к {rng(pm_start, pm_to)}</i>", ""]
-    if prev in days.index:
-        lines.append(f"К {WD[prev.weekday()]} {prev:%d.%m}: <b>{_chg(t[NET_RUB], days.at[prev, NET_RUB])}</b>")
-    ret_rub = f" · −{_rub(abs(t[RET_RUB]))}" if RET_RUB in days.columns else ""
-    ret_pct = (f" ({float(t[RET]) / float(t[QTY]) * 100:.1f}".replace(".", ",") + "%)"
-               if t[QTY] else "")
-    lines += [f"Продано: <b>{_n(t[QTY])} шт</b> · {_rub(t[RUB])}",
-              f"Возвраты: −{_n(t[RET])} шт{ret_rub}{ret_pct}"]
+        cmp_.append(f"{_more(t[NET_RUB], week_val)}, чем {WD_LAST[week.weekday()]} "
+                    f"({_rub(week_val)})")
+    if prev in days.index and days.at[prev, NET_RUB]:
+        cmp_.append(f"{_more(t[NET_RUB], days.at[prev, NET_RUB])}, чем "
+                    f"{WD_IN[prev.weekday()]}")
+    if cmp_:
+        lines.append("Это " + " и ".join(cmp_) + ".")
+    tail = []
+    if day > mon and wk_old:
+        tail.append(f"С начала недели наторговали на <b>{_rub(wk)}</b> — {_more(wk, wk_old)}, чем за "
+                    "те же дни прошлой недели.")
+    if day > m_start and mo_old:
+        tail.append(f"С начала месяца — <b>{_rub(mo)}</b>, {_more(mo, mo_old)}, чем за "
+                    f"{_span_long(pm_start, pm_to)}.")
+    if tail:
+        lines.append(" ".join(tail))
+    lines.append(_pre([("", "млн ₽", "шт", "изм."),
+                       ("Вчера", _mln(t[NET_RUB]), _n(t[NET_QTY]), _chg(t[NET_RUB], week_val)),
+                       ("Неделя", _mln(wk), _n(span(mon, day, NET_QTY)), _chg(wk, wk_old)),
+                       ("Месяц", _mln(mo), _n(span(m_start, day, NET_QTY)), _chg(mo, mo_old))]))
+    if t[QTY]:
+        ret_rub = f" на {_rub(abs(t[RET_RUB]))}" if RET_RUB in days.columns else ""
+        lines.append(f"Покупатели вернули <b>{_n(t[RET])} шт</b>{ret_rub} — это "
+                     f"{pc(float(t[RET]) / float(t[QTY]) * 100)} от проданного.")
     if t[NET_QTY] > 0:
-        check = f"Средний чек: <b>{_n(t[NET_RUB] / t[NET_QTY])} ₽</b> до СПП"
-        if AFTER in days.columns:
-            spp = (1 - float(t[AFTER]) / float(t[NET_RUB])) * 100 if t[NET_RUB] else 0
-            check += (f" · <b>{_n(t[AFTER] / t[NET_QTY])} ₽</b> после "
-                      f"(скидка WB {spp:.1f}".replace(".", ",") + "%)")
-        lines.append(check)
+        check = f"Средний чек — <b>{_n(t[NET_RUB] / t[NET_QTY])} ₽</b> по нашей цене"
+        if AFTER in days.columns and t[NET_RUB]:
+            spp = (1 - float(t[AFTER]) / float(t[NET_RUB])) * 100
+            check += (f"; покупатель со скидкой WB ({pc(spp)}) платил в среднем "
+                      f"<b>{_n(t[AFTER] / t[NET_QTY])} ₽</b>")
+        lines.append(check + ".")
     if PAY in days.columns:
-        lines.append(f"К перечислению от WB: <b>{_rub(t[PAY])}</b>")
-    lines += ["", f"<i>Как на сайте WB, с НДС, до СПП, продажи минус возвраты. "
-                  f"Данные в базе по {(loaded or day):%d.%m}.</i>"]
+        lines.append(f"WB перечислит нам за этот день <b>{_rub(t[PAY])}</b>.")
+    lines.append(f"<i>Как на сайте WB, с НДС, до СПП. Данные в базе по "
+                 f"{(loaded or day):%d.%m}.</i>")
     d14 = [day - timedelta(days=13 - i) for i in range(14)]
     v14 = [float(days.at[d, NET_RUB]) / 1e6 if d in days.index else 0.0 for d in d14]
     sub = (f"{_chg(t[NET_RUB], week_val)} к {wd_w} {week:%d.%m} · " if week_val else "") \
@@ -214,13 +263,19 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
         diff = cur.sub(old, fill_value=0).sort_values()
         up, down = diff[diff >= BRAND_MIN].tail(3)[::-1], diff[diff <= -BRAND_MIN].head(3)
         if len(up) or len(down):
-            lines = [f"<b>Бренды за день</b> · к {wd_w} {week:%d.%m}"]
             top = max(list(up.items()) + list(down.items()), key=lambda x: abs(x[1]))
-            lines.append(_quote(
-                f"Сильнее всех {'вырос' if top[1] > 0 else 'просел'} "
-                f"<b>{escape(str(top[0]))}</b>: {'+' if top[1] > 0 else '−'}{_rub(abs(top[1]))}"))
-            lines += [f"▲ {escape(str(b))} <b>+{_rub(v)}</b>" for b, v in up.items()]
-            lines += [f"▼ {escape(str(b))} <b>−{_rub(abs(v))}</b>" for b, v in down.items()]
+            lines = ["<b>Бренды: кто вырос, кто просел</b>", _quote(
+                f"{UP if top[1] > 0 else DOWN} Сильнее всех {'вырос' if top[1] > 0 else 'просел'} "
+                f"<b>{escape(str(top[0]))}</b>: {'+' if top[1] > 0 else '−'}{_rub(abs(top[1]))} "
+                f"{WD_TO[week.weekday()]}.")]
+            if len(up):
+                lines.append(f"{UP} Выросли: " + ", ".join(
+                    f"{escape(str(b))} (<b>+{_rub(v)}</b>)" for b, v in up.items()) + ".")
+            if len(down):
+                lines.append(f"{DOWN} Просели: " + ", ".join(
+                    f"{escape(str(b))} (<b>−{_rub(abs(v))}</b>)" for b, v in down.items()) + ".")
+            lines.append("<i>Сравниваем вчерашний день с тем же днём прошлой недели, продажи "
+                         "за вычетом возвратов.</i>")
             rows = [(str(b), float(v)) for b, v in list(up.items()) + list(down.items())]
             out.append({"text": "\n".join(lines), "photo": pic("бренды", lambda: ch.brands(
                 rows, "Бренды: что выросло и что просело",
@@ -235,17 +290,25 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
         by = {r["date"]: r for r in ser}
         st = ser[-1]
         st_d, st_w = by.get(st["date"] - timedelta(days=1)), by.get(st["date"] - timedelta(days=7))
-        places = (("Склады WB", "wb"), ("К клиенту", "to_client"),
-                  ("От клиента", "from_client"), ("Склад FBS", "fbs"), ("Итого", "total"))
-        lines = [f"<b>Остатки на {st['date']:%d.%m}: {_n(st['total'])} шт</b>"]
-        if st_w and st_w["total"]:
+        places = (("на нашем складе FBS", "fbs"), ("на складах WB", "wb"),
+                  ("едет к покупателям", "to_client"), ("возвращается от покупателей", "from_client"))
+        word = lambda v: f"на {_n(abs(v))} шт {'больше' if v > 0 else 'меньше'}"
+        head = f"Всего у нас <b>{_n(st['total'])} шт</b> товара"
+        if st_w and st_w["total"] and st["total"] != st_w["total"]:
             dlt = st["total"] - st_w["total"]
-            lines.append(_quote(f"За неделю <b>{_diff(dlt)} шт</b> "
-                                f"({_chg(st['total'], st_w['total'])})"))
-        lines.append(_pre([("", "шт", "день", "неделя")] + [
-            (name, _n(st[k]), _diff(st[k] - st_d[k]) if st_d else "—",
-             _diff(st[k] - st_w[k]) if st_w else "—") for name, k in places]))
-        lines.append("<i>Все места: склады WB, в пути к клиенту и от клиента, наш склад FBS.</i>")
+            head += f" — {word(dlt)}, чем неделю назад ({pc(dlt / st_w['total'] * 100)})"
+        lines = [f"<b>Остатки на {st['date']:%d.%m}</b>", _quote(head + "."),
+                 "Где лежит товар: " + ", ".join(
+                     f"{name} — <b>{_n(st[k])}</b>" for name, k in places) + "."]
+        if st_w:
+            name, k = max(places, key=lambda p: abs(st[p[1]] - st_w[p[1]]))
+            if st[k] != st_w[k]:
+                lines.append(f"За неделю сильнее всего изменилось «{name}»: "
+                             f"<b>{_diff(st[k] - st_w[k])} шт</b>.")
+        if st_d and st["total"] != st_d["total"]:
+            lines.append(f"За вчерашний день общий остаток: <b>{_diff(st['total'] - st_d['total'])} "
+                         "шт</b>.")
+        lines.append("<i>Считаем все места вместе: склады WB, товар в пути и наш склад FBS.</i>")
         parts = [(n, st[k], (st[k] - st_w[k]) if st_w else None) for n, k in (
             ("Склад FBS", "fbs"), ("Склады WB", "wb"), ("В пути к клиенту", "to_client"),
             ("В пути от клиента", "from_client"))]
@@ -258,15 +321,15 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
     if b:
         out.append(b)
 
-    # ---- 4. маржинальность с начала месяца по брендам
+    # ---- 4. маржинальность с начала месяца: как в дашборде продаж (после комиссии WB)
     def margin_block():
         from .margin import margin_table
         m, start, end, _ = margin_table(m_start.isoformat(), day.isoformat(), "brand")
         if m is None or m.empty:
             return None
-        rev_c, md_c = "Выручка без НДС, ₽", "МД2 после расходов WB, ₽"
+        rev_c, md_c, md2_c = "Выручка без НДС, ₽", "МД1 после комиссии, ₽", "МД2 после расходов WB, ₽"
         m = m[m["Бренд"].notna() & ~m["Бренд"].astype(str).str.startswith("Итого")]
-        rev, md = float(m[rev_c].sum()), float(m[md_c].sum())
+        rev, md, md2 = float(m[rev_c].sum()), float(m[md_c].sum()), float(m[md2_c].sum())
         if not rev:
             return None
         avg = md / rev * 100
@@ -274,21 +337,26 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
         rows = [(str(r["Бренд"]), float(r[md_c]) / float(r[rev_c]) * 100, float(r[md_c]))
                 for _, r in big.iterrows()]
         best, worst = max(rows, key=lambda r: r[1]), min(rows, key=lambda r: r[1])
-        loss = [r for r in rows if r[2] < 0]
-        pc = lambda v: f"{v:.1f}".replace(".", ",").replace("-", "−") + "%"
-        lines = [f"<b>Маржинальность с начала месяца: {pc(avg)}</b>",
-                 _quote(f"Маржинальный доход <b>{_rub(md)}</b> при выручке {_rub(rev)} без НДС"),
-                 f"▲ Лучше всех: {escape(best[0])} <b>{pc(best[1])}</b>"]
+        loss = sorted([r for r in rows if r[2] < 0], key=lambda r: r[1])[:3]
+        period = (f"За {_long(start)}" if start == end
+                  else f"С {start.day} по {_long(end)}")
+        lines = ["<b>Маржинальность с начала месяца</b>",
+                 _quote(f"{period} заработали <b>{_rub(md)}</b> маржи — это <b>{pc(avg)}</b> "
+                        "от выручки без НДС."),
+                 f"{UP} Самая высокая маржа у {escape(best[0])} — <b>{pc(best[1])}</b>."]
         if loss:
-            lines.append("▼ В убытке: " + "; ".join(
-                f"{escape(r[0])} <b>{pc(r[1])}</b>" for r in sorted(loss, key=lambda r: r[1])[:3]))
+            lines.append(f"{DOWN} В убыток продаём: " + ", ".join(
+                f"{escape(r[0])} (<b>{pc(r[1])}</b>)" for r in loss) + ".")
         else:
-            lines.append(f"▼ Ниже всех: {escape(worst[0])} <b>{pc(worst[1])}</b>")
-        lines.append(f"<i>{rng(start, end)} · управленческая маржа: выручка без НДС минус "
-                     "себестоимость, комиссия и расходы WB. Показаны 8 крупнейших брендов.</i>")
+            lines.append(f"{UP} Убыточных среди крупных брендов нет; ниже всех {escape(worst[0])} "
+                         f"— <b>{pc(worst[1])}</b>.")
+        lines.append(f"После логистики, хранения, штрафов и продвижения WB остаётся "
+                     f"<b>{_rub(md2)}</b> — {pc(md2 / rev * 100)}.")
+        lines.append("<i>Маржа — как в дашборде продаж: выручка без НДС минус себестоимость и "
+                     "комиссия WB. На графике 8 крупнейших брендов.</i>")
         return {"text": "\n".join(lines), "photo": pic("маржа", lambda: ch.margin(
             rows, avg, f"Маржинальность с начала месяца — {pc(avg)}",
-            f"{rng(start, end)} · маржа, % от выручки без НДС, и маржинальный доход"))}
+            f"{rng(start, end)} · маржа после себестоимости и комиссии WB, % от выручки без НДС"))}
     b = _safe("маржа", margin_block)
     if b:
         out.append(b)
@@ -301,28 +369,33 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
     if costs:
         tot = [sum(c[i] for c in costs) for i in (1, 2, 3)]
         sales7 = span(w_from, day, RUB)
-        share = (f"{tot[1] / sales7 * 100:.1f}".replace(".", ",") + "% от продаж"
-                 if sales7 else "")
-        lines += ["<b>Расходы WB</b> · тыс ₽, с НДС",
-                  _quote(f"За 7 дней <b>{_rub(tot[1])}</b>"
-                         + (f" — {share}" if share else "")
-                         + f" · {_chg(tot[1], tot[2])} к предыдущим 7"),
-                  _pre([("", "вчера", "7 дней", "изм.")]
+        mark = f"{UP if tot[1] <= tot[2] else DOWN} " if tot[2] else ""      # рост расходов — красный
+        head = f"{mark}За последние 7 дней WB удержал с нас <b>{_rub(tot[1])}</b>"
+        if sales7:
+            head += f" — это {pc(tot[1] / sales7 * 100)} от продаж"
+        if tot[2]:
+            head += f" и {_more(tot[1], tot[2])}, чем неделей раньше"
+        big = max(costs, key=lambda c: c[2])
+        lines += ["<b>Расходы WB</b>", _quote(head + "."),
+                  f"Больше всего ушло на «{big[0].lower()}» — <b>{_rub(big[2])}</b>. "
+                  f"Вчера WB удержал <b>{_rub(tot[0])}</b>.",
+                  _pre([("тыс ₽", "вчера", "7 дней", "изм.")]
                        + [(n, _ths(d), _ths(c), _chg(c, o)) for n, d, c, o in costs]
-                       + [("Итого", _ths(tot[0]), _ths(tot[1]), _chg(tot[1], tot[2]))]),
-                  f"<i>7 дней: {rng(w_from, day)}. По дате операции в отчёте WB; "
-                  "комиссия WB не входит.</i>", ""]
-    lines.append("<i>Подробности — спросите меня: по брендам, артикулам, в Excel.</i>")
+                       + [("Итого", _ths(tot[0]), _ths(tot[1]), _chg(tot[1], tot[2]))], wide=False),
+                  f"<i>7 дней — это {_span_long(w_from, day)}, сравниваем с предыдущими 7 днями. "
+                  "С НДС, по дате операции в отчёте WB; комиссия WB сюда не входит.</i>", ""]
+    lines.append("<i>Хотите подробнее — напишите мне вопрос: по брендам, артикулам, в Excel.</i>")
     out.append({"text": "\n".join(lines), "photo": None})
     return out
 
 
-def greet(parts: list[dict], today: date) -> list[dict]:
-    """Приветствие в начале утренней рассылки (в ответе на кнопку его нет)."""
+def greet(parts: list[dict], today: date, day: date | None = None) -> list[dict]:
+    """Приветствие отдельным первым сообщением утренней рассылки (на кнопке его нет)."""
     if parts:
         extra = {0: " Хорошей недели!", 4: " Пятница!"}.get(today.weekday(), "")
-        parts[0]["text"] = (f"Доброе утро, коллеги! ☀️{extra}\nВот как прошёл вчерашний день.\n\n"
-                            + parts[0]["text"])
+        when = f" — <b>{WD_FULL[day.weekday()]}, {_long(day)}</b>" if day else ""
+        parts.insert(0, {"photo": None, "text": (
+            f"Доброе утро, коллеги! ☀️{extra}\nВот как прошёл вчерашний день{when}.")})
     return parts
 
 

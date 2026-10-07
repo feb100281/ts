@@ -362,7 +362,7 @@ class Bot:
         day = now.date() - timedelta(days=1)
         loaded = digest.loaded_date()
         parts = digest.blocks(day, loaded) if loaded and loaded >= day else []
-        digest.greet(parts, now.date())
+        digest.greet(parts, now.date(), day)
         if not parts:
             print(f"[bot sales] сводка: продаж за {day:%d.%m.%Y} ещё нет (в базе по "
                   f"{loaded or '—'}), повтор через час", flush=True)
@@ -653,7 +653,7 @@ class Command(BaseCommand):
             loaded = digest.loaded_date()
             day = (date.fromisoformat(opts["digest_date"]) if opts.get("digest_date")
                    else loaded or date.today() - timedelta(days=1))
-            parts = digest.greet(digest.blocks(day, loaded), date.today())
+            parts = digest.greet(digest.blocks(day, loaded), date.today(), day)
             if not parts:
                 self.stdout.write(f"Продаж за {day:%d.%m.%Y} нет (в базе по {loaded}).")
                 return

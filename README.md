@@ -34,6 +34,9 @@ sudo systemctl restart ts-bot@sales && sleep 15 && sudo systemctl restart ts-bot
 
 Это превью продаж за вчерашний день в терминале (предыдущий день надо указать)
 python manage.py assistant_bot --profile sales --digest-preview --digest-date 2026-10-03
+
+ЭТО ОТПРАВКА СЕБЕ ПРИМЕР СООБЩЕНИЯ В ТЕЛЕГУ (БОТ)
+python manage.py assistant_bot --profile sales --digest-test
 _________
 
 
