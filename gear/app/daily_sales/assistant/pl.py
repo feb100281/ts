@@ -56,6 +56,8 @@ def _load(report_date: date) -> dict:
             con.execute(mp.read_sql(name))
         p = {"date_from": report_date}
         con.execute(mp.read_sql("margin.txt"), parameters=p)
+        from gear.management.commands.sql.read_query import ensure_pl_src
+        ensure_pl_src(con)
         con.execute(mp.read_sql("opex.txt"), parameters=p)
         con.execute(mp.read_sql("cf.txt"), parameters=p)
         con.execute(mp.read_sql("conv_loans.txt"),

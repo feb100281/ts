@@ -39,6 +39,7 @@ from .sql.read_query import (
     deposits,
     pl_notes,
     wb_payouts,
+    ensure_pl_src,
 )
 
 try:
@@ -285,6 +286,57 @@ PL_DETAIL_SECTIONS = OrderedDict([
 #  03. ТЕКСТЫ ПОЯСНЕНИЙ (листы NOTES)
 #      Формат блока: (заголовок, [абзацы...])
 # =============================================================================
+
+def zup_months() -> list:
+    """Месяцы, по которым есть начисления зарплаты из ЗУП (data/zup/payroll.parquet)."""
+    f = Path(settings.BASE_DIR) / "data" / "zup" / "payroll.parquet"
+    if not f.exists():
+        return []
+    try:
+        import pandas as pd
+        return sorted({date(d.year, d.month, 1)
+                       for d in pd.read_parquet(f, columns=["period"])["period"]})
+    except Exception:
+        return []
+
+
+def _month_ranges(months) -> str:
+    """[янв, фев, мар, май] → «01.2026–03.2026, 05.2026»."""
+    out, start, prev = [], None, None
+    for m in months:
+        nxt = date(prev.year + prev.month // 12, prev.month % 12 + 1, 1) if prev else None
+        if prev and m == nxt:
+            prev = m
+            continue
+        if start:
+            out.append(f"{start:%m.%Y}" + (f"–{prev:%m.%Y}" if prev != start else ""))
+        start = prev = m
+    if start:
+        out.append(f"{start:%m.%Y}" + (f"–{prev:%m.%Y}" if prev != start else ""))
+    return ", ".join(out)
+
+
+def payroll_note():
+    """Пояснение к зарплате в разделе 6: какие месяцы по начислению, какие по оплате."""
+    months = zup_months()
+    lines = [
+        "Строки «550100 Оплата труда», «550100 НДФЛ» и «550100 Страховые взносы».",
+        "За месяц, по которому есть расчётная ведомость из 1С:ЗУП, зарплата показана "
+        "ПО НАЧИСЛЕНИЮ: оплата труда = начислено за месяц минус НДФЛ, НДФЛ — удержанный "
+        "из начисления, страховые взносы — начисленные за месяц (единый тариф и взносы "
+        "на несчастные случаи). Оплата из банка по статье 550100 за такой месяц не "
+        "учитывается, чтобы не задвоить.",
+        "За месяц без ведомости ЗУП зарплата показана ПО ОПЛАТЕ ИЗ БАНКА (кассовый метод): "
+        "только выплаты сотрудникам по статье 550100; НДФЛ и взносы в такой месяц в "
+        "отчёт не попадают.",
+        "Подбор персонала и HR-сервисы — всегда по оплате из банка "
+        "(строка «550000 Расходы на персонал»).",
+        ("По начислению из ЗУП: " + _month_ranges(months) + ". Остальные месяцы — "
+         "по оплате из банка.") if months else
+        "Ведомостей ЗУП пока нет — все месяцы по оплате из банка.",
+    ]
+    return ("Зарплата в разделе 6: по начислению или по оплате", lines)
+
 
 NOTES_PL = [
     ("Назначение отчёта", [
@@ -3712,6 +3764,7 @@ def fetch_pack_data(con, date_from):
     con.execute(wb_costs)
     con.execute(dayly_sales_agg)
     con.execute(margin, parameters={"date_from": date_from})
+    ensure_pl_src(con)                    # зарплата по начислению из ЗУП, если есть
     con.execute(opex, parameters={"date_from": date_from})
     con.execute(cf, parameters={"date_from": date_from})
     con.execute(conv_loans, parameters={"date_from": date_from,
@@ -3995,7 +4048,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "
-                "показателей рентабельности", NOTES_PL)
+                "показателей рентабельности", NOTES_PL + [payroll_note()])
     build_notes(ws_nunit, "ПОЯСНЕНИЯ К ЮНИТ-ЭКОНОМИКЕ",
                 "Что показывает каждый показатель, как считается и почему "
                 "не сходится с кассой и отчётом WB", NOTES_UNIT)
@@ -4214,6 +4267,7 @@ def pivot_pl_source(con, date_from):
     con.execute(read_sql("wb_costs.txt"))
     con.execute(read_sql("dayly_sales_agg.txt"))
     con.execute(read_sql("cf.txt"), parameters=params)
+    ensure_pl_src(con)
     con.execute(read_sql("pivot_pl.txt"), parameters=params)
 
     cur = con.execute("SELECT * FROM pivot_pl ORDER BY date_from")

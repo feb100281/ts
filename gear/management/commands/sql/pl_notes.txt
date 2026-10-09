@@ -101,7 +101,7 @@ gl AS (
 
         SUM(p.amount)::DOUBLE AS amount
 
-    FROM pg.public.pl_for_csv p
+    FROM pl_src p  -- pl_for_csv + зарплата из ЗУП (pl_src.txt)
 
     WHERE p.date_from <= $date_from
       AND (

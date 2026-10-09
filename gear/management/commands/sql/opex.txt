@@ -144,7 +144,7 @@ SELECT
         COALESCE(NULLIF(TRIM(p.cost_item), ''), '') AS cost_item,
         COALESCE(NULLIF(TRIM(p.cp_name), ''), 'Без контрагента') AS cp_name,
         SUM(p.amount)::numeric AS amount
-    FROM pg.public.pl_for_csv p
+    FROM pl_src p  -- pl_for_csv + зарплата из ЗУП (pl_src.txt)
     WHERE p.date_from <= $date_from
       AND STARTS_WITH(p.account_name, '610000')
       and not STARTS_WITH(p.cost_item, '540101')
@@ -238,7 +238,7 @@ base_corporate AS (
 
         SUM(p.amount)::numeric AS value
 
-    FROM pg.public.pl_for_csv p
+    FROM pl_src p  -- pl_for_csv + зарплата из ЗУП (pl_src.txt)
 
     WHERE p.date_from <= $date_from
       AND STARTS_WITH(p.account_name, '620000')
@@ -324,7 +324,7 @@ base_other AS (
 
         SUM(p.amount)::numeric AS value
 
-    FROM pg.public.pl_for_csv p
+    FROM pl_src p  -- pl_for_csv + зарплата из ЗУП (pl_src.txt)
 
     WHERE p.date_from <= $date_from
       AND STARTS_WITH(p.account_name, '420000')
@@ -408,7 +408,7 @@ base_financial AS (
 
         SUM(p.amount)::numeric AS value
 
-    FROM pg.public.pl_for_csv p
+    FROM pl_src p  -- pl_for_csv + зарплата из ЗУП (pl_src.txt)
 
     WHERE p.date_from <= $date_from
       AND STARTS_WITH(p.account_name, '630000')
