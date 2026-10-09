@@ -1,5 +1,8 @@
+.tenant-glyph-preview[data-glyph="E012"]::before { content: "\e012"; }
 .tenant-glyph-preview[data-glyph="E016"]::before { content: "\e016"; }
 .tenant-glyph-preview[data-glyph="E017"]::before { content: "\e017"; }
+.tenant-glyph-preview[data-glyph="E01C"]::before { content: "\e01c"; }
+.tenant-glyph-preview[data-glyph="E047"]::before { content: "\e047"; }
 .tenant-glyph-preview[data-glyph="E061"]::before { content: "\e061"; }
 .tenant-glyph-preview[data-glyph="E09E"]::before { content: "\e09e"; }
 .tenant-glyph-preview[data-glyph="E09F"]::before { content: "\e09f"; }
@@ -16,3 +19,18 @@
 .tenant-glyph-preview[data-glyph="E0AA"]::before { content: "\e0aa"; }
 .tenant-glyph-preview[data-glyph="E0AB"]::before { content: "\e0ab"; }
 .tenant-glyph-preview[data-glyph="E0AC"]::before { content: "\e0ac"; }
+.tenant-glyph-preview[data-glyph="E0AD"]::before { content: "\e0ad"; }
+.tenant-glyph-preview[data-glyph="E0AE"]::before { content: "\e0ae"; }
+.tenant-glyph-preview[data-glyph="E0AF"]::before { content: "\e0af"; }
+.tenant-glyph-preview[data-glyph="E0B0"]::before { content: "\e0b0"; }
+.tenant-glyph-preview[data-glyph="E0B1"]::before { content: "\e0b1"; }
+.tenant-glyph-preview[data-glyph="E0B2"]::before { content: "\e0b2"; }
+.tenant-glyph-preview[data-glyph="E0B3"]::before { content: "\e0b3"; }
+.tenant-glyph-preview[data-glyph="E0B4"]::before { content: "\e0b4"; }
+.tenant-glyph-preview[data-glyph="E0B5"]::before { content: "\e0b5"; }
+.tenant-glyph-preview[data-glyph="E0B6"]::before { content: "\e0b6"; }
+.tenant-glyph-preview[data-glyph="E0B7"]::before { content: "\e0b7"; }
+.tenant-glyph-preview[data-glyph="E0B8"]::before { content: "\e0b8"; }
+.tenant-glyph-preview[data-glyph="E0B9"]::before { content: "\e0b9"; }
+.tenant-glyph-preview[data-glyph="E0BA"]::before { content: "\e0ba"; }
+.tenant-glyph-preview[data-glyph="E0BB"]::before { content: "\e0bb"; }

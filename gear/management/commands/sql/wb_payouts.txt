@@ -1,0 +1,73 @@
+-- ============================================================
+-- ВЫВОДЫ С БАЛАНСА МАРКЕТПЛЕЙСА И ИХ ПОСТУПЛЕНИЕ НА СЧЁТ
+--
+-- Две плоские выборки в одной таблице:
+--   side = 'OUT' — списания с баланса WB: витрина wb_balance_for_csv,
+--                  колонка «Вывод средств» — дата и сумма каждого вывода;
+--   side = 'IN'  — поступления от площадки на расчётный счёт: витрина
+--                  cf_to_csv, статья 111000 «Выручка от продажи товаров».
+--
+-- Сопоставление вывода с поступлением делается не здесь, а в python
+-- (mp.py, match_wb_payouts): это алгоритм, а не витрина.
+--
+-- Если поступления от WB в учёте лежат под другой статьёй — поменять
+-- условие в CTE inflow, больше ничего править не нужно.
+-- ============================================================
+
+CREATE OR REPLACE TEMP TABLE wb_payouts AS
+
+WITH outflow AS (
+
+    SELECT
+        date_from::DATE AS dt,
+        ROUND("Вывод средств", 2) AS amount
+
+    FROM pg.wb_balance_for_csv
+
+    WHERE date_from <= $date_from
+      AND COALESCE("Вывод средств", 0) <> 0
+),
+
+
+inflow AS (
+
+    SELECT
+        date_from::DATE AS dt,
+        COALESCE(NULLIF(TRIM(cp_name), ''), 'Маркетплейс') AS cp_name,
+        ROUND(SUM(amount), 2) AS amount
+
+    FROM pg.cf_to_csv
+
+    WHERE date_from <= $date_from
+      AND item = '111000 Выручка от продажи товаров'
+
+    GROUP BY
+        date_from::DATE,
+        COALESCE(NULLIF(TRIM(cp_name), ''), 'Маркетплейс')
+
+    HAVING ROUND(SUM(amount), 2) <> 0
+)
+
+
+SELECT
+    'OUT' AS side,
+    dt,
+    amount,
+    NULL::VARCHAR AS cp_name
+
+FROM outflow
+
+UNION ALL
+
+SELECT
+    'IN' AS side,
+    dt,
+    amount,
+    cp_name
+
+FROM inflow
+
+ORDER BY
+    side DESC,
+    dt
+;

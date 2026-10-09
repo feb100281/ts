@@ -1,0 +1,175 @@
+-- ============================================================
+-- ИСТОЧНИК СВОДНОЙ P&L (лист raw_pl книги pivots)
+--
+-- Строится по тем же витринам и правилам, что лист P&L
+-- управленческого пакета, поэтому итоги сводной совпадают с P&L:
+--   раздел 1   — pl_sales (выручка без НДС, упр. себестоимость FIFO,
+--                комиссия WB), как month_margins_wb_long;
+--   разделы 3-5 (WB) — wb_costs, как opex.txt (3 и 4 без НДС, 5 с НДС);
+--   разделы 5-8 (учёт) — pl_for_csv с фильтрами opex.txt;
+--   раздел 9   — налог на прибыль из cash flow (125200).
+--
+-- Перед запуском должны существовать временные таблицы
+-- base, stocks_daily, wb_costs, pl_sales, cf (см. build_pivots_workbook).
+-- При изменении opex.txt / margin.txt менять и этот файл.
+--
+-- Колонки и их порядок — как в скелете сводной (raw_pl).
+-- parent_account_name — раздел P&L, account_name — строка P&L.
+-- ============================================================
+
+CREATE OR REPLACE TEMP TABLE pivot_pl AS
+
+WITH sales AS (
+    SELECT
+        date_from::DATE AS date_from,
+        SUM(amount_vatless) AS rev,
+        SUM(cogs_man) AS cogs,
+        SUM(net_comission) AS comm
+    FROM pl_sales
+    WHERE date_from <= $date_from
+    GROUP BY 1
+),
+
+sec1 AS (
+    SELECT date_from, '1.4 Продажи без НДС' AS item, rev AS amount FROM sales
+    UNION ALL
+    SELECT date_from, '1.6. Себестоимость', -cogs FROM sales
+    UNION ALL
+    SELECT date_from, '1.9. Комиссия WB', comm FROM sales
+),
+
+wb AS (
+    SELECT
+        date_from::DATE AS date_from,
+        CASE
+            WHEN account = 'Other income / loss' THEN '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ'
+            WHEN account = 'WB Deduction' THEN '4. ПРОДВИЖЕНИЕ WB'
+            ELSE '3. РАСХОДЫ НА РЕАЛИЗАЦИЮ'
+        END AS section,
+        CASE
+            WHEN account IN ('Other income / loss', 'WB Deduction') THEN cost_item
+            ELSE account
+        END AS item,
+        cost_item AS detail,
+        -- те же формулы, что в opex.txt
+        SUM(
+            CASE
+                WHEN account = 'Other income / loss'
+                    THEN (dt - cr) / 100
+                ELSE (dt - cr) / (100 + COALESCE(vat_rate, 20)) * 100 / 100
+            END
+        ) AS amount
+    FROM wb_costs
+    WHERE date_from::DATE <= $date_from
+    GROUP BY 1, 2, 3, 4
+),
+
+gl AS (
+    SELECT
+        p.*,
+        CASE
+            WHEN STARTS_WITH(p.account_name, '420000') THEN '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ'
+            WHEN STARTS_WITH(p.account_name, '610000') THEN '6. НАКЛАДНЫЕ РАСХОДЫ'
+            WHEN STARTS_WITH(p.account_name, '620000') THEN '7. КОРПОРАТИВНЫЕ РАСХОДЫ'
+            ELSE '8. ФИНАНСОВЫЕ РАСХОДЫ'
+        END AS section,
+        CASE
+            WHEN STARTS_WITH(p.account_name, '630000')
+                THEN COALESCE(NULLIF(TRIM(p.cost_item), ''), 'Без группы')
+            ELSE COALESCE(NULLIF(TRIM(p.cost_item_group), ''), 'Без группы')
+        END AS item
+    FROM pl_src p  -- pl_for_csv + зарплата из ЗУП (pl_src.txt)
+    WHERE p.date_from <= $date_from
+      AND (
+            (STARTS_WITH(p.account_name, '420000')
+             AND NOT STARTS_WITH(p.cost_item_group, '590100'))
+         OR (STARTS_WITH(p.account_name, '610000')
+             AND NOT STARTS_WITH(p.cost_item, '540101'))
+         OR STARTS_WITH(p.account_name, '620000')
+         OR STARTS_WITH(p.account_name, '630000')
+      )
+),
+
+tax AS (
+    SELECT *
+    FROM cf
+    WHERE subitem = '125200 Налог на прибыль'
+)
+
+SELECT
+    date_from,
+    NULL::BIGINT AS acc_id,
+    NULL::BIGINT AS subconto_id,
+    NULL::BIGINT AS contract_id,
+    NULL::BIGINT AS cp_id,
+    NULL::BIGINT AS pid_account,
+    '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ' AS parent_account_name,
+    item AS account_name,
+    'Продажи WB (FIFO)' AS cost_item_group,
+    item AS cost_item,
+    'Без договора' AS contract_name,
+    'Маркетплейс WB' AS cp_name,
+    NULL::DOUBLE AS dt,
+    NULL::DOUBLE AS cr,
+    amount::DOUBLE AS amount,
+    'Управленческий учёт: pl_sales' AS description
+FROM sec1
+
+UNION ALL
+
+SELECT
+    date_from,
+    NULL, NULL, NULL, NULL, NULL,
+    section,
+    item,
+    COALESCE(NULLIF(TRIM(detail), ''), 'Без статьи'),
+    COALESCE(NULLIF(TRIM(detail), ''), 'Без статьи'),
+    'Без договора',
+    'Маркетплейс WB',
+    NULL, NULL,
+    amount::DOUBLE,
+    'Удержания WB: wb_costs'
+FROM wb
+
+UNION ALL
+
+SELECT
+    date_from::DATE,
+    TRY_CAST(acc_id AS BIGINT),
+    TRY_CAST(subconto_id AS BIGINT),
+    TRY_CAST(contract_id AS BIGINT),
+    TRY_CAST(cp_id AS BIGINT),
+    TRY_CAST(pid_account AS BIGINT),
+    section,
+    item,
+    COALESCE(NULLIF(TRIM(cost_item_group), ''), 'Без группы'),
+    COALESCE(NULLIF(TRIM(cost_item), ''), 'Без статьи'),
+    COALESCE(NULLIF(TRIM(contract_name), ''), 'Без договора'),
+    COALESCE(NULLIF(TRIM(cp_name), ''), 'Без контрагента'),
+    TRY_CAST(dt AS DOUBLE),
+    TRY_CAST(cr AS DOUBLE),
+    amount::DOUBLE,
+    CAST(description AS VARCHAR)
+FROM gl
+
+UNION ALL
+
+SELECT
+    date_from::DATE,
+    TRY_CAST(acc_id AS BIGINT),
+    TRY_CAST(subconto_id AS BIGINT),
+    TRY_CAST(contract_id AS BIGINT),
+    NULL,
+    NULL,
+    '9. НАЛОГ НА ПРИБЫЛЬ',
+    '125200 Налог на прибыль',
+    COALESCE(NULLIF(TRIM(item), ''), 'Без статьи'),
+    '125200 Налог на прибыль',
+    COALESCE(NULLIF(TRIM(contract_name), ''), 'Без договора'),
+    COALESCE(NULLIF(TRIM(cp_name), ''), 'Без контрагента'),
+    TRY_CAST(dt AS DOUBLE),
+    TRY_CAST(cr AS DOUBLE),
+    amount::DOUBLE,
+    CAST(description AS VARCHAR)
+FROM tax
+;

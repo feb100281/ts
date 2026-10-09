@@ -1,0 +1,42 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block bodyclass %}{{ block.super }} tga-page{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% include "admin/gear/telegramaccess/_style.html" %}
+{% endblock %}
+
+{% block object-tools-items %}
+  {% if request.user.is_superuser %}<a class="tga-print tga-ghost" href="{% url 'admin:gear_telegramquestion_changelist' %}">Журнал вопросов</a>{% endif %}
+  <a class="tga-print" href="{% url 'admin:gear_telegramaccess_print' %}" target="_blank" rel="noopener">Печать списка доступа</a>
+  {{ block.super }}
+{% endblock %}
+
+{% block search %}
+<div class="tga">
+  <div class="tga-cards">
+    {% for b in tga_bots %}
+    <div class="tga-card">
+      <div class="tga-card-kicker">Помощник в Telegram</div>
+      <div class="tga-card-title">{{ b.title }}</div>
+      <div class="tga-card-nums">
+        <span><b>{{ b.allowed }}</b>с доступом</span>
+        <span class="is-wait"><b>{{ b.waiting }}</b>ждут решения</span>
+      </div>
+      <div style="margin-top:8px"><a href="https://t.me/{{ b.username }}" target="_blank" rel="noopener">t.me/{{ b.username }}</a></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if tga_waiting %}
+  <div class="tga-alert">Есть заявки без решения: {{ tga_waiting }}. Поставьте галочку «Доступ разрешён» и нажмите «Сохранить» внизу списка.</div>
+  {% endif %}
+  <div class="tga-how">
+    <b>Как дать доступ.</b> Отправьте коллеге ссылку на бота → он нажимает «Старт» → заявка появляется здесь →
+    впишите в «Кто это» фамилию и имя, поставьте галочку, нажмите «Сохранить». Бот сам напишет человеку, что доступ открыт.
+    Снять галочку — доступ закрыт сразу.
+  </div>
+</div>
+{{ block.super }}
+{% endblock %}

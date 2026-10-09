@@ -1,3 +1,4 @@
+# utils/choises.py
 CURRENCY_SYMBOLS = {
     "RUB": "₽",
     "USD": "$",

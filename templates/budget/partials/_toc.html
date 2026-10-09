@@ -1,0 +1,236 @@
+{% comment %} templates/budget/partials/_toc.html {% endcomment %}
+<div class="toc-page keep-together">
+    <div class="toc-header">
+        <div class="toc-title">Содержание</div>
+        <div class="toc-date">Дата формирования: {{ generated_at }}</div>
+    </div>
+
+    <div class="toc-divider"></div>
+
+    <div class="toc-items">
+        {% if sales_block %}
+        <div class="toc-section">
+            <div class="toc-item">
+                <div class="toc-item-left">
+                    <a href="#section-sales" class="toc-link">
+                        <span class="toc-num">I.</span>
+                        <span class="toc-text">Операционные показатели продаж</span>
+                    </a>
+                </div>
+                <div class="toc-dots"></div>
+            </div>
+
+            <div class="toc-subitems">
+                <div class="toc-subitem">
+                    <a href="#section-sales-overview" class="toc-link">
+                        <span class="toc-subnum">I.1</span>
+                        <span class="toc-subtext">Ключевые показатели MTD / YTD</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-sales-drivers" class="toc-link">
+                        <span class="toc-subnum">I.2</span>
+                        <span class="toc-subtext">Драйверы изменения выручки</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-sales-correlations" class="toc-link">
+                        <span class="toc-subnum">I.3</span>
+                        <span class="toc-subtext">Корреляции и взаимосвязи</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-sales-dynamics" class="toc-link">
+                        <span class="toc-subnum">I.4</span>
+                        <span class="toc-subtext">Месячная и недельная динамика</span>
+                    </a>
+                </div>
+
+
+                <div class="toc-subitem">
+                    <a href="#section-sales-categories" class="toc-link">
+                        <span class="toc-subnum">I.5</span>
+                        <span class="toc-subtext">Анализ продаж по категориям</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-sales-geography" class="toc-link">
+                        <span class="toc-subnum">I.6</span>
+                        <span class="toc-subtext">География продаж</span>
+                    </a>
+                </div>
+
+
+                <div class="toc-subitem">
+                    <a href="#section-vat" class="toc-link">
+                        <span class="toc-subnum">I.7</span>
+                        <span class="toc-subtext">Анализ НДС</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-certificates" class="toc-link">
+                        <span class="toc-subnum">I.8</span>
+                        <span class="toc-subtext">Риски по сертификатам и декларациям</span>
+                    </a>
+                </div>
+
+                
+            </div>
+        </div>
+        {% endif %}
+
+
+
+
+        <div class="toc-section">
+            <div class="toc-item">
+                <div class="toc-item-left">
+                        <a href="#section-budget-ytd-monthly" class="toc-link">
+                        <span class="toc-num">{% if sales_block %}II.{% else %}II.{% endif %}</span>
+                        <span class="toc-text">Анализ выполнения плана выручки</span>
+                    </a>
+                </div>
+                <div class="toc-dots"></div>
+            </div>
+
+            <div class="toc-subitems">
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.1{% else %}II.1{% endif %}</span>
+                        <span class="toc-subtext">Помесячное выполнение плана WB</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-waterfall" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.2{% else %}II.2{% endif %}</span>
+                        <span class="toc-subtext">Помесячный вклад в отклонение от плана</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-dynamics" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.3{% else %}II.3{% endif %}</span>
+                        <span class="toc-subtext">Динамика накопленных продаж YTD</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-semi" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.4{% else %}II.4{% endif %}</span>
+                        <span class="toc-subtext">Выполнение полугодовых целевых оборотов</span>
+                    </a>
+                </div>
+
+                <div class="toc-subitem">
+                    <a href="#section-budget-ytd-daily" class="toc-link">
+                        <span class="toc-subnum">{% if sales_block %}II.5{% else %}II.5{% endif %}</span>
+                        <span class="toc-subtext">Дневная детализация текущего месяца</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+
+
+
+        {% comment %} <div class="toc-section">
+            <div class="toc-item">
+                <div class="toc-item-left">
+                    <a href="#section-summary" class="toc-link">
+                        <span class="toc-num">{% if sales_block %}II.{% else %}I.{% endif %}</span>
+                        <span class="toc-text">Сводные итоги исполнения бюджета</span>
+                    </a>
+                </div>
+                <div class="toc-dots"></div>
+            </div>
+        </div>
+
+        <div class="toc-section">
+            <div class="toc-item">
+                <div class="toc-item-left">
+                    <a href="#section-detail-month" class="toc-link">
+                        <span class="toc-num">{% if sales_block %}III.{% else %}II.{% endif %}</span>
+                        <span class="toc-text">Структура бюджета за месяц</span>
+                    </a>
+                </div>
+                <div class="toc-dots"></div>
+            </div>
+        </div>
+
+        <div class="toc-section">
+            <div class="toc-item">
+                <div class="toc-item-left">
+                    <a href="#section-detail-total" class="toc-link">
+                        <span class="toc-num">{% if sales_block %}IV.{% else %}III.{% endif %}</span>
+                        <span class="toc-text">Структура бюджета за весь период</span>
+                    </a>
+                </div>
+                <div class="toc-dots"></div>
+            </div>
+        </div>
+
+        <div class="toc-section">
+            <div class="toc-item">
+                <div class="toc-item-left">
+                    <a href="#section-comment" class="toc-link">
+                        <span class="toc-num">{% if sales_block %}V.{% else %}IV.{% endif %}</span>
+                        <span class="toc-text">Комментарий</span>
+                    </a>
+                </div>
+                <div class="toc-dots"></div>
+            </div>
+        </div> {% endcomment %}
+
+        {% if certificate_risks %}
+<div class="toc-section">
+    <div class="toc-item">
+        <div class="toc-item-left">
+            <a href="#appendix-a-certificates" class="toc-link">
+                <span class="toc-num">A.</span>
+                <span class="toc-text">Приложение A. Детализация рисков по сертификатам</span>
+            </a>
+        </div>
+        <div class="toc-dots"></div>
+    </div>
+</div>
+{% endif %}
+
+{% if vat_context.mtd_category_breakdown or vat_context.ytd_category_breakdown %}
+<div class="toc-section">
+    <div class="toc-item">
+        <div class="toc-item-left">
+            <a href="#appendix-b-vat-reduced-rate" class="toc-link">
+                <span class="toc-num">Б.</span>
+                <span class="toc-text">Приложение Б. Категории с льготной ставкой НДС 10%</span>
+            </a>
+        </div>
+        <div class="toc-dots"></div>
+    </div>
+</div>
+{% endif %}
+
+
+
+
+{% if vat_context.vat_validation and vat_context.vat_validation.issue_items %}
+<div class="toc-section">
+    <div class="toc-item">
+        <div class="toc-item-left">
+            <a href="#appendix-c-vat-validation" class="toc-link">
+                <span class="toc-num">В.</span>
+                <span class="toc-text">Приложение В. Контроль корректности ставок НДС</span>
+            </a>
+        </div>
+        <div class="toc-dots"></div>
+    </div>
+</div>
+{% endif %}
+
+    </div>
+</div>

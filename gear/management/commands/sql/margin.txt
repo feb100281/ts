@@ -1,0 +1,564 @@
+CREATE OR REPLACE TEMP TABLE month_margins_wb_long AS
+
+WITH month_margins_wb AS (
+    SELECT
+        me,
+        SUM(amount) AS amount,
+        SUM(retail_amount) AS retail_amount,
+        SUM(amount_vatless) AS amount_vatless,
+        SUM(cogs_man) AS cogs_man,
+        SUM(net_comission) AS net_comission,
+        SUM(total_net_sales) AS total_net_sales,
+        SUM(no_cost) AS no_cost,
+        SUM(no_income) AS no_income,
+        SUM(no_stocks) AS no_stocks
+
+    FROM pl_sales
+
+    WHERE date_from <= $date_from
+
+    GROUP BY me
+),
+
+
+cash_consideration AS (
+    SELECT
+        LAST_DAY(date_from) AS me,
+
+        COALESCE(
+            SUM(val / 100.0)
+            FILTER (
+                WHERE field = 'retail_price'
+                AND oper = 'dt'
+            ),
+            0
+        )
+        -
+        COALESCE(
+            SUM(val / 100.0)
+            FILTER (
+                WHERE field = 'retail_price'
+                AND oper = 'cr'
+            ),
+            0
+        ) AS cash_amount,
+
+        COALESCE(
+            COUNT(rrd_id)
+            FILTER (
+                WHERE field = 'retail_price'
+                AND oper = 'dt'
+            ),
+            0
+        )
+        -
+        COALESCE(
+            COUNT(rrd_id)
+            FILTER (
+                WHERE field = 'retail_price'
+                AND oper = 'cr'
+            ),
+            0
+        ) AS cash_total_net_sales
+
+    FROM sales.sales_long
+
+    -- обрезаем по дате отчёта, как и month_margins_wb выше: без этого
+    -- строки 1.2 и 2.2 («по отчету WB») всегда показывали полный месяц
+    WHERE date_from::DATE <= $date_from
+
+    GROUP BY me
+),
+
+
+-- ============================================================
+-- МЕСЯЧНЫЕ ПОКАЗАТЕЛИ
+-- ============================================================
+
+calcs AS (
+    SELECT
+        t.me,
+
+        t.amount,
+
+        c.cash_amount,
+
+        t.retail_amount,
+
+        t.amount_vatless,
+
+        ROUND(
+            (t.amount - t.retail_amount)
+            / NULLIF(t.amount, 0)
+            * 100,
+            2
+        ) AS wb_discount,
+
+        t.cogs_man,
+
+        t.amount_vatless
+            - t.cogs_man
+            AS sales_margin,
+
+        ROUND(
+            (
+                t.amount_vatless
+                - t.cogs_man
+            )
+            / NULLIF(t.amount_vatless, 0)
+            * 100,
+            2
+        ) AS sales_margin_prc,
+
+        t.net_comission,
+
+        ROUND(
+            -t.net_comission
+            / NULLIF(t.amount_vatless, 0)
+            * 100,
+            2
+        ) AS net_comission_prc,
+
+        t.amount_vatless
+            - t.cogs_man
+            + t.net_comission
+            AS margin,
+
+        ROUND(
+            (
+                t.amount_vatless
+                - t.cogs_man
+                + t.net_comission
+            )
+            / NULLIF(t.amount_vatless, 0)
+            * 100,
+            2
+        ) AS margin_prc,
+
+        t.total_net_sales,
+
+        c.cash_total_net_sales,
+
+        t.no_cost,
+
+        t.amount
+            / NULLIF(t.total_net_sales, 0)
+            AS wa_unit_price,
+
+        t.retail_amount
+            / NULLIF(t.total_net_sales, 0)
+            AS wa_retail_amount_unit_price,
+
+        t.cogs_man
+            / NULLIF(t.total_net_sales, 0)
+            AS wa_unit_costs
+
+    FROM month_margins_wb t
+
+    LEFT JOIN cash_consideration c
+        ON c.me = t.me
+),
+
+
+-- ============================================================
+-- НАКОПИТЕЛЬНЫЕ БАЗОВЫЕ ВЕЛИЧИНЫ С НАЧАЛА ГОДА
+--
+-- Проценты и средние ЗДЕСЬ НЕ СУММИРУЕМ.
+-- Сначала копим числители / знаменатели.
+-- ============================================================
+
+ytd_base AS (
+    SELECT
+        *,
+
+        YEAR(me) AS year,
+
+        SUM(amount) OVER ytd_window
+            AS ytd_amount,
+
+        SUM(cash_amount) OVER ytd_window
+            AS ytd_cash_amount,
+
+        SUM(retail_amount) OVER ytd_window
+            AS ytd_retail_amount,
+
+        SUM(amount_vatless) OVER ytd_window
+            AS ytd_amount_vatless,
+
+        SUM(cogs_man) OVER ytd_window
+            AS ytd_cogs_man,
+
+        SUM(net_comission) OVER ytd_window
+            AS ytd_net_comission,
+
+        SUM(total_net_sales) OVER ytd_window
+            AS ytd_total_net_sales,
+
+        SUM(cash_total_net_sales) OVER ytd_window
+            AS ytd_cash_total_net_sales,
+
+        SUM(no_cost) OVER ytd_window
+            AS ytd_no_cost
+
+    FROM calcs
+
+    WINDOW ytd_window AS (
+        PARTITION BY YEAR(me)
+        ORDER BY me
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    )
+),
+
+
+-- ============================================================
+-- В ДЛИННЫЙ ВИД
+--
+-- Порядок метрик оставил как у тебя.
+-- ============================================================
+
+long AS (
+
+    UNPIVOT ytd_base
+
+    ON
+        amount,
+        cash_amount,
+        retail_amount,
+        amount_vatless,
+        wb_discount,
+        cogs_man,
+        sales_margin,
+        sales_margin_prc,
+        net_comission,
+        net_comission_prc,
+        margin,
+        margin_prc,
+        total_net_sales,
+        cash_total_net_sales,
+        no_cost,
+        wa_unit_price,
+        wa_retail_amount_unit_price,
+        wa_unit_costs
+
+    INTO
+        NAME metric
+        VALUE value
+),
+
+
+-- ============================================================
+-- ПРАВИЛЬНЫЙ YTD ДЛЯ КАЖДОЙ МЕТРИКИ
+-- ============================================================
+
+with_ytd AS (
+    SELECT
+        me,
+        year,
+        metric,
+        value,
+
+        CASE metric
+
+            -- ================================================
+            -- АБСОЛЮТНЫЕ ПОКАЗАТЕЛИ: просто SUM с начала года
+            -- ================================================
+
+            WHEN 'amount'
+                THEN ytd_amount
+
+            WHEN 'cash_amount'
+                THEN ytd_cash_amount
+
+            WHEN 'retail_amount'
+                THEN ytd_retail_amount
+
+            WHEN 'amount_vatless'
+                THEN ytd_amount_vatless
+
+            WHEN 'cogs_man'
+                THEN ytd_cogs_man
+
+            WHEN 'net_comission'
+                THEN ytd_net_comission
+
+            WHEN 'total_net_sales'
+                THEN ytd_total_net_sales
+
+            WHEN 'cash_total_net_sales'
+                THEN ytd_cash_total_net_sales
+
+            WHEN 'no_cost'
+                THEN ytd_no_cost
+
+
+            -- ================================================
+            -- SALES MARGIN
+            -- ================================================
+
+            WHEN 'sales_margin'
+                THEN
+                    ytd_amount_vatless
+                    - ytd_cogs_man
+
+            WHEN 'sales_margin_prc'
+                THEN
+                    ROUND(
+                        (
+                            ytd_amount_vatless
+                            - ytd_cogs_man
+                        )
+                        / NULLIF(ytd_amount_vatless, 0)
+                        * 100,
+                        2
+                    )
+
+
+            -- ================================================
+            -- WB DISCOUNT
+            -- не SUM месячных процентов
+            -- ================================================
+
+            WHEN 'wb_discount'
+                THEN
+                    ROUND(
+                        (
+                            ytd_amount
+                            - ytd_retail_amount
+                        )
+                        / NULLIF(ytd_amount, 0)
+                        * 100,
+                        2
+                    )
+
+
+            -- ================================================
+            -- NET COMMISSION %
+            -- ================================================
+
+            WHEN 'net_comission_prc'
+                THEN
+                    ROUND(
+                        -ytd_net_comission
+                        / NULLIF(ytd_amount_vatless, 0)
+                        * 100,
+                        2
+                    )
+
+
+            -- ================================================
+            -- MARGIN
+            -- ================================================
+
+            WHEN 'margin'
+                THEN
+                    ytd_amount_vatless
+                    - ytd_cogs_man
+                    + ytd_net_comission
+
+            WHEN 'margin_prc'
+                THEN
+                    ROUND(
+                        (
+                            ytd_amount_vatless
+                            - ytd_cogs_man
+                            + ytd_net_comission
+                        )
+                        / NULLIF(ytd_amount_vatless, 0)
+                        * 100,
+                        2
+                    )
+
+
+            -- ================================================
+            -- WEIGHTED AVERAGE UNIT PRICE
+            -- ================================================
+
+            WHEN 'wa_unit_price'
+                THEN
+                    ytd_amount
+                    / NULLIF(ytd_total_net_sales, 0)
+
+            WHEN 'wa_retail_amount_unit_price'
+                THEN
+                    ytd_retail_amount
+                    / NULLIF(ytd_total_net_sales, 0)
+
+            WHEN 'wa_unit_costs'
+                THEN
+                    ytd_cogs_man
+                    / NULLIF(ytd_total_net_sales, 0)
+
+        END AS ytd
+
+    FROM long
+),
+
+
+-- ============================================================
+-- ПРЕДЫДУЩИЙ МЕСЯЦ
+-- ============================================================
+
+with_prev AS (
+    SELECT
+        *,
+
+        LAG(value) OVER (
+            PARTITION BY metric
+            ORDER BY me
+        ) AS prev_value
+
+    FROM with_ytd
+),
+
+
+-- ============================================================
+-- ФИНАЛЬНАЯ ДЛИННАЯ ТАБЛИЦА
+-- ============================================================
+fin as (
+SELECT
+    me,
+
+    year,
+
+    metric,
+
+    -- текущий месяц
+    value,
+
+    -- с начала года
+    ytd,
+
+    -- предыдущий месяц
+    prev_value,
+
+    -- абсолютное изменение MoM
+    value
+        - prev_value
+        AS mom,
+
+    -- относительное изменение MoM
+    ROUND(
+        (
+            value
+            - prev_value
+        )
+        / NULLIF(prev_value, 0)
+        * 100,
+        2
+    ) AS mom_prc
+
+FROM with_prev
+
+ORDER BY
+    me DESC,
+    CASE metric
+
+        WHEN 'amount' THEN 1
+        WHEN 'cash_amount' THEN 2
+        WHEN 'retail_amount' THEN 3
+        WHEN 'amount_vatless' THEN 4
+        WHEN 'wb_discount' THEN 5
+        WHEN 'cogs_man' THEN 6
+        WHEN 'sales_margin' THEN 7
+        WHEN 'sales_margin_prc' THEN 8
+        WHEN 'net_comission' THEN 9
+        WHEN 'net_comission_prc' THEN 10
+        WHEN 'margin' THEN 11
+        WHEN 'margin_prc' THEN 12
+        WHEN 'total_net_sales' THEN 13
+        WHEN 'cash_total_net_sales' THEN 14
+        WHEN 'no_cost' THEN 15
+        WHEN 'wa_unit_price' THEN 16
+        WHEN 'wa_retail_amount_unit_price' THEN 17
+        WHEN 'wa_unit_costs' THEN 18
+
+    END
+),
+last_fin as (
+select 
+me,
+year,
+CASE metric
+    WHEN 'amount' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.1. Продажи до СПП'
+    WHEN 'cash_amount' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.2. Продажи по отчету WB'
+    WHEN 'retail_amount' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.3. Продажи после СПП'
+    WHEN 'amount_vatless' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.4 Продажи без НДС'
+    WHEN 'wb_discount' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.5 Скидка WB, %'
+    WHEN 'cogs_man' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.6. Себестоимость'
+    WHEN 'sales_margin' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.7.Маржа продаж'
+    WHEN 'sales_margin_prc' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.8. Маржа продаж, %'
+    WHEN 'net_comission' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.9. Комиссия WB'
+    WHEN 'net_comission_prc' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.10. Комиссия WB, %'
+    WHEN 'margin' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.11. Маржа после комиссии'
+    WHEN 'margin_prc' THEN '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ |1.12. Маржа после комиссии, %'
+    WHEN 'total_net_sales' THEN '2. ЮНИТ ЭКОНОМИКА |2.1 Продажи, шт.'
+    WHEN 'cash_total_net_sales' THEN '2. ЮНИТ ЭКОНОМИКА |2.2. Продажи по отчету WB, шт.'
+    WHEN 'no_cost' THEN '2. ЮНИТ ЭКОНОМИКА |2.3. Без себестоимости, шт.'
+    WHEN 'wa_unit_price' THEN '2. ЮНИТ ЭКОНОМИКА |2.4. Средняя цена продажи'
+    WHEN 'wa_retail_amount_unit_price' THEN '2. ЮНИТ ЭКОНОМИКА |2.5. Средняя цена после скидки'
+    WHEN 'wa_unit_costs' THEN '2. ЮНИТ ЭКОНОМИКА |2.6. Средняя себестоимость'
+END AS metric,
+value,
+prev_value,
+mom,
+mom_prc,
+ytd
+from fin
+)
+select
+me,
+year,
+string_split(metric,'|')[1] as section,
+string_split(metric,'|')[2] as item,
+value,
+prev_value,
+mom,
+mom_prc,
+ytd
+from last_fin;
+
+
+
+
+-- select * from month_margins_wb_long;
+-- -- select 
+-- -- *,
+-- amount - cash_amount as dif 
+-- from month_margins_wb
+
+-- ;
+
+-- select sum(amount - cash_amount) from month_margins_wb;
+
+
+
+-- month_costs_wb as (
+--     select
+--     "me",
+--     "account",
+--     "cost_item",
+--     round(sum((dt-cr)/(100+vat_rate)*100) / 100.00,2) as costs_vatles
+--     from wb_costs
+--     where date_from <= $date_from
+--     group by "me",
+--     "account",
+--     "cost_item"
+-- ),
+
+-- monthly_stocks as (
+--     SELECT
+--         me,
+--         LAST(ending_fbs_stock ORDER BY date_from) AS ending_fbs_stock,
+--         LAST(ending_in_transit_stock ORDER BY date_from) AS ending_in_transit_stock,
+--         LAST(ending_stock ORDER BY date_from) AS ending_stock,
+--         LAST(ending_warehouse_stock ORDER BY date_from) AS ending_warehouse_stock,
+--         LAST("daily_stock_days" ORDER BY date_from) AS daily_stock_days
+--     FROM pl_sales
+--     where date_from <= $date_from
+--     GROUP BY me
+-- )
+
+
+
+
+

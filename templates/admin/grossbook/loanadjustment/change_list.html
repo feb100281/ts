@@ -1,0 +1,509 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+{% load admin_urls %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block object-tools %}{% endblock %}
+{% block title %}Корректировки займов{% endblock %}
+
+{% block content_title %}
+  {% url cl.opts|admin_urlname:'add' as add_url %}
+
+  <div style="
+      display:flex;
+      align-items:flex-start;
+      gap:16px;
+      flex-wrap:wrap;
+      padding-bottom:6px;
+  ">
+
+    <div style="
+        display:flex;
+        align-items:flex-start;
+        gap:12px;
+        flex-wrap:wrap;
+    ">
+      <div style="
+          width:40px;
+          height:40px;
+          border-radius:2px;
+          background:#173b34;
+          color:#e8f3ee;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:15px;
+          font-weight:800;
+          letter-spacing:.04em;
+          box-shadow:0 0 0 1px rgba(23,59,52,.20);
+      ">
+        КЗ
+      </div>
+
+      <div style="
+          display:flex;
+          flex-direction:column;
+          gap:4px;
+          line-height:1.3;
+      ">
+        <span style="
+            font-size:11px;
+            text-transform:uppercase;
+            letter-spacing:.06em;
+            color:#6b7280;
+        ">
+          Управленческий учёт
+        </span>
+
+        <span style="
+            font-size:19px;
+            font-weight:700;
+            color:#111827;
+        ">
+          Корректировки займов
+        </span>
+
+        <span style="
+            font-size:12px;
+            color:#64748b;
+        ">
+          Контрольные точки фактического остатка тела и процентов
+        </span>
+
+        <div style="
+            display:flex;
+            flex-wrap:wrap;
+            gap:6px;
+            margin-top:2px;
+        ">
+          {% if cl.query %}
+            <span style="
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:2px;
+                background:#fef3c7;
+                color:#92400e;
+                font-weight:700;
+            ">
+              Поиск: “{{ cl.query }}”
+            </span>
+          {% endif %}
+
+          {% if cl.has_filters %}
+            <span style="
+                font-size:11px;
+                padding:2px 8px;
+                border-radius:2px;
+                background:#f3f4f6;
+                color:#4b5563;
+                font-weight:700;
+            ">
+              Фильтры применены
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    <div style="
+        min-width:300px;
+        max-width:390px;
+        border-radius:2px;
+        background:rgba(248,250,252,.96);
+        box-shadow:0 18px 40px rgba(15,23,42,.14);
+        padding:10px 12px 12px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+    ">
+      <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:baseline;
+      ">
+        <span style="
+            font-size:11px;
+            letter-spacing:.14em;
+            text-transform:uppercase;
+            color:#9ca3af;
+        ">
+          Навигация
+        </span>
+
+        <span style="
+            font-size:13px;
+            font-weight:700;
+            color:#0f172a;
+        ">
+          Действия
+        </span>
+      </div>
+
+      <div style="
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+          margin-top:2px;
+      ">
+        {% if has_add_permission %}
+          <a
+            href="{{ add_url }}"
+            class="button"
+            style="
+              font-size:13px;
+              padding:5px 10px;
+              border-radius:2px;
+              display:inline-flex;
+              align-items:center;
+              gap:7px;
+              justify-content:flex-start;
+              background:#e8f3ee;
+              color:#166534;
+              border:1px solid rgba(22,101,52,.20);
+              text-decoration:none;
+              font-weight:700;
+            "
+          >
+            ➕ Новая корректировка
+          </a>
+        {% endif %}
+
+        <button
+          type="button"
+          id="loan-adjustment-print-selected"
+          style="
+            width:100%;
+            min-height:32px;
+            padding:5px 10px;
+            border-radius:2px;
+            display:inline-flex;
+            align-items:center;
+            gap:7px;
+            justify-content:flex-start;
+            background:#fff7ed;
+            color:#9a3412;
+            border:1px solid #fed7aa;
+            font-size:13px;
+            font-weight:700;
+            cursor:pointer;
+          "
+        >
+          🖨️ Печать справки по выбранным
+        </button>
+      </div>
+
+      
+    </div>
+  </div>
+
+  <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:4px;
+      padding:6px 2px 0;
+      border-top:1px solid #e5e7eb;
+      color:#6b7280;
+      font-size:11px;
+  ">
+    <nav style="
+        display:flex;
+        align-items:center;
+        gap:4px;
+        flex-wrap:wrap;
+    ">
+      <a
+        href="{% url 'admin:index' %}"
+        style="
+          text-transform:uppercase;
+          letter-spacing:.08em;
+          text-decoration:none;
+          color:#9ca3af;
+        "
+      >
+        НАЧАЛО
+      </a>
+
+      <span>›</span>
+
+      <span style="
+          text-transform:uppercase;
+          letter-spacing:.08em;
+          color:#9ca3af;
+      ">
+        GROSSBOOK
+      </span>
+
+      <span>›</span>
+
+      <span style="
+          text-transform:uppercase;
+          letter-spacing:.08em;
+          color:#4b5563;
+          font-weight:800;
+      ">
+        КОРРЕКТИРОВКИ ЗАЙМОВ
+      </span>
+    </nav>
+
+    <span style="color:#9ca3af;">
+      {{ cl.result_count }} записей
+    </span>
+  </div>
+
+  <div style="
+      margin:18px 0;
+      padding:11px 13px;
+      border-left:4px solid #2f6656;
+      background:#f7faf9;
+      color:#475569;
+      font-size:12px;
+      line-height:1.55;
+  ">
+    <strong style="color:#173b34;">
+      Как работает корректировка:
+    </strong>
+
+    указанное тело и проценты становятся фактическим остатком займа
+    на конец даты корректировки. Со следующего календарного дня
+    расчёт продолжается уже от скорректированного остатка.
+  </div>
+{% endblock %}
+
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+    #changelist #toolbar {
+      border-radius:2px;
+      overflow:hidden;
+    }
+
+    #changelist-form .results {
+      border-radius:2px;
+      overflow:hidden;
+      border:1px solid #e2e8f0;
+    }
+
+    #result_list {
+      border-collapse:separate;
+      border-spacing:0;
+    }
+
+    #result_list thead th {
+      position:sticky;
+      top:0;
+      z-index:5;
+      background:var(--body-bg, #fff);
+      color:#475569;
+      font-weight:700;
+      border-bottom:1px solid #dbe3e8;
+    }
+
+    #result_list thead th a {
+      background:inherit;
+    }
+
+    #result_list thead {
+      box-shadow:0 2px 0 rgba(0,0,0,.06);
+    }
+
+    #result_list tbody td,
+    #result_list tbody th {
+      vertical-align:middle;
+      transition:background-color .15s ease;
+    }
+
+    #result_list tbody tr:nth-child(even) td,
+    #result_list tbody tr:nth-child(even) th {
+      background:#f8fafc;
+    }
+
+    #result_list tbody tr:hover td,
+    #result_list tbody tr:hover th {
+      background:#eef5f2 !important;
+    }
+
+    .loan-adj-doc-number {
+      color:#0f172a;
+      font-size:13px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    .loan-adj-doc-id,
+    .loan-adj-date-note,
+    .loan-adj-contract-meta,
+    .loan-adj-comment {
+      margin-top:3px;
+      color:#64748b;
+      font-size:11px;
+      line-height:1.25;
+    }
+
+    .loan-adj-date,
+    .loan-adj-counterparty,
+    .loan-adj-reason {
+      color:#111827;
+      font-weight:700;
+    }
+
+    .loan-adj-comment {
+      max-width:300px;
+    }
+
+    .loan-adj-money {
+      display:inline-block;
+      min-width:108px;
+      text-align:right;
+      white-space:nowrap;
+      font-weight:700;
+      font-variant-numeric:tabular-nums;
+    }
+
+    .loan-adj-principal {
+      color:#166534;
+    }
+
+    .loan-adj-interest {
+      color:#b45309;
+    }
+
+    .loan-adj-total {
+      padding:4px 7px;
+      color:#173b34;
+      background:#e8f3ee;
+    }
+
+    .loan-adj-status {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:24px;
+      padding:3px 8px;
+      border-radius:2px;
+      font-size:11px;
+      font-weight:700;
+      white-space:nowrap;
+    }
+
+    .loan-adj-status-active {
+      color:#166534;
+      background:#dcfce7;
+      border:1px solid #bbf7d0;
+    }
+
+    .loan-adj-status-inactive {
+      color:#64748b;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+    }
+
+    .loan-adj-pdf-button {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      min-height:27px;
+      padding:4px 8px;
+      color:#334155 !important;
+      background:#fff;
+      border:1px solid #d5dde2;
+      border-radius:2px;
+      font-size:11px;
+      font-weight:800;
+      text-decoration:none !important;
+    }
+
+    .loan-adj-pdf-button:hover {
+      color:#166534 !important;
+      border-color:#86b49f;
+      background:#f0f9f5;
+    }
+  </style>
+
+  <script>
+    document.addEventListener(
+      "DOMContentLoaded",
+      function () {
+        const printButton = document.getElementById(
+          "loan-adjustment-print-selected"
+        );
+
+        if (!printButton) {
+          return;
+        }
+
+        printButton.addEventListener(
+          "click",
+          function () {
+            const form = document.getElementById(
+              "changelist-form"
+            );
+
+            if (!form) {
+              alert(
+                "Не найдена форма списка корректировок."
+              );
+              return;
+            }
+
+            const selectedRows = form.querySelectorAll(
+              "input.action-select:checked"
+            );
+
+            if (!selectedRows.length) {
+              alert(
+                "Сначала отметьте корректировки чекбоксами."
+              );
+              return;
+            }
+
+            const actionSelect = form.querySelector(
+              'select[name="action"]'
+            );
+
+            if (!actionSelect) {
+              alert(
+                "Не найден список административных действий."
+              );
+              return;
+            }
+
+            actionSelect.value = (
+              "export_selected_pdf"
+            );
+
+            if (
+              actionSelect.value
+              !== "export_selected_pdf"
+            ) {
+              alert(
+                "Действие печати не зарегистрировано."
+              );
+              return;
+            }
+
+            const selectAcross = form.querySelector(
+              'input[name="select_across"]'
+            );
+
+            if (selectAcross) {
+              selectAcross.value = "0";
+            }
+
+            form.submit();
+          }
+        );
+      }
+    );
+  </script>
+{% endblock %}
+
+
+{% block content %}
+  {{ block.super }}
+{% endblock %}

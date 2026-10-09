@@ -1,0 +1,136 @@
+CREATE OR REPLACE TEMP TABLE wb_expenses_weekly AS
+
+-- ============================================================
+-- Расходы WB по неделям и статьям.
+--
+-- Справочная копия того же подхода, что и в wb_costs.sql /
+-- opex.sql: категоризация по sales.sales_long.field/btn,
+-- НДС снимается по формуле (dt - cr) / (100 + vat_rate) * 100,
+-- дефолт ставки НДС 20%, если vat_rate не указан.
+--
+-- Отличие от wb_costs.sql: здесь берётся не вся история,
+-- а только последние N закрытых календарных недель (параметры
+-- $start_date / $end_date подставляются приложением), и итог
+-- группируется по неделе, а не по дню — нужно для графика
+-- "расходы WB по неделям" в коммерческом обзоре, чтобы было
+-- видно всплески по статьям.
+--
+-- Этот файл не используется приложением напрямую (запрос
+-- собирается динамически в commercial_review/data.py,
+-- _wb_expenses_sql()) — он существует только как читаемая
+-- документация того SQL, который реально выполняется, по тому
+-- же принципу, что и остальные .sql/.txt в этой папке.
+-- ============================================================
+
+WITH costs AS (
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Логистика' AS category,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0) AS dt,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS cr,
+        MAX(vat_rate) AS vat_rate
+    FROM sales.sales_long
+    WHERE field = 'delivery_rub'
+      AND date_from::DATE BETWEEN $start_date AND $end_date
+    GROUP BY date_from, rrd_id
+
+    UNION ALL
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Хранение' AS category,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0) AS dt,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS cr,
+        MAX(vat_rate) AS vat_rate
+    FROM sales.sales_long
+    WHERE field = 'storage_fee'
+      AND date_from::DATE BETWEEN $start_date AND $end_date
+    GROUP BY date_from, rrd_id
+
+    UNION ALL
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Приёмка' AS category,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0) AS dt,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS cr,
+        MAX(vat_rate) AS vat_rate
+    FROM sales.sales_long
+    WHERE field = 'acceptance'
+      AND date_from::DATE BETWEEN $start_date AND $end_date
+    GROUP BY date_from, rrd_id
+
+    UNION ALL
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Штрафы' AS category,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0) AS dt,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS cr,
+        MAX(vat_rate) AS vat_rate
+    FROM sales.sales_long
+    WHERE field = 'penalty'
+      AND date_from::DATE BETWEEN $start_date AND $end_date
+    GROUP BY date_from, rrd_id
+
+    UNION ALL
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Программа лояльности' AS category,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0) AS dt,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS cr,
+        MAX(vat_rate) AS vat_rate
+    FROM sales.sales_long
+    WHERE field IN ('cashback_commission_change', 'cashback_amount')
+      AND date_from::DATE BETWEEN $start_date AND $end_date
+    GROUP BY date_from, rrd_id
+
+    UNION ALL
+
+    SELECT
+        date_from,
+        rrd_id,
+        'Продвижение и услуги WB' AS category,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0) AS dt,
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS cr,
+        MAX(vat_rate) AS vat_rate
+    FROM sales.sales_long
+    WHERE field = 'deduction'
+      AND btn IS NOT NULL
+      AND NOT STARTS_WITH(btn, 'Платеж')
+      AND NOT STARTS_WITH(btn, 'Перевод')
+      AND date_from::DATE BETWEEN $start_date AND $end_date
+    GROUP BY date_from, rrd_id
+
+),
+
+daily AS (
+
+    SELECT
+        date_from::DATE AS day,
+        category,
+        SUM((dt - cr) / (100 + COALESCE(vat_rate, 20)) * 100) / 100
+            AS amount
+
+    FROM costs
+    GROUP BY day, category
+
+)
+
+-- Приложение группирует daily по неделям (Пн-Вс) на стороне
+-- pandas — здесь оставлен дневной срез как основа, потому что
+-- границы недели считаются той же функцией week_bounds(), что
+-- и у остального отчёта, а не отдельной SQL-логикой.
+SELECT
+    day,
+    category,
+    amount
+FROM daily
+ORDER BY day, category

@@ -1,0 +1,57 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{% static 'css/corporate/manufacturers.css' %}">
+<link rel="stylesheet" href="{% static 'css/sales/wbdocuments.css' %}">
+</head>
+
+<body>
+  <div class="wrap">
+
+    <div class="dochead">
+      <div class="kicker">Sales · WB</div>
+      <h1 class="title">Документы WB</h1>
+
+      <div class="meta">
+        <span>Сформировано: {{ generated_at|date:"d.m.Y H:i" }}</span>
+        <span class="pill"><span class="dot"></span> Выбрано: <b>{{ count }}</b></span>
+      </div>
+    </div>
+
+    <div class="printbar">
+      <button onclick="window.print()">🖨️ Печать / PDF</button>
+      <button onclick="history.back()">↩ Назад</button>
+    </div>
+
+    <table class="rev-table">
+      <thead>
+        <tr>
+          <th style="width:160px;">Дата</th>
+          <th style="width:220px;">Категория</th>
+          <th>Название</th>
+          <th style="width:110px;">Ext</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for d in rows %}
+          <tr>
+            <td>{{ d.creation_time|date:"d.m.Y H:i" }}</td>
+            <td>{{ d.category }}</td>
+            <td>
+              <div class="mname">{{ d.name }}</div>
+            </td>
+            <td>{{ d.extensions }}</td>
+        
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+</body>
+</html>
