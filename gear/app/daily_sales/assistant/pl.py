@@ -148,7 +148,10 @@ def pl_report(date_from=None, date_to=None, detail="summary") -> str:
     hdr = ["Показатель"] + [m.strftime("%m.%Y") + ("*" if m > rd else "")
                             for m in months]
     lines = ["\t".join(hdr)]
+    from .tools import MARGIN_OFF
     for key, label in METRICS:
+        if MARGIN_OFF and key in ("md", "kmd"):          # до утверждения методики маржи
+            continue
         pct = key in ("kmd", "zfp_pct", "zfp_ex_pct")
         vals = [data["derived"][m].get(key) for m in months]
         if key == "conv" and not any(vals):
@@ -160,7 +163,7 @@ def pl_report(date_from=None, date_to=None, detail="summary") -> str:
         items = sorted({(s, i) for (m, s, i) in data["pl"] if m in months})
         for s, i in items:
             vals = [data["pl"].get((m, s, i)) for m in months]
-            if not any(vals):
+            if not any(vals) or (MARGIN_OFF and "арж" in str(i)):
                 continue
             lines.append("\t".join([f"{s.strip()} | {i}"] + [_fmt(v) for v in vals]))
 

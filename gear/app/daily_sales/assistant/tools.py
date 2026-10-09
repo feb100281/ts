@@ -633,7 +633,7 @@ for _n in ("loans_report", "fx_report", "upd_report", "month_conclusions", "scen
 MARGIN_OFF = True
 MARGIN_TOOLS = {"margin_report"}
 MARGIN_HOLD_MSG = ("Методика расчёта маржинальности пока не утверждена — ждём решения "
-                   "финансового директора. Цифры маржи не показываем.")
+                   "Ильи. Цифры маржи не показываем.")
 
 
 def tools_for(profile: str = "sales") -> list:

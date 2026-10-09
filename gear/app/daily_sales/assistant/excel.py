@@ -214,7 +214,10 @@ def _pl_table(a):
                              for m in months]
     rows, row_fmts = [], {}
     pct_keys = {"kmd", "zfp_pct", "zfp_ex_pct"}
+    off = _margin_off()
     for key, label in METRICS:
+        if off and key in ("md", "kmd"):
+            continue
         vals = [data["derived"][m].get(key) for m in months]
         if key == "conv" and not any(vals):
             continue
@@ -225,6 +228,8 @@ def _pl_table(a):
         rows.append(["ДЕТАЛИЗАЦИЯ СТАТЕЙ"] + [None] * len(months))
         items = sorted({(s, i) for (m, s, i) in data["pl"] if m in months})
         for s, i in items:
+            if off and "арж" in str(i):
+                continue
             vals = [data["pl"].get((m, s, i)) for m in months]
             if any(vals):
                 rows.append([f"{s.strip()} · {i}"] + vals)
