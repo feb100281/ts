@@ -636,12 +636,33 @@ MARGIN_HOLD_MSG = ("Методика расчёта маржинальности
                    "Ильи. Цифры маржи не показываем.")
 
 
+def _sales_view(t: dict) -> dict:
+    """Описание инструмента для помощника по продажам: только «как на сайте WB»."""
+    import copy
+    if t["name"] == "export_excel":
+        t = copy.deepcopy(t)
+        t["description"] = ("Сформировать Excel-файл и дать пользователю кнопку скачивания. "
+                            "Либо wb_sales — продажи как на сайте WB (те же параметры, что у "
+                            "инструмента wb_sales), либо report — готовый отчёт целиком: "
+                            "{tool: имя инструмента, args: его параметры} (остатки, "
+                            "происшествия, FBS), либо sql — запрос на чтение (до 100 000 строк; "
+                            "понятные русские названия колонок). Вызывай, когда просят файл / "
+                            "Excel / выгрузку или таблица больше ~30 строк.")
+        for k in ("pl", "margin"):
+            t["input_schema"]["properties"].pop(k, None)
+    elif t["name"] == "incidents_report":
+        t = copy.deepcopy(t)
+        t["description"] = t["description"].replace(
+            "бухгалтерская и управленческая стоимость", "стоимость товара")
+    return t
+
+
 def tools_for(profile: str = "sales") -> list:
     """Инструменты профиля: finance видит всё, sales — только продажи."""
     off = MARGIN_TOOLS if MARGIN_OFF else set()
     if profile == "finance":
         return [t for t in TOOLS if t["name"] not in off]
-    return [t for t in TOOLS if t["name"] in SALES_TOOLS - off]
+    return [_sales_view(t) for t in TOOLS if t["name"] in SALES_TOOLS - off]
 
 
 def allowed(profile: str, name: str) -> bool:
