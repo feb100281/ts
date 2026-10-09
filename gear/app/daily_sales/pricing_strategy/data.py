@@ -1077,7 +1077,15 @@ def get_pricing_source(
                         -- ========================================
 
                         SUM(
-                            (t.cr_rev - COALESCE(t.retail_amount, 0) * COALESCE(t.vat_rate, 0) / (100 + COALESCE(t.vat_rate, 0))) /* было: t.cr_rev / (100 + COALESCE(t.vat_rate, 0)) * 100 */
+                            t.cr_rev
+                            / (
+                                100
+                                + COALESCE(
+                                    t.vat_rate,
+                                    0
+                                )
+                            )
+                            * 100
                         ) AS amount_vatless,
 
                         -- ========================================
@@ -1097,7 +1105,7 @@ def get_pricing_source(
 
                         SUM(
                             COALESCE(
-                                t.net_comission /* было: c.net_comission */,
+                                c.net_comission,
                                 0
                             )
                         ) AS net_comission
@@ -1110,9 +1118,8 @@ def get_pricing_source(
                     INNER JOIN pricing_nm_universe u
                         ON u.nm_id = sm.nm_id
 
-                    -- было (до fix/wb-vat): LEFT JOIN commissions c ON c.rrd_id = t.rrd_id;
-
-                    -- комиссия без НДС теперь из base.net_comission
+                    LEFT JOIN commissions c
+                        ON c.rrd_id = t.rrd_id
 
                     WHERE
                         t.cr_rev <> 0

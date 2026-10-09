@@ -33,3 +33,5 @@ Thumbs.db
 **/pricing_strategy/_cache/
 data/.sales_digest_sent
 data/.sales_digest_off
+
+_to_delete/

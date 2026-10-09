@@ -44,8 +44,7 @@ SALES_SQL = """
         COALESCE(ANY_VALUE(gender), 'Не указан') AS gender,
         COALESCE(NULLIF(TRIM(ANY_VALUE(title)), ''), 'Без наименования') AS title,
         SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS qty,
-        -- было (до fix/wb-vat): SUM(cr_rev / (100 + vat_rate) * 100) / 100 AS rev,
-        SUM(cr_rev - retail_amount * vat_rate / (100 + vat_rate)) / 100 AS rev,
+        SUM(cr_rev / (100 + vat_rate) * 100) / 100 AS rev,
         SUM(adjusted_cogs_man) / 100 AS cogs,
         SUM(net_comission) / 100 AS comm,
         -- оценочная себестоимость: нет приходов → резерв 620 ₽; нет на складе → последняя цена
@@ -251,8 +250,7 @@ DASH_SQL = """
     SELECT
         COALESCE(NULLIF(TRIM({dim}), ''), 'Не указано') AS name,
         SUM(CASE WHEN b.cr_rev > 0 THEN 1 WHEN b.cr_rev < 0 THEN -1 ELSE 0 END) AS qty,
-        -- было (до fix/wb-vat): SUM(b.cr_rev / (100 + b.vat_rate) * 100) / 100 AS rev,
-        SUM(b.cr_rev - b.retail_amount * b.vat_rate / (100 + b.vat_rate)) / 100 AS rev,
+        SUM(b.cr_rev / (100 + b.vat_rate) * 100) / 100 AS rev,
         SUM(b.adjusted_cogs_man) / 100 AS cogs,
         SUM(b.net_comission) / 100 AS comm,
         SUM((CASE WHEN b.cr_rev > 0 THEN 1 WHEN b.cr_rev < 0 THEN -1 ELSE 0 END)

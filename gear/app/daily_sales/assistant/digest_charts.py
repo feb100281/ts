@@ -129,7 +129,8 @@ def trend(labels, values, margins, title, sub) -> bytes:
                 fontsize=15 if i == n - 1 else 13.5, fontweight="bold" if i == n - 1 else None,
                 color=INK if i == n - 1 else MUTED)
     ax.set_xticks(range(n))
-    ax.set_xticklabels([f"{lab}\n" + (_num(m, 1) + "%" if m is not None else "—")
+    show = any(m is not None for m in margins)
+    ax.set_xticklabels([f"{lab}\n" + (_num(m, 1) + "%" if m is not None else "—") if show else lab
                         for lab, m in zip(labels, margins)], fontsize=13 if n <= 6 else 12)
     for i, (t, m) in enumerate(zip(ax.get_xticklabels(), margins)):
         t.set_color(WARM if m is not None and m < 0 else INK if i == n - 1 else MUTED)

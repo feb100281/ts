@@ -2290,7 +2290,11 @@ def get_sales_data(
 
                     ROUND(
                         SUM(
-                            (t.cr_rev - t.retail_amount * t.vat_rate / (100 + t.vat_rate)) /* было: t.cr_rev / (100 + t.vat_rate) * 100 */
+                            t.cr_rev
+                            / (
+                                100 + t.vat_rate
+                            )
+                            * 100
                         )
                         / 100.0,
                         2
@@ -2307,7 +2311,7 @@ def get_sales_data(
                     ROUND(
                         SUM(
                             COALESCE(
-                                t.net_comission /* было: c.net_comission */,
+                                c.net_comission,
                                 0
                             )
                         )
@@ -2318,7 +2322,11 @@ def get_sales_data(
                     ROUND(
                         (
                             SUM(
-                                (t.cr_rev - t.retail_amount * t.vat_rate / (100 + t.vat_rate)) /* было: t.cr_rev / (100 + t.vat_rate) * 100 */
+                                t.cr_rev
+                                / (
+                                    100 + t.vat_rate
+                                )
+                                * 100
                             )
                             -
                             SUM(
@@ -2327,7 +2335,7 @@ def get_sales_data(
                             +
                             SUM(
                                 COALESCE(
-                                    t.net_comission /* было: c.net_comission */,
+                                    c.net_comission,
                                     0
                                 )
                             )
@@ -2338,9 +2346,8 @@ def get_sales_data(
 
                 FROM base t
 
-                -- было (до fix/wb-vat): LEFT JOIN commissions c ON c.rrd_id = t.rrd_id;
-
-                -- комиссия без НДС теперь из base.net_comission
+                LEFT JOIN commissions c
+                    ON c.rrd_id = t.rrd_id
 
                 WHERE
                     t.cr_rev <> 0

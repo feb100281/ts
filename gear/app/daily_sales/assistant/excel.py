@@ -270,6 +270,16 @@ def _report_table(tool: str, tool_args: dict):
     return cols, rows, notes
 
 
+def _margin_off() -> bool:
+    from .tools import MARGIN_OFF
+    return MARGIN_OFF
+
+
+def _margin_msg() -> str:
+    from .tools import MARGIN_HOLD_MSG
+    return MARGIN_HOLD_MSG
+
+
 def export(args: dict, question: str = "") -> tuple[str, dict]:
     from gear.management.commands import mp
 
@@ -328,6 +338,8 @@ def export(args: dict, question: str = "") -> tuple[str, dict]:
                      "₽; расходы в скобках; ТБУ = постоянные затраты / КМД",
                      cols, rows, row_formats=row_fmts, totals=False)
         sql, cut, source = None, False, "Мэн пак (pl_report)"
+    elif args.get("margin") and _margin_off():
+        raise ValueError(_margin_msg())
     elif args.get("margin"):
         from .margin import margin_table
         m = args["margin"] if isinstance(args["margin"], dict) else {}
@@ -344,6 +356,8 @@ def export(args: dict, question: str = "") -> tuple[str, dict]:
         sql, cut, source = None, False, "Мэн пак: продажи, себестоимость FIFO, расходы WB"
     elif args.get("report"):
         r = args["report"] if isinstance(args["report"], dict) else {}
+        if _margin_off() and r.get("tool") == "margin_report":
+            raise ValueError(_margin_msg())
         cols, rows, notes = _report_table(r.get("tool", ""), r.get("args") or {})
         _write_table(ws, mp, title, desc or "Выгрузка ИИ-помощника",
                      f"Сформировано {stamp} · строк: {len(rows)}", cols, rows, totals=False)

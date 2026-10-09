@@ -40,6 +40,7 @@ WB_COSTS = (
                   "AND NOT STARTS_WITH(btn, 'Перевод')"),
 )
 BRAND_MIN = 10_000            # изменения бренда мельче этого в сводку не идут, ₽
+SHOW_MARGIN = False           # маржинальность не показываем, пока методика не утверждена
 
 
 def wb_costs(day: date) -> list[tuple[str, float, float, float]]:
@@ -384,6 +385,8 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
             f"{rng(m_start, day)} · маржа после расходов WB, % от выручки без НДС"))}
     for args in (("brand", "Маржинальность с начала месяца", "у", "брендов"),
                  ("category", "Маржинальность по категориям", "в категории", "категорий")):
+        if not SHOW_MARGIN:
+            break
         b = _safe(args[1], lambda: margin_block(*args))
         if b:
             out.append(b)

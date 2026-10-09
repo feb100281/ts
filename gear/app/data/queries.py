@@ -1361,12 +1361,7 @@ wb_price AS (
     SELECT
         rrd_id,
 
-        -- было (до fix/wb-vat): сумма без знака, возвраты прибавлялись
-        -- SUM(val) AS retail_amount
-        -- цена покупателя после СПП, со знаком: продажа (+), возврат (-)
-        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0)
-        -
-        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS retail_amount
+        SUM(val) AS retail_amount
 
     FROM sales.sales_long
 
@@ -1394,40 +1389,35 @@ wb_price AS (
 -- + net_comission
 -- =========================================================
 
--- Новая методика (как base.txt мэн пака): НДС с комиссии — фактический
--- из отчёта WB (ppvz_vw_nds), net_comission = comission_gross - vat_in_wb.
--- Было (до fix/wb-vat): комиссия / (100 + vat_rate) * 100:
---
--- commissions AS (
---     SELECT
---         rrd_id,
---         COALESCE(SUM(val / (100 + vat_rate) * 100)
---                  FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
---         -
---         COALESCE(SUM(val / (100 + vat_rate) * 100)
---                  FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
---             AS net_comission
---     FROM sales.sales_long
---     GROUP BY rrd_id
--- )
-
 commissions AS (
     SELECT
         rrd_id,
 
-        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
+        COALESCE(
+            SUM(
+                val
+                / (100 + vat_rate)
+                * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'dt'
+            ),
+            0
+        )
         -
-        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
-            AS comission_gross,
-
-        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'dt'), 0)
-        -
-        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'cr'), 0)
-            AS vat_in_wb
+        COALESCE(
+            SUM(
+                val
+                / (100 + vat_rate)
+                * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'cr'
+            ),
+            0
+        ) AS net_comission
 
     FROM sales.sales_long
-
-    WHERE field IN ('comission', 'ppvz_vw_nds')
 
     GROUP BY
         rrd_id
@@ -1450,12 +1440,10 @@ SELECT
         0
     ) AS retail_amount,
 
-    -- было: COALESCE(c.net_comission, 0) AS net_comission,
-    COALESCE(c.comission_gross, 0)
-    - COALESCE(c.vat_in_wb, 0)
-        AS net_comission,
-
-    COALESCE(c.vat_in_wb, 0) AS vat_in_wb,
+    COALESCE(
+        c.net_comission,
+        0
+    ) AS net_comission,
 
     -- =====================================================
     -- Себестоимость
@@ -1709,56 +1697,49 @@ LEFT JOIN inventories.wb_product w
 
 
 DAILY_SALES_AGG = """
--- комиссия без НДС теперь берётся из base (net_comission, как в base.txt);
--- было (до fix/wb-vat):
--- WITH commissions AS (
---     SELECT
---         rrd_id,
---
---         COALESCE(
---             SUM(
---                 val / (100 + vat_rate) * 100
---             ) FILTER (
---                 WHERE field = 'comission'
---                   AND oper = 'dt'
---             ),
---             0
---         )
---         -
---         COALESCE(
---             SUM(
---                 val / (100 + vat_rate) * 100
---             ) FILTER (
---                 WHERE field = 'comission'
---                   AND oper = 'cr'
---             ),
---             0
---         ) AS net_comission
---
---     FROM sales.sales_long
---     GROUP BY rrd_id
--- ),
+WITH commissions AS (
+    SELECT
+        rrd_id,
 
-WITH sales_by_day AS (
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'dt'
+            ),
+            0
+        )
+        -
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'cr'
+            ),
+            0
+        ) AS net_comission
+
+    FROM sales.sales_long
+    GROUP BY rrd_id
+),
+
+sales_by_day AS (
     SELECT
         t.date_from::DATE AS date_from,
 
         SUM(t.cr_rev) AS amount,
         SUM(t.retail_amount) AS retail_amount,
 
-        -- было (до fix/wb-vat): НДС с нашей цены до СПП
-        -- SUM(t.cr_rev) - SUM(t.cr_rev / (100 + t.vat_rate) * 100) AS vat_amount,
-        -- SUM(t.cr_rev / (100 + t.vat_rate) * 100) AS amount_vatless,
-
-        -- исходящий НДС: с цены покупателя (после СПП), как в мэн паке
-        SUM(
-            t.retail_amount * t.vat_rate / (100 + t.vat_rate)
-        ) AS vat_amount,
-
         SUM(t.cr_rev)
         -
         SUM(
-            t.retail_amount * t.vat_rate / (100 + t.vat_rate)
+            t.cr_rev / (100 + t.vat_rate) * 100
+        ) AS vat_amount,
+
+        SUM(
+            t.cr_rev / (100 + t.vat_rate) * 100
         ) AS amount_vatless,
 
         SUM(t.adjusted_cogs) AS cogs,
@@ -1784,12 +1765,12 @@ WITH sales_by_day AS (
             WHERE t.storage_flag = 'Нет приходов'
         ) AS no_income,
 
-        -- было: SUM(c.net_comission) AS net_comission
-        SUM(t.net_comission) AS net_comission
+        SUM(c.net_comission) AS net_comission
 
     FROM base t
 
-    -- было: LEFT JOIN commissions c ON c.rrd_id = t.rrd_id
+    LEFT JOIN commissions c
+        ON c.rrd_id = t.rrd_id
 
     WHERE t.cr_rev <> 0
 
@@ -2038,37 +2019,35 @@ ORDER BY s.date_from DESC
 
 
 DETAILS_DAY = """
--- комиссия без НДС теперь берётся из base (net_comission, как в base.txt);
--- было (до fix/wb-vat):
--- WITH commissions AS (
---     SELECT
---         rrd_id,
---
---         COALESCE(
---             SUM(
---                 val / (100 + vat_rate) * 100
---             ) FILTER (
---                 WHERE field = 'comission'
---                   AND oper = 'dt'
---             ),
---             0
---         )
---         -
---         COALESCE(
---             SUM(
---                 val / (100 + vat_rate) * 100
---             ) FILTER (
---                 WHERE field = 'comission'
---                   AND oper = 'cr'
---             ),
---             0
---         ) AS net_comission
---
---     FROM sales.sales_long
---     GROUP BY rrd_id
--- ),
+WITH commissions AS (
+    SELECT
+        rrd_id,
 
-WITH sales_agg AS (
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'dt'
+            ),
+            0
+        )
+        -
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'cr'
+            ),
+            0
+        ) AS net_comission
+
+    FROM sales.sales_long
+    GROUP BY rrd_id
+),
+
+sales_agg AS (
     SELECT
         t.usk AS nm_id,
         t.usk,
@@ -2080,19 +2059,14 @@ WITH sales_agg AS (
         SUM(t.cr_rev) AS amount,
         SUM(t.retail_amount) AS retail_amount,
 
-        -- было (до fix/wb-vat): НДС с нашей цены до СПП
-        -- SUM(t.cr_rev) - SUM(t.cr_rev / (100 + t.vat_rate) * 100) AS vat_amount,
-        -- SUM(t.cr_rev / (100 + t.vat_rate) * 100) AS amount_vatless,
-
-        -- исходящий НДС: с цены покупателя (после СПП), как в мэн паке
-        SUM(
-            t.retail_amount * t.vat_rate / (100 + t.vat_rate)
-        ) AS vat_amount,
-
         SUM(t.cr_rev)
         -
         SUM(
-            t.retail_amount * t.vat_rate / (100 + t.vat_rate)
+            t.cr_rev / (100 + t.vat_rate) * 100
+        ) AS vat_amount,
+
+        SUM(
+            t.cr_rev / (100 + t.vat_rate) * 100
         ) AS amount_vatless,
 
         SUM(t.adjusted_cogs) AS cogs,
@@ -2118,12 +2092,12 @@ WITH sales_agg AS (
             WHERE t.storage_flag = 'Нет приходов'
         ) AS no_income,
 
-        -- было: SUM(c.net_comission) AS net_comission
-        SUM(t.net_comission) AS net_comission
+        SUM(c.net_comission) AS net_comission
 
     FROM base t
 
-    -- было: LEFT JOIN commissions c ON c.rrd_id = t.rrd_id
+    LEFT JOIN commissions c
+        ON c.rrd_id = t.rrd_id
 
     WHERE t.cr_rev <> 0
       AND t.date_from::DATE = ?::DATE
@@ -2396,37 +2370,35 @@ ORDER BY
 
 
 DETAILS_PERIOD = """
--- комиссия без НДС теперь берётся из base (net_comission, как в base.txt);
--- было (до fix/wb-vat):
--- WITH commissions AS (
---     SELECT
---         rrd_id,
---
---         COALESCE(
---             SUM(
---                 val / (100 + vat_rate) * 100
---             ) FILTER (
---                 WHERE field = 'comission'
---                   AND oper = 'dt'
---             ),
---             0
---         )
---         -
---         COALESCE(
---             SUM(
---                 val / (100 + vat_rate) * 100
---             ) FILTER (
---                 WHERE field = 'comission'
---                   AND oper = 'cr'
---             ),
---             0
---         ) AS net_comission
---
---     FROM sales.sales_long
---     GROUP BY rrd_id
--- ),
+WITH commissions AS (
+    SELECT
+        rrd_id,
 
-WITH sales_agg AS (
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'dt'
+            ),
+            0
+        )
+        -
+        COALESCE(
+            SUM(
+                val / (100 + vat_rate) * 100
+            ) FILTER (
+                WHERE field = 'comission'
+                  AND oper = 'cr'
+            ),
+            0
+        ) AS net_comission
+
+    FROM sales.sales_long
+    GROUP BY rrd_id
+),
+
+sales_agg AS (
     SELECT
         t.usk AS nm_id,
         t.usk,
@@ -2438,19 +2410,14 @@ WITH sales_agg AS (
         SUM(t.cr_rev) AS amount,
         SUM(t.retail_amount) AS retail_amount,
 
-        -- было (до fix/wb-vat): НДС с нашей цены до СПП
-        -- SUM(t.cr_rev) - SUM(t.cr_rev / (100 + t.vat_rate) * 100) AS vat_amount,
-        -- SUM(t.cr_rev / (100 + t.vat_rate) * 100) AS amount_vatless,
-
-        -- исходящий НДС: с цены покупателя (после СПП), как в мэн паке
-        SUM(
-            t.retail_amount * t.vat_rate / (100 + t.vat_rate)
-        ) AS vat_amount,
-
         SUM(t.cr_rev)
         -
         SUM(
-            t.retail_amount * t.vat_rate / (100 + t.vat_rate)
+            t.cr_rev / (100 + t.vat_rate) * 100
+        ) AS vat_amount,
+
+        SUM(
+            t.cr_rev / (100 + t.vat_rate) * 100
         ) AS amount_vatless,
 
         SUM(t.adjusted_cogs) AS cogs,
@@ -2476,12 +2443,12 @@ WITH sales_agg AS (
             WHERE t.storage_flag = 'Нет приходов'
         ) AS no_income,
 
-        -- было: SUM(c.net_comission) AS net_comission
-        SUM(t.net_comission) AS net_comission
+        SUM(c.net_comission) AS net_comission
 
     FROM base t
 
-    -- было: LEFT JOIN commissions c ON c.rrd_id = t.rrd_id
+    LEFT JOIN commissions c
+        ON c.rrd_id = t.rrd_id
 
     WHERE t.cr_rev <> 0
 

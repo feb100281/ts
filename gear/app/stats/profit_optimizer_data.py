@@ -385,9 +385,8 @@ def get_profit_optimizer_data(
                     ) AS quantity_90d,
 
                     SUM(
-                        (COALESCE(t.cr_rev, 0) - COALESCE(t.retail_amount, 0) * COALESCE(t.vat_rate, 0)
-                           / (100 + COALESCE(t.vat_rate, 0))) / 100.0
-                        -- было (до fix/wb-vat): COALESCE(t.cr_rev, 0) / 100.0 / (1 + COALESCE(t.vat_rate, 0) / 100.0)
+                        COALESCE(t.cr_rev, 0) / 100.0
+                        / (1 + COALESCE(t.vat_rate, 0) / 100.0)
                     ) FILTER (
                         WHERE t.date_from::DATE BETWEEN
                             $report_date::DATE - INTERVAL 29 DAY
@@ -395,9 +394,8 @@ def get_profit_optimizer_data(
                     ) AS revenue_30d,
 
                     SUM(
-                        (COALESCE(t.cr_rev, 0) - COALESCE(t.retail_amount, 0) * COALESCE(t.vat_rate, 0)
-                           / (100 + COALESCE(t.vat_rate, 0))) / 100.0
-                        -- было (до fix/wb-vat): COALESCE(t.cr_rev, 0) / 100.0 / (1 + COALESCE(t.vat_rate, 0) / 100.0)
+                        COALESCE(t.cr_rev, 0) / 100.0
+                        / (1 + COALESCE(t.vat_rate, 0) / 100.0)
                     ) FILTER (
                         WHERE t.date_from::DATE BETWEEN
                             $report_date::DATE - INTERVAL 89 DAY
@@ -561,9 +559,8 @@ def get_profit_optimizer_data(
                 DATE_TRUNC('week', t.date_from::DATE)::DATE AS week,
                 COUNT(*) AS quantity,
                 SUM(
-                    (COALESCE(t.cr_rev, 0) - COALESCE(t.retail_amount, 0) * COALESCE(t.vat_rate, 0)
-                       / (100 + COALESCE(t.vat_rate, 0))) / 100.0
-                    -- было (до fix/wb-vat): COALESCE(t.cr_rev, 0) / 100.0 / (1 + COALESCE(t.vat_rate, 0) / 100.0)
+                    COALESCE(t.cr_rev, 0) / 100.0
+                    / (1 + COALESCE(t.vat_rate, 0) / 100.0)
                 ) AS revenue
             FROM base t
             INNER JOIN usk_to_nm m ON m.usk = t.usk

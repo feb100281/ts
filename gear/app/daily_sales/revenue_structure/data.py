@@ -2098,14 +2098,18 @@ def get_revenue_structure(
                         0
                     )
 
-                    -- было (до fix/wb-vat): НДС с нашей цены до СПП
-                    -- ELSE COALESCE(t.cr_rev, 0) / (100 + t.vat_rate) * 100
-
-                    -- НДС с цены покупателя (после СПП), как в мэн паке
                     ELSE
-                        COALESCE(t.cr_rev, 0)
-                        - COALESCE(t.retail_amount, 0)
-                          * t.vat_rate / (100 + t.vat_rate)
+                        COALESCE(
+                            t.cr_rev,
+                            0
+                        )
+                        /
+                        (
+                            100
+                            +
+                            t.vat_rate
+                        )
+                        * 100
 
                 END AS revenue_vatless,
 

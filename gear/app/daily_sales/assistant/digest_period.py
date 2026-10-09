@@ -11,7 +11,7 @@ from html import escape
 
 from conns import get_duckdb_conn_with_opt
 
-from .digest import (AFTER, BRAND_MIN, DOWN, MONTHS, NET_QTY, NET_RUB, PAY, QTY, RET, RET_RUB,
+from .digest import (AFTER, BRAND_MIN, SHOW_MARGIN, DOWN, MONTHS, NET_QTY, NET_RUB, PAY, QTY, RET, RET_RUB,
                      RUB, UP, WB_COSTS, WD_FULL, _chg, _diff, _long, _mln, _more, _n, _pre,
                      _quote, _rub, _safe, _span_long, _ths)
 
@@ -306,6 +306,8 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
             f"{rng} · маржа после расходов WB, % от выручки без НДС"))}
     for args in (("brand", f"Маржинальность {word}", "у", "брендов"),
                  ("category", "Маржинальность по категориям", "в категории", "категорий")):
+        if not SHOW_MARGIN:
+            break
         blk = _safe(args[1], lambda: margin_block(*args))
         if blk:
             out.append(blk)
@@ -361,7 +363,7 @@ def trend_periods(kind: str, a: date, b: date) -> list[tuple[date, date, str]]:
 
 
 def trend_block(kind: str, a: date, b: date, charts: bool = True) -> dict | None:
-    """Динамика за несколько периодов: выручка, штуки, чек, маржа, возвраты и выводы."""
+    """Динамика за несколько периодов: выручка, штуки, чек, возвраты (маржа — если включена)."""
     import pandas as pd
     from ..wb_sales_export import fetch
     from . import digest_charts as ch
@@ -388,7 +390,7 @@ def trend_block(kind: str, a: date, b: date, charts: bool = True) -> dict | None
         n = (y - x).days + 1
         rows.append({"lab": lab, "rev": rev, "qty": qty, "n": n, "per_day": rev / n,
                      "check": rev / qty if qty else 0, "ret": ret / sold * 100 if sold else None,
-                     "margin": _safe(f"маржа {lab}", mg)})
+                     "margin": _safe(f"маржа {lab}", mg) if SHOW_MARGIN else None})
     rows = [r for r in rows if r["rev"]]
     if len(rows) < 3:
         return None
@@ -460,21 +462,31 @@ def trend_block(kind: str, a: date, b: date, charts: bool = True) -> dict | None
                 "хороший период." if ls > 0 and lm > 0 else "")
         lines.append(f"<b>Вывод:</b> продажи {word[ls]}, маржа {word[lm]}"
                      + (f" — {hint}" if hint else "."))
+    elif abs(vs) >= 2:
+        lines.append("<b>Вывод:</b> " + (
+            "продажи выше обычного — хороший период." if vs > 0 else
+            "продажи ниже обычного — стоит посмотреть, какие бренды и категории просели (ниже)."))
 
-    t = [("", "млн ₽", "шт", "чек", "маржа")] + [
-        (r["lab"], _mln(r["rev"]), _n(r["qty"]), _n(r["check"]),
-         pc(r["margin"]) if r["margin"] is not None else "—") for r in rows]
+    if SHOW_MARGIN:
+        t = [("", "млн ₽", "шт", "чек", "маржа")] + [
+            (r["lab"], _mln(r["rev"]), _n(r["qty"]), _n(r["check"]),
+             pc(r["margin"]) if r["margin"] is not None else "—") for r in rows]
+    else:
+        t = [("", "млн ₽", "шт", "чек")] + [
+            (r["lab"], _mln(r["rev"]), _n(r["qty"]), _n(r["check"])) for r in rows]
     lines.append(_pre(t, wide=False))
     if kind == "month":
         ytd = [r for r, p in zip(rows, per[-len(rows):]) if p[0].year == b.year]
         if len(ytd) > 1:
             lines.append(f"С начала года продали на <b>{_rub(sum(r['rev'] for r in ytd))}</b>.")
         lines.append("<i>Месяцы разной длины, поэтому сравниваем средние продажи за день.</i>")
-    lines.append("<i>Продажи как на сайте WB, с НДС, до СПП; маржа — по методике дашборда.</i>")
+    lines.append("<i>Продажи как на сайте WB, с НДС, до СПП"
+                 + ("; маржа — по методике дашборда." if SHOW_MARGIN else ".") + "</i>")
     return {"text": "\n".join(lines), "photo": _safe("график «динамика»", lambda: ch.trend(
         [r["lab"] for r in rows], [r["rev"] / 1e6 for r in rows], [r["margin"] for r in rows],
         f"Динамика продаж: {nm}",
-        "млн ₽ по " + ("неделям" if kind == "week" else "месяцам") + " · под столбиком — маржа"))
+        "млн ₽ по " + ("неделям" if kind == "week" else "месяцам")
+        + (" · под столбиком — маржа" if SHOW_MARGIN else "")))
         if charts else None}
 
 

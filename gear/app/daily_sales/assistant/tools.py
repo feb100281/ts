@@ -629,12 +629,22 @@ for _n in ("loans_report", "fx_report", "upd_report", "month_conclusions", "scen
     _DISPATCH[_n] = _fx_tool(_n)
 
 
+# Маржинальность отключена, пока методика не утверждена (см. prompt.MARGIN_HOLD).
+MARGIN_OFF = True
+MARGIN_TOOLS = {"margin_report"}
+MARGIN_HOLD_MSG = ("Методика расчёта маржинальности пока не утверждена — ждём решения "
+                   "финансового директора. Цифры маржи не показываем.")
+
+
 def tools_for(profile: str = "sales") -> list:
     """Инструменты профиля: finance видит всё, sales — только продажи."""
+    off = MARGIN_TOOLS if MARGIN_OFF else set()
     if profile == "finance":
-        return TOOLS
-    return [t for t in TOOLS if t["name"] in SALES_TOOLS]
+        return [t for t in TOOLS if t["name"] not in off]
+    return [t for t in TOOLS if t["name"] in SALES_TOOLS - off]
 
 
 def allowed(profile: str, name: str) -> bool:
+    if MARGIN_OFF and name in MARGIN_TOOLS:
+        return False
     return profile == "finance" or name in SALES_TOOLS
