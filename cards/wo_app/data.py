@@ -31,7 +31,8 @@ def get_data_by_date(start=None, end=None):
             'ppvz_for_pay',
             'comission',
             'retail_amount',
-            'retail_price'
+            'retail_price',
+            'ppvz_vw_nds'
             )
         GROUP BY date_from
     )
