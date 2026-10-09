@@ -37,6 +37,9 @@ python manage.py assistant_bot --profile sales --digest-preview --digest-date 20
 
 ЭТО ОТПРАВКА СЕБЕ ПРИМЕР СООБЩЕНИЯ В ТЕЛЕГУ (БОТ)
 python manage.py assistant_bot --profile sales --digest-test
+
+python manage.py assistant_bot --profile sales --digest-test --digest-kind week
+python manage.py assistant_bot --profile sales --digest-test --digest-kind month
 _________
 
 

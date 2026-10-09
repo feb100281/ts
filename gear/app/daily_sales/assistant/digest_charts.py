@@ -73,6 +73,47 @@ def sales_days(days, values, title, sub) -> bytes:
     return _png(plt, fig)
 
 
+def sales_period(days, values, n_cur, ref, title, sub) -> bytes:
+    """Столбики по дням (млн ₽): последние n_cur дней — текущий период, раньше — прошлый.
+
+    ref — средний день прошлого периода (пунктир), None — без линии.
+    """
+    plt = _plt()
+    n = len(days)
+    fig, ax = plt.subplots(figsize=(10.8, 7.6), dpi=100)
+    colors = [PALE] * (n - n_cur) + [GREEN] * n_cur
+    ax.bar(range(n), values, width=0.72, color=colors)
+    top = max(values + [ref or 0]) or 1
+    ax.set_xlim(-0.7, n - 0.3)
+    ax.set_ylim(0, top * 1.18)
+    step = 1 if n <= 14 else 3 if n <= 31 else 7
+    ax.set_xticks(range(n))
+    ax.set_xticklabels([(f"{WD[d.weekday()]}\n{d:%d.%m}" if n <= 14 else f"{d:%d.%m}")
+                        if (n - 1 - i) % step == 0 else "" for i, d in enumerate(days)],
+                       color=MUTED, fontsize=13 if n <= 14 else 12)
+    for i, d in enumerate(days):
+        if d.weekday() >= 5:
+            ax.get_xticklabels()[i].set_color(WARM)
+    ax.yaxis.set_major_locator(plt.MaxNLocator(4))
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v:g}".replace(".", ","))
+    ax.tick_params(axis="y", labelcolor=MUTED, labelsize=13)
+    ax.yaxis.grid(True, color=GRID, lw=1)
+    ax.set_axisbelow(True)
+    _clean(ax)
+    if n <= 14:
+        for i in range(n - n_cur, n):
+            ax.text(i, values[i] + top * 0.02, _num(values[i], 1), ha="center", va="bottom",
+                    fontsize=13, fontweight="bold", color=INK)
+    if ref:
+        ax.axhline(ref, color=MUTED, lw=1, ls=(0, (4, 4)))
+        ax.plot([-0.5, 0.6], [top * 1.11] * 2, color=MUTED, lw=1, ls=(0, (4, 4)))
+        ax.text(0.9, top * 1.11, f"средний день прошлого месяца — {_num(ref, 2)}", va="center",
+                fontsize=12.5, color=MUTED)
+    _head(fig, title, sub)
+    fig.subplots_adjust(left=0.07, right=0.95, top=0.84, bottom=0.12)
+    return _png(plt, fig)
+
+
 def brands(rows, title, sub) -> bytes:
     """rows: [(бренд, изменение в ₽)], рост вправо, падение влево."""
     plt = _plt()
@@ -98,8 +139,11 @@ def brands(rows, title, sub) -> bytes:
     return _png(plt, fig)
 
 
-def stocks(days, totals, parts, title, sub) -> bytes:
-    """Линия общего остатка (шт) и состав: parts = [(место, шт, изменение за неделю | None)]."""
+def stocks(days, totals, parts, title, sub, ref=None, note="за неделю") -> bytes:
+    """Линия общего остатка (шт) и состав: parts = [(место, шт, изменение | None)].
+
+    ref — индекс точки сравнения (по умолчанию неделя назад), note — подпись изменения.
+    """
     plt = _plt()
     fig = plt.figure(figsize=(10.8, 9.2), dpi=100)
     ax = fig.add_axes([0.08, 0.47, 0.85, 0.35])
@@ -112,10 +156,13 @@ def stocks(days, totals, parts, title, sub) -> bytes:
     ax.set_xlim(-0.4, len(days) - 0.4)
     ax.text(xs[-1], ys[-1] + pad * 0.35, _num(ys[-1], 1), ha="center", fontsize=17,
             fontweight="bold", color=INK)
-    if len(days) > 7:
-        ax.scatter([xs[-8]], [ys[-8]], s=70, color=MID, zorder=3, edgecolors="white", linewidths=2)
-        ax.text(xs[-8], ys[-8] + pad * 0.35, _num(ys[-8], 1), ha="center", fontsize=14, color=MUTED)
-    step = 2 if len(days) > 8 else 1
+    if ref is None and len(days) > 7:
+        ref = len(days) - 8
+    if ref is not None:
+        ax.scatter([xs[ref]], [ys[ref]], s=70, color=MID, zorder=3, edgecolors="white", linewidths=2)
+        ax.text(xs[ref], ys[ref] + pad * 0.35, _num(ys[ref], 1), ha="center", fontsize=14,
+                color=MUTED)
+    step = 1 if len(days) <= 8 else 2 if len(days) <= 16 else 5
     ax.set_xticks(list(xs))
     ax.set_xticklabels([f"{d:%d.%m}" if (len(days) - 1 - i) % step == 0 else ""
                         for i, d in enumerate(days)], color=MUTED, fontsize=12.5)
@@ -135,8 +182,8 @@ def stocks(days, totals, parts, title, sub) -> bytes:
         ax2.text(v + mx * 0.02, y, _num(v), va="center", ha="left", fontsize=15,
                  fontweight="bold", color=INK)
         if ch is not None:
-            note = ("▲ " if ch > 0 else "▼ " if ch < 0 else "") + _num(abs(ch)) + " за неделю"
-            ax2.text(v + mx * 0.22, y, note, va="center", ha="left", fontsize=13, color=MUTED)
+            lab = ("▲ " if ch > 0 else "▼ " if ch < 0 else "") + _num(abs(ch)) + " " + note
+            ax2.text(v + mx * 0.22, y, lab, va="center", ha="left", fontsize=13, color=MUTED)
     ax2.set_xlim(-mx * 0.42, mx * 1.65)
     ax2.set_ylim(-0.6, len(parts) - 0.4)
     ax2.axis("off")

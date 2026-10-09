@@ -359,12 +359,11 @@ class Bot:
         except OSError:
             pass
         self.digest_try = time.time()
-        from gear.app.daily_sales.assistant import digest
+        from gear.app.daily_sales.assistant import digest, digest_period
         from gear.models import TelegramAccess
         day = now.date() - timedelta(days=1)
         loaded = digest.loaded_date()
-        parts = digest.blocks(day, loaded) if loaded and loaded >= day else []
-        digest.greet(parts, now.date(), day)
+        parts = digest_period.morning(now.date(), day, loaded)   # пн — неделя, 1-го — месяц
         if not parts:
             print(f"[bot sales] сводка: продаж за {day:%d.%m.%Y} ещё нет (в базе по "
                   f"{loaded or '—'}), повтор через час", flush=True)
@@ -641,7 +640,27 @@ class Command(BaseCommand):
                             help="Отправить сводку с картинками только на TELEGRAM_ADMIN_ID")
         parser.add_argument("--digest-date",
                             help="Дата для предпросмотра YYYY-MM-DD; по умолчанию — "
-                                 "последний загруженный день")
+                                 "последний загруженный день (неделя или месяц)")
+        parser.add_argument("--digest-kind", choices=["day", "week", "month"], default="day",
+                            help="Сводка за день, итоги недели (как в пн) или месяца (как 1-го)")
+
+    @staticmethod
+    def _digest_day(opts, loaded):
+        """(последний день периода, вид) для --digest-test / --digest-preview."""
+        from datetime import date, timedelta
+        from gear.app.daily_sales.assistant import digest_period
+        kind = opts.get("digest_kind") or "day"
+        if opts.get("digest_date"):
+            day = date.fromisoformat(opts["digest_date"])
+            if kind != "day":
+                day = digest_period.period(kind, day)[1]
+        else:
+            day = loaded or date.today() - timedelta(days=1)
+            if kind != "day":
+                day = digest_period.last_closed(kind, day)
+        if kind != "day" and loaded and day > loaded:
+            raise CommandError(f"Период до {day:%d.%m.%Y} ещё не загружен (в базе по {loaded}).")
+        return day, kind
 
     def handle(self, *args, **opts):
         profile = opts["profile"]
@@ -653,9 +672,12 @@ class Command(BaseCommand):
             if not admin.lstrip("-").isdigit() or not token:
                 raise CommandError("Нужны TELEGRAM_ADMIN_ID и TELEGRAM_BOT_TOKEN_SALES в .env")
             loaded = digest.loaded_date()
-            day = (date.fromisoformat(opts["digest_date"]) if opts.get("digest_date")
-                   else loaded or date.today() - timedelta(days=1))
-            parts = digest.greet(digest.blocks(day, loaded), date.today(), day)
+            day, kind = self._digest_day(opts, loaded)
+            if kind == "day":
+                parts = digest.greet(digest.blocks(day, loaded), date.today(), day)
+            else:
+                from gear.app.daily_sales.assistant import digest_period
+                parts = digest_period.morning(day + timedelta(days=1), day, loaded, [kind])
             if not parts:
                 self.stdout.write(f"Продаж за {day:%d.%m.%Y} нет (в базе по {loaded}).")
                 return
@@ -668,10 +690,14 @@ class Command(BaseCommand):
             from datetime import date, timedelta
             from gear.app.daily_sales.assistant import digest
             loaded = digest.loaded_date()
-            day = (date.fromisoformat(opts["digest_date"]) if opts.get("digest_date")
-                   else loaded or date.today() - timedelta(days=1))
+            day, kind = self._digest_day(opts, loaded)
             self.stdout.write(f"В базе продажи по: {loaded}")
-            self.stdout.write(digest.build(day, loaded) or f"Продаж за {day:%d.%m.%Y} нет.")
+            if kind == "day":
+                text = digest.build(day, loaded)
+            else:
+                from gear.app.daily_sales.assistant import digest_period
+                text = digest_period.build(kind, day, loaded) if loaded and loaded >= day else None
+            self.stdout.write(text or f"Продаж за {day:%d.%m.%Y} нет.")
             return
         token = (os.getenv(f"TELEGRAM_BOT_TOKEN_{profile.upper()}") or "").strip()
         if not token:
