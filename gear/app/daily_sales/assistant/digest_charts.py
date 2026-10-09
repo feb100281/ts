@@ -114,6 +114,37 @@ def sales_period(days, values, n_cur, ref, title, sub) -> bytes:
     return _png(plt, fig)
 
 
+def trend(labels, values, margins, title, sub) -> bytes:
+    """Столбики по периодам (млн ₽), текущий — последний; под столбиком маржа, %."""
+    plt = _plt()
+    n = len(values)
+    fig, ax = plt.subplots(figsize=(10.8, 7.6), dpi=100)
+    ax.bar(range(n), values, width=0.62, color=[PALE] * (n - 1) + [GREEN])
+    top = max(values) or 1
+    avg = sum(values[:-1]) / (n - 1) if n > 1 else 0
+    ax.set_xlim(-0.6, n - 0.4)
+    ax.set_ylim(0, top * 1.25)
+    for i, v in enumerate(values):
+        ax.text(i, v + top * 0.02, _num(v, 1), ha="center", va="bottom",
+                fontsize=15 if i == n - 1 else 13.5, fontweight="bold" if i == n - 1 else None,
+                color=INK if i == n - 1 else MUTED)
+    ax.set_xticks(range(n))
+    ax.set_xticklabels([f"{lab}\n" + (_num(m, 1) + "%" if m is not None else "—")
+                        for lab, m in zip(labels, margins)], fontsize=13 if n <= 6 else 12)
+    for i, (t, m) in enumerate(zip(ax.get_xticklabels(), margins)):
+        t.set_color(WARM if m is not None and m < 0 else INK if i == n - 1 else MUTED)
+    if avg:
+        ax.axhline(avg, color=MUTED, lw=1, ls=(0, (4, 4)))
+        ax.plot([-0.55, -0.15], [top * 1.2] * 2, color=MUTED, lw=1, ls=(0, (4, 4)))
+        ax.text(-0.05, top * 1.2, f"среднее прошлых — {_num(avg, 1)}", va="center",
+                fontsize=12.5, color=MUTED)
+    ax.yaxis.set_visible(False)
+    _clean(ax)
+    _head(fig, title, sub)
+    fig.subplots_adjust(left=0.04, right=0.96, top=0.84, bottom=0.13)
+    return _png(plt, fig)
+
+
 def brands(rows, title, sub) -> bytes:
     """rows: [(бренд, изменение в ₽)], рост вправо, падение влево."""
     plt = _plt()

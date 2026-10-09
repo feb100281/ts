@@ -168,6 +168,11 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
             n_cur, ref, f"{title} — {_rub(v)}", sub))
     out.append({"text": "\n".join(lines), "photo": photo})
 
+    # ---- 1б. динамика: 5 недель или месяцы с начала года
+    blk = _safe("динамика", lambda: trend_block(kind, a, b, charts))
+    if blk:
+        out.append(blk)
+
     # ---- 2. бренды и категории
     lim = MOVERS_MIN[kind]
 
@@ -332,6 +337,145 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
     lines.append("<i>Хотите подробнее — напишите мне вопрос: по брендам, артикулам, в Excel.</i>")
     out.append({"text": "\n".join(lines), "photo": None})
     return out
+
+
+TREND_WEEKS = 5
+TREND_MONTHS_MIN = 6           # в начале года берём хотя бы полгода назад
+
+
+def trend_periods(kind: str, a: date, b: date) -> list[tuple[date, date, str]]:
+    """[(начало, конец, подпись)] от старого к текущему периоду."""
+    if kind == "week":
+        out = []
+        for i in range(TREND_WEEKS - 1, -1, -1):
+            x, y = a - timedelta(days=7 * i), b - timedelta(days=7 * i)
+            out.append((x, y, f"{x:%d}–{y:%d.%m}" if x.month == y.month
+                        else f"{x:%d.%m}–{y:%d.%m}"))
+        return out
+    out, x = [], a                       # с января, но не меньше TREND_MONTHS_MIN месяцев
+    while x.year == a.year or len(out) < TREND_MONTHS_MIN:
+        e = (x + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        out.insert(0, (x, e, MONTHS_SHORT[x.month - 1]))
+        x = (x - timedelta(days=1)).replace(day=1)
+    return out
+
+
+def trend_block(kind: str, a: date, b: date, charts: bool = True) -> dict | None:
+    """Динамика за несколько периодов: выручка, штуки, чек, маржа, возвраты и выводы."""
+    import pandas as pd
+    from ..wb_sales_export import fetch
+    from . import digest_charts as ch
+    from .margin import dashboard_margin
+
+    per = trend_periods(kind, a, b)
+    df = fetch(per[0][0], b, "day", [])
+    if df.empty:
+        return None
+    dcol = df.columns[0]
+    df[dcol] = pd.to_datetime(df[dcol]).dt.date
+    pc = lambda v: f"{v:.1f}".replace(".", ",").replace("-", "−") + "%"
+
+    rows = []
+    for x, y, lab in per:
+        d = df[(df[dcol] >= x) & (df[dcol] <= y)]
+        rev, qty = float(d[NET_RUB].sum()), float(d[NET_QTY].sum())
+        sold, ret = float(d[QTY].sum()), float(d[RET].sum())
+
+        def mg(x=x, y=y):
+            m = dashboard_margin(x, y, "brand")
+            r = float(m["rev"].sum()) if m is not None and not m.empty else 0
+            return float(m["md2"].sum()) / r * 100 if r else None
+        n = (y - x).days + 1
+        rows.append({"lab": lab, "rev": rev, "qty": qty, "n": n, "per_day": rev / n,
+                     "check": rev / qty if qty else 0, "ret": ret / sold * 100 if sold else None,
+                     "margin": _safe(f"маржа {lab}", mg)})
+    rows = [r for r in rows if r["rev"]]
+    if len(rows) < 3:
+        return None
+    cur, prev, old = rows[-1], rows[-2], rows[:-1]
+    key = "rev" if kind == "week" else "per_day"           # месяцы сравниваем по среднему дню
+    avg = sum(r[key] for r in old) / len(old)
+    nm = f"{len(rows)} недель" if kind == "week" else f"{len(rows)} мес."
+
+    # ---- выводы
+    vs = (cur[key] - avg) / avg * 100 if avg else 0
+    if cur[key] >= max(r[key] for r in rows):
+        head = (f"{UP} Лучшая неделя за {nm}" if kind == "week" else f"{UP} Лучший месяц за {nm}")
+    elif cur[key] <= min(r[key] for r in rows):
+        head = (f"{DOWN} Самая слабая неделя за {nm}" if kind == "week"
+                else f"{DOWN} Самый слабый месяц за {nm}")
+    elif abs(vs) < 2:
+        head = ("Неделя" if kind == "week" else "Месяц") + " на уровне среднего"
+    else:
+        head = f"{UP if vs >= 0 else DOWN} " + (
+            "Неделя" if kind == "week" else "Месяц") + f" {'выше' if vs >= 0 else 'ниже'} среднего"
+    what = "продажи" if kind == "week" else "продажи в среднем за день"
+    head += (f": {what} {_rub(cur[key])} при среднем {_rub(avg)} за предыдущие "
+             f"{len(old)} ({'+' if vs >= 0 else '−'}{pc(abs(vs))}).")
+    lines = [f"<b>Динамика: {'последние ' + nm if kind == 'week' else 'по месяцам'}</b>",
+             _quote(head)]
+
+    k = 0                                                   # серия роста или падения
+    sign = 1 if cur[key] > prev[key] else -1
+    for i in range(len(rows) - 1, 0, -1):
+        if (rows[i][key] - rows[i - 1][key]) * sign > 0:
+            k += 1
+        else:
+            break
+    if k >= 2:
+        lines.append(f"{UP if sign > 0 else DOWN} Продажи {'растут' if sign > 0 else 'снижаются'} "
+                     f"{k}-{'ю неделю' if kind == 'week' else 'й месяц'} подряд.")
+
+    if prev["qty"] and prev["check"]:
+        dq = ((cur["qty"] / cur["n"]) / (prev["qty"] / prev["n"]) - 1) * 100
+        dc = (cur["check"] / prev["check"] - 1) * 100
+        if abs(dq) >= 1 or abs(dc) >= 1:
+            main = "количества проданного" if abs(dq) >= abs(dc) else "среднего чека"
+            lines.append(f"К {'прошлой неделе' if kind == 'week' else 'прошлому месяцу'} изменение "
+                         f"в основном за счёт {main}: штук в день {_chg(100 + dq, 100)}, "
+                         f"средний чек {_chg(100 + dc, 100)}.")
+
+    ms = [r["margin"] for r in rows if r["margin"] is not None]
+    m_cur, m_avg = cur["margin"], None
+    if m_cur is not None and len(ms) >= 3:
+        m_old = [r["margin"] for r in old if r["margin"] is not None]
+        m_avg = sum(m_old) / len(m_old)
+        dm = m_cur - m_avg
+        lines.append(f"Маржа после расходов WB — <b>{pc(m_cur)}</b>, в среднем за прошлые "
+                     f"{'недели' if kind == 'week' else 'месяцы'} {pc(m_avg)} ({'+' if dm >= 0 else '−'}"
+                     + f"{abs(dm):.1f}".replace(".", ",") + " п.п.).")
+    rets = [r["ret"] for r in rows if r["ret"] is not None]
+    if cur["ret"] is not None and len(rets) >= 3:
+        if cur["ret"] >= max(rets) and cur["ret"] > min(rets):
+            lines.append(f"{DOWN} Доля возвратов — самая высокая за {nm}: {pc(cur['ret'])}.")
+        elif cur["ret"] <= min(rets) and cur["ret"] < max(rets):
+            lines.append(f"{UP} Доля возвратов — самая низкая за {nm}: {pc(cur['ret'])}.")
+
+    if m_avg is not None:
+        lvl = lambda v, eps: 1 if v >= eps else -1 if v <= -eps else 0
+        ls, lm = lvl(vs, 2), lvl(m_cur - m_avg, 0.5)
+        word = {1: "выше обычного", 0: "на обычном уровне", -1: "ниже обычного"}
+        hint = ("стоит проверить скидки и расходы WB (блоки ниже)." if lm < 0 else
+                "стоит посмотреть, какие бренды и категории просели (ниже)." if ls < 0 else
+                "хороший период." if ls > 0 and lm > 0 else "")
+        lines.append(f"<b>Вывод:</b> продажи {word[ls]}, маржа {word[lm]}"
+                     + (f" — {hint}" if hint else "."))
+
+    t = [("", "млн ₽", "шт", "чек", "маржа")] + [
+        (r["lab"], _mln(r["rev"]), _n(r["qty"]), _n(r["check"]),
+         pc(r["margin"]) if r["margin"] is not None else "—") for r in rows]
+    lines.append(_pre(t, wide=False))
+    if kind == "month":
+        ytd = [r for r, p in zip(rows, per[-len(rows):]) if p[0].year == b.year]
+        if len(ytd) > 1:
+            lines.append(f"С начала года продали на <b>{_rub(sum(r['rev'] for r in ytd))}</b>.")
+        lines.append("<i>Месяцы разной длины, поэтому сравниваем средние продажи за день.</i>")
+    lines.append("<i>Продажи как на сайте WB, с НДС, до СПП; маржа — по методике дашборда.</i>")
+    return {"text": "\n".join(lines), "photo": _safe("график «динамика»", lambda: ch.trend(
+        [r["lab"] for r in rows], [r["rev"] / 1e6 for r in rows], [r["margin"] for r in rows],
+        f"Динамика продаж: {nm}",
+        "млн ₽ по " + ("неделям" if kind == "week" else "месяцам") + " · под столбиком — маржа"))
+        if charts else None}
 
 
 def morning(today: date, day: date, loaded: date | None, kinds: list[str] | None = None,
