@@ -2176,7 +2176,10 @@ wb_price AS (
 
     SELECT
         rrd_id,
-        SUM(val) AS retail_amount
+        -- было (до fix/wb-vat): SUM(val) AS retail_amount — без знака
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0)
+        -
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS retail_amount
 
     FROM sales.sales_long
 
@@ -2229,56 +2232,81 @@ rrd_vat AS (
 -- net_comission обычно отрицательная.
 -- ===================================================================
 
+-- Новая методика (как base.txt мэн пака): НДС с комиссии — фактический
+-- из отчёта WB (ppvz_vw_nds). Было (до fix/wb-vat):
+-- commissions AS (
+--
+--     SELECT
+--         rrd_id,
+--
+--         COALESCE(
+--             SUM(
+--                 val
+--                 / (
+--                     100
+--                     +
+--                     COALESCE(
+--                         vat_rate,
+--                         0
+--                     )
+--                 )
+--                 * 100
+--             ) FILTER (
+--                 WHERE
+--                     field = 'comission'
+--                     AND oper = 'dt'
+--             ),
+--             0
+--         )
+--
+--         -
+--
+--         COALESCE(
+--             SUM(
+--                 val
+--                 / (
+--                     100
+--                     +
+--                     COALESCE(
+--                         vat_rate,
+--                         0
+--                     )
+--                 )
+--                 * 100
+--             ) FILTER (
+--                 WHERE
+--                     field = 'comission'
+--                     AND oper = 'cr'
+--             ),
+--             0
+--         )
+--
+--         AS net_comission
+--
+--     FROM sales.sales_long
+--
+--     GROUP BY
+--         rrd_id
+-- )
+
 commissions AS (
 
     SELECT
         rrd_id,
 
-        COALESCE(
-            SUM(
-                val
-                / (
-                    100
-                    +
-                    COALESCE(
-                        vat_rate,
-                        0
-                    )
-                )
-                * 100
-            ) FILTER (
-                WHERE
-                    field = 'comission'
-                    AND oper = 'dt'
-            ),
-            0
-        )
-
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
         -
-
-        COALESCE(
-            SUM(
-                val
-                / (
-                    100
-                    +
-                    COALESCE(
-                        vat_rate,
-                        0
-                    )
-                )
-                * 100
-            ) FILTER (
-                WHERE
-                    field = 'comission'
-                    AND oper = 'cr'
-            ),
-            0
-        )
-
-        AS net_comission
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
+        -
+        (
+            COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'dt'), 0)
+            -
+            COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'cr'), 0)
+        ) AS net_comission
 
     FROM sales.sales_long
+
+    WHERE field IN ('comission', 'ppvz_vw_nds')
 
     GROUP BY
         rrd_id
@@ -3047,29 +3075,18 @@ def get_stats_data(
                     -- копейки + НДС
                     -- =================================================
 
+                    -- было (до fix/wb-vat): НДС с нашей цены до СПП
+                    -- SUM(COALESCE(t.cr_rev, 0) / 100.0
+                    --     / (1 + COALESCE(t.vat_rate, 0) / 100.0)) AS revenue,
+
+                    -- НДС с цены покупателя (после СПП), как в мэн паке
                     SUM(
-
-                        COALESCE(
-                            t.cr_rev,
-                            0
-                        )
-
-                        / 100.0
-
-                        / (
-
-                            1
-
-                            +
-
-                            COALESCE(
-                                t.vat_rate,
-                                0
-                            )
-                            / 100.0
-
-                        )
-
+                        (
+                            COALESCE(t.cr_rev, 0)
+                            - COALESCE(t.retail_amount, 0)
+                              * COALESCE(t.vat_rate, 0)
+                              / (100 + COALESCE(t.vat_rate, 0))
+                        ) / 100.0
                     ) AS revenue,
 
 

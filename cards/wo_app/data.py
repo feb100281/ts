@@ -15,8 +15,17 @@ def get_data_by_date(start=None, end=None):
         rrd_id,
         COALESCE(sum(val) filter (where field = 'comission' and oper = 'dt'),0) -
         COALESCE(sum(val) filter (where field = 'comission' and oper = 'cr')) as gross_comission,
-        COALESCE(sum(val / (100+vat_rate)*100) filter (where field = 'comission' and oper = 'dt'),0) -
-        COALESCE(sum(val/ (100+vat_rate)*100) filter (where field = 'comission' and oper = 'cr')) as net_comission
+        -- было (до fix/wb-vat): комиссия / (100 + vat_rate) * 100
+        -- COALESCE(sum(val / (100+vat_rate)*100) filter (where field = 'comission' and oper = 'dt'),0) -
+        -- COALESCE(sum(val/ (100+vat_rate)*100) filter (where field = 'comission' and oper = 'cr')) as net_comission
+        -- НДС с комиссии — фактический из отчёта WB (ppvz_vw_nds), как в base.txt
+        COALESCE(sum(val) filter (where field = 'comission' and oper = 'dt'),0) -
+        COALESCE(sum(val) filter (where field = 'comission' and oper = 'cr'),0) -
+        (COALESCE(sum(val) filter (where field = 'ppvz_vw_nds' and oper = 'dt'),0) -
+         COALESCE(sum(val) filter (where field = 'ppvz_vw_nds' and oper = 'cr'),0)) as net_comission,
+        -- цена покупателя после СПП, со знаком
+        COALESCE(sum(val) filter (where field = 'retail_amount' and oper = 'dt'),0) -
+        COALESCE(sum(val) filter (where field = 'retail_amount' and oper = 'cr'),0) as retail_amount
         from sales.sales_long
         group by rrd_id
     ),
@@ -65,19 +74,22 @@ def get_data_by_date(start=None, end=None):
     select  
     t.date_from,
     sum(cr_rev) as amount,
-    sum(cr_rev) -
-    sum(cr_rev / (100+vat_rate) * 100) as vat_amount,
-    sum(cr_rev / (100+vat_rate) * 100) as amount_vatless,
+    -- было (до fix/wb-vat): НДС с нашей цены до СПП
+    -- sum(cr_rev) - sum(cr_rev / (100+vat_rate) * 100) as vat_amount,
+    -- sum(cr_rev / (100+vat_rate) * 100) as amount_vatless,
+    sum(coalesce(a.retail_amount, 0) * vat_rate / (100+vat_rate)) as vat_amount,
+    sum(cr_rev - coalesce(a.retail_amount, 0) * vat_rate / (100+vat_rate)) as amount_vatless,
     sum(cr) as cogs,    
     count(cr_rev) as total_net_sales,
     count(cr_rev) filter (where cr =0) as no_cost,
     sum(
     case
         when coalesce(cr, 0) <> 0
+        -- было: cr_rev / (100 + coalesce(vat_rate, 0)) * 100
         then (
             cr_rev
-            / (100 + coalesce(vat_rate, 0))
-            * 100
+            - coalesce(a.retail_amount, 0) * coalesce(vat_rate, 0)
+              / (100 + coalesce(vat_rate, 0))
         )
         else 0
     end
@@ -203,15 +215,11 @@ from (
 
         sum(t.cr_rev)
         - sum(
-            t.cr_rev
-            / (100 + coalesce(t.vat_rate, 0))
-            * 100
+            t.cr_rev - coalesce(ra.retail_amount, 0) * coalesce(t.vat_rate, 0) / (100 + coalesce(t.vat_rate, 0)) /* было: t.cr_rev / (100 + coalesce(t.vat_rate, 0)) * 100 */
         ) as vat_amount,
 
         sum(
-            t.cr_rev
-            / (100 + coalesce(t.vat_rate, 0))
-            * 100
+            t.cr_rev - coalesce(ra.retail_amount, 0) * coalesce(t.vat_rate, 0) / (100 + coalesce(t.vat_rate, 0)) /* было: t.cr_rev / (100 + coalesce(t.vat_rate, 0)) * 100 */
         ) as amount_vatless,
 
         coalesce(sum(t.cr), 0) as dt,
@@ -230,9 +238,7 @@ from (
             case
                 when coalesce(t.cr, 0) <> 0
                 then (
-                    t.cr_rev
-                    / (100 + coalesce(t.vat_rate, 0))
-                    * 100
+                    t.cr_rev - coalesce(ra.retail_amount, 0) * coalesce(t.vat_rate, 0) / (100 + coalesce(t.vat_rate, 0)) /* было: t.cr_rev / (100 + coalesce(t.vat_rate, 0)) * 100 */
                 )
                 else 0
             end
@@ -249,6 +255,16 @@ from (
         avg(nullif(t.cr, 0)) as cost_mean
 
     from inventories.inv_gl_final t
+    -- цена покупателя после СПП по строке отчёта: НДС считаем с неё (fix/wb-vat)
+    left join (
+        select
+            rrd_id,
+            coalesce(sum(val) filter (where oper = 'dt'), 0)
+            - coalesce(sum(val) filter (where oper = 'cr'), 0) as retail_amount
+        from sales.sales_long
+        where field = 'retail_amount'
+        group by rrd_id
+    ) ra on ra.rrd_id = t.rrd_id
     where
         t.date_from between ? and ?
         and 

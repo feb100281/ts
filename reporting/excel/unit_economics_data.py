@@ -273,7 +273,7 @@ def _fetch_fifo_monthly(con, date_to):
 
             SUM(t.cr_rev) AS amount_before_spp,
             SUM(t.retail_amount) AS amount_after_spp,
-            SUM(t.cr_rev / (100 + t.vat_rate) * 100) AS amount_before_spp_vatless,
+            SUM((t.cr_rev - t.retail_amount * t.vat_rate / (100 + t.vat_rate)) /* было: t.cr_rev / (100 + t.vat_rate) * 100 */) AS amount_before_spp_vatless,
 
             SUM(t.adjusted_cogs_man) AS cogs_man
 
@@ -331,17 +331,17 @@ def _fetch_wb_cost_pool_monthly(con, date_to):
         SELECT
             EXTRACT(YEAR FROM date_from)::INT AS year,
             EXTRACT(MONTH FROM date_from)::INT AS month,
-            COALESCE(
-                SUM(val / (100 + vat_rate) * 100)
-                FILTER (WHERE field = 'comission' AND oper = 'dt'), 0
-            )
-            -
-            COALESCE(
-                SUM(val / (100 + vat_rate) * 100)
-                FILTER (WHERE field = 'comission' AND oper = 'cr'), 0
+            -- было (до fix/wb-vat): комиссия / (100 + vat_rate) * 100
+            -- НДС с комиссии — фактический из отчёта WB (ppvz_vw_nds), как в base.txt
+            COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
+            - COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
+            - (
+                COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'dt'), 0)
+                - COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'cr'), 0)
             ) AS net_comission
         FROM sales.sales_long
-        WHERE date_from <= ?
+        WHERE field IN ('comission', 'ppvz_vw_nds')
+          AND date_from <= ?
         GROUP BY 1, 2
     """
     commission_df = con.execute(commission_sql, [date_to]).df()
