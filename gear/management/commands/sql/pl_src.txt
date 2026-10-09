@@ -3,8 +3,9 @@
 --
 -- pl_for_csv (кассовый метод) + зарплата по начислению из ЗУП:
 -- за месяцы, по которым есть расчётная ведомость ЗУП, оплата
--- труда (550100) из банка заменяется начислением, а НДФЛ и
--- страховые взносы добавляются отдельными строками. Месяцы без
+-- труда (550100) из банка заменяется начислением; НДФЛ и
+-- страховые взносы добавляются статьями в ту же группу
+-- «Расходы на персонал». Месяцы без
 -- ведомости остаются кассовыми. Подбор персонала и прочее — как было.
 --
 -- {payroll}, {contrib} — пути к data/zup/*.parquet (команда zup_payroll).
@@ -26,20 +27,16 @@ zup_months AS (
 ),
 
 acc AS (
-    SELECT COALESCE(MIN(account_name), '610000 Накладные расходы') AS account_name
+    SELECT
+        COALESCE(MIN(account_name), '610000 Накладные расходы') AS account_name,
+        COALESCE(MIN(cost_item_group) FILTER (WHERE STARTS_WITH(cost_item, '550100')),
+                 '550000 Расходы на персонал') AS grp
     FROM pg.public.pl_for_csv
     WHERE STARTS_WITH(account_name, '610000')
 ),
 
 cash AS (
-    SELECT * REPLACE (
-        CASE
-            WHEN STARTS_WITH(account_name, '610000')
-             AND STARTS_WITH(COALESCE(cost_item, ''), '550100')
-                THEN '550100 Оплата труда'
-            ELSE cost_item_group
-        END AS cost_item_group
-    )
+    SELECT *
     FROM pg.public.pl_for_csv p
     WHERE NOT (
         STARTS_WITH(p.account_name, '610000')
@@ -52,8 +49,8 @@ accrual AS (
     SELECT
         z.period::DATE AS date_from,
         a.account_name,
-        '550100 Оплата труда' AS cost_item_group,
-        '550100 Оплата труда (начислено без НДФЛ)' AS cost_item,
+        a.grp AS cost_item_group,
+        '550100 Заработная плата по ведомости ЗУП (без НДФЛ)' AS cost_item,
         COALESCE(z.full_name, UPPER(z.name_short)) AS cp_name,
         'Начисление ЗУП' AS contract_name,
         -(z.accrued_total - z.ndfl)::DOUBLE AS amount,
@@ -66,8 +63,8 @@ accrual AS (
     SELECT
         z.period::DATE,
         a.account_name,
-        '550100 НДФЛ',
-        '550100 НДФЛ (начислено)',
+        a.grp,
+        '550100 НДФЛ по ведомости ЗУП',
         COALESCE(z.full_name, UPPER(z.name_short)),
         'Начисление ЗУП',
         -z.ndfl::DOUBLE,
@@ -80,8 +77,12 @@ accrual AS (
     SELECT
         c.period::DATE,
         a.account_name,
-        '550100 Страховые взносы',
-        'Страховые взносы: ' || c.section,
+        a.grp,
+        '550100 Страховые взносы: ' || CASE
+            WHEN c.section ILIKE 'Единый тариф%' THEN 'единый тариф'
+            WHEN c.section ILIKE '%несч%' THEN 'несчастные случаи и профзаболевания'
+            ELSE c.section
+        END,
         c.full_name,
         'Начисление ЗУП',
         -c.amount::DOUBLE,

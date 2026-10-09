@@ -171,6 +171,14 @@ def pl_report(date_from=None, date_to=None, detail="summary") -> str:
 
     note = (f"\nДанные мэн пака на {rd:%d.%m.%Y}. Расходы со знаком минус. "
             "* — месяц неполный. ТБУ = постоянные затраты / КМД.")
+    try:
+        from gear.management.commands.mp import zup_months, _month_ranges
+        zm = zup_months()
+        note += ("\nЗарплата по начислению из ЗУП: " + _month_ranges(zm) + "; остальные месяцы — "
+                 "по оплате из банка, без НДФЛ и взносов." if zm else
+                 "\nЗарплата во всех месяцах — по оплате из банка, без НДФЛ и взносов.")
+    except Exception:
+        pass
     part = [m for m in months if m > rd]
     if part:
         note += (f"\nВНИМАНИЕ: {part[-1]:%m.%Y} не закрыт — в колонке со * факт только по "
