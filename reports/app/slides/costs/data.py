@@ -19,6 +19,7 @@ def get_summary(start, end):
             from sales.sales_long
             where field not in (
                 'comission',
+                'ppvz_vw_nds',
                 'ppvz_for_pay',
                 'retail_amount',
                 'retail_price'

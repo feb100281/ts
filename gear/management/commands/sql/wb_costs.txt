@@ -347,5 +347,16 @@ SELECT
 
 FROM wb_costs t
 
-LEFT JOIN sales.sales_long s
+-- одна строка на rrd_id: прямой JOIN на sales_long размножал строки
+-- по числу полей rrd_id (retail_price, retail_amount, comission, ...)
+LEFT JOIN (
+    SELECT
+        rrd_id,
+        COALESCE(
+            MAX(vat_rate) FILTER (WHERE field = 'retail_price'),
+            MAX(vat_rate)
+        ) AS vat_rate
+    FROM sales.sales_long
+    GROUP BY rrd_id
+) s
     ON s.rrd_id = t.rrd_id;
