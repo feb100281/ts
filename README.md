@@ -326,4 +326,17 @@ python manage.py zup_payroll --push            # разобрать всё и о
 
 
 ### СДЕЛАТЬ НАЧИЛЕНИЯ ПО ЗАРПЛАТЕ (НА МАКЕ- НЕ НА СЕРВЕРЕ)
-python manage.py zup_payroll --push
+python manage.py zup_payroll --push ### это сразу все месяцы
+
+python manage.py zup_payroll --month 2026-10            # только проверить октябрь, ничего не пишет
+python manage.py zup_payroll --month 2026-10 --push     # заменить только октябрь и отправить на сервер
+
+
+
+
+Зарплата за 2025 (разово, другой формат: «Ведомость 2025.docx» + «Взносы 2025-MM.xlsx»
+в папке «09. Зарплата начисления ЗУП/2025»):
+```
+python manage.py zup_payroll_2025 --check   # проверить
+python manage.py zup_payroll_2025 --push    # записать data/zup/*_2025.parquet и отправить
+```

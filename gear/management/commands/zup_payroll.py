@@ -147,7 +147,11 @@ def _month_from_text(s) -> date | None:
 
 
 def parse_vznosy(path: Path) -> tuple[list[dict], list[str]]:
-    """Взносы по сотрудникам: раздел, месяц дохода, база, сумма."""
+    """Взносы: раздел, сотрудник, месяц дохода, база, сумма.
+
+    «Проверка расчёта взносов» — строка на сотрудника. «Анализ взносов в фонды»
+    (без сотрудников) — одна строка на раздел из «Итого», full_name = None.
+    """
     rows = list(_rows(path))
     out, warn = [], []
     section, hdr = None, None
@@ -157,8 +161,9 @@ def parse_vznosy(path: Path) -> tuple[list[dict], list[str]]:
             continue
         i0, v0 = cells[0]
         t0 = str(v0).strip()
-        if t0 == "Сотрудник":                            # шапка таблицы раздела
-            hdr = {"name": i0, "month": None, "base": None, "amt": []}
+        if any(str(v).strip() == "Начислено всего" for _, v in cells):   # шапка раздела
+            hdr = {"name": i0, "month": None, "base": None, "amt": [],
+                   "by_emp": t0 == "Сотрудник"}
             for i, v in cells:
                 h = str(v).strip().lower()
                 if h.startswith("месяц получения"):
@@ -169,7 +174,12 @@ def parse_vznosy(path: Path) -> tuple[list[dict], list[str]]:
                     hdr["amt"].append(i)
             continue
         if t0 == "Итого":
-            if hdr and hdr["amt"]:
+            if hdr and hdr["amt"] and not hdr["by_emp"]:          # отчёт без сотрудников
+                tot = round(sum(_num(r[i]) for i in hdr["amt"] if i < len(r)), 2)
+                out.append({"section": section or "", "full_name": None, "income_month": None,
+                            "base": _num(r[hdr["base"]]) if hdr["base"] is not None else 0.0,
+                            "amount": tot})
+            elif hdr and hdr["amt"]:
                 file_tot = round(sum(_num(r[i]) for i in hdr["amt"] if i < len(r)), 2)
                 got = round(sum(x["amount"] for x in out if x["section"] == section), 2)
                 if abs(file_tot - got) > 0.05:
@@ -181,7 +191,7 @@ def parse_vznosy(path: Path) -> tuple[list[dict], list[str]]:
             if len(cells) == 1 and i0 == 0 and not t0.startswith(("Период", "Организация")):
                 section = t0                             # заголовок раздела
             continue
-        if i0 != hdr["name"]:
+        if i0 != hdr["name"] or not hdr["by_emp"]:
             continue
         amt = sum(_num(r[i]) for i in hdr["amt"] if i < len(r))
         out.append({
@@ -201,7 +211,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--src", default=os.getenv("ZUP_DIR", DEFAULT_SRC),
                             help="Папка с подпапками YYYY-MM")
-        parser.add_argument("--month", help="Проверить только один месяц YYYY-MM (без записи)")
+        parser.add_argument("--month", help="Один месяц YYYY-MM: без --push — только проверка; "
+                                            "с --push — заменить в данных только этот месяц")
         parser.add_argument("--out", default=str(Path(settings.BASE_DIR) / "data" / "zup"))
         parser.add_argument("--push", action="store_true",
                             help="После записи отправить папку на сервер через rsync")
@@ -241,7 +252,8 @@ class Command(BaseCommand):
 
             full_by_key: dict[str, set] = {}
             for x in vz:
-                full_by_key.setdefault(short_key(x["full_name"]), set()).add(norm_name(x["full_name"]))
+                if x["full_name"]:
+                    full_by_key.setdefault(short_key(x["full_name"]), set()).add(norm_name(x["full_name"]))
             for r in rows:
                 cand = full_by_key.get(short_key(r["name_short"]), set())
                 r["full_name"] = next(iter(cand)) if len(cand) == 1 else None
@@ -254,7 +266,7 @@ class Command(BaseCommand):
                 r.update(period=period, source=ved.name)
                 pay.append(r)
             for x in vz:
-                x.update(period=period, full_name=norm_name(x["full_name"]), source=vzn.name)
+                x.update(period=period, full_name=norm_name(x["full_name"]) or None, source=vzn.name)
                 if x["amount"]:                          # нулевые разделы (ОМС, ОСС…) не храним
                     con.append(x)
             acc = sum(r["accrued_total"] for r in rows)
@@ -276,7 +288,7 @@ class Command(BaseCommand):
             msg = ("НОВЫЕ СОТРУДНИКИ — нет среди контрагентов:\n  " + "\n  ".join(new))
             self.stdout.write(self.style.ERROR(msg))
             self._notify(msg)
-        if o.get("month"):
+        if only and not o.get("push"):
             self.stdout.write("Проверка одного месяца — файлы не записаны.")
             return
 
@@ -288,6 +300,19 @@ class Command(BaseCommand):
             df["period"] = pd.to_datetime(df["period"]).dt.date
         if "income_month" in dc:
             dc["income_month"] = pd.to_datetime(dc["income_month"]).dt.date
+        if only:                              # заменить только этот месяц, остальные как были
+            m = date(*map(int, only.split("-")), 1)
+            dp, dc = dp[dp["period"] == m], dc[dc["period"] == m]
+            merged = []
+            for name, df in (("payroll", dp), ("contributions", dc)):
+                f = out / f"{name}.parquet"
+                if f.exists():
+                    old = pd.read_parquet(f)
+                    old["period"] = pd.to_datetime(old["period"]).dt.date
+                    df = pd.concat([old[old["period"] != m], df], ignore_index=True)
+                merged.append(df)
+            dp, dc = merged
+            self.stdout.write(f"Заменён только {only}; остальные месяцы — как были в data/zup.")
         for name, df in (("payroll", dp), ("contributions", dc)):
             tmp = out / f"{name}.parquet.tmp"
             df.to_parquet(tmp, index=False)

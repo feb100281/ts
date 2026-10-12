@@ -16,12 +16,12 @@ def ensure_pl_src(con) -> bool:
     """
     from django.conf import settings
     zup = Path(settings.BASE_DIR) / "data" / "zup"
-    pay, con_f = zup / "payroll.parquet", zup / "contributions.parquet"
-    if pay.exists() and con_f.exists():
+    # payroll.parquet (с 2026) и payroll_2025.parquet (разовая загрузка) читаются вместе
+    if list(zup.glob("payroll*.parquet")) and list(zup.glob("contributions*.parquet")):
         try:
             con.execute(read_sql("pl_src.txt")
-                        .replace("{payroll}", str(pay).replace("'", "''"))
-                        .replace("{contrib}", str(con_f).replace("'", "''")))
+                        .replace("{payroll}", str(zup / "payroll*.parquet").replace("'", "''"))
+                        .replace("{contrib}", str(zup / "contributions*.parquet").replace("'", "''")))
             return True
         except Exception as e:
             print(f"[pl_src] ЗУП не подключён, кассовый метод: {type(e).__name__}: {e}",

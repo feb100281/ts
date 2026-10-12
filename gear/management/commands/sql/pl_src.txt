@@ -15,11 +15,11 @@
 CREATE OR REPLACE TEMP VIEW pl_src AS
 
 WITH zup_pay AS (
-    SELECT * FROM read_parquet('{payroll}')
+    SELECT * FROM read_parquet('{payroll}', union_by_name = true)
 ),
 
 zup_con AS (
-    SELECT * FROM read_parquet('{contrib}')
+    SELECT * FROM read_parquet('{contrib}', union_by_name = true)
 ),
 
 zup_months AS (
@@ -83,7 +83,7 @@ accrual AS (
             WHEN c.section ILIKE '%несч%' THEN 'несчастные случаи и профзаболевания'
             ELSE c.section
         END,
-        c.full_name,
+        COALESCE(c.full_name, 'Без разбивки по сотрудникам'),
         'Начисление ЗУП',
         -c.amount::DOUBLE,
         'ЗУП: проверка расчёта взносов'

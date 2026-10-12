@@ -289,12 +289,12 @@ PL_DETAIL_SECTIONS = OrderedDict([
 
 def zup_months() -> list:
     """Месяцы, по которым есть начисления зарплаты из ЗУП (data/zup/payroll.parquet)."""
-    f = Path(settings.BASE_DIR) / "data" / "zup" / "payroll.parquet"
-    if not f.exists():
+    files = sorted((Path(settings.BASE_DIR) / "data" / "zup").glob("payroll*.parquet"))
+    if not files:
         return []
     try:
         import pandas as pd
-        return sorted({date(d.year, d.month, 1)
+        return sorted({date(d.year, d.month, 1) for f in files
                        for d in pd.read_parquet(f, columns=["period"])["period"]})
     except Exception:
         return []
