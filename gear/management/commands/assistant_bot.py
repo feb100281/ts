@@ -643,15 +643,16 @@ class Command(BaseCommand):
         parser.add_argument("--digest-date",
                             help="Дата для предпросмотра YYYY-MM-DD; по умолчанию — "
                                  "последний загруженный день (неделя или месяц)")
-        parser.add_argument("--digest-kind", choices=["day", "week", "month"], default="day",
-                            help="Сводка за день, итоги недели (как в пн) или месяца (как 1-го)")
+        parser.add_argument("--digest-kind", choices=["day", "week", "month"],
+                            help="Сводка за день, итоги недели или месяца; по умолчанию — "
+                                 "как в сегодняшней рассылке (пн — неделя, 1-го — месяц)")
 
     @staticmethod
     def _digest_day(opts, loaded):
         """(последний день периода, вид) для --digest-test / --digest-preview."""
         from datetime import date, timedelta
         from gear.app.daily_sales.assistant import digest_period
-        kind = opts.get("digest_kind") or "day"
+        kind = opts.get("digest_kind") or digest_period.kinds_for(date.today())[0]
         if opts.get("digest_date"):
             day = date.fromisoformat(opts["digest_date"])
             if kind != "day":
