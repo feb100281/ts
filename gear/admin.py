@@ -300,7 +300,8 @@ class TelegramQuestionAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        # вопросы удаляются вместе с доступом (каскад); в журнале кнопок удаления нет
+        return request.user.is_active and request.user.is_superuser
 
     @staticmethod
     def _name(a):
