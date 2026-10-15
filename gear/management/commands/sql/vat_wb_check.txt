@@ -1,0 +1,34 @@
+-- Сверка НДС с вознаграждения WB с УПД, по неделям отчёта (пн–вс).
+-- Источник — sales.wb_raw (поля API: vwNds → ppvz_vw_nds, deliveryRub → delivery_rub).
+-- Серии отчётов: основная (report_id из 15 знаков) и дополнительная
+-- (16 знаков, оканчивается на «1»); на каждую серию WB выставляет свой УПД.
+-- НДС как в УПД = НДС продаж − НДС возвратов + НДС технических строк
+--                 + НДС логистики (ставка 22 % с 2026 года, до этого 20 %).
+WITH r AS (
+    SELECT
+        DATE_TRUNC('week', rr_dt)::DATE AS week,
+        CASE WHEN LENGTH(report_id::VARCHAR) = 16
+              AND report_id::VARCHAR LIKE '%1'
+             THEN 'доп.' ELSE 'осн.' END AS seria,
+        COALESCE(sop_name, '') AS sop_name,
+        COALESCE(ppvz_vw_nds, 0) AS nds,
+        COALESCE(delivery_rub, 0) AS dlv,
+        CASE WHEN rr_dt::DATE >= DATE '2026-01-01' THEN 22 ELSE 20 END AS rate
+    FROM sales.wb_raw
+    WHERE rr_dt::DATE >= DATE_TRUNC('year', $date_from::DATE)
+      AND rr_dt::DATE <= $date_from::DATE
+)
+SELECT
+    week,
+    week + 6 AS week_end,
+    seria,
+    ROUND(SUM(nds) FILTER (WHERE sop_name = 'Продажа'), 2) AS nds_sale,
+    ROUND(SUM(nds) FILTER (WHERE sop_name = 'Возврат'), 2) AS nds_return,
+    ROUND(SUM(nds) FILTER (WHERE sop_name NOT IN ('Продажа', 'Возврат')), 2) AS nds_tech,
+    ROUND(SUM(dlv) FILTER (WHERE sop_name ILIKE '%логистик%'), 2) AS logistics,
+    ROUND(SUM(dlv * rate / (100 + rate)) FILTER (WHERE sop_name ILIKE '%логистик%'), 2)
+        AS nds_logistics
+FROM r
+GROUP BY 1, 2, 3
+HAVING SUM(ABS(nds)) + SUM(ABS(dlv)) > 0
+ORDER BY 1, 3

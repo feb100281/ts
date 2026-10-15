@@ -171,8 +171,11 @@ SEC_FIN = "8. ФИНАНСОВЫЕ РАСХОДЫ"
 TAX_SUBITEM = "125200 Налог на прибыль"
 
 
-def pl_layout():
-    """Возвращает список строк P&L в порядке вывода."""
+def pl_layout(after_spp=False):
+    """Возвращает список строк P&L в порядке вывода.
+
+    after_spp — вариант «после СПП»: выручка и комиссия по цене покупателя.
+    """
     L = []
     add = L.append
 
@@ -186,15 +189,18 @@ def pl_layout():
          (SEC_REVENUE, "1.3. Продажи после СПП", 1), 1, FMT_MONEY))
     add(("ratio", "1.5", "Скидка WB (СПП), %",
          ("__spp__", "1.1", -1), 2, FMT_PCT))
-    add(("item", "1.4", "Продажи без НДС до СПП (чистая выручка)",
-        (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
+    add(("item", "1.4",
+         "Продажи без НДС после СПП (чистая выручка)" if after_spp
+         else "Продажи без НДС до СПП (чистая выручка)",
+         (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
     add(("item", "1.6", "Себестоимость проданного товара",
          (SEC_REVENUE, "1.6. Себестоимость", -1), 1, FMT_MONEY))
     add(("calc", "1.7", "МАРЖА ПРОДАЖ (валовая прибыль)",
          [("1.4", 1), ("1.6", 1)], 0, FMT_MONEY))
     add(("ratio", "1.8", "Маржа продаж, % к выручке",
          ("1.7", "1.4", 1), 2, FMT_PCT))
-    add(("item", "1.9", "Комиссия WB",
+    add(("item", "1.9",
+         "Комиссия WB без СПП" if after_spp else "Комиссия WB",
          (SEC_REVENUE, "1.9. Комиссия WB", 1), 1, FMT_MONEY))
     add(("ratio", "1.10", "Комиссия WB, % к выручке",
          ("1.9", "1.4", -1), 2, FMT_PCT))
@@ -202,6 +208,9 @@ def pl_layout():
          [("1.7", 1), ("1.9", 1)], 0, FMT_MONEY))
     add(("ratio", "1.12", "Маржа после комиссии, % к выручке",
          ("1.11", "1.4", 1), 2, FMT_PCT))
+    if after_spp:
+        add(("calc", "1.13", "Справочно: СПП, исключённая из выручки и комиссии",
+             [("1.1", 1), ("1.3", -1)], 2, FMT_MONEY))
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ 3. Расходы на реализацию
@@ -479,6 +488,16 @@ NOTES_PL = [
         "«Итого за период» — сумма годовых итогов. Для процентов и средних значений "
         "колонки итогов пересчитываются по формуле, а не суммируются.",
     ]),
+    ("Лист «P&L после СПП»", [
+        "На листе «P&L» выручка показана по нашей цене до СПП, а СПП входит в "
+        "комиссию WB. На листе «P&L после СПП» и выручка, и комиссия считаются "
+        "по цене покупателя (после СПП), как в бухгалтерии.",
+        "Выручка без НДС после СПП = продажи до СПП − СПП − НДС; комиссия WB без "
+        "СПП = комиссия WB + СПП. Обе строки меняются на одну и ту же сумму СПП "
+        "(строка 1.13), поэтому прибыль на обоих листах одинаковая. Меняются "
+        "только проценты: они считаются от меньшей выручки.",
+        "НДС одинаковый на обоих листах: он всегда считается с цены покупателя.",
+    ]),
 ]
 
 NOTES_CF = [
@@ -609,6 +628,7 @@ def apply_column_dividers(ws, first_row, last_row, first_col, last_col):
             )
 
 TOC_SHEET_NAME = "Оглавление"
+PL_AFTER_SPP_SHEET_NAME = "P&L после СПП"
 
 
 def title_band(ws, title, subtitle, ncols, extra=None, show_back=True):
@@ -786,8 +806,28 @@ def columns_layout(ws, cols, report_year):
 #  05. ЛИСТ P&L
 # =============================================================================
 
+def pl_after_spp(pl_data):
+    """P&L после СПП: из выручки и комиссии исключается СПП.
+
+    До СПП:    1.4 = продажи до СПП − НДС,  комиссия = наша цена − к перечислению.
+    После СПП: 1.4 = продажи после СПП − НДС, комиссия = цена покупателя − к перечислению.
+    Разница в обеих строках = СПП (1.1 − 1.3), прибыль не меняется.
+    """
+    out = dict(pl_data)
+    for (me, sec, itm) in {k for k in pl_data if k[1] == SEC_REVENUE}:
+        if itm not in ("1.4 Продажи без НДС", "1.9. Комиссия WB"):
+            continue
+        spp = ((pl_data.get((me, SEC_REVENUE, "1.1. Продажи до СПП")) or 0.0)
+               - (pl_data.get((me, SEC_REVENUE, "1.3. Продажи после СПП")) or 0.0))
+        v = pl_data.get((me, sec, itm))
+        if v is None:
+            continue
+        out[(me, sec, itm)] = round(v - spp if itm.startswith("1.4") else v + spp, 2)
+    return out
+
+
 def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
-             note_anchors=None, rowmap_out=None):
+             note_anchors=None, rowmap_out=None, after_spp=False):
     as_of = as_of or report_date
     """
     pl_data      — {(me, section, item): value}
@@ -806,8 +846,11 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     sheet_setup(ws)
     title_band(
         ws,
-        "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L)",
-        "Управленческая отчётность (management pack) · метод начисления",
+        "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) ПОСЛЕ СПП" if after_spp
+        else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L)",
+        ("Выручка и комиссия WB по цене покупателя (после СПП) · "
+         "прибыль та же, что на листе «P&L»") if after_spp
+        else "Управленческая отчётность (management pack) · метод начисления",
         ncols,
         extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s · "
               "завершённые годы свёрнуты, их итоги видны"
@@ -820,7 +863,7 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     columns_header(ws, cols, hdr_year, hdr, report_date.year, note_header="НОТА")
 
     # ---- раскладка строк: сначала распределяем номера строк
-    layout = pl_layout()
+    layout = pl_layout(after_spp)
     plan = []          # (kind, code, label, spec, level, fmt)
     for spec in layout:
         kind, code, label, src, level, fmt = spec
@@ -2379,6 +2422,144 @@ def build_wb_payouts(ws, receipts, withdrawn_total, report_date, as_of=None):
 
 
 # =============================================================================
+#  07C2. ЛИСТ «СВЕРКА НДС WB»
+#
+#      НДС с вознаграждения WB по неделям отчёта и сериям отчётов — в том же
+#      разрезе, в каком WB выставляет УПД. Колонка «НДС по УПД» заполняется
+#      вручную, разница считается формулой.
+# =============================================================================
+
+VAT_CHECK_SHEET_NAME = "Сверка НДС WB"
+
+
+def build_vat_check(ws, vat_rows, report_date, as_of=None):
+    """vat_rows — строки sql/vat_wb_check.txt:
+    (week, week_end, seria, nds_sale, nds_return, nds_tech, logistics, nds_logistics)
+    """
+    as_of = as_of or report_date
+    sheet_setup(ws, landscape=True)
+    ncols = 12
+
+    title_band(
+        ws,
+        "СВЕРКА НДС С ВОЗНАГРАЖДЕНИЯ WB С УПД",
+        "НДС из еженедельных отчётов WB по неделям и сериям отчётов — "
+        "для сверки с УПД",
+        ncols,
+        extra="Российский рубль (RUB) · недели пн–вс с 01.01.%d по %s · "
+              "колонку «НДС по УПД» заполните из УПД, разница посчитается сама"
+              % (as_of.year, as_of.strftime("%d.%m.%Y")),
+    )
+
+    widths = [3, 22, 9, 17, 17, 18, 16, 16, 18, 16, 14, 3]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
+    f_txt = Font(name=FONT, size=9, color=TEXT_2)
+    f_num = Font(name=FONT, size=9, color=INCOME)
+    f_bold = Font(name=FONT, size=10, bold=True, color=TEXT)
+    f_month = Font(name=FONT, size=10, bold=True, color=TEXT)
+    f_note = Font(name=FONT, size=8, color=MUTED)
+    f_input = Font(name=FONT, size=9, color=NAVY_3)
+
+    r = 7
+    headers = [
+        "Неделя отчёта", "Серия", "НДС с продаж", "НДС с возвратов",
+        "НДС технических строк", "Логистика с НДС", "НДС логистики",
+        "НДС как в УПД", "НДС по УПД (ввод)", "Разница",
+    ]
+    for i, text in enumerate(headers):
+        col = 2 + i
+        write(ws, r, col, text, font=f_hdr, fillc=NAVY,
+              align="left" if col <= 3 else "right",
+              indent=1 if col <= 3 else 0, wrap=True)
+    ws.cell(row=r, column=ncols).fill = fill(NAVY)
+    ws.row_dimensions[r].height = 30
+    hdr_row = r
+    r += 1
+
+    def num(row, col, value, font=f_num, fillc=None, border=B_BOTTOM):
+        write(ws, row, col, value, font=font, fmt=FMT_MONEY_DEC,
+              fillc=fillc, border=border, align="right")
+
+    months = OrderedDict()
+    for row in vat_rows:
+        wk = row[0] if isinstance(row[0], date) else date.fromisoformat(str(row[0]))
+        months.setdefault((wk.year, wk.month), []).append(row)
+
+    week_rows = []
+    for (year, month), group in months.items():
+        write(ws, r, 2, "%s %d" % (MONTHS_RU[month - 1], year), font=f_month,
+              fillc=SURFACE_2, border=B_BOTTOM_STRONG, align="left", indent=1)
+        for cc in range(3, ncols):
+            ws.cell(row=r, column=cc).fill = fill(SURFACE_2)
+            ws.cell(row=r, column=cc).border = B_BOTTOM_STRONG
+        ws.row_dimensions[r].height = 18
+        r += 1
+
+        for (wk, wk_end, seria, sale, ret, tech, logi, logi_vat) in group:
+            wk = wk if isinstance(wk, date) else date.fromisoformat(str(wk))
+            wk_end = (wk_end if isinstance(wk_end, date)
+                      else date.fromisoformat(str(wk_end)))
+            write(ws, r, 2, "%s–%s" % (wk.strftime("%d.%m"),
+                                       wk_end.strftime("%d.%m.%Y")),
+                  font=f_txt, border=B_BOTTOM, align="left", indent=1)
+            write(ws, r, 3, seria, font=f_txt, border=B_BOTTOM,
+                  align="left", indent=1)
+            num(r, 4, float(sale or 0))
+            num(r, 5, float(ret or 0))
+            num(r, 6, float(tech or 0))
+            num(r, 7, float(logi or 0))
+            num(r, 8, float(logi_vat or 0))
+            num(r, 9, "=D{0}-E{0}+F{0}+H{0}".format(r), font=f_bold)
+            num(r, 10, None, font=f_input, fillc=SURFACE_5)
+            num(r, 11, '=IF(J{0}="","",I{0}-J{0})'.format(r), font=f_bold)
+            ws.row_dimensions[r].height = 16
+            week_rows.append(r)
+            r += 1
+
+    # итог — по строкам недель, месячные плашки пустые
+    write(ws, r, 2, "ИТОГО С НАЧАЛА ГОДА", font=f_bold, fillc=TOTAL_ROW,
+          border=B_TOTAL, align="left", indent=1)
+    ws.cell(row=r, column=3).fill = fill(TOTAL_ROW)
+    ws.cell(row=r, column=3).border = B_TOTAL
+    for col in range(4, 12):
+        L_ = get_column_letter(col)
+        if col == 11:
+            formula = '=IF(COUNT(J{0}:J{1})=0,"",SUM(K{0}:K{1}))'.format(
+                hdr_row + 1, r - 1)
+        else:
+            formula = "=SUM(%s%d:%s%d)" % (L_, hdr_row + 1, L_, r - 1)
+        num(r, col, formula if week_rows else 0, font=f_bold,
+            fillc=TOTAL_ROW, border=B_TOTAL)
+    ws.row_dimensions[r].height = 20
+    r += 2
+
+    note = (
+        "Как считается. «НДС как в УПД» = НДС с продаж − НДС с возвратов + "
+        "НДС технических строк + НДС логистики. НДС с продаж, возвратов и "
+        "технических строк — поле vwNds API (колонка «НДС с вознаграждения "
+        "Вайлдберриз» в Excel-отчёте). Технические строки — «Возмещение "
+        "издержек по перевозке / по складским операциям», ПВЗ и т. п.: WB "
+        "переносит туда часть вознаграждения, НДС по ним отрицательный. "
+        "НДС логистики = логистика × 22/122 (до 2026 года — 20/120).\n"
+        "Серии. На неделю WB формирует два отчёта: основной и "
+        "дополнительный (номер оканчивается на «1»), на каждый — свой УПД, "
+        "поэтому сверять нужно по строке серии. Расхождение в несколько "
+        "рублей — округление НДС логистики в УПД.\n"
+        "Этот же НДС уменьшает комиссию WB в P&L (комиссия показана без НДС)."
+    )
+    write(ws, r, 2, note, font=f_note, align="left", wrap=True, indent=1)
+    ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=ncols - 1)
+    ws.row_dimensions[r].height = 90
+
+    ws.freeze_panes = ws.cell(row=hdr_row + 1, column=4)
+    ws.print_title_rows = "1:%d" % hdr_row
+    return r
+
+
+# =============================================================================
 #  07D. ЛИСТ «РАСШИФРОВКИ P&L» (ноты)
 #
 #      Каждая строка разделов 3-8 раскрывается на три уровня вниз:
@@ -3813,8 +3994,11 @@ def fetch_pack_data(con, date_from):
     con.execute(wb_payouts, parameters={"date_from": date_from})
     payout_rows = con.execute("SELECT * FROM wb_payouts").fetchall()
 
+    vat_rows = con.execute(read_sql("vat_wb_check.txt"),
+                           parameters={"date_from": date_from}).fetchall()
+
     return (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows, payout_rows, conv_rows)
+        deposit_balance, note_rows, payout_rows, conv_rows, vat_rows)
 
 
 # Данные листа «Юнит-экономика». Считаются по тем же витринам, что и P&L,
@@ -3930,7 +4114,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     with get_duckdb_conn_with_opt(ro=True) as con:
         (pl_rows, cf_rows, unit_rows, treasury_rows,
         deposit_balance, note_rows, payout_rows,
-        conv_rows) = fetch_pack_data(con, date_from)
+        conv_rows, vat_rows) = fetch_pack_data(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -4003,12 +4187,14 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_cover.title = TOC_SHEET_NAME
     ws_sum = wb.create_sheet(SUMMARY_SHEET_NAME)
     ws_pl = wb.create_sheet("P&L")
+    ws_pl_spp = wb.create_sheet(PL_AFTER_SPP_SHEET_NAME)
     ws_notes_pl = wb.create_sheet(NOTES_SHEET_NAME)
     ws_unit = wb.create_sheet("Юнит-экономика")
     ws_be = wb.create_sheet(BREAKEVEN_SHEET_NAME)
     ws_cf = wb.create_sheet("Cash Flow")
     ws_cash = wb.create_sheet("Остатки ДС")
     ws_payouts = wb.create_sheet(PAYOUTS_SHEET_NAME)
+    ws_vat = wb.create_sheet(VAT_CHECK_SHEET_NAME)
     ws_npl = wb.create_sheet("Пояснения P&L")
     ws_nunit = wb.create_sheet("Пояснения Юнит-экономика")
     ws_nbe = wb.create_sheet(BE_NOTES_SHEET_NAME)
@@ -4019,6 +4205,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     pl_rowmap = {}
     build_pl(ws_pl, pl_data, tax_by_month, months, report_date,
              as_of=date_from, note_anchors=note_anchors, rowmap_out=pl_rowmap)
+    build_pl(ws_pl_spp, pl_after_spp(pl_data), tax_by_month, months, report_date,
+             as_of=date_from, note_anchors=note_anchors, after_spp=True)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
                     conv_by_month=conv_by_month)
@@ -4049,6 +4237,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_wb_payouts(ws_payouts, payout_receipts,
                      round(sum(x["amount"] for x in outs), 2),
                      report_date, as_of=date_from)
+
+    build_vat_check(ws_vat, vat_rows, report_date, as_of=date_from)
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "
@@ -4084,6 +4274,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                              "точка безубыточности, отклонения, прогноз"),
         ("P&L", "Отчёт о прибылях и убытках с промежуточными итогами, "
                 "EBITDA, налогом и рентабельностью"),
+        (PL_AFTER_SPP_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по цене "
+                                  "покупателя (после СПП), как в бухгалтерии"),
         (NOTES_SHEET_NAME, "Расшифровка каждой строки P&L: статья, "
                            "контрагент, договор"),
         ("Юнит-экономика", "Количества, цены и себестоимость на единицу, "
@@ -4097,6 +4289,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                        "и депозиты с расшифровкой по счетам"),
         (PAYOUTS_SHEET_NAME, "Поступления от площадки на расчётный счёт: "
                              "даты, суммы и количество по месяцам"),
+        (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
+                               "отчётов — для сверки с УПД"),
         ("Пояснения P&L", "Методика расчёта каждого раздела и промежуточного итога"),
         ("Пояснения Юнит-экономика", "Как считается каждый показатель "
                                      "и почему он не равен кассе"),
@@ -4117,8 +4311,10 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     wb.active = 0
 
     # порядок листов: отчёты, затем пояснения
-    order = [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, "P&L", NOTES_SHEET_NAME, "Юнит-экономика",
+    order = [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, "P&L", PL_AFTER_SPP_SHEET_NAME,
+             NOTES_SHEET_NAME, "Юнит-экономика",
              BREAKEVEN_SHEET_NAME, "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
+             VAT_CHECK_SHEET_NAME,
              "Пояснения P&L", "Пояснения Юнит-экономика", BE_NOTES_SHEET_NAME,
              "Пояснения Cash Flow"]
     ordered = [wb[n] for n in order if n in wb.sheetnames]
