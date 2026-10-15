@@ -171,10 +171,12 @@ SEC_FIN = "8. ФИНАНСОВЫЕ РАСХОДЫ"
 TAX_SUBITEM = "125200 Налог на прибыль"
 
 
-def pl_layout(after_spp=False):
+def pl_layout(after_spp=False, dashboard=False):
     """Возвращает список строк P&L в порядке вывода.
 
     after_spp — вариант «после СПП»: выручка и комиссия по цене покупателя.
+    dashboard — вариант «как в дашборде»: НДС снимается ставкой с цены до СПП
+                и со всей комиссии.
     """
     L = []
     add = L.append
@@ -191,6 +193,7 @@ def pl_layout(after_spp=False):
          ("__spp__", "1.1", -1), 2, FMT_PCT))
     add(("item", "1.4",
          "Продажи без НДС после СПП (чистая выручка)" if after_spp
+         else "Продажи до СПП × 100/(100 + ставка НДС)" if dashboard
          else "Продажи без НДС до СПП (чистая выручка)",
          (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
     add(("item", "1.6", "Себестоимость проданного товара",
@@ -200,7 +203,9 @@ def pl_layout(after_spp=False):
     add(("ratio", "1.8", "Маржа продаж, % к выручке",
          ("1.7", "1.4", 1), 2, FMT_PCT))
     add(("item", "1.9",
-         "Комиссия WB без СПП" if after_spp else "Комиссия WB",
+         "Комиссия WB без СПП" if after_spp
+         else "Комиссия WB × 100/(100 + ставка НДС)" if dashboard
+         else "Комиссия WB",
          (SEC_REVENUE, "1.9. Комиссия WB", 1), 1, FMT_MONEY))
     add(("ratio", "1.10", "Комиссия WB, % к выручке",
          ("1.9", "1.4", -1), 2, FMT_PCT))
@@ -498,6 +503,15 @@ NOTES_PL = [
         "только проценты: они считаются от меньшей выручки.",
         "НДС одинаковый на обоих листах: он всегда считается с цены покупателя.",
     ]),
+    ("Лист «P&L дашборд»", [
+        "Строки 1.4 и 1.9 посчитаны так же, как в дашборде продаж: продажи до СПП "
+        "и вся комиссия WB делятся на (100 + ставка НДС) и умножаются на 100. "
+        "Остальные строки — как на листе «P&L».",
+        "Отличие от листа «P&L»: выручка ниже на НДС с суммы СПП, а комиссия — "
+        "на разницу между НДС по ставке и фактическим НДС WB (vwNds). WB не "
+        "предъявляет НДС на СПП, ПВЗ и эквайринг, поэтому фактический НДС "
+        "с комиссии меньше расчётного, и прибыль на этом листе выше.",
+    ]),
 ]
 
 NOTES_CF = [
@@ -629,6 +643,7 @@ def apply_column_dividers(ws, first_row, last_row, first_col, last_col):
 
 TOC_SHEET_NAME = "Оглавление"
 PL_AFTER_SPP_SHEET_NAME = "P&L после СПП"
+PL_DASHBOARD_SHEET_NAME = "P&L дашборд"
 
 
 def title_band(ws, title, subtitle, ncols, extra=None, show_back=True):
@@ -806,6 +821,31 @@ def columns_layout(ws, cols, report_year):
 #  05. ЛИСТ P&L
 # =============================================================================
 
+# Выручка и комиссия «как в дашборде продаж» (gear/app/data/queries.py):
+# НДС снимается ставкой и с цены до СПП, и со всей комиссии WB.
+PL_DASHBOARD_SQL = """
+    SELECT
+        LAST_DAY(date_from::DATE) AS me,
+        SUM(cr_rev * 100 / (100 + COALESCE(vat_rate, 20))) / 100 AS rev,
+        SUM((net_comission + vat_in_wb) * 100 / (100 + COALESCE(vat_rate, 20))) / 100
+            AS comm
+    FROM base
+    WHERE cr_rev <> 0
+      AND date_from::DATE <= $date_from
+    GROUP BY 1
+"""
+
+
+def pl_dashboard(pl_data, dash_rows):
+    """P&L «как в дашборде»: строки 1.4 и 1.9 по методу дашборда продаж."""
+    out = dict(pl_data)
+    for me, rev, comm in dash_rows:
+        me = me if isinstance(me, date) else date.fromisoformat(str(me))
+        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(float(rev or 0), 2)
+        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(float(comm or 0), 2)
+    return out
+
+
 def pl_after_spp(pl_data):
     """P&L после СПП: из выручки и комиссии исключается СПП.
 
@@ -827,7 +867,8 @@ def pl_after_spp(pl_data):
 
 
 def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
-             note_anchors=None, rowmap_out=None, after_spp=False):
+             note_anchors=None, rowmap_out=None, after_spp=False,
+             dashboard=False):
     as_of = as_of or report_date
     """
     pl_data      — {(me, section, item): value}
@@ -847,9 +888,12 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     title_band(
         ws,
         "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) ПОСЛЕ СПП" if after_spp
+        else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) КАК В ДАШБОРДЕ" if dashboard
         else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L)",
         ("Выручка и комиссия WB по цене покупателя (после СПП) · "
          "прибыль та же, что на листе «P&L»") if after_spp
+        else ("Выручка и комиссия WB по методу дашборда продаж: НДС снят ставкой "
+              "с цены до СПП и со всей комиссии") if dashboard
         else "Управленческая отчётность (management pack) · метод начисления",
         ncols,
         extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s · "
@@ -863,7 +907,7 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     columns_header(ws, cols, hdr_year, hdr, report_date.year, note_header="НОТА")
 
     # ---- раскладка строк: сначала распределяем номера строк
-    layout = pl_layout(after_spp)
+    layout = pl_layout(after_spp, dashboard)
     plan = []          # (kind, code, label, spec, level, fmt)
     for spec in layout:
         kind, code, label, src, level, fmt = spec
@@ -4045,9 +4089,11 @@ def fetch_pack_data(con, date_from):
 
     vat_rows = con.execute(read_sql("vat_wb_check.txt"),
                            parameters={"date_from": date_from}).fetchall()
+    dash_rows = con.execute(PL_DASHBOARD_SQL,
+                            parameters={"date_from": date_from}).fetchall()
 
     return (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows, payout_rows, conv_rows, vat_rows)
+        deposit_balance, note_rows, payout_rows, conv_rows, vat_rows, dash_rows)
 
 
 # Данные листа «Юнит-экономика». Считаются по тем же витринам, что и P&L,
@@ -4163,7 +4209,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     with get_duckdb_conn_with_opt(ro=True) as con:
         (pl_rows, cf_rows, unit_rows, treasury_rows,
         deposit_balance, note_rows, payout_rows,
-        conv_rows, vat_rows) = fetch_pack_data(con, date_from)
+        conv_rows, vat_rows, dash_rows) = fetch_pack_data(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -4237,6 +4283,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_sum = wb.create_sheet(SUMMARY_SHEET_NAME)
     ws_pl = wb.create_sheet("P&L")
     ws_pl_spp = wb.create_sheet(PL_AFTER_SPP_SHEET_NAME)
+    ws_pl_dash = wb.create_sheet(PL_DASHBOARD_SHEET_NAME)
     ws_notes_pl = wb.create_sheet(NOTES_SHEET_NAME)
     ws_unit = wb.create_sheet("Юнит-экономика")
     ws_be = wb.create_sheet(BREAKEVEN_SHEET_NAME)
@@ -4256,6 +4303,9 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
              as_of=date_from, note_anchors=note_anchors, rowmap_out=pl_rowmap)
     build_pl(ws_pl_spp, pl_after_spp(pl_data), tax_by_month, months, report_date,
              as_of=date_from, note_anchors=note_anchors, after_spp=True)
+    build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
+             report_date, as_of=date_from, note_anchors=note_anchors,
+             dashboard=True)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
                     conv_by_month=conv_by_month)
@@ -4325,6 +4375,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                 "EBITDA, налогом и рентабельностью"),
         (PL_AFTER_SPP_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по цене "
                                   "покупателя (после СПП), как в бухгалтерии"),
+        (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
+                                  "дашборда продаж — для сравнения"),
         (NOTES_SHEET_NAME, "Расшифровка каждой строки P&L: статья, "
                            "контрагент, договор"),
         ("Юнит-экономика", "Количества, цены и себестоимость на единицу, "
@@ -4361,6 +4413,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     # порядок листов: отчёты, затем пояснения
     order = [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, "P&L", PL_AFTER_SPP_SHEET_NAME,
+             PL_DASHBOARD_SHEET_NAME,
              NOTES_SHEET_NAME, "Юнит-экономика",
              BREAKEVEN_SHEET_NAME, "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
              VAT_CHECK_SHEET_NAME,
