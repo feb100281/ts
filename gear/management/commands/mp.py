@@ -193,7 +193,7 @@ def pl_layout(after_spp=False, dashboard=False):
          ("__spp__", "1.1", -1), 2, FMT_PCT))
     add(("item", "1.4",
          "Продажи без НДС после СПП (чистая выручка)" if after_spp
-         else "Продажи до СПП × 100/(100 + ставка НДС)" if dashboard
+         else "Продажи без НДС (как в дашборде)" if dashboard
          else "Продажи без НДС до СПП (чистая выручка)",
          (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
     add(("item", "1.6", "Себестоимость проданного товара",
@@ -204,7 +204,7 @@ def pl_layout(after_spp=False, dashboard=False):
          ("1.7", "1.4", 1), 2, FMT_PCT))
     add(("item", "1.9",
          "Комиссия WB без СПП" if after_spp
-         else "Комиссия WB × 100/(100 + ставка НДС)" if dashboard
+         else "Комиссия WB (как в дашборде)" if dashboard
          else "Комиссия WB",
          (SEC_REVENUE, "1.9. Комиссия WB", 1), 1, FMT_MONEY))
     add(("ratio", "1.10", "Комиссия WB, % к выручке",
@@ -504,13 +504,14 @@ NOTES_PL = [
         "НДС одинаковый на обоих листах: он всегда считается с цены покупателя.",
     ]),
     ("Лист «P&L дашборд»", [
-        "Строки 1.4 и 1.9 посчитаны так же, как в дашборде продаж: продажи до СПП "
-        "и вся комиссия WB делятся на (100 + ставка НДС) и умножаются на 100. "
-        "Остальные строки — как на листе «P&L».",
-        "Отличие от листа «P&L»: выручка ниже на НДС с суммы СПП, а комиссия — "
-        "на разницу между НДС по ставке и фактическим НДС WB (vwNds). WB не "
-        "предъявляет НДС на СПП, ПВЗ и эквайринг, поэтому фактический НДС "
-        "с комиссии меньше расчётного, и прибыль на этом листе выше.",
+        "Раздел 1 и расходы WB взяты из того же запроса, что и дашборд продаж "
+        "(без фильтров по бренду, категории и полу), и сложены по месяцам. "
+        "Разделы 3 и 4 заменены одной строкой «Расходы WB (как в дашборде)»: "
+        "логистика, хранение, приёмка, штрафы, продвижение, программа "
+        "лояльности и коррекции продаж — дашборд показывает их одной суммой. "
+        "Поэтому коррекции продаж убраны из раздела 5.",
+        "«Валовая прибыль после продвижения WB» на этом листе = «Финансовый "
+        "результат» дашборда за тот же период. Разделы 5–8 — как на листе «P&L».",
     ]),
 ]
 
@@ -821,28 +822,45 @@ def columns_layout(ws, cols, report_year):
 #  05. ЛИСТ P&L
 # =============================================================================
 
-# Выручка и комиссия «как в дашборде продаж» (gear/app/data/queries.py):
-# НДС снимается ставкой и с цены до СПП, и со всей комиссии WB.
-PL_DASHBOARD_SQL = """
-    SELECT
-        LAST_DAY(date_from::DATE) AS me,
-        SUM(cr_rev * 100 / (100 + COALESCE(vat_rate, 20))) / 100 AS rev,
-        SUM((net_comission + vat_in_wb) * 100 / (100 + COALESCE(vat_rate, 20))) / 100
-            AS comm
-    FROM base
-    WHERE cr_rev <> 0
-      AND date_from::DATE <= $date_from
-    GROUP BY 1
-"""
+# Лист «P&L дашборд»: строки продаж и расходов WB берутся из того же запроса,
+# что и дашборд продаж (DashboardData.get_dayly_sales_grid_data, без фильтров).
+DASH_WB_ITEM = "Расходы WB (как в дашборде)"
+DASH_DROP_OTHER = {"5.1. Коррекции продаж и возвратов"}  # входят в расходы WB дашборда
+
+
+def fetch_dashboard_rows(start, end):
+    """Помесячные суммы дашборда продаж: (me, amount, retail, rev, cogs, comm, wb_costs)."""
+    from gear.app.data.base import DashboardData
+
+    with DashboardData() as d:
+        df = d.get_dayly_sales_grid_data(start=start, end=end)
+    if df.empty:
+        return []
+    df["me"] = df["date_from"].map(
+        lambda x: last_day(x if isinstance(x, date) else x.date()))
+    cols = ["amount", "retail_amount", "amount_vatless", "cogs_man",
+            "net_comission", "wb_costs"]
+    g = df.groupby("me")[cols].sum()
+    return [(me, *[float(v or 0) for v in row]) for me, row in g.iterrows()]
 
 
 def pl_dashboard(pl_data, dash_rows):
-    """P&L «как в дашборде»: строки 1.4 и 1.9 по методу дашборда продаж."""
-    out = dict(pl_data)
-    for me, rev, comm in dash_rows:
-        me = me if isinstance(me, date) else date.fromisoformat(str(me))
-        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(float(rev or 0), 2)
-        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(float(comm or 0), 2)
+    """P&L «как в дашборде»: раздел 1 и расходы WB — цифры дашборда продаж.
+
+    Разделы 3 и 4 заменяются одной строкой «Расходы WB (как в дашборде)»,
+    коррекции продаж убираются из раздела 5 (в дашборде они внутри расходов WB).
+    Валовая прибыль после продвижения = «Финансовый результат» дашборда.
+    """
+    out = {k: v for k, v in pl_data.items()
+           if k[1] not in (SEC_SELLING, SEC_PROMO)
+           and not (k[1] == SEC_OTHER and k[2] in DASH_DROP_OTHER)}
+    for me, amount, retail, rev, cogs, comm, wb in dash_rows:
+        out[(me, SEC_REVENUE, "1.1. Продажи до СПП")] = round(amount, 2)
+        out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
+        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
+        out[(me, SEC_REVENUE, "1.6. Себестоимость")] = round(cogs, 2)
+        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(comm, 2)
+        out[(me, SEC_SELLING, DASH_WB_ITEM)] = round(-wb, 2)
     return out
 
 
@@ -892,8 +910,9 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
         else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L)",
         ("Выручка и комиссия WB по цене покупателя (после СПП) · "
          "прибыль та же, что на листе «P&L»") if after_spp
-        else ("Выручка и комиссия WB по методу дашборда продаж: НДС снят ставкой "
-              "с цены до СПП и со всей комиссии") if dashboard
+        else ("Продажи, себестоимость, комиссия и расходы WB — те же цифры, что "
+              "в дашборде продаж; валовая прибыль после продвижения = "
+              "«Финансовый результат» дашборда") if dashboard
         else "Управленческая отчётность (management pack) · метод начисления",
         ncols,
         extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s · "
@@ -4089,11 +4108,8 @@ def fetch_pack_data(con, date_from):
 
     vat_rows = con.execute(read_sql("vat_wb_check.txt"),
                            parameters={"date_from": date_from}).fetchall()
-    dash_rows = con.execute(PL_DASHBOARD_SQL,
-                            parameters={"date_from": date_from}).fetchall()
-
     return (pl_rows, cf_rows, unit_rows, treasury_rows,
-        deposit_balance, note_rows, payout_rows, conv_rows, vat_rows, dash_rows)
+        deposit_balance, note_rows, payout_rows, conv_rows, vat_rows)
 
 
 # Данные листа «Юнит-экономика». Считаются по тем же витринам, что и P&L,
@@ -4209,7 +4225,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     with get_duckdb_conn_with_opt(ro=True) as con:
         (pl_rows, cf_rows, unit_rows, treasury_rows,
         deposit_balance, note_rows, payout_rows,
-        conv_rows, vat_rows, dash_rows) = fetch_pack_data(con, date_from)
+        conv_rows, vat_rows) = fetch_pack_data(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -4303,9 +4319,10 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
              as_of=date_from, note_anchors=note_anchors, rowmap_out=pl_rowmap)
     build_pl(ws_pl_spp, pl_after_spp(pl_data), tax_by_month, months, report_date,
              as_of=date_from, note_anchors=note_anchors, after_spp=True)
+    # отдельное подключение дашборда — после закрытия read-only соединения пакета
+    dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from)
     build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
-             report_date, as_of=date_from, note_anchors=note_anchors,
-             dashboard=True)
+             report_date, as_of=date_from, dashboard=True)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
                     conv_by_month=conv_by_month)
