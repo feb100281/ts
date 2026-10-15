@@ -1,6 +1,6 @@
 CREATE OR REPLACE TEMP TABLE pl_sales AS
 
-WITH sales_by_day AS (
+WITH sales_raw AS (
     SELECT
         t.date_from::DATE AS date_from,
 
@@ -55,6 +55,31 @@ WITH sales_by_day AS (
 
     GROUP BY
         t.date_from::DATE
+),
+
+-- НДС с вознаграждения WB на строках отчёта, которых нет в base: технические
+-- «Возмещение издержек по перевозке/по складским операциям» (quantity = 2,
+-- в sales_long не попадают), «Возмещение за выдачу и возврат на ПВЗ» и т. п.
+-- WB переносит часть вознаграждения (с НДС) в возмещение издержек (без НДС),
+-- vwNds по таким строкам отрицательный. Без них НДС WB не сходится с УПД.
+vat_wb_tech AS (
+    SELECT
+        r.rr_dt::DATE AS date_from,
+        SUM(r.ppvz_vw_nds) * 100 AS vat_tech
+    FROM sales.wb_raw r
+    WHERE COALESCE(r.ppvz_vw_nds, 0) <> 0
+      AND COALESCE(r.sop_name, '') NOT IN ('Продажа', 'Возврат')
+      AND r.rrd_id NOT IN (SELECT rrd_id FROM base WHERE rrd_id IS NOT NULL)
+    GROUP BY 1
+),
+
+sales_by_day AS (
+    SELECT
+        s.* REPLACE (s.net_comission + COALESCE(v.vat_tech, 0) AS net_comission),
+        COALESCE(v.vat_tech, 0) AS vat_wb_tech
+    FROM sales_raw s
+    LEFT JOIN vat_wb_tech v
+        ON v.date_from = s.date_from
 ),
 
 sales_count_by_week AS (
