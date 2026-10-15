@@ -504,12 +504,14 @@ NOTES_PL = [
         "НДС одинаковый на обоих листах: он всегда считается с цены покупателя.",
     ]),
     ("Лист «P&L дашборд»", [
-        "Раздел 1 и расходы WB взяты из того же запроса, что и дашборд продаж "
-        "(без фильтров по бренду, категории и полу), и сложены по месяцам. "
-        "Разделы 3 и 4 заменены одной строкой «Расходы WB (как в дашборде)»: "
-        "логистика, хранение, приёмка, штрафы, продвижение, программа "
-        "лояльности и коррекции продаж — дашборд показывает их одной суммой. "
-        "Поэтому коррекции продаж убраны из раздела 5.",
+        "Раздел 1 (продажи, себестоимость, комиссия) взят из того же запроса, "
+        "что и дашборд продаж (без фильтров по бренду, категории и полу).",
+        "Разделы 3 и 4 расписаны по статьям, как на листе «P&L». Коррекции "
+        "продаж перенесены из раздела 5 в раздел 3 (строка 3.7): в дашборде "
+        "они входят в расходы WB. Дашборд распределяет расходы WB по неделям "
+        "на проданные штуки и снимает НДС только там, где в строке есть ставка, "
+        "поэтому его итог немного отличается от суммы статей — эта разница "
+        "в строке 3.8.",
         "«Валовая прибыль после продвижения WB» на этом листе = «Финансовый "
         "результат» дашборда за тот же период. Разделы 5–8 — как на листе «P&L».",
     ]),
@@ -822,10 +824,13 @@ def columns_layout(ws, cols, report_year):
 #  05. ЛИСТ P&L
 # =============================================================================
 
-# Лист «P&L дашборд»: строки продаж и расходов WB берутся из того же запроса,
-# что и дашборд продаж (DashboardData.get_dayly_sales_grid_data, без фильтров).
-DASH_WB_ITEM = "Расходы WB (как в дашборде)"
-DASH_DROP_OTHER = {"5.1. Коррекции продаж и возвратов"}  # входят в расходы WB дашборда
+# Лист «P&L дашборд»: раздел 1 и итог расходов WB — из того же запроса, что
+# и дашборд продаж (DashboardData.get_dayly_sales_grid_data, без фильтров).
+# Расходы WB расписаны по статьям, как на листе «P&L»; дашборд распределяет
+# их по неделям на проданные штуки, разница — отдельной строкой.
+DASH_CORR_OTHER = "5.1. Коррекции продаж и возвратов"   # в дашборде — в расходах WB
+DASH_CORR_ITEM = "3.7 Коррекции продаж и возвратов"
+DASH_ADJ_ITEM = "3.8 Разница с расчётом дашборда"
 
 
 def fetch_dashboard_rows(start, end):
@@ -845,22 +850,30 @@ def fetch_dashboard_rows(start, end):
 
 
 def pl_dashboard(pl_data, dash_rows):
-    """P&L «как в дашборде»: раздел 1 и расходы WB — цифры дашборда продаж.
+    """P&L «как в дашборде».
 
-    Разделы 3 и 4 заменяются одной строкой «Расходы WB (как в дашборде)»,
-    коррекции продаж убираются из раздела 5 (в дашборде они внутри расходов WB).
-    Валовая прибыль после продвижения = «Финансовый результат» дашборда.
+    Раздел 1 — цифры дашборда. Разделы 3 и 4 — статьи как на листе «P&L»,
+    коррекции продаж перенесены из раздела 5 в раздел 3 (в дашборде они
+    внутри расходов WB). Строка «Разница с расчётом дашборда» доводит
+    разделы 3 + 4 до расходов WB дашборда, поэтому валовая прибыль после
+    продвижения = «Финансовый результат» дашборда.
     """
-    out = {k: v for k, v in pl_data.items()
-           if k[1] not in (SEC_SELLING, SEC_PROMO)
-           and not (k[1] == SEC_OTHER and k[2] in DASH_DROP_OTHER)}
+    out = {}
+    for k, v in pl_data.items():
+        me, sec, itm = k
+        if sec == SEC_OTHER and itm == DASH_CORR_OTHER:
+            out[(me, SEC_SELLING, DASH_CORR_ITEM)] = v
+        else:
+            out[k] = v
     for me, amount, retail, rev, cogs, comm, wb in dash_rows:
         out[(me, SEC_REVENUE, "1.1. Продажи до СПП")] = round(amount, 2)
         out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
         out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
         out[(me, SEC_REVENUE, "1.6. Себестоимость")] = round(cogs, 2)
         out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(comm, 2)
-        out[(me, SEC_SELLING, DASH_WB_ITEM)] = round(-wb, 2)
+        actual = sum(v or 0 for (m, sec, _i), v in out.items()
+                     if m == me and sec in (SEC_SELLING, SEC_PROMO))
+        out[(me, SEC_SELLING, DASH_ADJ_ITEM)] = round(-wb - actual, 2)
     return out
 
 
@@ -4322,7 +4335,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     # отдельное подключение дашборда — после закрытия read-only соединения пакета
     dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from)
     build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
-             report_date, as_of=date_from, dashboard=True)
+             report_date, as_of=date_from, note_anchors=note_anchors,
+             dashboard=True)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
                     conv_by_month=conv_by_month)
