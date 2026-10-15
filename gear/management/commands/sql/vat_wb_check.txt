@@ -1,7 +1,10 @@
 -- Сверка НДС с вознаграждения WB с УПД, по неделям отчёта (пн–вс).
 -- Источник — sales.wb_raw (поля API: vwNds → ppvz_vw_nds, deliveryRub → delivery_rub).
--- Серии отчётов: основная (report_id из 15 знаков) и дополнительная
--- (16 знаков, оканчивается на «1»); на каждую серию WB выставляет свой УПД.
+-- Серии отчётов (по report_id, т. е. по документу WB):
+--   «осн.»  — стандартный отчёт (reportType = 1); до 27.04.2026 в него же
+--             входили строки выкупа (reportType = 2);
+--   «выкуп» — с 27.04.2026 строки выкупа (reportType = 2) идут отдельным
+--             отчётом: report_id из 16 знаков, оканчивается на «1».
 -- НДС как в УПД = НДС продаж − НДС возвратов + НДС технических строк
 --                 + НДС логистики (ставка 22 % с 2026 года, до этого 20 %).
 WITH r AS (
@@ -9,7 +12,7 @@ WITH r AS (
         DATE_TRUNC('week', rr_dt)::DATE AS week,
         CASE WHEN LENGTH(report_id::VARCHAR) = 16
               AND report_id::VARCHAR LIKE '%1'
-             THEN 'доп.' ELSE 'осн.' END AS seria,
+             THEN 'выкуп' ELSE 'осн.' END AS seria,
         COALESCE(sop_name, '') AS sop_name,
         COALESCE(ppvz_vw_nds, 0) AS nds,
         COALESCE(delivery_rub, 0) AS dlv,

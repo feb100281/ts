@@ -19,6 +19,19 @@
 
 CREATE OR REPLACE TEMP TABLE pivot_pl AS
 
+-- В сводной уровни: раздел → строка P&L (account_name) → статья (cost_item)
+-- → контрагент → договор. Если статья совпадает со строкой P&L, вместо неё
+-- показывается группа статей, иначе — «Без детализации»: без этого
+-- раскрытая строка повторяла бы саму себя.
+SELECT * REPLACE (
+    CASE
+        WHEN cost_item = account_name
+            THEN COALESCE(NULLIF(cost_item_group, account_name), 'Без детализации')
+        ELSE cost_item
+    END AS cost_item
+)
+FROM (
+
 WITH sales AS (
     SELECT
         date_from::DATE AS date_from,
@@ -172,4 +185,5 @@ SELECT
     amount::DOUBLE,
     CAST(description AS VARCHAR)
 FROM tax
+) u
 ;
