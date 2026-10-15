@@ -2435,27 +2435,32 @@ VAT_CHECK_SHEET_NAME = "Сверка НДС WB"
 def build_vat_check(ws, vat_rows, report_date, as_of=None):
     """vat_rows — строки sql/vat_wb_check.txt:
     (week, week_end, seria, nds_sale, nds_return, nds_tech, logistics, nds_logistics)
+
+    Две сверки:
+      • с отчётом о реализации — НДС с вознаграждения (стр. 2.2), без логистики;
+      • с УПД на услуги WB — тот же НДС плюс НДС логистики.
     """
     as_of = as_of or report_date
     sheet_setup(ws, landscape=True)
-    ncols = 12
+    ncols = 15
 
     title_band(
         ws,
-        "СВЕРКА НДС С ВОЗНАГРАЖДЕНИЯ WB С УПД",
-        "НДС из еженедельных отчётов WB по неделям и сериям отчётов — "
-        "для сверки с УПД",
+        "СВЕРКА НДС С ВОЗНАГРАЖДЕНИЯ WB",
+        "НДС из отчётов WB по неделям и сериям — для сверки с отчётом "
+        "о реализации (стр. 2.2) и с УПД",
         ncols,
         extra="Российский рубль (RUB) · недели пн–вс с 01.01.%d по %s · "
-              "колонку «НДС по УПД» заполните из УПД, разница посчитается сама"
+              "колонки «ввод» заполните из документов, разница посчитается сама"
               % (as_of.year, as_of.strftime("%d.%m.%Y")),
     )
 
-    widths = [3, 22, 9, 17, 17, 18, 16, 16, 18, 16, 14, 3]
+    widths = [3, 22, 8, 15, 15, 15, 18, 16, 12, 15, 14, 16, 16, 12, 3, 3]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
+    f_grp = Font(name=FONT, size=8, bold=True, color="FFFFFF")
     f_txt = Font(name=FONT, size=9, color=TEXT_2)
     f_num = Font(name=FONT, size=9, color=INCOME)
     f_bold = Font(name=FONT, size=10, bold=True, color=TEXT)
@@ -2463,18 +2468,43 @@ def build_vat_check(ws, vat_rows, report_date, as_of=None):
     f_note = Font(name=FONT, size=8, color=MUTED)
     f_input = Font(name=FONT, size=9, color=NAVY_3)
 
+    # колонки
+    C_WEEK, C_SER = 2, 3
+    C_SALE, C_RET, C_TECH = 4, 5, 6
+    C_VV, C_VV_IN, C_VV_DIFF = 7, 8, 9
+    C_LOG, C_LOG_VAT = 10, 11
+    C_UPD, C_UPD_IN, C_UPD_DIFF = 12, 13, 14
+    last_col = C_UPD_DIFF
+
+    # верхняя строка шапки — группы колонок
     r = 7
-    headers = [
-        "Неделя отчёта", "Серия", "НДС с продаж", "НДС с возвратов",
-        "НДС технических строк", "Логистика с НДС", "НДС логистики",
-        "НДС как в УПД", "НДС по УПД (ввод)", "Разница",
+    groups = [
+        (C_WEEK, C_TECH, ""),
+        (C_VV, C_VV_DIFF, "СВЕРКА С ОТЧЁТОМ О РЕАЛИЗАЦИИ"),
+        (C_LOG, C_UPD_DIFF, "СВЕРКА С УПД"),
     ]
-    for i, text in enumerate(headers):
-        col = 2 + i
+    for c1, c2, text in groups:
+        if c2 > c1:
+            ws.merge_cells(start_row=r, start_column=c1, end_row=r, end_column=c2)
+        write(ws, r, c1, text, font=f_grp, fillc=NAVY_3, align="center")
+        for cc in range(c1, c2 + 1):
+            ws.cell(row=r, column=cc).fill = fill(NAVY_3)
+    ws.row_dimensions[r].height = 16
+    r += 1
+
+    headers = {
+        C_WEEK: "Неделя отчёта", C_SER: "Серия",
+        C_SALE: "НДС с продаж", C_RET: "НДС с возвратов",
+        C_TECH: "НДС технических строк",
+        C_VV: "НДС с вознаграждения (стр. 2.2)",
+        C_VV_IN: "Отчёт, стр. 2.2 (ввод)", C_VV_DIFF: "Разница",
+        C_LOG: "Логистика с НДС", C_LOG_VAT: "НДС логистики",
+        C_UPD: "НДС как в УПД", C_UPD_IN: "УПД (ввод)", C_UPD_DIFF: "Разница",
+    }
+    for col, text in headers.items():
         write(ws, r, col, text, font=f_hdr, fillc=NAVY,
-              align="left" if col <= 3 else "right",
-              indent=1 if col <= 3 else 0, wrap=True)
-    ws.cell(row=r, column=ncols).fill = fill(NAVY)
+              align="left" if col <= C_SER else "right",
+              indent=1 if col <= C_SER else 0, wrap=True)
     ws.row_dimensions[r].height = 30
     hdr_row = r
     r += 1
@@ -2483,6 +2513,9 @@ def build_vat_check(ws, vat_rows, report_date, as_of=None):
         write(ws, row, col, value, font=font, fmt=FMT_MONEY_DEC,
               fillc=fillc, border=border, align="right")
 
+    def ref(col, row):
+        return "%s%d" % (get_column_letter(col), row)
+
     months = OrderedDict()
     for row in vat_rows:
         wk = row[0] if isinstance(row[0], date) else date.fromisoformat(str(row[0]))
@@ -2490,9 +2523,9 @@ def build_vat_check(ws, vat_rows, report_date, as_of=None):
 
     week_rows = []
     for (year, month), group in months.items():
-        write(ws, r, 2, "%s %d" % (MONTHS_RU[month - 1], year), font=f_month,
+        write(ws, r, C_WEEK, "%s %d" % (MONTHS_RU[month - 1], year), font=f_month,
               fillc=SURFACE_2, border=B_BOTTOM_STRONG, align="left", indent=1)
-        for cc in range(3, ncols):
+        for cc in range(C_SER, last_col + 1):
             ws.cell(row=r, column=cc).fill = fill(SURFACE_2)
             ws.cell(row=r, column=cc).border = B_BOTTOM_STRONG
         ws.row_dimensions[r].height = 18
@@ -2502,59 +2535,72 @@ def build_vat_check(ws, vat_rows, report_date, as_of=None):
             wk = wk if isinstance(wk, date) else date.fromisoformat(str(wk))
             wk_end = (wk_end if isinstance(wk_end, date)
                       else date.fromisoformat(str(wk_end)))
-            write(ws, r, 2, "%s–%s" % (wk.strftime("%d.%m"),
-                                       wk_end.strftime("%d.%m.%Y")),
+            write(ws, r, C_WEEK, "%s–%s" % (wk.strftime("%d.%m"),
+                                            wk_end.strftime("%d.%m.%Y")),
                   font=f_txt, border=B_BOTTOM, align="left", indent=1)
-            write(ws, r, 3, seria, font=f_txt, border=B_BOTTOM,
+            write(ws, r, C_SER, seria, font=f_txt, border=B_BOTTOM,
                   align="left", indent=1)
-            num(r, 4, float(sale or 0))
-            num(r, 5, float(ret or 0))
-            num(r, 6, float(tech or 0))
-            num(r, 7, float(logi or 0))
-            num(r, 8, float(logi_vat or 0))
-            num(r, 9, "=D{0}-E{0}+F{0}+H{0}".format(r), font=f_bold)
-            num(r, 10, None, font=f_input, fillc=SURFACE_5)
-            num(r, 11, '=IF(J{0}="","",I{0}-J{0})'.format(r), font=f_bold)
+            num(r, C_SALE, float(sale or 0))
+            num(r, C_RET, float(ret or 0))
+            num(r, C_TECH, float(tech or 0))
+            num(r, C_VV, "=%s-%s+%s" % (ref(C_SALE, r), ref(C_RET, r),
+                                        ref(C_TECH, r)), font=f_bold)
+            num(r, C_VV_IN, None, font=f_input, fillc=SURFACE_5)
+            num(r, C_VV_DIFF, '=IF(%s="","",%s-%s)' % (
+                ref(C_VV_IN, r), ref(C_VV, r), ref(C_VV_IN, r)), font=f_bold)
+            num(r, C_LOG, float(logi or 0))
+            num(r, C_LOG_VAT, float(logi_vat or 0))
+            num(r, C_UPD, "=%s+%s" % (ref(C_VV, r), ref(C_LOG_VAT, r)),
+                font=f_bold)
+            num(r, C_UPD_IN, None, font=f_input, fillc=SURFACE_5)
+            num(r, C_UPD_DIFF, '=IF(%s="","",%s-%s)' % (
+                ref(C_UPD_IN, r), ref(C_UPD, r), ref(C_UPD_IN, r)), font=f_bold)
             ws.row_dimensions[r].height = 16
             week_rows.append(r)
             r += 1
 
     # итог — по строкам недель, месячные плашки пустые
-    write(ws, r, 2, "ИТОГО С НАЧАЛА ГОДА", font=f_bold, fillc=TOTAL_ROW,
+    write(ws, r, C_WEEK, "ИТОГО С НАЧАЛА ГОДА", font=f_bold, fillc=TOTAL_ROW,
           border=B_TOTAL, align="left", indent=1)
-    ws.cell(row=r, column=3).fill = fill(TOTAL_ROW)
-    ws.cell(row=r, column=3).border = B_TOTAL
-    for col in range(4, 12):
+    ws.cell(row=r, column=C_SER).fill = fill(TOTAL_ROW)
+    ws.cell(row=r, column=C_SER).border = B_TOTAL
+    first, last = hdr_row + 1, r - 1
+    for col in range(C_SALE, last_col + 1):
         L_ = get_column_letter(col)
-        if col == 11:
-            formula = '=IF(COUNT(J{0}:J{1})=0,"",SUM(K{0}:K{1}))'.format(
-                hdr_row + 1, r - 1)
+        if col in (C_VV_DIFF, C_UPD_DIFF):
+            IN_ = get_column_letter(col - 1)
+            formula = '=IF(COUNT({i}{a}:{i}{b})=0,"",SUM({c}{a}:{c}{b}))'.format(
+                i=IN_, c=L_, a=first, b=last)
         else:
-            formula = "=SUM(%s%d:%s%d)" % (L_, hdr_row + 1, L_, r - 1)
+            formula = "=SUM(%s%d:%s%d)" % (L_, first, L_, last)
         num(r, col, formula if week_rows else 0, font=f_bold,
             fillc=TOTAL_ROW, border=B_TOTAL)
     ws.row_dimensions[r].height = 20
     r += 2
 
     note = (
-        "Как считается. «НДС как в УПД» = НДС с продаж − НДС с возвратов + "
-        "НДС технических строк + НДС логистики. НДС с продаж, возвратов и "
-        "технических строк — поле vwNds API (колонка «НДС с вознаграждения "
-        "Вайлдберриз» в Excel-отчёте). Технические строки — «Возмещение "
-        "издержек по перевозке / по складским операциям», ПВЗ и т. п.: WB "
-        "переносит туда часть вознаграждения, НДС по ним отрицательный. "
-        "НДС логистики = логистика × 22/122 (до 2026 года — 20/120).\n"
-        "Серии. На неделю WB формирует два отчёта: основной и "
-        "дополнительный (номер оканчивается на «1»), на каждый — свой УПД, "
-        "поэтому сверять нужно по строке серии. Расхождение в несколько "
-        "рублей — округление НДС логистики в УПД.\n"
+        "Две сверки. Отчёт о реализации (PDF «Отчёт Вайлдберриз № …»): "
+        "стр. 2.2 «НДС с вознаграждения Вайлдберриз» сравнивается с колонкой "
+        "«НДС с вознаграждения» = НДС с продаж − НДС с возвратов + НДС "
+        "технических строк. Логистики в этой строке нет: в отчёте возмещение "
+        "расходов по перевозке идёт без НДС. УПД на услуги WB включает и НДС "
+        "логистики, поэтому сравнивается с колонкой «НДС как в УПД».\n"
+        "Источник — поле vwNds API (в Excel-детализации «НДС с вознаграждения "
+        "Вайлдберриз»). Технические строки — «Возмещение издержек по перевозке / "
+        "по складским операциям», ПВЗ и т. п.: WB переносит туда часть "
+        "вознаграждения, НДС по ним отрицательный. НДС логистики = логистика × "
+        "22/122 (до 2026 года — 20/120).\n"
+        "Серии: на неделю WB формирует основной и дополнительный отчёт, на "
+        "каждый — свои документы. Мы загружаем ежедневные отчёты, а документы "
+        "выставляются по недельному, поэтому возможны расхождения в десятые доли "
+        "процента: часть коррекций WB переносит в соседнюю неделю.\n"
         "Этот же НДС уменьшает комиссию WB в P&L (комиссия показана без НДС)."
     )
-    write(ws, r, 2, note, font=f_note, align="left", wrap=True, indent=1)
-    ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=ncols - 1)
-    ws.row_dimensions[r].height = 90
+    write(ws, r, C_WEEK, note, font=f_note, align="left", wrap=True, indent=1)
+    ws.merge_cells(start_row=r, start_column=C_WEEK, end_row=r, end_column=last_col)
+    ws.row_dimensions[r].height = 120
 
-    ws.freeze_panes = ws.cell(row=hdr_row + 1, column=4)
+    ws.freeze_panes = ws.cell(row=hdr_row + 1, column=C_SALE)
     ws.print_title_rows = "1:%d" % hdr_row
     return r
 
@@ -4290,7 +4336,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         (PAYOUTS_SHEET_NAME, "Поступления от площадки на расчётный счёт: "
                              "даты, суммы и количество по месяцам"),
         (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
-                               "отчётов — для сверки с УПД"),
+                               "отчётов — для сверки с отчётом о реализации и УПД"),
         ("Пояснения P&L", "Методика расчёта каждого раздела и промежуточного итога"),
         ("Пояснения Юнит-экономика", "Как считается каждый показатель "
                                      "и почему он не равен кассе"),
