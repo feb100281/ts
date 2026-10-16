@@ -35,15 +35,16 @@ QUIET = ((23, 20), (23, 57))  # МСК: ночная загрузка данны
 NAMES = {"sales": "помощник по продажам", "finance": "финансовый помощник"}
 
 ABOUT = {
-    "sales": "Продажи на Wildberries: штуки, возвраты, бренды, остатки. "
-             "Отвечаю по данным компании и присылаю Excel.",
+    "sales": "Продажи на Wildberries: отчёты по кнопкам за любой период — продажи, остатки, "
+             "бренды, категории, расходы WB, реклама. Excel сразу.",
     "finance": "Финансы компании: прибыль, деньги, займы, договоры, прогноз. "
                "Отвечаю по данным компании и присылаю Excel.",
 }
 DESCRIPTION = {
-    "sales": "ИИ-помощник по продажам.\n\nСпросите обычными словами: продажи и возвраты, "
-             "бренды и артикулы, остатки, расходы WB. Любой расчёт пришлю "
-             "файлом Excel.\n\nДоступ — только для сотрудников, по подтверждению.",
+    "sales": "Помощник по продажам на Wildberries.\n\nКнопки внизу — готовые отчёты за любой "
+             "период: продажи, остатки, бренды, категории, расходы WB, реклама, топ карточек. "
+             "Цифры, график и Excel сразу.\n\nНестандартный вопрос — напишите своими словами, "
+             "ответит ИИ.\n\nДоступ — только для сотрудников, по подтверждению.",
     "finance": "Финансовый ИИ-помощник.\n\nСпросите обычными словами: прибыль и точка "
                "безубыточности, деньги на счетах, движение денег, займы, договоры, "
                "прогноз. Любой расчёт пришлю файлом Excel.\n\nДоступ — только для "
@@ -118,7 +119,10 @@ def quiet_now() -> bool:
 
 
 def keyboard(profile: str) -> dict:
-    """Постоянное меню под полем ввода."""
+    """Постоянное меню под полем ввода. У бота продаж — готовые отчёты по кнопкам."""
+    if profile == "sales":
+        from gear.app.daily_sales.assistant import menu
+        return menu.keyboard()
     return {"keyboard": [[{"text": MENU["examples"]}, {"text": MENU["new"]}],
                          [{"text": MENU["help"]}]],
             "resize_keyboard": True, "is_persistent": True,
@@ -143,6 +147,7 @@ class Bot:
         self.digest_done, self.digest_try = "", 0.0     # сводка: дата отправки, время попытки
         self.purged = 0.0                        # когда последний раз чистили журнал
         self.menu_shown: set[int] = set()        # кому уже показали нижнее меню
+        self.menu_rep: dict[int, str] = {}       # какой отчёт открыт: даты текстом идут в него
         self.opener = self._opener()
 
     # ---------------------------------------------------------------- сеть
@@ -185,12 +190,16 @@ class Bot:
         with self.opener.open(req, timeout=120) as r:
             return json.loads(r.read().decode("utf-8"))
 
-    def send_photo(self, chat_id: int, photo, caption: str = "", silent: bool = False):
+    def send_photo(self, chat_id: int, photo, caption: str = "", silent: bool = False,
+                   markup: dict | None = None):
         """photo — PNG (bytes) или file_id уже загруженной картинки. Возвращает file_id."""
         fields = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML",
                   "disable_notification": "true" if silent else "false"}
+        if markup:
+            fields["reply_markup"] = json.dumps(markup, ensure_ascii=False)
         if isinstance(photo, str):
-            res = self.call("sendPhoto", photo=photo, **fields)
+            res = self.call("sendPhoto", photo=photo, **{
+                k: (markup if k == "reply_markup" else v) for k, v in fields.items()})
         else:
             boundary = uuid.uuid4().hex
             body = b"".join(
@@ -207,6 +216,150 @@ class Bot:
                 res = json.loads(r.read().decode("utf-8"))
         sizes = (res.get("result") or {}).get("photo") or []
         return sizes[-1]["file_id"] if sizes else None
+
+    def send_file(self, chat_id: int, data: bytes, name: str, mime: str, caption: str = ""):
+        """Файл из памяти (Excel, PDF)."""
+        boundary = uuid.uuid4().hex
+        head = "".join(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'
+            for k, v in (("chat_id", chat_id), ("caption", caption), ("parse_mode", "HTML")) if v)
+        body = head.encode("utf-8") + (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="document"; '
+            f'filename="{name}"\r\nContent-Type: {mime}\r\n\r\n').encode("utf-8") \
+            + data + f"\r\n--{boundary}--\r\n".encode()
+        req = urllib.request.Request(
+            API.format(token=self.token, method="sendDocument"), data=body,
+            headers={"content-type": f"multipart/form-data; boundary={boundary}"},
+            method="POST")
+        with self.opener.open(req, timeout=180) as r:
+            return json.loads(r.read().decode("utf-8"))
+
+    def edit(self, chat_id: int, message_id: int | None, text: str, markup: dict | None = None):
+        """Правим сообщение с кнопками; не вышло — шлём новое."""
+        params = {"chat_id": chat_id, "text": text, "parse_mode": "HTML",
+                  "disable_web_page_preview": True}
+        if markup:
+            params["reply_markup"] = markup
+        try:
+            if message_id:
+                self.call("editMessageText", message_id=message_id, **params)
+                return message_id
+        except urllib.error.HTTPError as e:
+            if "not modified" in (e.read() or b"").decode("utf-8", "ignore"):
+                return message_id
+        except Exception:
+            pass
+        try:
+            return self.call("sendMessage", **params)["result"]["message_id"]
+        except Exception:
+            return None
+
+    # ---------------------------------------------------------------- отчёты по кнопкам
+    def on_menu(self, cq: dict):
+        """Кнопки отчётов: выбор периода, календарь, отчёт, файлы. Без ИИ."""
+        from gear.app.daily_sales.assistant import menu
+        try:
+            self.call("answerCallbackQuery", callback_query_id=cq["id"])
+        except Exception:
+            pass
+        msg = cq.get("message") or {}
+        chat_id, mid = (msg.get("chat") or {}).get("id"), msg.get("message_id")
+        parts = (cq.get("data") or "").split(":")
+        op = parts[1] if len(parts) > 1 else ""
+        rep = parts[2] if len(parts) > 2 else ""
+        if not chat_id or op == "n" or rep not in menu.REPORTS:
+            return
+        obj, _ = self.access(cq.get("from") or {})
+        if not obj.is_allowed:
+            return
+        if quiet_now():
+            self.say(chat_id, "Сейчас обновляются данные — с {0:02d}:{1:02d} до {2:02d}:{3:02d} "
+                              "по Москве отчёты недоступны.".format(*QUIET[0], *QUIET[1]))
+            return
+        hi, lo = menu.loaded(), menu.DATA_START
+        self.menu_rep[chat_id] = rep
+        if op == "o":
+            self.edit(chat_id, mid, menu.ask_text(rep), menu.period_kb(rep))
+        elif op == "p" and len(parts) > 3:
+            a, b = menu.preset(parts[3], hi)
+            self.menu_report(chat_id, mid, obj, rep, a, b)
+        elif op in ("c", "d") and len(parts) > 3:
+            if op == "d":
+                start, ym = menu.from_ymd(parts[3]), parts[3][:6]
+            else:
+                start = menu.from_ymd(parts[4]) if len(parts) > 4 and parts[4] not in ("", "0") \
+                    else None
+                ym = parts[3] or f"{hi:%Y%m}"
+            text = menu.ask_text(rep).split("\n")[0] + (
+                f"\nНачало: <b>{start:%d.%m.%Y}</b>. Теперь нажмите <b>последний день</b>."
+                if start else "\nНажмите <b>первый день</b> периода.")
+            self.edit(chat_id, mid, text,
+                      menu.calendar_kb(rep, int(ym[:4]), int(ym[4:6]), start, lo, hi))
+        elif op == "e" and len(parts) > 4:
+            a, b = sorted((menu.from_ymd(parts[3]), menu.from_ymd(parts[4])))
+            self.menu_report(chat_id, mid, obj, rep, a, b)
+        elif op == "f" and len(parts) > 5:
+            self.menu_file(chat_id, obj, rep, parts[3], menu.from_ymd(parts[4]),
+                           menu.from_ymd(parts[5]))
+
+    def menu_file(self, chat_id: int, obj, rep: str, code: str, a, b, quiet: bool = False):
+        from gear.app.daily_sales.assistant import menu
+        note = None if quiet else self.status(chat_id, "Готовлю файл")
+        try:
+            self.call("sendChatAction", chat_id=chat_id, action="upload_document")
+        except Exception:
+            pass
+        try:
+            f = menu.file(rep, code, a, b)
+            self.drop(chat_id, note)
+            if not f:
+                self.say(chat_id, "За этот период данных для файла нет.")
+                return
+            self.send_file(chat_id, f[1], f[0], f[2])
+        except Exception as e:
+            self.drop(chat_id, note)
+            print(f"[bot sales] файл {rep}/{code}: {type(e).__name__}: {e}", flush=True)
+            self.say(chat_id, "Файл собрать не получилось — попробуйте позже или другой период.")
+
+    def menu_report(self, chat_id: int, mid, obj, rep: str, a, b):
+        from gear.app.daily_sales.assistant import menu
+        started = time.time()
+        label = f"{menu.REPORTS[rep]} · {menu.span(a, b)}"
+        mid = self.edit(chat_id, mid, f"<b>{html.escape(label)}</b>\n<i>Считаю…</i>")
+        stop = threading.Event()
+        threading.Thread(target=self.typing, args=(chat_id, stop), daemon=True).start()
+        try:
+            res = menu.build(rep, a, b)
+        except Exception as e:
+            stop.set()
+            print(f"[bot sales] отчёт {rep}: {type(e).__name__}: {e}", flush=True)
+            self.edit(chat_id, mid, f"<b>{html.escape(label)}</b>\nНе получилось посчитать — "
+                                    "попробуйте позже.", menu.period_kb(rep))
+            self.log(obj, f"[кнопка] {label}", started)
+            return
+        stop.set()
+        if not res:
+            self.edit(chat_id, mid, f"<b>{html.escape(label)}</b>\nЗа этот период данных нет. "
+                                    "Выберите другой:", menu.period_kb(rep))
+            return
+        self.drop(chat_id, mid)
+        text, kb = res["text"], res["kb"]
+        plain = re.sub(r"<[^>]+>", "", html.unescape(text))
+        sent = False
+        if res.get("photo"):
+            try:
+                cap = text if len(plain) <= 1000 else ""
+                self.send_photo(chat_id, res["photo"], cap, markup=kb if cap else None)
+                sent = bool(cap)
+            except Exception as e:
+                print(f"[bot sales] картинка {rep}: {type(e).__name__}: {e}", flush=True)
+        if not sent:
+            self.say(chat_id, text, kb, raw=True)
+        if res.get("auto"):
+            self.menu_file(chat_id, obj, rep, res["auto"], a, b, quiet=True)
+        self.log(obj, f"[кнопка] {label}", started, {"files": [1] if res.get("auto") else []})
+        type(obj).objects.filter(pk=obj.pk).update(
+            requests=obj.requests + 1, last_seen=timezone.now())
 
     def send_blocks(self, chat_id: int, blocks: list[dict]):
         """Сводка: картинка с подписью, затем следующая. Звук — только у первого сообщения."""
@@ -284,6 +437,8 @@ class Bot:
             pass
         chat = (cq.get("message") or {}).get("chat") or {}
         data = cq.get("data") or ""
+        if self.profile == "sales" and data.startswith("mn:"):
+            return self.on_menu(cq)
         if self.profile == "sales" and data == "ex:0" and chat.get("id") \
                 and self.send_digest(chat["id"], cq.get("from") or {}):
             return
@@ -447,6 +602,19 @@ class Bot:
                 "Доступ пока не подтверждён. Если ждёте давно — напишите Дарье."), raw=True)
             return
         text = {v: "/" + k for k, v in MENU.items()}.get(text, text)
+        if self.profile == "sales":
+            from gear.app.daily_sales.assistant import menu
+            text = {menu.BTN_AI: "/examples", menu.BTN_HELP: "/help"}.get(text, text)
+            if text in menu.BY_TEXT:                 # отчёт по кнопке — без ИИ
+                self.menu_shown.add(chat_id)
+                rep = menu.BY_TEXT[text]
+                self.menu_rep[chat_id] = rep
+                self.say(chat_id, menu.ask_text(rep), menu.period_kb(rep), raw=True)
+                return
+            rng = menu.parse_range(text, menu.loaded()) if chat_id in self.menu_rep else None
+            if rng and obj.is_allowed and not quiet_now():   # даты текстом — в открытый отчёт
+                self.menu_report(chat_id, None, obj, self.menu_rep[chat_id], *rng)
+                return
         if chat_id not in self.menu_shown and text != "/start":
             self.menu_shown.add(chat_id)         # после обновления бота меню ставим сами
             self.say(chat_id, "Меню — на кнопках внизу.", keyboard(self.profile), raw=True)
@@ -459,6 +627,10 @@ class Bot:
             self.menu_shown.add(chat_id)
             return
         if text == "/help":
+            if self.profile == "sales":
+                from gear.app.daily_sales.assistant import menu
+                self.say(chat_id, menu.HELP, keyboard(self.profile), raw=True)
+                return
             self.say(chat_id, HELP[self.profile], keyboard(self.profile), raw=True)
             return
         if text == "/examples":
