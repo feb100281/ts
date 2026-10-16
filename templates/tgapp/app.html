@@ -25,14 +25,14 @@ b{font-weight:700}
 
 .top{position:relative;overflow:hidden;color:#fff;padding:20px 18px 64px;
   background:radial-gradient(120% 140% at 100% 0%,#4E8F7B 0%,var(--brand) 45%,#163F35 100%)}
-.top:after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;
+.top:after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:0;
   background:radial-gradient(circle,rgba(255,255,255,.18),transparent 70%)}
 .brand{font-size:11px;letter-spacing:.18em;font-weight:700;color:#CFE6DD;text-transform:uppercase}
 .hello{font-size:24px;font-weight:800;margin:6px 0 2px;letter-spacing:-.01em}
 .sub{color:#CFE6DD;font-size:13px}
 
 .reports{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:-46px 14px 14px;position:relative;z-index:2}
-.rep{border:0;background:var(--card);border-radius:16px;padding:10px 4px 9px;box-shadow:var(--shadow);cursor:pointer;
+.rep{border:0;background:var(--card);border-radius:0;padding:10px 4px 9px;box-shadow:var(--shadow);cursor:pointer;
   display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--muted);
   transition:transform .12s,background .15s}
 .rep i{font-style:normal;font-size:21px;line-height:1}
@@ -40,24 +40,24 @@ b{font-weight:700}
 .rep.on{background:var(--brand);color:#fff}
 html.dark .rep.on{background:var(--brand-3)}
 
-.period{margin:0 14px 12px;background:var(--card);border-radius:16px;padding:12px;box-shadow:var(--shadow)}
+.period{margin:0 14px 12px;background:var(--card);border-radius:0;padding:12px;box-shadow:var(--shadow)}
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:7px 13px;
+.chip{flex:none;border:1px solid var(--line);background:var(--soft);border-radius:0;padding:7px 13px;
   font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
 .chip.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
 .range{display:none;gap:8px;align-items:center;margin-top:10px}
 .range.show{display:flex}
-.range input{flex:1;min-width:0;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--soft);
+.range input{flex:1;min-width:0;height:40px;border-radius:0;border:1px solid var(--line);background:var(--soft);
   color:var(--ink);padding:0 10px;font:inherit}
-.range button{height:40px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-weight:600;padding:0 14px}
+.range button{height:40px;border:0;border-radius:0;background:var(--brand);color:#fff;font-weight:600;padding:0 14px}
 
 .head{margin:6px 18px 10px}
 .head h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.01em}
 .head p{margin:3px 0 0;color:var(--muted);font-size:13px}
 
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 14px 12px}
-.kpi{background:var(--card);border-radius:16px;padding:12px 13px;box-shadow:var(--shadow);min-width:0;
+.kpi{background:var(--card);border-radius:0;padding:12px 13px;box-shadow:var(--shadow);min-width:0;
   animation:up .35s ease both}
 .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
 .kpi .v{font-size:19px;font-weight:800;margin:4px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -65,7 +65,7 @@ html.dark .rep.on{background:var(--brand-3)}
 .kpi .d.good{color:var(--rise)} .kpi .d.bad{color:var(--fall)}
 .kpi.wide{grid-column:1/-1}
 
-.card{margin:0 14px 12px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;animation:up .35s ease both}
+.card{margin:0 14px 12px;background:var(--card);border-radius:0;box-shadow:var(--shadow);overflow:hidden;animation:up .35s ease both}
 .card h3{margin:0;padding:14px 16px 6px;font-size:14px;font-weight:700}
 .card .row{display:flex;gap:10px;padding:9px 16px;border-top:1px solid var(--line);font-size:14px}
 .card .row:first-of-type{border-top:0}
@@ -76,19 +76,19 @@ html.dark .rep.on{background:var(--brand-3)}
 .up{color:var(--rise);font-weight:600} .down{color:var(--fall);font-weight:600}
 
 .files{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 14px 12px}
-.file{border:0;border-radius:14px;background:var(--brand);color:#fff;font-weight:600;padding:12px 10px;
+.file{border:0;border-radius:0;background:var(--brand);color:#fff;font-weight:600;padding:12px 10px;
   display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:13.5px;box-shadow:var(--shadow)}
 .file.alt{background:var(--card);color:var(--ink);border:1px solid var(--line)}
 .file:active{transform:scale(.97)}
 .note{margin:4px 18px 16px;color:var(--muted);font-size:12px;line-height:1.45}
 
 .empty,.err{margin:28px 18px;text-align:center;color:var(--muted)}
-.sk{margin:0 14px 12px;border-radius:16px;background:linear-gradient(90deg,var(--card),var(--soft),var(--card));
+.sk{margin:0 14px 12px;border-radius:0;background:linear-gradient(90deg,var(--card),var(--soft),var(--card));
   background-size:200% 100%;animation:sh 1.2s infinite linear}
 @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
 @keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);
-  background:#17201D;color:#fff;border-radius:12px;padding:10px 14px;font-size:13px;opacity:0;transition:opacity .2s;
+  background:#17201D;color:#fff;border-radius:0;padding:10px 14px;font-size:13px;opacity:0;transition:opacity .2s;
   pointer-events:none;max-width:90%;text-align:center}
 .toast.show{opacity:.95}
 </style>
@@ -226,7 +226,7 @@ function drawChart(c){
     vals.forEach((v, i) => {
       const y = 6 + i * 34, w = Math.abs(v) / mx * span, x = v >= 0 ? x0 : x0 - w;
       const name = c.labels[i].length > 18 ? c.labels[i].slice(0,17) + "…" : c.labels[i];
-      svg += `<rect x="${x}" y="${y}" width="${Math.max(w,2)}" height="22" rx="6" fill="${v>=0?brand:"#C0705F"}"/>`;
+      svg += `<rect x="${x}" y="${y}" width="${Math.max(w,2)}" height="22" rx="0" fill="${v>=0?brand:"#C0705F"}"/>`;
       svg += `<text x="${v>=0 ? x0-8 : x0+8}" y="${y+15}" font-size="12" fill="${muted}" text-anchor="${v>=0?"end":"start"}">${name}</text>`;
       svg += `<text x="${v>=0 ? x+w+6 : x-6}" y="${y+15}" font-size="12" font-weight="700" fill="currentColor" text-anchor="${v>=0?"start":"end"}">${(v>0&&hasNeg?"+":"")+fmtShort(v)}</text>`;
     });
@@ -257,10 +257,10 @@ function drawChart(c){
     vals.forEach((v, i) => {
       if (v == null) return;
       const x = X(i) + (iw / n - bw) / 2, y = Y(Math.max(v,0)), h = Math.max(Y(0) - y, 1);
-      svg += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="${Math.min(5,bw/3)}" fill="${i >= n-ncur ? brand : pale}"><title>${c.labels[i]}: ${Math.round(v).toLocaleString("ru-RU")}</title></rect>`;
+      svg += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="0" fill="${i >= n-ncur ? brand : pale}"><title>${c.labels[i]}: ${Math.round(v).toLocaleString("ru-RU")}</title></rect>`;
     });
     const lv = vals[n-1];
-    if (lv != null) svg += `<text x="${X(n-1)+iw/n/2}" y="${Y(lv)-6}" font-size="11.5" font-weight="700" fill="currentColor" text-anchor="middle">${fmtShort(lv)}</text>`;
+    if (lv != null) svg += `<text x="${W-R}" y="${Y(lv)-7}" font-size="11.5" font-weight="700" fill="currentColor" text-anchor="end">${fmtShort(lv)}</text>`;
   }
   c.labels.forEach((t, i) => {
     if ((n - 1 - i) % step) return;
