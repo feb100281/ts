@@ -21,6 +21,7 @@ PRESET_ID = "assistant-rep-preset"
 RANGE_ID = "assistant-rep-range"
 RANGE_BOX_ID = "assistant-rep-range-box"
 SHOW_ID = "assistant-rep-show"
+BOX_ID = "assistant-rep-box"
 CUSTOM = "custom"
 MAX_ROWS = 12
 
@@ -48,21 +49,24 @@ def report_bar():
     reps = [{"label": t, "value": k} for k, t in m.REPORTS.items()]
     first = reps[0]["value"]
     opts = preset_options(first)
-    return html.Div(className="asst-reports", children=[
-        html.Div([DashIconify(icon="solar:chart-square-linear", width=14),
-                  html.Span("Готовые отчёты · без ИИ")], className="asst-rep-label"),
-        html.Div(className="asst-rep-row", children=[
-            dcc.Dropdown(id=REP_ID, options=reps, value=first, clearable=False, searchable=False,
-                         className="asst-rep-dd asst-rep-main", optionHeight=34, maxHeight=260),
-            dcc.Dropdown(id=PRESET_ID, options=opts, value=opts[0]["value"], clearable=False,
-                         searchable=False, className="asst-rep-dd asst-rep-period", optionHeight=34),
-            html.Button("Показать", id=SHOW_ID, className="asst-rep-btn"),
-        ]),
-        html.Div(id=RANGE_BOX_ID, className="asst-rep-range", style={"display": "none"}, children=[
-            dcc.DatePickerRange(id=RANGE_ID, display_format="DD.MM.YYYY", first_day_of_week=1,
-                                min_date_allowed=m.DATA_START, start_date_placeholder_text="с",
-                                end_date_placeholder_text="по", minimum_nights=0,
-                                number_of_months_shown=1, with_portal=False),
+    return html.Details(id=BOX_ID, open=True, className="asst-reports", children=[
+        html.Summary(className="asst-rep-sum", children=[
+            DashIconify(icon="solar:chart-square-linear", width=15),
+            html.Span("Готовые отчёты"), html.Span("без ИИ", className="asst-rep-tag"),
+            DashIconify(icon="solar:alt-arrow-down-linear", width=14, className="asst-rep-chev")]),
+        html.Div(className="asst-rep-body", children=[
+            dcc.RadioItems(id=REP_ID, options=reps, value=first, className="asst-rep-tiles",
+                           labelClassName="asst-rep-tile", inputClassName="asst-rep-radio"),
+            dcc.RadioItems(id=PRESET_ID, options=opts, value=opts[0]["value"], className="asst-rep-chips",
+                           labelClassName="asst-rep-chip", inputClassName="asst-rep-radio"),
+            html.Div(id=RANGE_BOX_ID, className="asst-rep-range", style={"display": "none"}, children=[
+                dcc.DatePickerRange(id=RANGE_ID, display_format="DD.MM.YYYY", first_day_of_week=1,
+                                    min_date_allowed=m.DATA_START, start_date_placeholder_text="с",
+                                    end_date_placeholder_text="по", minimum_nights=0,
+                                    number_of_months_shown=1, with_portal=True),
+            ]),
+            html.Button([DashIconify(icon="solar:play-bold", width=13), html.Span("Показать отчёт")],
+                        id=SHOW_ID, className="asst-rep-btn"),
         ]),
     ])
 

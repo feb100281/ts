@@ -17,7 +17,7 @@ scripts = [
 styles = [
     "/static/css/dash/aggrid_compact.css",
     "/static/css/dash/daily_sales_panel.css",
-    "/static/css/dash/assistant.css",
+    "/static/css/dash/assistant.css?v=20261016",
     "/static/css/dash/manpack.css",
 ]
 

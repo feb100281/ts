@@ -153,7 +153,8 @@ class Bot:
         self.menu_rep: dict[int, str] = {}       # какой отчёт открыт: даты текстом идут в него
         self.menu_q: dict[int, str] = {}         # финбот: ждём текст запроса (контрагент, поиск)
         self.menu_arg: dict[tuple, str] = {}     # финбот: (чат, отчёт) → контрагент / строка поиска
-        self.menu_opts: dict[int, list] = {}     # финбот: варианты контрагентов для выбора
+        self.menu_opts: dict[int, list] = {}     # финбот: варианты для выбора (значения)
+        self.menu_text: dict[int, str] = {}      # финбот: свободный текст — где искать
         self.opener = self._opener()
 
     # ---------------------------------------------------------------- сеть
@@ -308,7 +309,27 @@ class Bot:
                 self.say(chat_id, M.query_prompt(rep), raw=True)
                 self.menu_q[chat_id] = rep
                 return
-            self.pick(chat_id, mid, rep, opts[int(parts[3])])
+            value = opts[int(parts[3])]
+            if rep in getattr(M, "PICK_REPORT", set()):        # выбор сразу даёт отчёт
+                self.drop(chat_id, mid)
+                self.menu_pick_report(chat_id, obj, rep, value)
+            else:
+                self.pick(chat_id, mid, rep, value)
+        elif op == "y" and len(parts) > 3 and parts[3].isdigit():   # финбот: сетка месяцев
+            self.edit(chat_id, mid, M.ask_text(rep).split("\n")[0] + "\nВыберите месяц.",
+                      M.month_kb(rep, int(parts[3]), lo, hi))
+        elif op == "a" and len(parts) > 5:                     # отчёт с параметром (валюта)
+            self.menu_arg[(chat_id, rep)] = parts[3]
+            a, b = sorted((M.from_ymd(parts[4]), M.from_ymd(parts[5])))
+            self.menu_report(chat_id, mid, obj, rep, a, b)
+        elif op == "t":                                        # свободный текст → выбранный поиск
+            text = self.menu_text.get(chat_id)
+            if not text:
+                self.menu_q[chat_id] = rep
+                self.say(chat_id, M.query_prompt(rep), raw=True)
+                return
+            self.drop(chat_id, mid)
+            self.menu_query(chat_id, obj, rep, text)
         elif op == "u" and len(parts) > 3 and parts[3].isdigit():   # файлы УПД
             self.upd_files(chat_id, obj, int(parts[3]))
         elif op == "p" and len(parts) > 3:
@@ -321,7 +342,9 @@ class Bot:
                 start = M.from_ymd(parts[4]) if len(parts) > 4 and parts[4] not in ("", "0") \
                     else None
                 ym = parts[3] or f"{hi:%Y%m}"
+            one = rep in M.SINGLE_DAY or rep in getattr(M, "ONE_DATE", set())
             text = M.ask_text(rep).split("\n")[0] + (
+                "\nНажмите <b>дату</b>." if one else
                 f"\nНачало: <b>{start:%d.%m.%Y}</b>. Теперь нажмите <b>последний день</b>."
                 if start else "\nНажмите <b>первый день</b> периода.")
             self.edit(chat_id, mid, text,
@@ -355,19 +378,17 @@ class Bot:
         finally:
             stop.set()
         label = f"[кнопка] {M.REPORTS[rep]} · {text[:80]}"
-        if rep == "p":
-            names = res or []
-            if not names:
+        if isinstance(res, list):                    # варианты: [(подпись, значение)]
+            if not res:
                 self.menu_q[chat_id] = rep
-                self.say(chat_id, "Не нашла такого контрагента в выписке за 2 года. "
-                                  "Напишите иначе — часть названия или ИНН.")
+                self.say(chat_id, "Никого не нашла. Напишите иначе — часть названия или ИНН.")
                 return
-            if len(names) == 1:
-                return self.pick(chat_id, None, rep, names[0])
-            self.menu_opts[chat_id] = names
-            kb = {"inline_keyboard": [[{"text": n[:60], "callback_data": f"fm:q:p:{i}"}]
-                                      for i, n in enumerate(names)]}
-            self.say(chat_id, "Кого показать?", kb)
+            if len(res) == 1 and rep not in getattr(M, "PICK_REPORT", set()):
+                return self.pick(chat_id, None, rep, res[0][1])
+            self.menu_opts[chat_id] = [v for _, v in res]
+            kb = {"inline_keyboard": [[{"text": t[:60], "callback_data": f"fm:q:{rep}:{i}"}]
+                                      for i, (t, _) in enumerate(res)]}
+            self.say(chat_id, "Кого показать? Выберите:", kb)
             return
         if not res:
             self.say(chat_id, "Не получилось — попробуйте позже.")
@@ -377,6 +398,21 @@ class Bot:
             self.menu_arg[(chat_id, rep)] = text
         self.menu_send(chat_id, obj, rep, res, None, None)
         self.log(obj, label, started, {})
+
+    def menu_pick_report(self, chat_id: int, obj, rep: str, value: str):
+        """Финбот: отчёт по выбранному варианту (карточка контрагента)."""
+        M = self.mod()
+        started = time.time()
+        try:
+            res = M.picked(rep, value)
+        except Exception as e:
+            print(f"[bot {self.profile}] выбор {rep}: {type(e).__name__}: {e}", flush=True)
+            res = None
+        if not res:
+            self.say(chat_id, "Не получилось — попробуйте позже.")
+            return
+        self.menu_send(chat_id, obj, rep, res, None, None)
+        self.log(obj, f"[кнопка] {M.REPORTS[rep]} · id {value}", started, {})
 
     def upd_files(self, chat_id: int, obj, doc_id: int):
         """Финбот: файлы, прикреплённые к УПД."""
@@ -392,6 +428,9 @@ class Bot:
         if not files:
             self.say(chat_id, "Файлов к этому УПД нет или они недоступны.")
             return
+        title = getattr(M, "upd_title", lambda _: "")(doc_id)
+        if title:
+            self.say(chat_id, title, raw=True)
         for name, data, mime in files:
             if len(data) > 49 * 1024 * 1024:
                 self.say(chat_id, f"«{html.escape(name)}» больше 50 МБ — Telegram такой не пропустит. "
@@ -759,9 +798,21 @@ class Bot:
             if rng and not quiet_now():              # даты текстом — в открытый отчёт
                 self.menu_report(chat_id, None, obj, rep, *rng)
                 return
+            if not getattr(menu, "AI", True) and not text.startswith("/"):   # финбот без ИИ
+                self.menu_shown.add(chat_id)
+                self.menu_text[chat_id] = text
+                msg_text, kb = menu.text_kb(text)
+                self.say(chat_id, msg_text, kb, raw=True)
+                return
         if chat_id not in self.menu_shown and text != "/start":
             self.menu_shown.add(chat_id)         # после обновления бота меню ставим сами
             self.say(chat_id, "Меню — на кнопках внизу.", keyboard(self.profile), raw=True)
+        if text == "/start" and self.profile == "finance" and not getattr(self.mod(), "AI", True):
+            self.say(chat_id, f"{hello} Я <b>{NAMES[self.profile]}</b>.\n\nОтчёты — на кнопках внизу: "
+                              "нажмите, выберите период — придут цифры, графики и Excel. Можно "
+                              "просто написать название, ИНН или сумму.", keyboard(self.profile), raw=True)
+            self.menu_shown.add(chat_id)
+            return
         if text == "/start":
             self.say(chat_id, (
                 f"{hello} Я <b>{NAMES[self.profile]}</b>.\n\n{html.escape(ABOUT[self.profile])}"

@@ -169,10 +169,14 @@ def register_assistant_callbacks(app, profile="sales"):
         def _rep_range(code):
             return {} if code == RP.CUSTOM else {"display": "none"}
 
+    rep_outputs = [Output(RP.BOX_ID, "open")] if reports else []
+    tail = (no_update,) if reports else ()
+
     @app.callback(
         Output(ASSISTANT_HISTORY_STORE_ID, "data"),
         Output(ASSISTANT_INPUT_ID, "value"),
         Output(ASSISTANT_SEEN_STORE_ID, "data"),
+        *rep_outputs,
         Input(ASSISTANT_SEND_BTN_ID, "n_clicks"),
         Input(ASSISTANT_INPUT_ID, "n_submit"),
         Input(ASSISTANT_CLEAR_BTN_ID, "n_clicks"),
@@ -196,7 +200,7 @@ def register_assistant_callbacks(app, profile="sales"):
 
         if reports and _clicked(seen, "report", n_show):   # готовый отчёт — без ИИ
             history.append(RP.run_report(*rep_args))
-            return history[-MAX_HISTORY * 2:], no_update, seen
+            return (history[-MAX_HISTORY * 2:], no_update, seen, False)   # панель сворачиваем
 
         sent = _clicked(seen, "send", n_send)
         submitted = _clicked(seen, "submit", n_submit)
@@ -207,7 +211,7 @@ def register_assistant_callbacks(app, profile="sales"):
                 chip_text = examples[i]
 
         if cleared:
-            return [], "", seen
+            return ([], "", seen) + tail
         if chip_text:
             text = chip_text
         elif not (sent or submitted):
@@ -215,12 +219,12 @@ def register_assistant_callbacks(app, profile="sales"):
 
         text = (text or "").strip()
         if not text:
-            return no_update, no_update, seen
+            return (no_update, no_update, seen) + tail
 
         history.append({"role": "user", "content": text})
         print(f"[assistant] вопрос: {text[:80]}", flush=True)
         history.append(_ask_msg(_convo(history), profile))
-        return history, "", seen
+        return (history, "", seen) + tail
 
     @app.callback(
         Output(ASSISTANT_MESSAGES_ID, "children"),
