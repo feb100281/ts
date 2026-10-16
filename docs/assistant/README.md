@@ -204,3 +204,12 @@ python pdf.py    # два .pdf: HTML → PDF через Playwright/Chromium, A4,
 - Источники — те же, что в дашборде: `wb_sales_export`, `stocks`, `wb_expenses_excel`, `ad_campaigns_report`, `wb_top_cards_report`, `commercial_review`.
 - Нажатия пишутся в журнал вопросов с пометкой «[кнопка]». Свободный текст по-прежнему отвечает ИИ.
 - Утренняя рассылка не менялась.
+
+## Mini App бота продаж (📱 Приложение)
+
+- Страница: `/tg/app/` (`templates/tgapp/app.html`), API: `/tg/api/meta/`, `/tg/api/report/`, `/tg/api/file/` — `gear/tgapp.py`.
+- Отчёты те же, что на кнопках бота (`assistant/menu.py`): текст разбирается на плитки и секции, графики рисуются SVG без внешних библиотек.
+- Вход — по подписи Telegram (initData) токеном `TELEGRAM_BOT_TOKEN_SALES`; пускаем только подтверждённых в «Помощник в Telegram: доступ» (бот sales).
+- Файлы — по подписанной ссылке на час (Telegram.WebApp.downloadFile).
+- Включение: в `.env` `TELEGRAM_WEBAPP_URL_SALES=https://ts-bias.ru/tg/app/` и перезапуск gunicorn и бота — появятся кнопка «📱 Приложение» в меню и кнопка «Приложение» у поля ввода.
+- Открытия пишутся в журнал вопросов с пометкой «[приложение]».

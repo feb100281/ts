@@ -399,9 +399,15 @@ class Bot:
 
     def setup(self):
         """Меню команд и описание бота — задаются при каждом запуске."""
+        menu_button = {"type": "default"}
+        if self.profile == "sales":
+            from gear.app.daily_sales.assistant import menu
+            if menu.app_url().startswith("https://"):     # кнопка «Приложение» у поля ввода
+                menu_button = {"type": "web_app", "text": "Приложение",
+                               "web_app": {"url": menu.app_url()}}
         for method, params in (
             ("deleteMyCommands", {}),                       # управление — кнопками
-            ("setChatMenuButton", {"menu_button": {"type": "default"}}),
+            ("setChatMenuButton", {"menu_button": menu_button}),
             ("setMyDescription", {"description": DESCRIPTION[self.profile]}),
             ("setMyShortDescription", {"short_description": ABOUT[self.profile]}),
         ):
