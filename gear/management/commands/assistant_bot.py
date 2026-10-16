@@ -355,9 +355,10 @@ class Bot:
                 print(f"[bot sales] картинка {rep}: {type(e).__name__}: {e}", flush=True)
         if not sent:
             self.say(chat_id, text, kb, raw=True)
-        if res.get("auto"):
-            self.menu_file(chat_id, obj, rep, res["auto"], a, b, quiet=True)
-        self.log(obj, f"[кнопка] {label}", started, {"files": [1] if res.get("auto") else []})
+        auto = res.get("auto") or []
+        for code in ([auto] if isinstance(auto, str) else auto):
+            self.menu_file(chat_id, obj, rep, code, a, b, quiet=True)
+        self.log(obj, f"[кнопка] {label}", started, {"files": [1] if auto else []})
         type(obj).objects.filter(pk=obj.pk).update(
             requests=obj.requests + 1, last_seen=timezone.now())
 
@@ -604,7 +605,11 @@ class Bot:
         text = {v: "/" + k for k, v in MENU.items()}.get(text, text)
         if self.profile == "sales":
             from gear.app.daily_sales.assistant import menu
-            text = {menu.BTN_AI: "/examples", menu.BTN_HELP: "/help"}.get(text, text)
+            if text == menu.BTN_AI:
+                self.menu_rep.pop(chat_id, None)     # дальше текст — вопрос ИИ, а не даты отчёта
+                self.say(chat_id, menu.AI_TEXT, keyboard(self.profile), raw=True)
+                return
+            text = {menu.BTN_HELP: "/help"}.get(text, text)
             if text in menu.BY_TEXT:                 # отчёт по кнопке — без ИИ
                 self.menu_shown.add(chat_id)
                 rep = menu.BY_TEXT[text]

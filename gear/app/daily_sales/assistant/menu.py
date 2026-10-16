@@ -30,8 +30,12 @@ REPORTS = {
     "c": "🗂 Категории",
     "w": "💸 Расходы WB",
     "a": "📣 Реклама",
-    "t": "🏆 Топ карточек",
+    "d": "💳 Скидка СПП",
+    "r": "📑 Коммерческий обзор",
+    "m": "💰 Маржинальность",
+    "l": "🔻 Продаём в убыток",
 }
+SINGLE_DAY = {"r"}                 # отчёт на дату, а не за период
 BTN_AI = "🤖 Спросить ИИ"
 BTN_HELP = "ℹ️ Как пользоваться"
 BY_TEXT = {v: k for k, v in REPORTS.items()}
@@ -59,8 +63,9 @@ def keyboard() -> dict:
     return {"keyboard": [[{"text": r["s"]}, {"text": r["k"]}],
                          [{"text": r["b"]}, {"text": r["c"]}],
                          [{"text": r["w"]}, {"text": r["a"]}],
-                         [{"text": r["t"]}, {"text": BTN_AI}],
-                         [{"text": BTN_HELP}]],
+                         [{"text": r["m"]}, {"text": r["l"]}],
+                         [{"text": r["d"]}, {"text": r["r"]}],
+                         [{"text": BTN_AI}, {"text": BTN_HELP}]],
             "resize_keyboard": True, "is_persistent": True,
             "input_field_placeholder": "Кнопка или вопрос своими словами…"}
 
@@ -156,6 +161,9 @@ def prev_range(a: date, b: date) -> tuple[date, date]:
 
 
 def period_kb(rep: str) -> dict:
+    if rep in SINGLE_DAY:
+        return {"inline_keyboard": [[{"text": "Вчера", "callback_data": f"mn:p:{rep}:y"},
+                                     {"text": "📅 Другая дата", "callback_data": f"mn:c:{rep}::0"}]]}
     rows, row = [], []
     for code, label in PRESETS:
         row.append({"text": label, "callback_data": f"mn:p:{rep}:{code}"})
@@ -182,6 +190,8 @@ def calendar_kb(rep: str, year: int, month: int, start: date | None, lo: date, h
             d = date(year, month, day)
             if d < lo or d > hi or (start and d < start):
                 line.append({"text": "·", "callback_data": "mn:n"})
+            elif rep in SINGLE_DAY:
+                line.append({"text": str(day), "callback_data": f"mn:e:{rep}:{ymd(d)}:{ymd(d)}"})
             elif start:
                 mark = f"[{day}]" if d == start else str(day)
                 line.append({"text": mark, "callback_data": f"mn:e:{rep}:{s}:{ymd(d)}"})
@@ -203,6 +213,9 @@ def calendar_kb(rep: str, year: int, month: int, start: date | None, lo: date, h
 
 
 def ask_text(rep: str) -> str:
+    if rep in SINGLE_DAY:
+        return (f"<b>{REPORTS[rep]}</b>\nНа какую дату? Нажмите кнопку или напишите дату: "
+                "<code>15.10</code>")
     return (f"<b>{REPORTS[rep]}</b>\nЗа какой период? Нажмите кнопку или напишите даты: "
             "<code>01.10–15.10</code>, <code>01.09.2026-30.09.2026</code>, <code>05.10</code>")
 
@@ -306,6 +319,44 @@ def _tot(df, col):
     return float(df[col].sum()) if col in df.columns and not df.empty else 0.0
 
 
+RP_S, RP_R = "До СПП: продажи, ₽", "До СПП: возвраты, ₽"
+
+
+def _why(cur, old) -> str:
+    """За счёт чего изменились продажи до СПП: количество, средняя цена, возвраты.
+
+    Методика коммерческого обзора 2.0: количество = Δшт × прошлая цена,
+    цена = Δцены × текущие шт, возвраты = −Δвозвратов в ₽. Сумма = изменение итога.
+    """
+    q, oq = _tot(cur, SOLD), _tot(old, SOLD)
+    s, os_ = _tot(cur, RP_S), _tot(old, RP_S)
+    if not q or not oq:
+        return ""
+    p, op = s / q, os_ / oq
+    eff = [("количество", (q - oq) * op), ("средняя цена", (p - op) * q),
+           ("возвраты", -(_tot(cur, RP_R) - _tot(old, RP_R)))]
+    total = sum(v for _, v in eff)
+    if not total:
+        return ""
+    sign = lambda v: ("+" if v >= 0 else "−") + rub(abs(v))
+    main = max(eff, key=lambda e: abs(e[1]))
+    text = (f"<b>Почему {'выросли' if total > 0 else 'упали'} продажи ({sign(total)})</b>\n"
+            + "\n".join(f"• {name}: {sign(v)}" for name, v in eff)
+            + f"\nГлавное — <b>{main[0]}</b>. ")
+    if main[0] == "возвраты":
+        text += "Смотреть надо на возвраты: размеры, фото, описание — цена тут ни при чём."
+    elif main[0] == "количество" and main[1] < 0:
+        text += "Упал спрос: проверьте наличие лидеров, позиции в выдаче и рекламу."
+    elif main[0] == "количество":
+        text += "Рост за счёт количества — здоровый рост. Проверьте, хватит ли запаса."
+    elif main[1] < 0:
+        text += ("Средняя цена ниже: скидки или больше дешёвых позиций в продажах. "
+                 "Подробно — в «💳 Скидка СПП».")
+    else:
+        text += "Цена выросла без потери количества — хороший знак."
+    return text
+
+
 def report_sales(a: date, b: date) -> dict | None:
     from . import digest_charts as ch
     pa, pb = prev_range(a, b)
@@ -324,6 +375,7 @@ def report_sales(a: date, b: date) -> dict | None:
     spp = (1 - ra / rp) * 100 if rp else 0
     o_spp = (1 - o_ra / o_rp) * 100 if o_rp else 0
     n = ndays(a, b)
+    why = _why(cur, old)
     lines = [f"<b>📊 Продажи · {span(a, b)}</b>",
              f"<i>{n} дн. · сравнение с {span(pa, pb)}</i>", "",
              f"До СПП: <b>{rub(rp)}</b>  {chg(rp, o_rp)}",
@@ -334,6 +386,8 @@ def report_sales(a: date, b: date) -> dict | None:
              f"Средняя цена до СПП: <b>{rub(rp / q if q else 0)}</b>  "
              f"{chg(rp / q if q else 0, o_rp / o_q if o_q else 0)}",
              f"СПП: <b>{num(spp, 1)}%</b>  {chg(spp, o_spp, pp=True)}"]
+    if why:
+        lines += ["", why]
     if n > 1:
         best = cur.loc[cur[RP].idxmax()]
         lines += ["", f"Лучший день: <b>{best[dcol]:%d.%m}</b> — {rub(best[RP])}",
@@ -627,14 +681,23 @@ def report_costs(a: date, b: date) -> dict | None:
     worst = max(rows, key=lambda r: r[1] - r[2])
     if worst[1] - worst[2] > 0 and worst[2]:
         lines += ["", f"Сильнее всего выросла статья «{worst[0]}»: +{rub(worst[1] - worst[2])}."]
-    lines += ["", "<i>Комиссия WB сюда не входит. Подробно по дням и статьям — в Excel.</i>"]
+    lines += ["", "<i>Комиссия WB сюда не входит. Подробно по дням и статьям — в Excel; "
+                  "какие карточки и склады тянут логистику и штрафы — в PDF кнопкой ниже.</i>"]
     photo = _photo(lambda: _costs_chart(rows, f"Расходы WB — {rub(tot)}",
                                         f"{span(a, b)} · изменение к {span(pa, pb)}"))
     return {"text": "\n".join(lines), "photo": photo, "auto": "xl",
-            "kb": _files_kb("w", a, b, (("xl", "Excel: расходы WB"),))}
+            "kb": _files_kb("w", a, b, (("xl", "Excel: расходы WB"),
+                                        ("lpdf", "PDF: логистика и штрафы"),
+                                        ("lxl", "Excel: логистика и штрафы")))}
 
 
-def file_costs(a: date, b: date):
+def file_costs(code: str, a: date, b: date):
+    from .. import wb_top_cards_report as tc
+    s, e = a.isoformat(), b.isoformat()
+    if code == "lpdf":
+        return f"Логистика и штрафы {span(a, b)}.pdf", tc.build_top_cards_pdf_bytes(s, e), PDF
+    if code == "lxl":
+        return f"Логистика и штрафы {span(a, b)}.xlsx", tc.build_top_cards_excel(s, e), XLSX
     from ..wb_expenses_excel import build_wb_expenses_excel
     return f"Расходы WB {span(a, b)}.xlsx", build_wb_expenses_excel(a.isoformat(), b.isoformat()), XLSX
 
@@ -675,14 +738,20 @@ def report_ads(a: date, b: date) -> dict | None:
                 + (f"{num(d, 1)}%" if d == d and d is not None else "нет заказов")
                 for n, s, d in zip(bad["name"], bad["spend_rub"], bad["drr"])]
         bal = ad._fetch_balance()
-        if bal and bal.get("balance") is not None:
-            lines += ["", f"Баланс рекламного кабинета: <b>{rub(bal['balance'])}</b>"]
+        if bal and bal.get("net") is not None:
+            left = f"Доступно на счёте рекламы: <b>{rub(bal['net'])}</b>"
+            if bal.get("bonus"):
+                left += f" + бонусы {rub(bal['bonus'])}"
+            spend_day = t["spend_rub"] / ndays(a, b) if t["spend_rub"] else 0
+            if spend_day and bal["net"]:
+                left += f" — хватит примерно на {num(bal['net'] / spend_day)} дн."
+            lines += ["", left]
     except Exception as e:
         print(f"[menu] реклама: {type(e).__name__}: {e}", flush=True)
-    lines += ["", "<i>По статистике кампаний WB. Подробный разбор — в PDF-записке.</i>"]
-    return {"text": "\n".join(lines), "photo": None, "auto": "xl",
-            "kb": _files_kb("a", a, b, (("pdf", "PDF: записка"), ("xl", "Excel: кампании"),
-                                        ("per", "Excel: по периодам")))}
+    lines += ["", "<i>По статистике кампаний WB. Аналитическая записка (PDF) и детализация "
+                  "(Excel) — следом.</i>"]
+    return {"text": "\n".join(lines), "photo": None, "auto": ["pdf", "xl"],
+            "kb": _files_kb("a", a, b, (("per", "Excel: по периодам"),))}
 
 
 def file_ads(code: str, a: date, b: date):
@@ -695,21 +764,327 @@ def file_ads(code: str, a: date, b: date):
     return f"Реклама WB {span(a, b)}.xlsx", ad.build_ad_campaigns_excel(s, e), XLSX
 
 
-# ---------------------------------------------------------------- 🏆 топ карточек
-def report_top(a: date, b: date) -> dict | None:
-    lines = [f"<b>🏆 Топ карточек · {span(a, b)}</b>", "",
-             "Лучшие и худшие карточки товара за период: продажи, возвраты, остатки — "
-             "тот же отчёт, что в дашборде.", "", "Excel пришлю сразу, PDF — по кнопке."]
-    return {"text": "\n".join(lines), "photo": None, "auto": "xl",
-            "kb": _files_kb("t", a, b, (("xl", "Excel"), ("pdf", "PDF")))}
+# ---------------------------------------------------------------- 💳 скидка СПП
+DISC = "СПП, %"
+AVG_RP, AVG_RA = "Средняя цена до СПП, ₽", "Средняя цена после СПП, ₽"
 
 
-def file_top(code: str, a: date, b: date):
-    from .. import wb_top_cards_report as tc
-    s, e = a.isoformat(), b.isoformat()
-    if code == "pdf":
-        return f"Топ карточек {span(a, b)}.pdf", tc.build_top_cards_pdf_bytes(s, e), PDF
-    return f"Топ карточек {span(a, b)}.xlsx", tc.build_top_cards_excel(s, e), XLSX
+def _spp(df) -> float:
+    rp = _tot(df, RP)
+    return (1 - _tot(df, RA) / rp) * 100 if rp else 0.0
+
+
+def _spp_chart(days, spp, avg_rp, avg_ra, title, sub) -> bytes:
+    from . import digest_charts as ch
+    plt = ch._plt()
+    fig = plt.figure(figsize=(10.8, 9.0), dpi=100)
+    ax = fig.add_axes([0.08, 0.52, 0.86, 0.30])
+    xs = range(len(days))
+    ax.plot(xs, spp, color=ch.WARM, lw=2.6)
+    ax.scatter([xs[-1]], [spp[-1]], s=90, color=ch.WARM, zorder=3, edgecolors="white", linewidths=2)
+    ax.text(xs[-1], spp[-1] + 0.6, num(spp[-1], 1) + "%", ha="center", fontsize=16,
+            fontweight="bold", color=ch.INK)
+    ax2 = fig.add_axes([0.08, 0.08, 0.86, 0.30])
+    ax2.plot(xs, avg_rp, color=ch.GREEN, lw=2.4, label="до СПП")
+    ax2.plot(xs, avg_ra, color=ch.MID, lw=2.4, label="после СПП (платит покупатель)")
+    ax2.legend(frameon=False, fontsize=12.5, loc="upper left", ncol=2)
+    step = 1 if len(days) <= 10 else 3 if len(days) <= 31 else 7
+    for a_ in (ax, ax2):
+        a_.set_xticks(list(xs))
+        a_.set_xticklabels([f"{d:%d.%m}" if (len(days) - 1 - i) % step == 0 else ""
+                            for i, d in enumerate(days)], color=ch.MUTED, fontsize=12)
+        a_.yaxis.set_major_locator(plt.MaxNLocator(4))
+        a_.tick_params(axis="y", labelcolor=ch.MUTED, labelsize=12)
+        a_.yaxis.grid(True, color=ch.GRID, lw=1)
+        a_.set_axisbelow(True)
+        ch._clean(a_)
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v:g}%".replace(".", ","))
+    ax2.yaxis.set_major_formatter(lambda v, _: num(v))
+    ch._head(fig, title, sub, y=0.945)
+    fig.text(0.06, 0.845, "СПП по дням, %", fontsize=13, fontweight="bold", color=ch.INK)
+    fig.text(0.06, 0.41, "Средняя цена за штуку, ₽", fontsize=13, fontweight="bold", color=ch.INK)
+    return ch._png(plt, fig)
+
+
+def report_disc(a: date, b: date) -> dict | None:
+    pa, pb = prev_range(a, b)
+    df = sales(pa, b, "day")
+    if df.empty:
+        return None
+    dcol = df.columns[0]
+    df[dcol] = pd.to_datetime(df[dcol]).dt.date
+    cur, old = df[df[dcol] >= a], df[df[dcol] <= pb]
+    if cur.empty:
+        return None
+    q, oq = _tot(cur, QTY), _tot(old, QTY)
+    rp, ra, orp, ora = _tot(cur, RP), _tot(cur, RA), _tot(old, RP), _tot(old, RA)
+    spp, ospp = _spp(cur), _spp(old)
+    lines = [f"<b>💳 Скидка СПП · {span(a, b)}</b>",
+             f"<i>сравнение с {span(pa, pb)}</i>", "",
+             f"СПП: <b>{num(spp, 1)}%</b>  {chg(spp, ospp, pp=True)}",
+             f"Скидка WB в рублях: <b>{rub(rp - ra)}</b>  {chg(rp - ra, orp - ora)}",
+             f"Средняя цена до СПП: <b>{rub(rp / q if q else 0)}</b>  "
+             f"{chg(rp / q if q else 0, orp / oq if oq else 0)}",
+             f"Платит покупатель (после СПП): <b>{rub(ra / q if q else 0)}</b>  "
+             f"{chg(ra / q if q else 0, ora / oq if oq else 0)}"]
+    if len(cur) > 1:
+        cur = cur.assign(_spp=[(1 - r_a / r_p) * 100 if r_p else None
+                               for r_p, r_a in zip(cur[RP], cur[RA])])
+        hi_d, lo_d = cur.loc[cur["_spp"].idxmax()], cur.loc[cur["_spp"].idxmin()]
+        lines += ["", f"Максимум: <b>{num(hi_d['_spp'], 1)}%</b> — {hi_d[dcol]:%d.%m}",
+                  f"Минимум: <b>{num(lo_d['_spp'], 1)}%</b> — {lo_d[dcol]:%d.%m}"]
+    try:
+        g, og = sales(a, b, "brand"), sales(pa, pb, "brand")
+        m = g[["Бренд", RP, RA]].merge(og[["Бренд", RP, RA]], on="Бренд", how="left",
+                                       suffixes=("", "_o")).fillna(0)
+        m = m[m[RP] >= max(rp * 0.01, 1)]
+        m["s"] = (1 - m[RA] / m[RP]) * 100
+        m["so"] = [(1 - x / y) * 100 if y else None for x, y in zip(m[RA + "_o"], m[RP + "_o"])]
+        m["d"] = m["s"] - m["so"]
+        up = m[m["d"].notna()].sort_values("d", ascending=False).head(5)
+        dn = m[m["d"].notna()].sort_values("d").head(5)
+        if not up.empty and up["d"].iloc[0] > 0.5:
+            lines += ["", "<b>▲ Скидка выросла сильнее всего</b>"] + [
+                f"• {esc(x)} — {num(s_, 1)}% ({chg(s_, so, pp=True)})"
+                for x, s_, so, d_ in zip(up["Бренд"], up["s"], up["so"], up["d"]) if d_ > 0.5]
+        if not dn.empty and dn["d"].iloc[0] < -0.5:
+            lines += ["", "<b>▼ Скидка снизилась сильнее всего</b>"] + [
+                f"• {esc(x)} — {num(s_, 1)}% ({chg(s_, so, pp=True)})"
+                for x, s_, so, d_ in zip(dn["Бренд"], dn["s"], dn["so"], dn["d"]) if d_ < -0.5]
+    except Exception as e:
+        print(f"[menu] СПП по брендам: {type(e).__name__}: {e}", flush=True)
+    lines += ["", "<i>СПП — скидка постоянного покупателя за счёт WB: 1 − после СПП / до СПП.</i>"]
+    photo = None
+    show = df if ndays(pa, b) <= CHART_MAX_DAYS else cur
+    if len(show) > 1:
+        vals = [((1 - r_a / r_p) * 100 if r_p else 0, r_p / qq if qq else 0, r_a / qq if qq else 0)
+                for r_p, r_a, qq in zip(show[RP], show[RA], show[QTY])]
+        photo = _photo(lambda: _spp_chart(list(show[dcol]), [v[0] for v in vals],
+                                          [v[1] for v in vals], [v[2] for v in vals],
+                                          f"СПП — {num(spp, 1)}%",
+                                          f"{span(show[dcol].iloc[0], b)} · до и после СПП"))
+    return {"text": "\n".join(lines), "photo": photo, "auto": "day",
+            "kb": _files_kb("d", a, b, (("day", "Excel: по дням"), ("brand", "Excel: по брендам"),
+                                        ("category", "Excel: по категориям")))}
+
+
+def file_disc(code: str, a: date, b: date):
+    if code not in ("day", "brand", "category"):
+        return None
+    df = sales(a, b, code)
+    if df.empty:
+        return None
+    key = {"day": "Дата", "brand": "Бренд", "category": "Категория"}[code]
+    if code == "day":
+        df[key] = pd.to_datetime(df[key]).dt.date
+    cols = [key, QTY, RP, RA, AVG_RP, AVG_RA, DISC]
+    df = df[cols].copy()
+    df.insert(4, "Скидка WB, ₽", df[RP] - df[RA])
+    if code != "day":
+        df = df.sort_values(RP, ascending=False)
+    cols = list(df.columns)
+    name = {"day": "по дням", "brand": "по брендам", "category": "по категориям"}[code]
+    data = _book("Скидка СПП", f"{span(a, b)} · как на сайте WB, с НДС",
+                 [(f"СПП {name}", cols, df.values.tolist())],
+                 notes=[("СПП, %", "1 − После СПП / До СПП, по чистым суммам."),
+                        ("Скидка WB, ₽", "До СПП минус после СПП: сколько скидки дал WB."),
+                        ("Средняя цена", "Сумма / проданные штуки (продажи минус возвраты).")])
+    return f"Скидка СПП {name} {span(a, b)}.xlsx", data, XLSX
+
+
+# ---------------------------------------------------------------- 📑 коммерческий обзор 2.0
+def report_review(a: date, b: date) -> dict | None:
+    lines = [f"<b>📑 Коммерческий обзор 2.0 на {b:%d.%m.%Y}</b>", "",
+             "Тот же PDF, что в дашборде: продажи и их причины, бренды и категории, "
+             "остатки, FBS, расходы WB. Собираю — это может занять до минуты."]
+    return {"text": "\n".join(lines), "photo": None, "auto": "pdf", "kb": {"inline_keyboard": [
+        [{"text": "🔁 Другая дата", "callback_data": "mn:o:r"}]]}}
+
+
+def file_review(b: date):
+    from ..commercial_review.data import build_review_data
+    from ..commercial_review.report import build_commercial_review_pdf
+    payload, fbs = build_review_data(b)
+    return f"Коммерческий обзор {b:%d.%m.%Y}.pdf", build_commercial_review_pdf(payload, fbs=fbs), PDF
+
+
+# ---------------------------------------------------------------- 💰 маржинальность / 🔻 убыток
+MANAGEMENT_NOTE = ("<i>Управленческий учёт, как в дашборде продаж: выручка без НДС, себестоимость "
+                   "по FIFO, продажи скорректированы на возвраты (возврат сторнирует исходную "
+                   "продажу по её себестоимости), комиссия WB без НДС; расходы WB (логистика, "
+                   "хранение, штрафы, продвижение) распределены на проданные штуки по неделям.</i>")
+MARGIN_SQL = """
+WITH commissions AS (
+    SELECT rrd_id,
+           COALESCE(SUM(val / (100 + vat_rate) * 100)
+                    FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
+           - COALESCE(SUM(val / (100 + vat_rate) * 100)
+                      FILTER (WHERE field = 'comission' AND oper = 'cr'), 0) AS net_comission
+    FROM sales.sales_long GROUP BY rrd_id
+),
+wk AS (
+    SELECT YEARWEEK(date_from::DATE) AS yw,
+           SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS n
+    FROM base WHERE cr_rev <> 0 GROUP BY 1
+),
+cw AS (
+    SELECT yw, SUM(dt / (100 + vat_rate) * 100) - SUM(cr / (100 + vat_rate) * 100) AS costs
+    FROM wb_costs GROUP BY yw
+),
+cps AS (
+    SELECT wk.yw, CASE WHEN COALESCE(wk.n, 0) = 0 THEN NULL ELSE ABS(cw.costs) / wk.n END AS r
+    FROM wk LEFT JOIN cw ON cw.yw = wk.yw
+)
+SELECT {dims},
+       SUM(CASE WHEN t.cr_rev > 0 THEN 1 WHEN t.cr_rev < 0 THEN -1 ELSE 0 END) AS qty,
+       SUM(t.cr_rev / (100 + t.vat_rate) * 100) / 100 AS rev,
+       SUM(t.adjusted_cogs_man) / 100 AS cogs,
+       SUM(c.net_comission) / 100 AS comm,
+       SUM((CASE WHEN t.cr_rev > 0 THEN 1 WHEN t.cr_rev < 0 THEN -1 ELSE 0 END)
+           * COALESCE(cps.r, 0)) / 100 AS wb
+FROM base t
+LEFT JOIN commissions c ON c.rrd_id = t.rrd_id
+LEFT JOIN cps ON cps.yw = YEARWEEK(t.date_from::DATE)
+WHERE t.cr_rev <> 0 AND t.date_from::DATE BETWEEN ? AND ?
+GROUP BY ALL
+"""
+MDIMS = {
+    "brand": ("COALESCE(NULLIF(TRIM(UPPER(t.brand)), ''), 'НЕ УКАЗАН') AS name", ["Бренд"]),
+    "category": ("COALESCE(NULLIF(TRIM(t.subject_name), ''), 'Не указана') AS name", ["Категория"]),
+    "nm": ("COALESCE(NULLIF(TRIM(UPPER(t.brand)), ''), 'НЕ УКАЗАН') AS brand, "
+           "COALESCE(NULLIF(TRIM(t.subject_name), ''), 'Не указана') AS category, "
+           "t.usk AS nm_id, COALESCE(NULLIF(TRIM(t.title), ''), '') AS name",
+           ["Бренд", "Категория", "Артикул WB", "Наименование"]),
+}
+_mcache: dict = {}
+
+
+def margin(a: date, b: date, by: str) -> pd.DataFrame:
+    """Маржа по методике дашборда продаж (DashboardData: base + wb_costs)."""
+    import time
+    key = (a, b, by)
+    hit = _mcache.get(key)
+    if hit and time.time() - hit[0] < 1800:
+        return hit[1].copy()
+    from ...data.base import DashboardData
+    with DashboardData() as d:
+        df = d.con.execute(MARGIN_SQL.replace("{dims}", MDIMS[by][0]), [a, b]).df()
+    for c in ("qty", "rev", "cogs", "comm", "wb"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+    df["md1"] = df["rev"] - df["cogs"] + df["comm"]
+    df["res"] = df["md1"] - df["wb"]
+    if len(_mcache) > 12:
+        _mcache.clear()
+    _mcache[key] = (time.time(), df)
+    return df.copy()
+
+
+def _pct(v, base):
+    return v / base * 100 if base else 0.0
+
+
+def report_margin(a: date, b: date) -> dict | None:
+    pa, pb = prev_range(a, b)
+    g, og = margin(a, b, "brand"), margin(pa, pb, "brand")
+    if g.empty or not g["rev"].sum():
+        return None
+    T = {k: g[k].sum() for k in ("rev", "cogs", "comm", "md1", "wb", "res", "qty")}
+    O = {k: og[k].sum() for k in ("rev", "md1", "res")} if not og.empty else {"rev": 0, "md1": 0, "res": 0}
+    m1, om1 = _pct(T["md1"], T["rev"]), _pct(O["md1"], O["rev"])
+    m2, om2 = _pct(T["res"], T["rev"]), _pct(O["res"], O["rev"])
+    lines = [f"<b>💰 Маржинальность · {span(a, b)}</b>",
+             f"<i>сравнение с {span(pa, pb)} · управленческий учёт</i>", "",
+             f"Выручка без НДС: <b>{rub(T['rev'])}</b>  {chg(T['rev'], O['rev'])}",
+             f"Себестоимость: <b>{rub(T['cogs'])}</b> · {num(_pct(T['cogs'], T['rev']), 1)}%",
+             f"Комиссия WB: <b>{rub(-T['comm'])}</b> · {num(_pct(-T['comm'], T['rev']), 1)}%",
+             f"Маржинальность: <b>{num(m1, 1)}%</b> · {rub(T['md1'])}  {chg(m1, om1, pp=True)}",
+             f"Расходы WB: <b>{rub(T['wb'])}</b> · {num(_pct(T['wb'], T['rev']), 1)}%",
+             f"Финансовый результат: <b>{num(m2, 1)}%</b> · {rub(T['res'])}  {chg(m2, om2, pp=True)}"]
+    g = g[g["rev"] > max(T["rev"] * 0.005, 1)].copy()
+    g["m2"] = g["res"] / g["rev"] * 100
+    best = g.sort_values("m2", ascending=False).head(5)
+    worst = g.sort_values("m2").head(5)
+    lines += ["", "<b>▲ Самые доходные бренды</b>"] + [
+        f"• {esc(n)} — {num(p, 1)}% · {rub(r)}" for n, p, r in zip(best["name"], best["m2"], best["res"])]
+    lines += ["", "<b>▼ Самые слабые бренды</b>"] + [
+        f"• {esc(n)} — {num(p, 1)}% · {rub(r)}" for n, p, r in zip(worst["name"], worst["m2"], worst["res"])]
+    lines += ["", "Маржинальность = выручка − себестоимость − комиссия; финансовый результат — "
+                  "ещё минус расходы WB. % — от выручки без НДС.", "", MANAGEMENT_NOTE]
+    return {"text": "\n".join(lines), "photo": None, "auto": "brand",
+            "kb": _files_kb("m", a, b, (("brand", "Excel: по брендам"),
+                                        ("category", "Excel: по категориям"),
+                                        ("nm", "Excel: по артикулам")))}
+
+
+def _margin_rows(df, by):
+    df = df.sort_values("res")
+    keys = {"brand": ["name"], "category": ["name"], "nm": ["brand", "category", "nm_id", "name"]}[by]
+    cols = MDIMS[by][1] + ["Продано, шт", "Выручка без НДС, ₽", "Себестоимость, ₽",
+                           "Комиссия WB, ₽", "Маржинальность, ₽", "Маржинальность, %",
+                           "Расходы WB, ₽", "Финансовый результат, ₽", "Финансовый результат, %",
+                           "Доля выручки, %"]
+    tot = df["rev"].sum()
+    rows = [[r[k] for k in keys] + [r["qty"], r["rev"], -r["cogs"], r["comm"], r["md1"],
+                                    _pct(r["md1"], r["rev"]) if r["rev"] else None, -r["wb"],
+                                    r["res"], _pct(r["res"], r["rev"]) if r["rev"] else None,
+                                    _pct(r["rev"], tot)]
+            for _, r in df.iterrows()]
+    return cols, rows
+
+
+MARGIN_NOTES = [
+    ("Учёт", "Управленческий, по методике дашборда продаж."),
+    ("Выручка", "Наша цена до СПП без НДС, продажи минус возвраты."),
+    ("Себестоимость", "Управленческая, FIFO. Возврат сторнирует исходную продажу по её "
+                      "себестоимости (корректировка продаж на возвраты)."),
+    ("Комиссия WB", "Без НДС."),
+    ("Расходы WB", "Логистика, хранение, приёмка, штрафы, продвижение, лояльность, коррекции — "
+                   "без НДС, распределены на проданные штуки по неделям, как в дашборде."),
+    ("Финансовый результат", "Маржинальность минус расходы WB. Меньше нуля — продажи в убыток."),
+]
+
+
+def file_margin(by: str, a: date, b: date, only_loss: bool = False):
+    if by not in MDIMS:
+        return None
+    df = margin(a, b, by)
+    if only_loss:
+        df = df[df["res"] < 0]
+    if df.empty:
+        return None
+    cols, rows = _margin_rows(df, by)
+    name = {"brand": "по брендам", "category": "по категориям", "nm": "по артикулам"}[by]
+    title = "В убытке" if only_loss else "Маржинальность"
+    data = _book(title, f"{span(a, b)} · управленческий учёт", [(f"{title} {name}", cols, rows)],
+                 notes=MARGIN_NOTES)
+    return f"{title} {name} {span(a, b)}.xlsx", data, XLSX
+
+
+def report_loss(a: date, b: date) -> dict | None:
+    nm = margin(a, b, "nm")
+    if nm.empty:
+        return None
+    loss = nm[nm["res"] < 0].sort_values("res")
+    total_rev = nm["rev"].sum()
+    lines = [f"<b>🔻 Продаём в убыток · {span(a, b)}</b>", "<i>управленческий учёт</i>", ""]
+    if loss.empty:
+        lines += ["Артикулов с отрицательным финансовым результатом нет. 👍", "", MANAGEMENT_NOTE]
+        return {"text": "\n".join(lines), "photo": None, "auto": None,
+                "kb": _files_kb("l", a, b, ())}
+    lines += [f"Артикулов в убытке: <b>{num(len(loss))}</b> из {num(len(nm))}",
+              f"Их выручка: <b>{rub(loss['rev'].sum())}</b> · {num(_pct(loss['rev'].sum(), total_rev), 1)}% "
+              f"от всей", f"Убыток по ним: <b>{rub(loss['res'].sum())}</b>", "",
+              "<b>Самые убыточные артикулы</b>"]
+    for _, r in loss.head(8).iterrows():
+        lines.append(f"• {esc(r['brand'])} · {esc(str(r['name'])[:38])} ({r['nm_id']}) — "
+                     f"{rub(r['res'])}, {num(r['qty'])} шт")
+    br = loss.groupby("brand", as_index=False)[["res", "rev"]].sum().sort_values("res").head(5)
+    lines += ["", "<b>Бренды, где больше всего убыточных продаж</b>"] + [
+        f"• {esc(n)} — {rub(v)}" for n, v in zip(br["brand"], br["res"])]
+    lines += ["", "Убыток = выручка без НДС − себестоимость − комиссия − расходы WB < 0.", "",
+              MANAGEMENT_NOTE]
+    return {"text": "\n".join(lines), "photo": None, "auto": "nm",
+            "kb": _files_kb("l", a, b, (("brand", "Excel: убыток по брендам"),))}
 
 
 # ---------------------------------------------------------------- диспетчер
@@ -724,8 +1099,14 @@ def build(rep: str, a: date, b: date) -> dict | None:
         return report_costs(a, b)
     if rep == "a":
         return report_ads(a, b)
-    if rep == "t":
-        return report_top(a, b)
+    if rep == "d":
+        return report_disc(a, b)
+    if rep == "r":
+        return report_review(a, b)
+    if rep == "m":
+        return report_margin(a, b)
+    if rep == "l":
+        return report_loss(a, b)
     return None
 
 
@@ -738,11 +1119,17 @@ def file(rep: str, code: str, a: date, b: date):
     if rep == "k":
         return file_stocks(code, a, b)
     if rep == "w":
-        return file_costs(a, b)
+        return file_costs(code, a, b)
     if rep == "a":
         return file_ads(code, a, b)
-    if rep == "t":
-        return file_top(code, a, b)
+    if rep == "d":
+        return file_disc(code, a, b)
+    if rep == "r":
+        return file_review(b)
+    if rep == "m":
+        return file_margin(code, a, b)
+    if rep == "l":
+        return file_margin(code, a, b, only_loss=True)
     return None
 
 
@@ -753,5 +1140,14 @@ HELP = ("<b>Как пользоваться</b>\n"
         "Или просто напишите даты после кнопки отчёта: 01.10–15.10.\n"
         "• Всё сравнивается с прошлым таким же периодом (месяц — с прошлым месяцем).\n"
         "• Продажи — как на сайте WB: с НДС, до СПП, после СПП и к перечислению.\n"
-        "• Нестандартный вопрос — просто напишите его своими словами, ответит ИИ.\n\n"
+        "• «💳 Скидка СПП» — как менялась скидка WB и цена для покупателя.\n"
+        "• «📑 Коммерческий обзор» — PDF коммерческого обзора 2.0 на выбранную дату.\n"
+        "• «💰 Маржинальность» и «🔻 Продаём в убыток» — по управленческому учёту, как в "
+        "дашборде: себестоимость FIFO, продажи скорректированы на возвраты.\n"
+        "• Нужного отчёта нет на кнопках — просто напишите вопрос своими словами, ответит ИИ.\n\n"
         "Важные цифры сверяйте с дашбордом. Если что-то не так — напишите Дарье.")
+
+
+AI_TEXT = ("🤖 <b>Спросите своими словами</b>\n"
+           "Если нужного раздела нет на кнопках — просто напишите вопрос обычным "
+           "сообщением, я посчитаю и при необходимости пришлю Excel.")
