@@ -32,6 +32,11 @@ def assistant_file(request, fid):
     return view(request, fid)
 
 
+def assistant_report_file(request):
+    from gear.app.daily_sales.assistant.reports_panel import report_file as view
+    return view(request)
+
+
 def tg_app(request):
     from gear.tgapp import app as view          # Mini App бота продаж
     return view(request)
@@ -79,6 +84,8 @@ urlpatterns = [
     path("admin/api/budgets/", export_view(api_budgets, "export_budget_analysis"), name="api_budgets"),
     path("admin/export/budget-analysis/", export_view(export_budget_analysis, "export_budget_analysis"), name="export_budget_analysis"),
     path("admin/assistant/file/<str:fid>/", admin.site.admin_view(assistant_file), name="assistant_file"),
+    path("admin/assistant/report-file/", admin.site.admin_view(assistant_report_file),
+         name="assistant_report_file"),
     path("tg/app/", tg_app, name="tg_app"),
     path("tg/api/meta/", tg_api("api_meta"), name="tg_api_meta"),
     path("tg/api/report/", tg_api("api_report"), name="tg_api_report"),

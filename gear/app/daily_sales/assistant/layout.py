@@ -10,6 +10,7 @@ from .ids import (
     ASSISTANT_UI_STORE_ID, ASSISTANT_MESSAGES_ID, ASSISTANT_CHIPS_ID,
     ASSISTANT_INPUT_ID, ASSISTANT_SEND_BTN_ID, chip_id,
 )
+from .reports_panel import report_bar
 
 PROFILES = {
     "sales": {
@@ -94,6 +95,8 @@ def assistant_widget(profile="sales"):
                 *[html.Button(e, id=chip_id(i), className="asst-chip")
                   for i, e in enumerate(prof["examples"][:N_CHIPS])],
             ]),
+
+            report_bar() if profile == "sales" else None,   # готовые отчёты без ИИ
 
             html.Div(className="asst-composer", children=[
                 dcc.Input(id=ASSISTANT_INPUT_ID, type="text", debounce=False,

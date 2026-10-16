@@ -35,7 +35,7 @@ def _mask(name, inn=None):
     return n or "Без контрагента"
 
 
-def _load(start: date, end: date) -> pd.DataFrame:
+def _load(start: date, end: date, masked: bool = True) -> pd.DataFrame:
     with connection.cursor() as cur:
         cur.execute("SELECT * FROM public.cf_to_csv WHERE date_from::date BETWEEN %s AND %s",
                     [start, end])
@@ -45,8 +45,9 @@ def _load(start: date, end: date) -> pd.DataFrame:
         return df
     inn_col = next((c for c in cols if re.search(r"(inn|tax_id)", c, re.I)
                     and re.search(r"cp|counter|contr", c, re.I)), None)
-    df["cp"] = [_mask(n, df.at[i, inn_col] if inn_col else None)
-                for i, n in zip(df.index, df.get("cp_name", pd.Series([""] * len(df))))]
+    names = df.get("cp_name", pd.Series([""] * len(df))).fillna("").astype(str).str.strip()
+    df["cp"] = ([_mask(n, df.at[i, inn_col] if inn_col else None) for i, n in zip(df.index, names)]
+                if masked else names.replace("", "Без контрагента"))   # кнопки финбота — без маски
     df["contract"] = df.get("contract_name", "").fillna("").replace("", "Без договора")
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
     df["d"] = pd.to_datetime(df["date_from"]).dt.date
@@ -57,13 +58,13 @@ def _load(start: date, end: date) -> pd.DataFrame:
     return df[["d", "activity", "operation", "item", "subitem", "cp", "contract", "amount"]]
 
 
-def _get(start, end):
-    key = (start, end)
+def _get(start, end, masked: bool = True):
+    key = (start, end, masked)
     with _lock:
         hit = _cache.get(key)
         if hit and time.time() - hit[0] < CACHE_TTL:
             return hit[1]
-        df = _load(start, end)
+        df = _load(start, end, masked)
         if len(_cache) > 8:
             _cache.clear()
         _cache[key] = (time.time(), df)
