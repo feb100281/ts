@@ -157,6 +157,15 @@ def period_kb(rep: str) -> dict:
     return {"inline_keyboard": rows}
 
 
+ARG_FIRST = {"x"}                       # сначала параметр (валюта), потом период
+
+
+def arg_kb(rep: str) -> tuple[str, dict]:
+    from ...manpack import data as md
+    btn = [{"text": c, "callback_data": f"fm:v:{rep}:{c}"} for c in md.FX_CURRENCIES]
+    return "💱 <b>Курсы валют</b>\nКакая валюта?", {"inline_keyboard": [btn]}
+
+
 def month_kb(rep: str, year: int, lo: date, hi: date) -> dict:
     """Сетка месяцев года: нажатие сразу открывает отчёт за месяц."""
     btn = []
@@ -196,8 +205,8 @@ def query_prompt(rep: str) -> str:
     return {
         "p": "💸 <b>Оплаты контрагента</b>\nНапишите часть названия или ИНН — например "
              "<b>спутник</b> или <b>7708</b>.",
-        "k": "🛡 <b>Проверка контрагента</b>\nНапишите <b>ИНН</b> или <b>название</b> — покажу "
-             "карточку, риски и наши договоры с ним.",
+        "k": "🛡 <b>Проверка контрагента</b>\nНапишите <b>ИНН</b> или <b>название</b> — найду в "
+             "ЕГРЮЛ/ЕГРИП: статус, риски, руководитель, наши расчёты и договоры, ссылки на сервисы ФНС.",
         "s": "🔍 <b>Поиск платежей</b> за 12 месяцев\nНапишите, что искать:\n"
              "• слово из названия контрагента, договора или статьи — <b>аренда</b>, <b>лужники</b>\n"
              "• сумму — <b>45000</b> или <b>45 000,50</b>",
@@ -1185,8 +1194,80 @@ def cp_find(text: str) -> list[tuple[str, str]]:
         flt |= Q(tax_id__startswith=q)
     out = []
     for cp in Counterparty.objects.filter(flt).order_by("name")[:8]:
-        out.append((f"{cp.name}" + (f" · ИНН {cp.tax_id}" if cp.tax_id else ""), str(cp.pk)))
+        out.append((f"{cp.name}" + (f" · ИНН {cp.tax_id}" if cp.tax_id else ""), f"id:{cp.pk}"))
     return out
+
+
+def report_check_inn(inn: str) -> dict:
+    """Карточка из ЕГРЮЛ/ЕГРИП (DaData) + наши деньги и договоры + ссылки на сервисы ФНС."""
+    from . import cp_check as C
+    p, note = None, ""
+    try:
+        found = C.find(inn)
+        if found:
+            p = C.profile(found)
+        else:
+            note = "В ЕГРЮЛ/ЕГРИП такого ИНН нет — проверьте цифры."
+    except C.CheckUnavailable as e:
+        note = f"Карточка из ЕГРЮЛ недоступна: {e}."
+        if not C.api_key():
+            note += " Нужен ключ DADATA_API_KEY в .env."
+    inn = p["inn"] if p else inn
+    local, contracts = [], []
+    try:
+        from contracts.models import Contracts
+        from counterparties.models import Counterparty
+        local = list(Counterparty.objects.filter(tax_id=inn))
+        contracts = list(Contracts.objects.filter(cp__in=local).select_related("title")
+                         .order_by("-date")[:11])
+    except Exception as e:
+        print(f"[fin_menu] проверка {inn}: справочник: {type(e).__name__}: {e}", flush=True)
+    names = {c.name.strip().lower() for c in local} | ({p["name"].strip().lower()} if p else set())
+    our = {"n": 0, "inflow": 0.0, "outflow": 0.0, "last": None, "articles": []}
+    try:
+        hi = loaded()
+        df = _cf(hi - timedelta(days=729), hi)
+        part = df[df["cp"].str.strip().str.lower().isin(names)] if df is not None and not df.empty else None
+        if part is not None and not part.empty:
+            arts = part.assign(a=part.subitem.where(part.subitem != "", part.item).map(_art))
+            top = arts.groupby("a").amount.apply(lambda x: x.abs().sum()).sort_values(ascending=False)
+            our = {"n": len(part), "inflow": part[part.amount > 0].amount.sum(),
+                   "outflow": part[part.amount < 0].amount.sum(), "last": part.d.max(),
+                   "articles": [a for a in top.index[:3] if a]}
+    except Exception as e:
+        print(f"[fin_menu] проверка {inn}: выписка: {type(e).__name__}: {e}", flush=True)
+    text = C.text(p, our, inn, note).replace("<b>Наши расчёты</b>", "<b>Наши расчёты за 2 года</b>")
+    if contracts:
+        head, sep, tail = text.rpartition("\n\n<i>📋")
+        block = ["", f"<b>Наши договоры ({len(contracts) if len(contracts) <= 10 else '10+'})</b>"] + [
+            f"• {esc(getattr(c.title, 'title', '') or 'Договор')} № {esc(c.number or 'б/н')}"
+            + (f" от {c.date:%d.%m.%Y}" if c.date else "") + ("" if c.is_signed else " · <i>не подписан</i>")
+            for c in contracts[:10]]
+        text = head + "\n" + "\n".join(block) + sep + tail if sep else text + "\n" + "\n".join(block)
+    links = [{"text": t, "url": u} for t, u in C.links(inn)]
+    rows = [[{"text": "📋 Скопировать ИНН", "copy_text": {"text": inn}}]]
+    rows += [links[i:i + 2] for i in range(0, len(links), 2)]
+    rows.append([{"text": "🔁 Проверить другого", "callback_data": "fm:o:k"}])
+    return {"text": text, "photo": None, "auto": None, "files": (), "kb": {"inline_keyboard": rows}}
+
+
+def check_query(text: str):
+    """ИНН → сразу карточка; название → варианты из ЕГРЮЛ (DaData), без ключа — из справочника."""
+    from . import cp_check as C
+    q = (text or "").strip()
+    digits = re.sub(r"\D", "", q)
+    if digits and len(digits) in (10, 12, 13, 15) and len(digits) >= len(q.replace(" ", "")) - 3:
+        return report_check_inn(digits)
+    try:
+        found = C.suggest(q)
+        opts = [(f"{C.STATUS.get(f['status'], ('❔', ''))[0]} {f['name'][:40]}"
+                 + (f" · {f['city']}" if f["city"] else ""), f["inn"]) for f in found]
+    except C.CheckUnavailable as e:
+        print(f"[fin_menu] DaData: {e}", flush=True)
+        opts = cp_find(q)
+    if len(opts) == 1:
+        return picked("k", opts[0][1])
+    return opts
 
 
 def report_check(cp_id) -> dict:
@@ -1357,16 +1438,15 @@ PICK_REPORT = {"k"}                 # выбор из вариантов сра�
 
 
 def picked(rep: str, value: str) -> dict | None:
-    return report_check(value) if rep == "k" else None
+    if rep != "k":
+        return None
+    return report_check(value[3:]) if str(value).startswith("id:") else report_check_inn(value)
 
 
 def query(rep: str, text: str, hi: date):
     """Текстовый запрос: результат отчёта или список вариантов [(подпись, значение)]."""
     if rep == "k":
-        found = cp_find(text)
-        if len(found) == 1:
-            return report_check(found[0][1])
-        return found
+        return check_query(text)
     if rep == "s":
         return report_search(text)
     if rep == "p":

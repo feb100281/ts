@@ -315,6 +315,10 @@ class Bot:
                 self.menu_pick_report(chat_id, obj, rep, value)
             else:
                 self.pick(chat_id, mid, rep, value)
+        elif op == "v" and len(parts) > 3:                     # финбот: выбран параметр (валюта)
+            self.menu_arg[(chat_id, rep)] = parts[3]
+            self.edit(chat_id, mid, M.ask_text(rep).replace("</b>\n", f" · {html.escape(parts[3])}</b>\n", 1),
+                      M.period_kb(rep))
         elif op == "y" and len(parts) > 3 and parts[3].isdigit():   # финбот: сетка месяцев
             self.edit(chat_id, mid, M.ask_text(rep).split("\n")[0] + "\nВыберите месяц.",
                       M.month_kb(rep, int(parts[3]), lo, hi))
@@ -783,6 +787,9 @@ class Bot:
                 if rep in query:
                     self.menu_q[chat_id] = rep
                     self.say(chat_id, menu.query_prompt(rep), raw=True)
+                elif rep in getattr(menu, "ARG_FIRST", set()):    # сначала валюта, потом период
+                    t, kb = menu.arg_kb(rep)
+                    self.say(chat_id, t, kb, raw=True)
                 else:
                     self.say(chat_id, menu.ask_text(rep), menu.period_kb(rep), raw=True)
                 return
