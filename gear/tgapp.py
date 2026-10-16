@@ -174,8 +174,9 @@ def api_report(request):
         files.append({"label": label, "url": (
             f"/tg/api/file/?u={acc.tg_id}&rep={rep}&code={quote(code)}&a={a}&b={b}&exp={exp}&sig={sig}")})
     out = blocks(res["text"])
-    out.update({"a": a.isoformat(), "b": b.isoformat(), "chart": res.get("chart"), "files": files,
-                "period": menu.span(a, b)})
+    charts = res.get("charts") or ([res["chart"]] if res.get("chart") else [])
+    out.update({"a": a.isoformat(), "b": b.isoformat(), "charts": _clean(charts), "files": files,
+                "tables": _clean(res.get("tables") or []), "period": menu.span(a, b)})
     return JsonResponse(out)
 
 
@@ -200,6 +201,25 @@ def api_file(request):
     resp = HttpResponse(data, content_type=mime)
     resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(name)}"
     return resp
+
+
+def _clean(v):
+    """numpy / NaN → обычные числа и None, чтобы ушло в JSON."""
+    import math
+    if isinstance(v, dict):
+        return {k: _clean(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_clean(x) for x in v]
+    if hasattr(v, "item") and not isinstance(v, (str, bytes)):
+        try:
+            v = v.item()
+        except Exception:
+            pass
+    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+        return None
+    if isinstance(v, date):
+        return v.isoformat()
+    return v
 
 
 def _log(acc, text, started):

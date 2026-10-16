@@ -325,10 +325,15 @@ def _book(title: str, subtitle: str, sheets: list[tuple[str, list, list]], notes
     return buf.getvalue()
 
 
+def table(title: str, cols: list, rows: list, kinds: list | None = None) -> dict:
+    """Таблица для приложения: kinds — формат колонок (text|int|rub|pct|signed)."""
+    return {"title": title, "cols": cols, "rows": rows, "kinds": kinds or ["text"] * len(cols)}
+
+
 # Результат отчёта: {"text", "photo", "files": [(имя, байты, mime)], "kb"}
 def _files_kb(rep, a, b, items) -> dict:
     s, e = ymd(a), ymd(b)
-    btn = [{"text": label, "callback_data": f"mn:f:{rep}:{code}:{s}:{e}"} for code, label in items]
+    btn = [{"text": "⬇️ " + label, "callback_data": f"mn:f:{rep}:{code}:{s}:{e}"} for code, label in items]
     rows = [btn[i:i + 2] for i in range(0, len(btn), 2)]
     rows.append([{"text": "🔁 Другой период", "callback_data": f"mn:o:{rep}"}])
     return {"inline_keyboard": rows}
@@ -383,6 +388,22 @@ def _why(cur, old) -> str:
     return text
 
 
+def _sales_tables(a: date, b: date) -> list:
+    out = []
+    try:
+        for level, ttl, key in (("brand", "Бренды", "Бренд"), ("category", "Категории", "Категория")):
+            m, *_ = _compare(level, a, b)
+            tot = m[RP].sum() or 1
+            out.append(table(ttl, [key, "До СПП", "Шт", "Доля", "К прошлому"],
+                             [[r[key], r[RP], r[QTY], r[RP] / tot * 100,
+                               (r["d_rp"] / r[RP + "_old"] * 100) if r[RP + "_old"] else None]
+                              for _, r in m.iterrows() if r[RP] or r[RP + "_old"]],
+                             ["text", "rub", "int", "pct", "signed_pct"]))
+    except Exception as e:
+        print(f"[menu] таблицы продаж: {type(e).__name__}: {e}", flush=True)
+    return out
+
+
 def report_sales(a: date, b: date) -> dict | None:
     from . import digest_charts as ch
     pa, pb = prev_range(a, b)
@@ -434,7 +455,7 @@ def report_sales(a: date, b: date) -> dict | None:
              "labels": [f"{d:%d.%m}" for d in show[dcol]], "values": [round(float(v)) for v in show[RP]],
              "n_cur": len(cur) if show is df else len(show)}
     return {"text": "\n".join(lines), "photo": photo, "auto": "day", "chart": chart,
-            "files": SALES_FILES, "kb": _files_kb("s", a, b, SALES_FILES)}
+            "files": SALES_FILES, "tables": _sales_tables(a, b), "kb": _files_kb("s", a, b, SALES_FILES)}
 
 
 def file_sales(level: str, a: date, b: date):
@@ -616,8 +637,27 @@ def report_stocks(a: date, b: date) -> dict | None:
     if q > 0:
         lines += ["", f"Продано за период: <b>{num(q)} шт</b> (≈{num(q / n)} в день)",
                   f"Хватит примерно на <b>{num(end['total'] / (q / n))} дн.</b>"]
+    tables = []
     try:
         g, _, _ = _stock_table(a, b, "brand")
+        tot_end = g["end"].sum() or 1
+        top = g.sort_values("end", ascending=False).head(10)
+        lines += ["", "<b>Как остатки распределены по брендам</b>"] + [
+            f"{i}. {esc(x)} — <b>{num(e)} шт</b> · {num(e / tot_end * 100, 1)}%"
+            + (f" ({'+' if c > 0 else '−'}{num(abs(c))})" if c else "")
+            for i, (x, e, c) in enumerate(zip(top["brand"], top["end"], top["chg"]), 1)]
+        if len(g) > 10:
+            lines.append(f"…ещё {len(g) - 10} — в Excel и в приложении.")
+        for by, ttl in (("brand", "Бренды"), ("category", "Категории")):
+            t = g if by == "brand" else _stock_table(a, b, "category")[0]
+            t = t.sort_values("end", ascending=False)
+            te = t["end"].sum() or 1
+            tables.append(table(ttl, [ttl[:-1] if by == "brand" else "Категория", "Остаток, шт",
+                                      "Изм., шт", "Доля", "Запас, дн."],
+                                [[r[by], r["end"], r["chg"], r["end"] / te * 100,
+                                  r["cover"] if r["cover"] == r["cover"] else None]
+                                 for _, r in t.iterrows()],
+                                ["text", "int", "signed", "pct", "int"]))
         up = g[g["chg"] > 0].sort_values("chg", ascending=False).head(5)
         down = g[g["chg"] < 0].sort_values("chg").head(5)
         if not up.empty:
@@ -648,7 +688,7 @@ def report_stocks(a: date, b: date) -> dict | None:
     chart = {"type": "line", "title": "Остатки всего, шт", "labels": [f"{r['date']:%d.%m}" for r in ser],
              "values": [r["total"] for r in ser]} if len(ser) > 1 else None
     return {"text": "\n".join(x for x in lines if x is not None), "photo": photo, "auto": "brand",
-            "chart": chart, "files": files, "kb": _files_kb("k", a, b, files)}
+            "chart": chart, "files": files, "tables": tables, "kb": _files_kb("k", a, b, files)}
 
 
 def file_stocks(by: str, a: date, b: date):
@@ -1079,8 +1119,17 @@ def report_margin(a: date, b: date) -> dict | None:
                   "ещё минус расходы WB. % — от выручки без НДС.", "", MANAGEMENT_NOTE]
     files = (("brand", "Excel: по брендам"), ("category", "Excel: по категориям"),
              ("nm", "Excel: по артикулам"))
+    tables = []
+    for by, ttl in (("brand", "Бренды"), ("category", "Категории")):
+        t = margin(a, b, by).sort_values("rev", ascending=False)
+        tables.append(table(ttl, ["Бренд" if by == "brand" else "Категория", "Выручка", "Маржа",
+                                  "Фин. результат", "Фин. рез., ₽"],
+                            [[r["name"], r["rev"], _pct(r["md1"], r["rev"]) if r["rev"] else None,
+                              _pct(r["res"], r["rev"]) if r["rev"] else None, r["res"]]
+                             for _, r in t.iterrows()],
+                            ["text", "rub", "pct", "pct", "rub"]))
     return {"text": "\n".join(lines), "photo": None, "auto": "brand", "files": files,
-            "kb": _files_kb("m", a, b, files)}
+            "tables": tables, "kb": _files_kb("m", a, b, files)}
 
 
 def _margin_rows(df, by):
@@ -1195,9 +1244,9 @@ def report_weeks(a: date, b: date) -> dict | None:
         rows.append((mon, end, full, cur, prev))
     last_mon, last_end, last_full, cur, prev = rows[-1]
     lbl = lambda m, e, f: f"{m:%d.%m}–{(m + timedelta(days=6)):%d.%m}" + ("" if f else f" (по {e:%d.%m})")
-    lines = [f"<b>📅 Недели · {len(rows)} шт · {span(rows[0][0], b)}</b>",
-             "<i>календарные недели пн–вс; неполная неделя сравнивается с теми же днями прошлой</i>", "",
-             f"<b>Неделя {lbl(last_mon, last_end, last_full)}</b>",
+    lines = [f"<b>📅 Недели · {span(rows[0][0], b)}</b>",
+             f"<i>неделя {lbl(last_mon, last_end, last_full)} к прошлой · календарные недели пн–вс"
+             + ("" if last_full else ", неполная — к тем же дням") + "</i>", "",
              f"До СПП: <b>{rub(cur['rp'])}</b>  {chg(cur['rp'], prev['rp'])}",
              f"Продано: <b>{num(cur['q'])} шт</b>  {chg(cur['q'], prev['q'])}",
              f"Средняя цена: <b>{rub(cur['price'])}</b>  {chg(cur['price'], prev['price'])}",
@@ -1225,10 +1274,37 @@ def report_weeks(a: date, b: date) -> dict | None:
             if len(full_rows) >= 3 and ups in (0, 3):
                 lines.append("Три недели подряд " + ("рост" if ups == 3 else "падение")
                              + " — это уже тренд, а не случайность.")
+    lines += ["", "<b>Цена и скидка по неделям</b>"] + [
+        f"• {m:%d.%m} — до СПП {rub(c['price'])} · покупатель {rub(c['ra'] / c['q'] if c['q'] else 0)}"
+        f" · СПП {num(c['spp'], 1)}%" for m, e, f, c, p in rows]
+    if len(rows) > 1:
+        f0, f1 = rows[0][3], rows[-1][3]
+        dp = f1["price"] - f0["price"]
+        ds = f1["spp"] - f0["spp"]
+        parts = []
+        if abs(dp) >= 1:
+            parts.append(f"цена до СПП {'выросла' if dp > 0 else 'снизилась'} на {rub(abs(dp))}")
+        if abs(ds) >= 0.1:
+            parts.append(f"СПП {'выросла' if ds > 0 else 'снизилась'} на {num(abs(ds), 1)} п.п.")
+        lines.append(f"За {len(rows)} нед.: " + ", ".join(parts) + "." if parts
+                     else "Цена и скидка за эти недели почти не менялись.")
     lines += ["", "<i>Как на сайте WB: с НДС, по дате операции в отчёте реализации.</i>"]
-    chart = {"type": "bar", "title": "Продажи до СПП по неделям, ₽",
-             "labels": [f"{m:%d.%m}" for m, *_ in rows], "values": [round(r[3]["rp"]) for r in rows],
-             "n_cur": len(rows)}
+    labels = [f"{m:%d.%m}" + ("" if f else "*") for m, e, f, *_ in rows]
+    chart = {"type": "bar", "title": "Продажи до СПП по неделям, ₽", "labels": labels,
+             "values": [round(r[3]["rp"]) for r in rows], "n_cur": len(rows), "label_all": True}
+    charts = [chart,
+              {"type": "line", "title": "Средняя цена за штуку, ₽", "labels": labels, "label_all": True,
+               "series": [{"name": "до СПП", "values": [round(r[3]["price"]) for r in rows]},
+                          {"name": "платит покупатель", "values": [
+                              round(r[3]["ra"] / r[3]["q"]) if r[3]["q"] else None for r in rows]}]},
+              {"type": "line", "title": "СПП по неделям, %", "labels": labels, "label_all": True,
+               "values": [round(r[3]["spp"], 1) for r in rows]}]
+    wk_table = table("Недели", ["Неделя", "До СПП", "Шт", "К прошлой", "Цена до СПП", "Цена покупателя",
+                                "СПП", "Возвраты"],
+                     [[lbl(m, e, f), c["rp"], c["q"], (c["rp"] / p["rp"] - 1) * 100 if p["rp"] else None,
+                       c["price"], c["ra"] / c["q"] if c["q"] else None, c["spp"], c["ret"]]
+                      for m, e, f, c, p in rows],
+                     ["text", "rub", "int", "signed_pct", "rub", "rub", "pct", "pct"])
     photo = None
     if len(rows) > 1:
         from . import digest_charts as ch
@@ -1239,8 +1315,8 @@ def report_weeks(a: date, b: date) -> dict | None:
                                         + ("" if rows[-1][2] else " · * неделя ещё идёт")))
     files = (("weeks", "Excel: недели"), ("brands", "Excel: бренды по неделям"),
              ("cats", "Excel: категории по неделям"))
-    return {"text": "\n".join(lines), "photo": photo, "auto": "weeks", "chart": chart,
-            "files": files, "kb": _files_kb("n", a, b, files)}
+    return {"text": "\n".join(lines), "photo": photo, "auto": "weeks", "chart": chart, "charts": charts,
+            "files": files, "tables": [wk_table], "kb": _files_kb("n", a, b, files)}
 
 
 def file_weeks(code: str, a: date, b: date):

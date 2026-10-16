@@ -31,7 +31,7 @@ b{font-weight:700}
 .hello{font-size:24px;font-weight:800;margin:6px 0 2px;letter-spacing:-.01em}
 .sub{color:#CFE6DD;font-size:13px}
 
-.reports{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:-46px 14px 14px;position:relative;z-index:2}
+.reports{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:-46px 14px 14px;position:relative;z-index:2}
 .rep{border:0;background:var(--card);border-radius:0;padding:10px 4px 9px;box-shadow:var(--shadow);cursor:pointer;
   display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--muted);
   transition:transform .12s,background .15s}
@@ -56,7 +56,7 @@ html.dark .rep.on{background:var(--brand-3)}
 .head h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.01em}
 .head p{margin:3px 0 0;color:var(--muted);font-size:13px}
 
-.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 14px 12px}
+.kpis{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 14px 12px}
 .kpi{background:var(--card);border-radius:0;padding:12px 13px;box-shadow:var(--shadow);min-width:0;
   animation:up .35s ease both}
 .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
@@ -80,6 +80,24 @@ html.dark .rep.on{background:var(--brand-3)}
   display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:13.5px;box-shadow:var(--shadow)}
 .file.alt{background:var(--card);color:var(--ink);border:1px solid var(--line)}
 .file:active{transform:scale(.97)}
+.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;border:0;background:none;padding:12px 16px 10px;font-weight:600;font-size:13.5px;color:var(--muted);
+  border-bottom:2px solid transparent;cursor:pointer}
+.tab.on{color:var(--brand);border-bottom-color:var(--brand)}
+html.dark .tab.on{color:#7FC2A9;border-bottom-color:#7FC2A9}
+.tbl{overflow-x:auto;max-height:420px;overflow-y:auto}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+.tbl th{position:sticky;top:0;background:var(--soft);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.03em;text-align:right;padding:8px 10px;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;max-width:150px;
+  overflow:hidden;text-overflow:ellipsis}
+.tbl th:first-child{background:var(--soft);z-index:2}
+.tbl td{padding:8px 10px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+.more{display:block;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:10px;color:var(--brand);font-weight:600;cursor:pointer}
+.dl-title{margin:4px 18px 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.legend{display:flex;gap:14px;padding:0 16px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle}
 .note{margin:4px 18px 16px;color:var(--muted);font-size:12px;line-height:1.45}
 
 .empty,.err{margin:28px 18px;text-align:center;color:var(--muted)}
@@ -190,34 +208,67 @@ async function load(){
         <div class="v">${k.value}</div><div class="d ${deltaClass(k.label,k.rest)}">${k.rest||"&nbsp;"}</div></div>`;
     }).join("") + `</div>`;
   }
-  if (d.chart) h += `<div class="card"><h3>${d.chart.title}</h3><div class="chartbox" id="ch"></div></div>`;
-  if (d.files.length) h += `<div class="files">` + d.files.map((f,i) =>
-    `<button class="file ${i?"alt":""}" data-i="${i}">${/pdf/i.test(f.label)?"📄":"📊"} ${f.label.replace(/^(Excel|PDF):\s*/,"")}</button>`).join("") + `</div>`;
+  (d.charts||[]).forEach((c,i) => h += `<div class="card"><h3>${c.title}</h3>${legend(c)}<div class="chartbox" id="ch${i}"></div></div>`);
+  if ((d.tables||[]).length) h += `<div class="card" id="tblcard"><div class="tabs">` + d.tables.map((t,i) =>
+    `<button class="tab ${i?"":"on"}" data-t="${i}">${t.title}</button>`).join("") + `</div><div id="tblbody"></div></div>`;
   d.sections.forEach((s,i) => {
     h += `<div class="card" style="animation-delay:${80+i*40}ms">` + (s.title?`<h3>${s.title}</h3>`:"")
       + s.rows.map((r,j)=>`<div class="row"><span class="n">${j+1}</span><span>${colorize(r)}</span></div>`).join("")
       + (s.text.length?`<div class="txt">${s.text.map(t=>`<p>${colorize(t)}</p>`).join("")}</div>`:"") + `</div>`;
   });
+  if (d.files.length) h += `<div class="dl-title">⬇️ Скачать файлом</div><div class="files">` + d.files.map((f,i) =>
+    `<button class="file ${i?"alt":""}" data-i="${i}">⬇️ ${/pdf/i.test(f.label)?"PDF":"Excel"}: ${f.label.replace(/^(Excel|PDF):\s*/,"")}</button>`).join("") + `</div>`;
   d.notes.forEach(n => h += `<div class="note">${n}</div>`);
   $("#out").innerHTML = h;
   document.querySelectorAll(".file").forEach(b => b.onclick = () => download(d, d.files[+b.dataset.i]));
-  if (d.chart) drawChart(d.chart);
+  (d.charts||[]).forEach((c,i) => drawChart(c, "ch"+i));
+  if ((d.tables||[]).length) {
+    const show = i => { document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", +t.dataset.t===i)); drawTable(d.tables[i], 15); };
+    document.querySelectorAll(".tab").forEach(t => t.onclick = () => { haptic(); show(+t.dataset.t); });
+    show(0);
+  }
 }
 
+const SERIES_COLORS = ["var(--brand)", "#C9A24B", "#8FA39C"];
+function legend(c){
+  if (!c.series || c.series.length < 2) return "";
+  return `<div class="legend">` + c.series.map((s,i) => `<span><i style="background:${SERIES_COLORS[i]}"></i>${s.name}</span>`).join("") + `</div>`;
+}
+function cell(v, k){
+  if (v == null || v === "") return "—";
+  if (k === "text") return String(v).replace(/</g,"&lt;");
+  const n = +v, abs = Math.abs(n).toLocaleString("ru-RU", {maximumFractionDigits: k==="pct"||k==="signed_pct" ? 1 : 0});
+  if (k === "rub") return (n < 0 ? "−" : "") + abs + " ₽";
+  if (k === "pct") return (n < 0 ? "−" : "") + abs + "%";
+  if (k === "signed_pct") return `<span class="${n>0?"up":n<0?"down":""}">${n>0?"+":n<0?"−":""}${abs}%</span>`;
+  if (k === "signed") return `<span class="${n>0?"up":n<0?"down":""}">${n>0?"+":n<0?"−":""}${abs}</span>`;
+  return (n < 0 ? "−" : "") + abs;
+}
+function drawTable(t, limit){
+  const rows = limit ? t.rows.slice(0, limit) : t.rows;
+  let h = `<div class="tbl"><table><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`
+    + rows.map(r => `<tr>${r.map((v,i)=>`<td>${cell(v, t.kinds[i])}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>`;
+  if (limit && t.rows.length > limit) h += `<button class="more" id="more">Показать все (${t.rows.length})</button>`;
+  $("#tblbody").innerHTML = h;
+  const m = $("#more"); if (m) m.onclick = () => { haptic(); drawTable(t, 0); };
+}
 function fmtShort(v){
   const a = Math.abs(v);
   if (a >= 1e6) return (v/1e6).toFixed(a >= 1e7 ? 0 : 1).replace(".",",") + " млн";
-  if (a >= 1e3) return Math.round(v/1e3) + " тыс";
+  if (a >= 1e4) return Math.round(v/1e3) + " тыс";
+  if (a >= 100) return Math.round(v).toLocaleString("ru-RU");
   return (Math.round(v*10)/10).toString().replace(".",",");
 }
-function drawChart(c){
-  // свой SVG без внешних библиотек: столбики, линия или горизонтальные столбики
-  const box = document.getElementById("ch"); if (!box) return;
+function drawChart(c, id){
+  // свой SVG без внешних библиотек: столбики, линия (одна или несколько) или горизонтальные столбики
+  const box = document.getElementById(id); if (!box) return;
   const css = getComputedStyle(document.documentElement);
   const brand = css.getPropertyValue("--brand").trim(), muted = css.getPropertyValue("--muted").trim();
   const dark = document.documentElement.classList.contains("dark");
   const pale = dark ? "#2C463E" : "#CBD9D4", grid = dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.07)";
-  const W = (box.clientWidth || 364) - 24, vals = c.values.map(v => v == null ? null : +v), n = vals.length;
+  const series = c.series || [{values: c.values}];
+  const W = (box.clientWidth || 364) - 24, vals = series[0].values.map(v => v == null ? null : +v), n = vals.length;
+  const allVals = series.flatMap(s => s.values).filter(v => v != null).map(Number);
   const ns = "http://www.w3.org/2000/svg";
   let svg = "";
   if (c.type === "hbar") {
@@ -235,7 +286,7 @@ function drawChart(c){
     return;
   }
   const H = 220, L = 46, R = 8, T = 18, B = 26, iw = W - L - R, ih = H - T - B;
-  const nums = vals.filter(v => v != null), lo = c.type === "line" ? Math.min(...nums) : 0, hi = Math.max(...nums) || 1;
+  const nums = allVals, lo = c.type === "line" ? Math.min(...nums) : 0, hi = Math.max(...nums) || 1;
   const pad = c.type === "line" ? (hi - lo) * 0.15 || hi * 0.05 || 1 : 0;
   const y0 = lo - pad, y1 = hi + pad * 1.2 + (c.type === "line" ? 0 : hi * 0.08);
   const Y = v => T + ih - (v - y0) / (y1 - y0) * ih, X = i => L + (n === 1 ? iw/2 : i * iw / (c.type==="line" ? n-1 : n));
@@ -245,13 +296,21 @@ function drawChart(c){
   }
   const step = Math.ceil(n / 7), ncur = c.n_cur || n;
   if (c.type === "line") {
-    const pts = vals.map((v, i) => v == null ? null : [X(i), Y(v)]).filter(Boolean);
-    const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
-    svg += `<path d="${d} L${pts[pts.length-1][0]} ${T+ih} L${pts[0][0]} ${T+ih} Z" fill="${brand}" opacity=".12"/>`;
-    svg += `<path d="${d}" fill="none" stroke="${brand}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-    const last = pts[pts.length-1];
-    svg += `<circle cx="${last[0]}" cy="${last[1]}" r="5" fill="${brand}" stroke="#fff" stroke-width="2"/>`;
-    svg += `<text x="${Math.min(last[0], W-R-4)}" y="${last[1]-10}" font-size="12" font-weight="700" fill="currentColor" text-anchor="end">${fmtShort(vals[n-1])}</text>`;
+    series.forEach((s, si) => {
+      const col = si ? (si === 1 ? "#C9A24B" : "#8FA39C") : brand;
+      const pts = s.values.map((v, i) => v == null ? null : [X(i), Y(+v), +v]).filter(Boolean);
+      if (!pts.length) return;
+      const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+      if (series.length === 1) svg += `<path d="${d} L${pts[pts.length-1][0]} ${T+ih} L${pts[0][0]} ${T+ih} Z" fill="${brand}" opacity=".12"/>`;
+      svg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+      pts.forEach((p, i) => {
+        const lastPt = i === pts.length - 1;
+        if (!(c.label_all && n <= 14) && !lastPt) return;
+        svg += `<circle cx="${p[0]}" cy="${p[1]}" r="${lastPt?5:3.5}" fill="${col}" stroke="#fff" stroke-width="2"/>`;
+        const above = si === 0;
+        svg += `<text x="${lastPt ? Math.min(p[0], W-R) : p[0]}" y="${p[1] + (above ? -9 : 16)}" font-size="${lastPt?12:10.5}" font-weight="${lastPt?700:600}" fill="currentColor" text-anchor="${lastPt?"end":"middle"}">${fmtShort(p[2])}</text>`;
+      });
+    });
   } else {
     const bw = iw / n * 0.72;
     vals.forEach((v, i) => {
@@ -259,8 +318,13 @@ function drawChart(c){
       const x = X(i) + (iw / n - bw) / 2, y = Y(Math.max(v,0)), h = Math.max(Y(0) - y, 1);
       svg += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="0" fill="${i >= n-ncur ? brand : pale}"><title>${c.labels[i]}: ${Math.round(v).toLocaleString("ru-RU")}</title></rect>`;
     });
-    const lv = vals[n-1];
-    if (lv != null) svg += `<text x="${W-R}" y="${Y(lv)-7}" font-size="11.5" font-weight="700" fill="currentColor" text-anchor="end">${fmtShort(lv)}</text>`;
+    if (c.label_all && n <= 16) {
+      vals.forEach((v, i) => { if (v == null) return;
+        svg += `<text x="${X(i)+iw/n/2}" y="${Y(Math.max(v,0))-6}" font-size="${i===n-1?11.5:10.5}" font-weight="${i===n-1?700:600}" fill="${i===n-1?"currentColor":muted}" text-anchor="middle">${fmtShort(v)}</text>`; });
+    } else {
+      const lv = vals[n-1];
+      if (lv != null) svg += `<text x="${W-R}" y="${Y(lv)-7}" font-size="11.5" font-weight="700" fill="currentColor" text-anchor="end">${fmtShort(lv)}</text>`;
+    }
   }
   c.labels.forEach((t, i) => {
     if ((n - 1 - i) % step) return;
