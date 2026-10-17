@@ -114,6 +114,7 @@ def _drr_high() -> float:
     except Exception:
         return DRR_HIGH
 MARGIN_WEEKS = 8           # маржа товара «в обычное время» — за 8 недель
+ADS_MIN_SPEND = 500        # реклама меньше 500 ₽ в неделю на артикул — не считаем (копейки, шум)
 LOW_STOCK_DAYS = 7         # остатка меньше чем на неделю — рекламу можно не крутить   # блок сигналов в ежедневной рассылке (если есть что показать)
 
 COLS = {"Продажи, шт": "q", "Возвраты, шт": "rq", "До СПП: продажи, ₽": "s",
@@ -277,9 +278,9 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
                 key = "our" if x >= y else "spp"
             elif dem > 0 and dpb is not None and dpb <= -PRICE_STEP:
                 key = "our" if x <= y else "spp"
-            elif dem < 0 and a0 > 0 and a1 < (1 - ADS_STEP) * a0:
+            elif dem < 0 and a0 >= ADS_MIN_SPEND * n1 / 7 and a1 < (1 - ADS_STEP) * a0:
                 key = "ads"
-            elif dem > 0 and a1 > (1 + ADS_STEP) * a0 and a1 > 0:
+            elif dem > 0 and a1 > (1 + ADS_STEP) * a0 and a1 >= ADS_MIN_SPEND * n1 / 7:
                 key = "ads"
             else:
                 key = "demand"
@@ -346,6 +347,8 @@ def _with_margin(df, a, b, pa, pb, k):
 def ads_ok(r, n1: int = 7) -> str | None:
     """Почему сократить рекламу было разумно (или None)."""
     from .menu import num
+    if r.get("delta") is not None and r["delta"] >= 0:
+        return "продажи не упали — экономия без потерь"
     st = r.get("stock_now")
     daily = (r["q0"] or 0) / max(n1, 1)
     if st is not None and st == st and (st <= 3 or st < daily * LOW_STOCK_DAYS):
@@ -363,14 +366,15 @@ def ads_ok(r, n1: int = 7) -> str | None:
 
 def ads_cut(df, n1: int):
     """Артикулы, где рекламу сократили от 30%, и оценка: оправданно (причина) или нет (None)."""
-    off = df[(df["ad0"] > 0) & (df["ad1"] < (1 - ADS_STEP) * df["ad0"])].copy()
+    off = df[(df["ad0"] >= ADS_MIN_SPEND * n1 / 7) & (df["ad1"] < (1 - ADS_STEP) * df["ad0"])].copy()
     off["ok"] = [ads_ok(r, n1) for _, r in off.iterrows()] if len(off) else []
     off["ok"] = off["ok"].astype(object).where(off["ok"].notna(), None)
     return off
 
 
 def _ok_kind(t: str) -> str:
-    return ("мало остатка" if t.startswith("остаток") else "низкая маржа" if t.startswith("маржа")
+    return ("продажи не упали" if t.startswith("продажи не") else
+            "мало остатка" if t.startswith("остаток") else "низкая маржа" if t.startswith("маржа")
             else "не было заказов" if t.startswith("реклама не") else "дорогая реклама")
 
 
@@ -725,7 +729,9 @@ def file(code: str, a: date, b: date):
         ("Цены", "Покупатель платит за шт — средняя цена после СПП (что реально платит покупатель на WB). "
                   "Наша цена до СПП — цена, которую ставим мы. СПП — скидка, которую даёт WB за свой счёт. "
                   "Изм. % — на сколько процентов цена стала выше (+) или ниже (−) по сравнению с прошлым периодом."),
-        ("Реклама", "Все артикулы, где расход на рекламу снизился от 30%. Сверху — где сократили зря. "
+        ("Реклама", "Все артикулы, где расход на рекламу снизился от 30% (если раньше тратили хотя бы "
+                    f"{ADS_MIN_SPEND} ₽ в неделю — копейки не считаем). Сверху — где сократили зря. "
+                    "«Зря» — только если продажи упали, товар есть, маржа нормальная и реклама окупалась. "
                     "«Изменение продаж» — общее изменение по товару, «из них из-за рекламы» — часть, которую "
                     "разбор относит именно к рекламе (если одновременно выросла цена, падение уходит в цену). "
                     "«Правильно» — рекламу сократили, когда товара почти не осталось (меньше чем на неделю), "
