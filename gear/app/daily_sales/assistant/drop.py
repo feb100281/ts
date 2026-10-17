@@ -63,12 +63,15 @@ def _restock_base(df):
     no = df[(df["stock_now"].notna()) & (df["stock_now"] <= 0) & (df["q0"] >= 2)].copy()
     no["day_loss"] = no["v0"].fillna(0) * no["p0"].fillna(0)
     no = no[no["day_loss"] >= RESTOCK_MIN_DAY]
-    days = (no["d0"] * no["kk"]).where(lambda x: x > 0)
     no["mpct"] = no["m8"].where(no["m8"].notna(), no["pr0"] / no["rv0"].where(no["rv0"] > 0) * 100)
-    no["day_profit"] = no["pr0"] / days
+    # прибыль = продажи без НДС × маржа за 8 недель: одна неделя с возвратами не искажает знак
+    no["day_profit"] = no["day_loss"] / VAT_K * no["mpct"] / 100
+    no["note"] = no["mpct"].isna().map(
+        {True: "нет себестоимости в упр. учёте — маржу не посчитать, проверьте карточку", False: ""})
     return no
 
 
+VAT_K = 1.22                      # продажи до СПП с НДС → без НДС (маржа считается от выручки без НДС)
 RESTOCK_MIN_WEEK_QTY = 5          # довозить, если продавался хотя бы 5 шт в неделю
 RESTOCK_MIN_MONTH_PROFIT = 10000  # и приносил от 10 тыс ₽ прибыли в месяц
 
@@ -76,10 +79,12 @@ RESTOCK_MIN_MONTH_PROFIT = 10000  # и приносил от 10 тыс ₽ пр�
 def _profitable(df):
     no = _restock_base(df)
     ok = no[no["mpct"].isna() | (no["mpct"] >= RESTOCK_MIN_MARGIN)].copy()
-    ok["month_profit"] = ok["day_profit"].fillna(ok["day_loss"] * RESTOCK_MIN_MARGIN / 100) * 30
+    ok["month_profit"] = ok["day_profit"] * 30                         # пусто, если маржи нет
     ok["week_qty"] = ok["v0"].fillna(0) * 7
-    ok["big"] = (ok["month_profit"] >= RESTOCK_MIN_MONTH_PROFIT) & (ok["week_qty"] >= RESTOCK_MIN_WEEK_QTY)
-    return ok.sort_values("month_profit", ascending=False)
+    # без маржи судим по продажам: как если бы маржа была минимальной (10%)
+    est = ok["month_profit"].fillna(ok["day_loss"] * 30 / VAT_K * RESTOCK_MIN_MARGIN / 100)
+    ok["big"] = (est >= RESTOCK_MIN_MONTH_PROFIT) & (ok["week_qty"] >= RESTOCK_MIN_WEEK_QTY)
+    return ok.assign(rank=est).sort_values("rank", ascending=False)
 
 
 def restock(df):
@@ -587,9 +592,11 @@ def _todo(df, res) -> list[str]:
     no, skip = restock(df), restock_skip(df)
     if len(no):
         prof = no["day_profit"].dropna()
+        nm_ = int(no["mpct"].isna().sum())
         out.append(f"📦 Довезти: <b>{num(len(no))}</b> артикулов без остатка — прибыльные и продавались от "
                    f"{RESTOCK_MIN_WEEK_QTY} шт в неделю. Теряем около {rub(no['day_loss'].sum() * 30)} продаж и "
-                   f"{rub(no['month_profit'].sum())} прибыли в месяц, лист «Довезти» (сверху — больше прибыли).")
+                   f"{rub(no['month_profit'].sum())} прибыли в месяц, лист «Довезти» (сверху — больше прибыли)."
+                   + (f" У {num(nm_)} нет себестоимости — маржу не посчитать, см. примечание." if nm_ else ""))
     small = restock_small(df)
     if len(small):
         out.append(f"🐢 Мало продавались: <b>{num(len(small))}</b> прибыльных артикулов без остатка, но меньше "
@@ -655,7 +662,7 @@ def file(code: str, a: date, b: date):
     no = restock(df)
     nz = lambda v: None if v != v else v  # noqa: E731
     rs_row = lambda r: info(r) + [nz(r["month_profit"]), nz(r["mpct"]), r["day_loss"] * 30,  # noqa: E731
-                                  round(r["week_qty"], 1), r["p0"], r["stock_now"], r["d0"], r["d1"]]
+                                  round(r["week_qty"], 1), r["p0"], r["stock_now"], r["d0"], r["d1"], r["note"]]
     no_rows = [rs_row(r) for _, r in no.iterrows()]
     sm_rows = [rs_row(r) for _, r in restock_small(df).iterrows()]
     sk = restock_skip(df)
@@ -679,7 +686,7 @@ def file(code: str, a: date, b: date):
                                   r["stock_now"], cover(r, n1), nz(r["m8"]), nz(r["pr1"] - r["pr0"])])
     rs_cols = ["Прибыль в месяц*, ₽", f"Маржа за {MARGIN_WEEKS} недель*, %", "Продажи в месяц, ₽",
                "Продавали шт в неделю", "Цена до СПП, ₽", stock_label(),
-               f"Дней в наличии {span(res['pa'], res['pb'])}", f"Дней в наличии {span(a, b)}"]
+               f"Дней в наличии {span(res['pa'], res['pb'])}", f"Дней в наличии {span(a, b)}", "Примечание"]
     sheets = [("Итог", ["Показатель", "Сумма, ₽", "Доля в изменении продаж, %"], s_rows, {"totals": False}),
               ("Артикулы", main_cols, main),
               ("Довезти", head + rs_cols, no_rows),
@@ -709,6 +716,8 @@ def file(code: str, a: date, b: date):
                     "пока был в наличии, в пересчёте на 30 дней. Только прибыльные (маржа после расходов WB от 10%) и "
                     f"заметные: от {RESTOCK_MIN_WEEK_QTY} шт в неделю и от {RESTOCK_MIN_MONTH_PROFIT // 1000} тыс ₽ прибыли "
                     "в месяц. Остальные прибыльные — на листе «Мало продавались». Сверху — больше прибыли. "
+                    "Прибыль в месяц = продажи в месяц без НДС × маржа за 8 недель. Если себестоимости нет, "
+                    "маржа и прибыль пустые, а товар оценивается по продажам — см. «Примечание». "
                     "Продажи — за вычетом возвратов: число в скобках (минус) — вернули больше, чем продали."),
         ("Не довозить", "Товары без остатка, которые продавались в минус или с маржой ниже 10%: распродажа, "
                         "демпинг или высокие расходы WB. В «Довезти» они не попадают. Везти их по прежней цене "
