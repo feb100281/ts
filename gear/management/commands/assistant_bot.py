@@ -545,6 +545,8 @@ class Bot:
 
     def say(self, chat_id: int, text: str, markup: dict | None = None, raw: bool = False,
             silent: bool = False):
+        if markup is None and self.profile in ("sales", "finance"):
+            markup = keyboard(self.profile)          # меню внизу не теряется: ставим к каждому простому ответу
         parts = split(text if raw else to_html(text))
         for k, part in enumerate(parts):
             extra = {"reply_markup": markup} if markup and k == len(parts) - 1 else {}
