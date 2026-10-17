@@ -317,6 +317,8 @@ def _book(title: str, subtitle: str, sheets: list[tuple[str, list, list]], notes
     for name, cols, rows in sheets:
         ws = wb.create_sheet(name[:31])
         _write_table(ws, mp, f"{title} — {name.lower()}", subtitle, None, cols, rows)
+        if "Наименование" in cols:                          # закрепляем до наименования включительно
+            ws.freeze_panes = ws.cell(row=8, column=mp.COL_CODE + cols.index("Наименование") + 1)
     if notes:
         from openpyxl.styles import Font
         ws = wb.create_sheet("Описание")

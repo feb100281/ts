@@ -32,6 +32,21 @@ BUCKETS = (  # ключ, подпись, значок
     ("demand", "Спрос и прочее", "🌦"),
 )
 NAMES = {k: n for k, n, _ in BUCKETS}
+PLAIN = {  # понятная подпись: (если минус, если плюс)
+    "stock": ("Не было товара на складах", "Товар снова в наличии"),
+    "price": ("Снизили цену — каждая штука дешевле", "Подняли цену — каждая проданная штука дороже"),
+    "our": ("Подняли цену — купили меньше штук", "Снизили цену — купили больше штук"),
+    "spp": ("WB снизил скидку СПП — купили меньше", "WB увеличил скидку СПП — купили больше"),
+    "ads": ("Меньше рекламы", "Больше рекламы"),
+    "ret": ("Больше возвратов", "Меньше возвратов"),
+    "new": ("Новые и вернувшиеся товары", "Новые и вернувшиеся товары"),
+    "demand": ("Спрос: покупают меньше без видимой причины", "Спрос: покупают больше без видимой причины"),
+}
+PRICE_KEYS = ("spp", "our", "price")
+
+
+def plain(key: str, v: float) -> str:
+    return PLAIN[key][0 if v < 0 else 1]
 ICONS = {k: i for k, _, i in BUCKETS}
 
 PRICE_STEP = 0.03          # цена для покупателя изменилась заметно — от 3%
@@ -229,6 +244,8 @@ def reason(r, n1: int) -> str:
         return f"покупателю {'дороже' if r['dpb'] > 0 else 'дешевле'} на {num(abs(r['dpb']))}%" + (
             f" ({', '.join(parts)})" if parts else "")
     if w == "ads":
+        if r["ad0"] > 0 and r["ad1"] < 1:
+            return f"рекламу выключили (было {num(r['ad0'] / 1000)} тыс ₽)"
         if r["ad0"] > 0:
             return f"реклама {_pct((r['ad1'] / r['ad0'] - 1) * 100)} ({num(r['ad1'] / 1000)} тыс ₽)"
         return f"реклама {num(r['ad1'] / 1000)} тыс ₽ (раньше не было)"
@@ -246,7 +263,10 @@ def reason(r, n1: int) -> str:
 def _who(r) -> str:
     from .menu import esc
     name = r["sa"] or f"nm {r['nm']}"
-    return f"{esc(name)} · {esc(r['brand'])}" if r["brand"] else esc(name)
+    title = str(r["title"] or "").strip()
+    title = title if len(title) <= 34 else title[:33] + "…"
+    head = f"<b>{esc(title)}</b> · " if title else ""
+    return head + (f"{esc(name)} · {esc(r['brand'])}" if r["brand"] else esc(name))
 
 
 def chart_reasons(tot: dict, title: str, sub: str) -> bytes:
@@ -294,11 +314,26 @@ def report(a: date, b: date) -> dict | None:
              + (" · прошлый период пересчитан на ту же длину" if res["k"] != 1 else "") + "</i>", "",
              f"Было: <b>{rub(base)}</b> → стало: <b>{rub(cur)}</b>",
              f"Изменение: <b>{'+' if d >= 0 else '−'}{rub(abs(d))}</b>  {chg(cur, base)}",
-             "", "<b>Из чего сложилось</b>"]
+             ""]
     lim = max(abs(d) * 0.02, 1000)
-    for key, v in sorted(tot.items(), key=lambda x: x[1]):
-        if abs(v) >= lim:
-            lines.append(f"{ICONS[key]} {NAMES[key]} — <b>{'+' if v > 0 else '−'}{rub(abs(v))}</b>")
+    sg = lambda v: ("+" if v > 0 else "−") + rub(abs(v))  # noqa: E731
+    prices = sum(tot[k] for k in PRICE_KEYS)
+    groups = [("prices", prices)] + [(k, v) for k, v in tot.items() if k not in PRICE_KEYS]
+    groups = [g for g in groups if abs(g[1]) >= lim]
+    groups.sort(key=lambda g: g[1] if down else -g[1])
+    if groups:
+        k0, v0 = groups[0]
+        what = "цены для покупателя" if k0 == "prices" else plain(k0, v0).lower()
+        lines += [f"Главное: <b>{what}</b> — {sg(v0)} из {sg(d)}.", ""]
+    lines.append("<b>Из чего сложилось</b>")
+    for key, v in groups:
+        if key != "prices":
+            lines.append(f"{ICONS[key]} {plain(key, v)} — <b>{sg(v)}</b>")
+            continue
+        lines.append(f"💰 Цены — <b>{sg(v)}</b>")
+        for k in PRICE_KEYS:
+            if abs(tot[k]) >= lim:
+                lines.append(f"    · {plain(k, tot[k])} — {sg(tot[k])}")
     worst = df.head(TOP) if down else df.sort_values("delta", ascending=False).head(TOP)
     worst = worst[(worst["delta"] < 0) if down else (worst["delta"] > 0)]
     if len(worst):
@@ -513,13 +548,17 @@ def signals_text(res: dict, top: int = 10, short: bool = False) -> str | None:
              f"Заметно просели <b>{num(len(hit))}</b> артикулов, вместе "
              f"<b>−{rub(-hit['delta'].sum())}</b> за неделю:"]
     for i, (_, r) in enumerate(hit.head(top).iterrows(), 1):
-        lines.append(f"{i}. {_who(r)} — <b>{_pct(r['delta'] / r['net0'] * 100)}</b> "
-                     f"(−{rub(-r['delta'])}) · {ICONS[r['why']]} {reason(r, 7)}")
+        pct = max(r["delta"] / r["net0"] * 100, -100)
+        v1 = r["q1"] / 7 if r["q1"] == r["q1"] else 0.0
+        qty = f" · {num(r['q0'] / 7, 1)} → {num(v1, 1)} шт/день" if r["q0"] > 0 else ""
+        lines.append(f"{i}. {_who(r)}\n    <b>{_pct(pct)}</b> (−{rub(-r['delta'])}){qty}"
+                     f" · {ICONS[r['why']]} {reason(r, 7)}")
     if len(hit) > top:
         lines.append(f"…ещё {len(hit) - top} — " + ("кнопка «🚨 Сигналы» в боте." if short else "в Excel."))
-    by = hit.groupby("why")["delta"].sum().sort_values()
-    lines += ["", "Главные причины: " + ", ".join(f"{ICONS[k]} {NAMES[k][0].lower() + NAMES[k][1:]} −{rub(-v)}"
-                                                  for k, v in by.items() if v < 0) + "."]
+    by = hit.groupby("why")["delta"].agg(["sum", "size"]).sort_values("sum")
+    lines += ["", "<b>Почему просели — по всем этим товарам</b>"] + [
+        f"{ICONS[k]} {plain(k, r['sum'])} — <b>−{rub(-r['sum'])}</b> · {num(r['size'])} тов."
+        for k, r in by.iterrows() if r["sum"] < 0]
     return "\n".join(lines)
 
 
@@ -551,7 +590,7 @@ def file_signals(b: date):
     rows = [[r["brand"], r["category"], r["sa"], r["nm"], r["title"], r["net0"], r["net1"], r["delta"],
              r["delta"] / r["net0"] * 100, NAMES[r["why"]], reason(r, 7), r["stock_now"]]
             for _, r in res["hit"].iterrows()]
-    cols = ["Бренд", "Категория", "Артикул продавца", "Артикул WB", "Наименование", "Обычно за 7 дней, ₽",
+    cols = ["Бренд", "Категория", "Артикул продавца", "Артикул WB", "Наименование", "В среднем за неделю (4 недели до), ₽",
             "Последние 7 дней, ₽", "Изменение, ₽", "Изменение, %", "Главная причина", "Пояснение",
             "Остаток сейчас, шт"]
     data = _book("Сигналы", f"{span(res['a'], b)} к среднему за 4 недели", [("Сигналы", cols, rows)])
