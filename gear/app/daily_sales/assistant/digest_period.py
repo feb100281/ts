@@ -172,6 +172,9 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
     blk = _safe("динамика", lambda: trend_block(kind, a, b, charts))
     if blk:
         out.append(blk)
+    blk = _safe("цена и скидка", lambda: price_block(kind, a, b, charts))
+    if blk:
+        out.append(blk)
 
     # ---- 2. бренды и категории
     lim = MOVERS_MIN[kind]
@@ -488,6 +491,59 @@ def trend_block(kind: str, a: date, b: date, charts: bool = True) -> dict | None
         "млн ₽ по " + ("неделям" if kind == "week" else "месяцам")
         + (" · под столбиком — маржа" if SHOW_MARGIN else "")))
         if charts else None}
+
+
+def price_block(kind: str, a: date, b: date, charts: bool = True) -> dict | None:
+    """Средняя цена за штуку (до СПП и для покупателя) и СПП по тем же периодам, что динамика."""
+    import pandas as pd
+    from ..wb_sales_export import fetch
+    from . import digest_charts as ch
+
+    per = trend_periods(kind, a, b)
+    df = fetch(per[0][0], b, "day", [])
+    if df.empty:
+        return None
+    dcol = df.columns[0]
+    df[dcol] = pd.to_datetime(df[dcol]).dt.date
+    rows = []
+    for x, y, lab in per:
+        d = df[(df[dcol] >= x) & (df[dcol] <= y)]
+        rp, ra, q = float(d[NET_RUB].sum()), float(d[AFTER].sum()), float(d[NET_QTY].sum())
+        if rp and q:
+            rows.append({"lab": lab, "price": rp / q, "buyer": ra / q, "spp": (1 - ra / rp) * 100})
+    if len(rows) < 3:
+        return None
+    cur, prev, old = rows[-1], rows[-2], rows[:-1]
+    pp = lambda v: ("+" if v >= 0 else "−") + f"{abs(v):.1f}".replace(".", ",") + " п.п."
+    pc = lambda v: f"{v:.1f}".replace(".", ",") + "%"
+    to = "к прошлой неделе" if kind == "week" else "к прошлому месяцу"
+    nm = f"{len(rows)} недель" if kind == "week" else f"{len(rows)} мес."
+    lines = [f"<b>Цена и скидка: {'последние ' + nm if kind == 'week' else 'по месяцам'}</b>",
+             _quote(f"Средняя цена за штуку до СПП — {_rub(cur['price'])} ({_chg(cur['price'], prev['price'])} {to}), "
+                    f"покупатель платит {_rub(cur['buyer'])} ({_chg(cur['buyer'], prev['buyer'])}). "
+                    f"Скидка WB (СПП) — {pc(cur['spp'])} ({pp(cur['spp'] - prev['spp'])}).")]
+    avg_p = sum(r["price"] for r in old) / len(old)
+    avg_s = sum(r["spp"] for r in old) / len(old)
+    dp = (cur["price"] / avg_p - 1) * 100 if avg_p else 0
+    lines.append(f"Цена до СПП {'выше' if dp >= 0 else 'ниже'} среднего за прошлые "
+                 f"{'недели' if kind == 'week' else 'месяцы'} на {pc(abs(dp))}, "
+                 f"СПП — {pp(cur['spp'] - avg_s)} к среднему ({pc(avg_s)}).")
+    if cur["spp"] >= max(r["spp"] for r in rows):
+        lines.append(f"{UP} СПП — самая высокая за {nm}: покупатель видит цену ниже при той же нашей цене.")
+    elif cur["spp"] <= min(r["spp"] for r in rows):
+        lines.append(f"{DOWN} СПП — самая низкая за {nm}: для покупателя товар стал дороже.")
+    if cur["price"] >= max(r["price"] for r in rows):
+        lines.append(f"Цена до СПП — самая высокая за {nm}.")
+    elif cur["price"] <= min(r["price"] for r in rows):
+        lines.append(f"Цена до СПП — самая низкая за {nm}.")
+    lines.append(_pre([("", "до СПП", "покуп.", "СПП")] + [
+        (r["lab"], _n(r["price"]), _n(r["buyer"]), pc(r["spp"])) for r in rows], wide=False))
+    lines.append("<i>Средняя цена = продажи за вычетом возвратов / штуки; с НДС, как на сайте WB.</i>")
+    photo = _safe("график «цена и скидка»", lambda: ch.price_spp(
+        [r["lab"] for r in rows], [r["price"] for r in rows], [r["buyer"] for r in rows],
+        [r["spp"] for r in rows], "Цена и скидка WB",
+        "по " + ("неделям" if kind == "week" else "месяцам") + " · с НДС")) if charts else None
+    return {"text": "\n".join(lines), "photo": photo}
 
 
 def morning(today: date, day: date, loaded: date | None, kinds: list[str] | None = None,

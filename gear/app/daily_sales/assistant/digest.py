@@ -416,6 +416,10 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
                   "С НДС, по дате операции в отчёте WB; комиссия WB сюда не входит.</i>", ""]
     lines.append("<i>Хотите подробнее — напишите мне вопрос: по брендам, артикулам, в Excel.</i>")
     out.append({"text": "\n".join(lines), "photo": None})
+    from . import drop                                      # просевшие артикулы — если есть
+    sig = _safe("сигналы", lambda: drop.digest_block(day))
+    if sig:
+        out.append(sig)
     return out
 
 

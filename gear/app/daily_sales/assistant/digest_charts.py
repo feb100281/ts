@@ -269,3 +269,41 @@ def margin(rows, avg, title, sub) -> bytes:
     ax.axis("off")
     _head(fig, title, sub, y=1 - 0.45 / fig.get_figheight())
     return _png(plt, fig)
+
+
+def price_spp(labels, price, buyer, spp, title, sub) -> bytes:
+    """Сверху — средняя цена за штуку до СПП и для покупателя (₽), снизу — СПП, %."""
+    plt = _plt()
+    n = len(labels)
+    fig, (ax, bx) = plt.subplots(2, 1, figsize=(10.8, 9.4), dpi=100, sharex=True,
+                                 gridspec_kw={"height_ratios": [2.1, 1], "hspace": 0.12})
+    xs = list(range(n))
+    vals = [v for v in price + buyer if v]
+    lo, hi = (min(vals), max(vals)) if vals else (0, 1)
+    pad = (hi - lo) * 0.25 or hi * 0.05 or 1
+    for ys, color, name, va in ((price, GREEN, "до СПП", "bottom"), (buyer, WARM, "платит покупатель", "top")):
+        pts = [(x, y) for x, y in zip(xs, ys) if y]
+        ax.plot([p[0] for p in pts], [p[1] for p in pts], color=color, lw=2.6, marker="o", ms=6, label=name)
+        for x, y in pts:
+            ax.text(x, y, f"\n{_num(y)}\n", ha="center", va=va, fontsize=12,
+                    color=color, fontweight="bold" if x == n - 1 else None)
+    ax.set_ylim(lo - pad, hi + pad)
+    ax.yaxis.set_visible(False)
+    ax.legend(frameon=False, fontsize=12.5, loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=2)
+    ax.text(0, 1.02, "Средняя цена за штуку, ₽", transform=ax.transAxes, fontsize=13, color=MUTED)
+    _clean(ax)
+    s_vals = [v or 0 for v in spp]
+    bx.bar(xs, s_vals, width=0.55, color=[PALE] * (n - 1) + [MID])
+    top = max(s_vals) or 1
+    for x, v in zip(xs, s_vals):
+        bx.text(x, v + top * 0.03, _num(v, 1) + "%", ha="center", va="bottom", fontsize=12,
+                color=INK if x == n - 1 else MUTED, fontweight="bold" if x == n - 1 else None)
+    bx.set_ylim(0, top * 1.35)
+    bx.yaxis.set_visible(False)
+    bx.text(0, 1.02, "Скидка WB (СПП), %", transform=bx.transAxes, fontsize=13, color=MUTED)
+    bx.set_xticks(xs)
+    bx.set_xticklabels(labels, fontsize=13 if n <= 6 else 12, color=MUTED)
+    _clean(bx)
+    _head(fig, title, sub, y=0.955)
+    fig.subplots_adjust(left=0.05, right=0.96, top=0.84, bottom=0.07)
+    return _png(plt, fig)

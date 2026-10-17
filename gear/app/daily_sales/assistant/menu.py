@@ -35,8 +35,10 @@ REPORTS = {
     "n": "📅 Недели",
     "m": "💰 Маржинальность",
     "l": "🔻 Продаём в убыток",
+    "z": "🔎 Почему упали продажи",
+    "g": "🚨 Сигналы",
 }
-SINGLE_DAY = {"r"}                 # отчёт на дату, а не за период
+SINGLE_DAY = {"r", "g"}                 # отчёт на дату, а не за период
 BTN_AI = "🤖 Спросить ИИ"
 BTN_HELP = "ℹ️ Как пользоваться"
 BY_TEXT = {v: k for k, v in REPORTS.items()}
@@ -80,6 +82,7 @@ def keyboard() -> dict:
                          [{"text": r["w"]}, {"text": r["a"]}],
                          [{"text": r["n"]}, {"text": r["m"]}],
                          [{"text": r["l"]}, {"text": r["d"]}],
+                         [{"text": r["z"]}, {"text": r["g"]}],
                          [{"text": r["r"]}, {"text": BTN_AI}],
                          [{"text": BTN_HELP}]] + app_row(),
             "resize_keyboard": True, "is_persistent": True,
@@ -155,8 +158,8 @@ def preset(code: str, hi: date) -> tuple[date, date]:
         return mon - timedelta(weeks=int(code[1:]) - 1), hi
     if code == "y":
         return hi, hi
-    if code == "7":
-        return hi - timedelta(days=6), hi
+    if code.isdigit():                                       # N последних дней
+        return hi - timedelta(days=int(code) - 1), hi
     if code == "30":
         return hi - timedelta(days=29), hi
     if code == "w":
@@ -182,7 +185,14 @@ def prev_range(a: date, b: date) -> tuple[date, date]:
 WEEK_PRESETS = (("w2", "Эта и прошлая"), ("w4", "4 недели"), ("w8", "8 недель"), ("w13", "13 недель"))
 
 
+DROP_PRESETS = (("7", "7 дней"), ("14", "14 дней"), ("28", "28 дней"),
+                ("w", "Прошлая неделя"), ("m", "Этот месяц"), ("pm", "Прошлый месяц"))
+
+
 def period_kb(rep: str) -> dict:
+    if rep == "z":
+        btn = [{"text": t, "callback_data": f"mn:p:z:{c}"} for c, t in DROP_PRESETS]
+        return {"inline_keyboard": [btn[:3], btn[3:], [{"text": "📅 Свой период", "callback_data": "mn:c:z::0"}]]}
     if rep == "n":
         btn = [{"text": t, "callback_data": f"mn:p:n:{c}"} for c, t in WEEK_PRESETS]
         return {"inline_keyboard": [btn[:2], btn[2:],
@@ -1313,9 +1323,20 @@ def report_weeks(a: date, b: date) -> dict | None:
                                         "Продажи по неделям, млн ₽",
                                         f"{span(rows[0][0], b)} · до СПП"
                                         + ("" if rows[-1][2] else " · * неделя ещё идёт")))
+    photos = []
+    if len(rows) > 1:                                    # цена и скидка — второй картинкой
+        from . import digest_charts as ch
+        pic = _photo(lambda: ch.price_spp(
+            labels, [r[3]["price"] for r in rows],
+            [r[3]["ra"] / r[3]["q"] if r[3]["q"] else None for r in rows], [r[3]["spp"] for r in rows],
+            "Цена и скидка по неделям", f"{span(rows[0][0], b)} · с НДС"
+            + ("" if rows[-1][2] else " · * неделя ещё идёт")))
+        if pic:
+            photos.append(pic)
     files = (("weeks", "Excel: недели"), ("brands", "Excel: бренды по неделям"),
              ("cats", "Excel: категории по неделям"))
-    return {"text": "\n".join(lines), "photo": photo, "auto": "weeks", "chart": chart, "charts": charts,
+    return {"text": "\n".join(lines), "photo": photo, "photos": photos, "auto": "weeks", "chart": chart,
+            "charts": charts,
             "files": files, "tables": [wk_table], "kb": _files_kb("n", a, b, files)}
 
 
@@ -1397,11 +1418,20 @@ def build(rep: str, a: date, b: date) -> dict | None:
         return report_margin(a, b)
     if rep == "l":
         return report_loss(a, b)
+    if rep == "z":
+        from . import drop
+        return drop.report(a, b)
+    if rep == "g":
+        from . import drop
+        return drop.report_signals(a, b)
     return None
 
 
 def file(rep: str, code: str, a: date, b: date):
     """(имя, байты, mime) или None."""
+    if rep in ("z", "g"):
+        from . import drop
+        return drop.file_signals(b) if rep == "g" else drop.file(code, a, b)
     if rep == "s":
         return file_sales(code, a, b)
     if rep in GROUP:
@@ -1431,6 +1461,9 @@ HELP = ("<b>Как пользоваться</b>\n"
         "• Свой период — «📅 Свой период»: нажмите день начала, потом день конца. "
         "Или просто напишите даты после кнопки отчёта: 01.10–15.10.\n"
         "• Всё сравнивается с прошлым таким же периодом (месяц — с прошлым месяцем).\n"
+        "• «🔎 Почему упали продажи» — из чего сложилось изменение: остатки, цена, СПП, реклама, "
+        "возвраты, спрос; по каждому артикулу — в Excel.\n"
+        "• «🚨 Сигналы» — артикулы, которые за 7 дней заметно просели, и вероятная причина.\n"
         "• Продажи — как на сайте WB: с НДС, до СПП, после СПП и к перечислению.\n"
         "• «📅 Недели» — календарные недели пн–вс: эта к прошлой или несколько недель подряд.\n"
         "• «💳 Скидка СПП» — как менялась скидка WB и цена для покупателя.\n"
