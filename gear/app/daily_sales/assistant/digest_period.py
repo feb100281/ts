@@ -341,6 +341,11 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
                   "<i>С НДС, по дате операции в отчёте WB; комиссия WB сюда не входит.</i>", ""]
     lines.append("<i>Хотите подробнее — напишите мне вопрос: по брендам, артикулам, в Excel.</i>")
     out.append({"text": "\n".join(lines), "photo": None})
+    if kind == "week":                                  # полный список сигналов — раз в неделю
+        from . import drop
+        sig = _safe("сигналы недели", lambda: drop.week_block(b))
+        if sig:
+            out.append(sig)
     return out
 
 

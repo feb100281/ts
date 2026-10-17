@@ -256,3 +256,5 @@ python pdf.py    # два .pdf: HTML → PDF через Playwright/Chromium, A4,
   (`SIGNALS_IN_DIGEST`).
 - Источники: sales.sales_long (как wb_sales_export), stocks.unpacked_stocks + unpacked_fbs_stocks,
   ads.unpacked_ad_campaigns_stats_by_nm.
+- Рассылка: ежедневно — только новые сигналы (вчера их не было, до 5 шт., коротко) и «📈 Растут» (до 3,
+  с запасом остатка); в понедельник в итогах недели — полный список сигналов. Пусто — блока нет.
