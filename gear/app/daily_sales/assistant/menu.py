@@ -314,9 +314,12 @@ def _book(title: str, subtitle: str, sheets: list[tuple[str, list, list]], notes
 
     wb = Workbook()
     wb.remove(wb.active)
-    for name, cols, rows in sheets:
+    for sheet in sheets:
+        name, cols, rows = sheet[:3]
+        opts = sheet[3] if len(sheet) > 3 else {}
         ws = wb.create_sheet(name[:31])
-        _write_table(ws, mp, f"{title} — {name.lower()}", subtitle, None, cols, rows)
+        _write_table(ws, mp, f"{title} — {name.lower()}", subtitle, None, cols, rows,
+                     totals=opts.get("totals", True))
         if "Наименование" in cols:                          # закрепляем до наименования включительно
             ws.freeze_panes = ws.cell(row=8, column=mp.COL_CODE + cols.index("Наименование") + 1)
     if notes:

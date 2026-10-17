@@ -55,6 +55,32 @@ SIG_MIN_DAY = 2000         # сигналы: артикул продавал в 
 SIG_DROP = 0.3             # сигналы: падение от 30%
 SIG_MIN_LOSS = 10000       # сигналы: потеря за неделю от 10 тыс ₽
 SIGNALS_IN_DIGEST = True
+RESTOCK_MIN_DAY = 300      # «Довезти»: товар продавал хотя бы на 300 ₽ в день
+RESTOCK_MIN_MARGIN = 10    # и приносил прибыль после расходов WB от 10% выручки
+
+
+def _restock_base(df):
+    no = df[(df["stock_now"].notna()) & (df["stock_now"] <= 0) & (df["q0"] >= 2)].copy()
+    no["day_loss"] = no["v0"].fillna(0) * no["p0"].fillna(0)
+    no = no[no["day_loss"] >= RESTOCK_MIN_DAY]
+    days = (no["d0"] * no["kk"]).where(lambda x: x > 0)
+    no["mpct"] = no["pr0"] / no["rv0"].where(no["rv0"] > 0) * 100
+    no["day_profit"] = no["pr0"] / days
+    return no
+
+
+def restock(df):
+    """Довезти: нет на складах, раньше заметно продавался и был прибыльным; сверху — больше прибыли в день."""
+    no = _restock_base(df)
+    ok = no[no["mpct"].isna() | (no["mpct"] >= RESTOCK_MIN_MARGIN)].copy()
+    ok["rank"] = ok["day_profit"].fillna(ok["day_loss"] * RESTOCK_MIN_MARGIN / 100)
+    return ok.sort_values("rank", ascending=False)
+
+
+def restock_skip(df):
+    """Не довозить: продавался в минус или почти без прибыли (распродажа, демпинг)."""
+    no = _restock_base(df)
+    return no[no["mpct"].notna() & (no["mpct"] < RESTOCK_MIN_MARGIN)].sort_values("mpct")
 DRR_HIGH = 25              # ДРР выше — реклама считается дорогой   # блок сигналов в ежедневной рассылке (если есть что показать)
 
 COLS = {"Продажи, шт": "q", "Возвраты, шт": "rq", "До СПП: продажи, ₽": "s",
@@ -221,6 +247,8 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
     df = pd.DataFrame(rows)
     if df.empty:
         return None
+    df = _with_margin(df, a, b, pa, pb, k)
+    df["kk"] = k
     tot = {key: float(df[key].sum()) for key in NAMES}
     tot_u = {key: float(df["u_" + key].sum()) for key in NAMES}
     q0, q1 = float(df["q0"].sum()), float(df["q1"].sum())
@@ -231,6 +259,43 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
             "tot_u": tot_u, "avg": avg,
             "base": float(df["net0"].sum()), "cur": float(df["net1"].sum()), "tot": tot,
             "df": df.sort_values("delta")}
+
+
+def _with_margin(df, a, b, pa, pb, k):
+    """Прибыль после расходов WB по методике дашборда (упр. учёт) — было и стало."""
+    try:
+        from .menu import margin
+        m1, m0 = margin(a, b, "nm"), margin(pa, pb, "nm")
+    except Exception as e:
+        print(f"[drop] маржа: {type(e).__name__}: {e}", flush=True)
+        df["pr0"] = df["pr1"] = df["rv0"] = df["rv1"] = float("nan")
+        return df
+    def prep(m, mult, sfx):
+        m = m.groupby("nm_id", as_index=False)[["rev", "res"]].sum()
+        m["nm_id"] = pd.to_numeric(m["nm_id"], errors="coerce")
+        m = m.dropna(subset=["nm_id"]).astype({"nm_id": "int64"})
+        return m.rename(columns={"nm_id": "nm", "rev": "rv" + sfx, "res": "pr" + sfx}).assign(
+            **{"rv" + sfx: lambda t: t["rv" + sfx] * mult, "pr" + sfx: lambda t: t["pr" + sfx] * mult})
+    return df.merge(prep(m1, 1, "1"), on="nm", how="left").merge(prep(m0, k, "0"), on="nm", how="left")
+
+
+def profit(r) -> str:
+    """Как изменилась прибыль по артикулу (упр. учёт)."""
+    from .menu import rub
+    p0, p1 = r.get("pr0"), r.get("pr1")
+    if p0 != p0 or p1 != p1 or p0 is None or p1 is None:
+        return ""
+    dp = p1 - p0
+    if abs(dp) < 1000:
+        return " · прибыль почти не изменилась"
+    return f" · прибыль {'▲ +' if dp > 0 else '▼ −'}{rub(abs(dp))}" + (" ✅" if dp > 0 else "")
+
+
+def _group_profit(part) -> tuple[float, float] | None:
+    p = part.dropna(subset=["pr0", "pr1"])
+    if p.empty:
+        return None
+    return float(p["delta"].sum()), float((p["pr1"] - p["pr0"]).sum())
 
 
 # ---------------------------------------------------------------- подписи
@@ -351,6 +416,10 @@ def report(a: date, b: date) -> dict | None:
                   f"Наша цена до СПП: {rub(av['p0'])} → <b>{rub(av['p1'])}</b> ({chg(av['p1'], av['p0'])}) · "
                   f"СПП {num(spp0, 1)}% → <b>{num(spp1, 1)}%</b>",
                   f"Продано штук: {num(av['q0'])} → <b>{num(av['q1'])}</b> ({chg(av['q1'], av['q0'])})"]
+    pp = df.dropna(subset=["pr0", "pr1"])
+    if not pp.empty:
+        P0, P1 = float(pp["pr0"].sum()), float(pp["pr1"].sum())
+        lines.append(f"Прибыль после расходов WB*: {rub(P0)} → <b>{rub(P1)}</b> ({chg(P1, P0)})")
     lines += ["", "<b>Из чего сложилось</b> — сколько это дало продажам, ₽"]
     pcs = lambda v: f" ({'+' if v > 0 else '−'}{num(abs(v))} шт)" if abs(v) >= 1 else ""  # noqa: E731
     for key, v in groups:
@@ -367,7 +436,24 @@ def report(a: date, b: date) -> dict | None:
         lines += ["", f"<b>Где {'потеряли' if down else 'выросли'} больше всего</b>"]
         for _, r in worst.iterrows():
             lines.append(f"• {_who(r)} — <b>{'+' if r['delta'] > 0 else '−'}{rub(abs(r['delta']))}</b>"
-                         f" · {ICONS[r['why']]} {reason(r, res['n1'])}")
+                         f" · {ICONS[r['why']]} {reason(r, res['n1'])}{profit(r)}")
+    checks = []
+    up = df[df["our_pct"].fillna(0) >= PRICE_STEP * 100]
+    g = _group_profit(up)
+    if g and len(up):
+        ds, dp = g
+        checks.append(f"🏷 Подняли цену на <b>{num(len(up))}</b> арт.: продажи {'+' if ds >= 0 else '−'}{rub(abs(ds))}, "
+                      f"прибыль {'+' if dp >= 0 else '−'}{rub(abs(dp))} — "
+                      + ("повышение окупилось ✅" if dp >= 0 else "повышение не окупилось ⚠️"))
+    off = df[(df["ad0"] > 0) & (df["ad1"] < (1 - ADS_STEP) * df["ad0"])]
+    g = _group_profit(off)
+    if g and len(off):
+        ds, dp = g
+        checks.append(f"📣 Сократили рекламу на <b>{num(len(off))}</b> арт.: продажи {'+' if ds >= 0 else '−'}{rub(abs(ds))}, "
+                      f"прибыль {'+' if dp >= 0 else '−'}{rub(abs(dp))} — "
+                      + ("экономия на рекламе себя оправдала ✅" if dp >= 0 else "стоит вернуть рекламу ⚠️"))
+    if checks:
+        lines += ["", "<b>Правильно ли сделали — по прибыли*</b>"] + checks
     todo = _todo(df, res)
     if todo:
         lines += ["", "<b>Что сделать</b>"] + todo
@@ -377,7 +463,9 @@ def report(a: date, b: date) -> dict | None:
                   "дают общее изменение. Продажи считаем за вычетом возвратов, поэтому «вернули меньше» — плюс. "
                   "«Товары, которых раньше не было в продаже» — новинки и товары, вернувшиеся после паузы. "
                   "Цена или реклама считаются причиной, если изменились заметно: цена от 3%, реклама от 30%. "
-                  "Маржинальность здесь не учитывается — только продажи. Подробно по каждому артикулу — в Excel.</i>"]
+                  "Подробно по каждому артикулу — в Excel.</i>",
+              "<i>* Прибыль — управленческий учёт, как в дашборде продаж: выручка без НДС минус себестоимость "
+              "(FIFO), комиссия и расходы WB.</i>"]
     photo = _photo(lambda: chart_reasons(tot, f"{'−' if down else '+'}{rub(abs(d))} к прошлому периоду",
                                          f"из чего сложилось · {span(a, b)} к {span(pa, pb)}"))
     rows = sorted([(NAMES[key], v) for key, v in tot.items() if abs(v) >= lim], key=lambda x: x[1])
@@ -394,10 +482,16 @@ def report(a: date, b: date) -> dict | None:
 def _todo(df, res) -> list[str]:
     from .menu import num, rub
     out = []
-    no = df[(df["stock_now"].notna()) & (df["stock_now"] <= 0) & (df["net0"] > 0)]
+    no, skip = restock(df), restock_skip(df)
     if len(no):
-        out.append(f"📦 Довезти: <b>{num(len(no))}</b> артикулов сейчас без остатка, а раньше продавались "
-                   f"на {rub(no['net0'].sum())} за период — лист «Довезти».")
+        prof = no["day_profit"].dropna()
+        out.append(f"📦 Довезти: <b>{num(len(no))}</b> прибыльных артикулов сейчас без остатка — теряем около "
+                   f"{rub(no['day_loss'].sum())} продаж"
+                   + (f" и {rub(prof.sum())} прибыли" if len(prof) else "")
+                   + " в день, лист «Довезти» (сверху — больше прибыли).")
+    if len(skip):
+        out.append(f"🚫 Не довозить: <b>{num(len(skip))}</b> артикулов без остатка были убыточными или почти без "
+                   f"прибыли (маржа ниже {RESTOCK_MIN_MARGIN}%) — в «Довезти» их нет, список на листе «Не довозить».")
     pr = df[(df["our"] + df["spp"]) < 0]
     if len(pr):
         out.append(f"💸 Цены: <b>{num(len(pr))}</b> артикулов, где покупателю стало дороже и штуки упали — "
@@ -431,36 +525,68 @@ def file(code: str, a: date, b: date):
     df, n1 = res["df"], res["n1"]
     sub = f"{span(a, b)} к {span(res['pa'], res['pb'])} · до СПП с НДС"
     base, d = res["base"], res["cur"] - res["base"]
-    s_rows = [[NAMES[k], v, v / d * 100 if d else None] for k, v in sorted(res["tot"].items(), key=lambda x: x[1])]
-    s_rows += [["Итого изменение", d, 100.0], ["Было", base, None], ["Стало", res["cur"], None]]
+    s_rows = [["Продажи в прошлом периоде", base, None]]
+    s_rows += [[plain(k, v), v, v / d * 100 if d else None]
+               for k, v in sorted(res["tot"].items(), key=lambda x: x[1]) if abs(v) >= 1]
+    s_rows += [["Изменение продаж, всего", d, 100.0], ["Продажи в текущем периоде", res["cur"], None]]
+    pp = df.dropna(subset=["pr0", "pr1"])
+    if not pp.empty:
+        s_rows += [["Прибыль после расходов WB, прошлый период*", float(pp["pr0"].sum()), None],
+                   ["Прибыль после расходов WB, текущий период*", float(pp["pr1"].sum()), None]]
     head = ["Бренд", "Категория", "Артикул продавца", "Артикул WB", "Наименование"]
     info = lambda r: [r["brand"], r["category"], r["sa"], r["nm"], r["title"]]  # noqa: E731
-    main = [info(r) + [r["net0"], r["net1"], r["delta"], *[r[k] for k in NAMES], NAMES[r["why"]],
+    nz = lambda v: None if v != v else v  # noqa: E731
+    main = [info(r) + [r["net0"], r["net1"], r["delta"], nz(r["pr0"]), nz(r["pr1"]),
+                       nz(r["pr1"] - r["pr0"]), *[r[k] for k in NAMES], plain(r["why"], r[r["why"]]),
                        reason(r, n1), r["d0"], r["d1"], r["stock_now"], r["p0"], r["p1"], r["spp0"], r["spp1"],
                        r["ad0"], r["ad1"]] for _, r in df.iterrows()]
-    main_cols = head + ["Было, ₽", "Стало, ₽", "Изменение, ₽", *[NAMES[k] + ", ₽" for k in NAMES],
+    main_cols = head + ["Продажи было, ₽", "Продажи стало, ₽", "Изменение продаж, ₽", "Прибыль было*, ₽",
+                        "Прибыль стало*, ₽", "Изменение прибыли*, ₽", *[NAMES[k] + ", ₽" for k in NAMES],
                         "Главная причина", "Пояснение", "Дней в наличии (было)", "Дней в наличии (стало)",
                         "Остаток сейчас, шт", "Цена до СПП (было)", "Цена до СПП (стало)", "СПП было, %",
                         "СПП стало, %", "Реклама было, ₽", "Реклама стало, ₽"]
-    no = df[(df["stock_now"].notna()) & (df["stock_now"] <= 0) & (df["net0"] > 0)].sort_values("net0", ascending=False)
-    no_rows = [info(r) + [r["net0"], r["net1"], r["stock_now"], r["v0"],
-                          r["d0"], r["d1"]] for _, r in no.iterrows()]
+    no = restock(df)
+    nz = lambda v: None if v != v else v  # noqa: E731
+    no_rows = [info(r) + [nz(r["day_profit"]), nz(r["mpct"]), r["day_loss"], r["v0"], r["p0"], r["d0"], r["d1"],
+                          r["net0"], r["net1"]] for _, r in no.iterrows()]
+    sk = restock_skip(df)
+    sk_rows = [info(r) + [nz(r["mpct"]), nz(r["day_profit"]), r["day_loss"], r["p0"], r["net0"]]
+               for _, r in sk.iterrows()]
     pr = df[(df["our"] + df["spp"]) < 0].assign(x=lambda t: t["our"] + t["spp"]).sort_values("x")
     pr_rows = [info(r) + [r["x"], r["dpb"], r["our_pct"], r["spp0"], r["spp1"], r["p0"], r["p1"]]
                for _, r in pr.iterrows()]
     ad = df[df["ads"] < 0].sort_values("ads")
     ad_rows = [info(r) + [r["ads"], r["ad0"], r["ad1"], r["delta"]] for _, r in ad.iterrows()]
-    sheets = [("Итог", ["Причина", "Сумма, ₽", "Доля изменения, %"], s_rows),
+    sheets = [("Итог", ["Показатель", "Сумма, ₽", "Доля в изменении продаж, %"], s_rows, {"totals": False}),
               ("Артикулы", main_cols, main),
-              ("Довезти", head + ["Продажи раньше, ₽", "Продажи сейчас, ₽", "Остаток сейчас, шт",
-                                  "Продавали шт в день", "Дней в наличии (было)", "Дней в наличии (стало)"],
+              ("Довезти", head + ["Прибыль в день*, ₽", "Маржа после расходов WB*, %", "Продажи в день, ₽",
+                                  "Продавали шт в день", "Цена до СПП, ₽",
+                                  f"Дней в наличии {span(res['pa'], res['pb'])}",
+                                  f"Дней в наличии {span(a, b)}",
+                                  f"Продажи {span(res['pa'], res['pb'])}, ₽", f"Продажи {span(a, b)}, ₽"],
                no_rows),
+              ("Не довозить", head + ["Маржа после расходов WB*, %", "Прибыль в день*, ₽", "Продажи в день, ₽",
+                                     "Цена до СПП, ₽", f"Продажи {span(res['pa'], res['pb'])}, ₽"], sk_rows),
               ("Цена", head + ["Потеря из-за цены, ₽", "Цена для покупателя, %", "Наша цена, %", "СПП было, %",
                                "СПП стало, %", "Цена до СПП (было)", "Цена до СПП (стало)"], pr_rows),
               ("Реклама", head + ["Потеря из-за рекламы, ₽", "Реклама было, ₽", "Реклама стало, ₽",
                                   "Изменение продаж, ₽"], ad_rows)]
     notes = [
         ("Продажи", "Как на сайте WB: до СПП, с НДС, по дате операции в отчёте реализации; без коррекций WB."),
+        ("Итог", "Каждая строка — на сколько рублей эта причина изменила продажи. Минус (в скобках) — уменьшила. "
+                 "Доля в изменении — какая часть общего изменения пришлась на причину; у причин, которые "
+                 "работали в обратную сторону, доля со знаком минус."),
+        ("Довезти", f"Товары, которых на {b:%d.%m.%Y} нет на складах WB и FBS, хотя раньше они продавались. "
+                    "Если дней в наличии в текущем периоде почти столько же, сколько в прошлом, — товар "
+                    "закончился только что, и потери впереди. «Теряем в день» — сколько он продавал в день, "
+                    "пока был в наличии. Только прибыльные: маржа после расходов WB от 10% (или данных о марже нет). "
+                    "Сверху — больше прибыли в день. Мелочь (меньше 300 ₽ продаж в день) не показываем. "
+                    "Продажи — за вычетом возвратов: число в скобках (минус) — вернули больше, чем продали."),
+        ("Не довозить", "Товары без остатка, которые продавались в минус или с маржой ниже 10%: распродажа, "
+                        "демпинг или высокие расходы WB. В «Довезти» они не попадают. Везти их по прежней цене "
+                        "убыточно."),
+        ("Прибыль*", "Управленческий учёт, как в дашборде продаж: выручка без НДС минус себестоимость (FIFO), "
+                     "комиссия и расходы WB, распределённые на штуки по неделям."),
         ("Разложение", "Выручка = дни в наличии × штук в день × цена. Наличие = (дни₁ − дни₀) × штук в день₀ "
                        "× цена₀; цена = штуки₁ × (цена₁ − цена₀); спрос = дни₁ × (штук в день₁ − штук в день₀)"
                        " × цена₀; возвраты — изменение суммы возвратов со знаком минус. Сумма причин = изменение."),
@@ -581,7 +707,7 @@ def signals_text(res: dict, top: int = 10, short: bool = False) -> str | None:
         v1 = r["q1"] / 7 if r["q1"] == r["q1"] else 0.0
         qty = f" · продавали {num(r['q0'] / 7, 1)} → {num(v1, 1)} шт в день" if r["q0"] > 0 else ""
         lines.append(f"{i}. {_who(r)}\n    <b>{_pct(pct)}</b> (−{rub(-r['delta'])}){qty}"
-                     f" · {ICONS[r['why']]} {reason(r, 7)}")
+                     f" · {ICONS[r['why']]} {reason(r, 7)}{profit(r)}")
     if len(hit) > top:
         lines.append(f"…ещё {len(hit) - top} — " + ("кнопка «🚨 Сигналы» в боте." if short else "в Excel."))
     by = hit.groupby("why")["delta"].agg(["sum", "size"]).sort_values("sum")
