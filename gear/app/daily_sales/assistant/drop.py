@@ -64,7 +64,7 @@ def _restock_base(df):
     no["day_loss"] = no["v0"].fillna(0) * no["p0"].fillna(0)
     no = no[no["day_loss"] >= RESTOCK_MIN_DAY]
     days = (no["d0"] * no["kk"]).where(lambda x: x > 0)
-    no["mpct"] = no["pr0"] / no["rv0"].where(no["rv0"] > 0) * 100
+    no["mpct"] = no["m8"].where(no["m8"].notna(), no["pr0"] / no["rv0"].where(no["rv0"] > 0) * 100)
     no["day_profit"] = no["pr0"] / days
     return no
 
@@ -81,7 +81,18 @@ def restock_skip(df):
     """Не довозить: продавался в минус или почти без прибыли (распродажа, демпинг)."""
     no = _restock_base(df)
     return no[no["mpct"].notna() & (no["mpct"] < RESTOCK_MIN_MARGIN)].sort_values("mpct")
-DRR_HIGH = 25              # ДРР выше — реклама считается дорогой   # блок сигналов в ежедневной рассылке (если есть что показать)
+DRR_HIGH = 9               # ДРР выше — «плохо» по шкале отчёта о рекламе (до 7% отлично, 7–9% нормально)
+
+
+def _drr_high() -> float:
+    """Порог «плохо» — из шкалы ДРР отчёта о рекламе, чтобы не расходиться."""
+    try:
+        from ..ad_campaigns_report import DRR_HIGH_THRESHOLD
+        return float(DRR_HIGH_THRESHOLD)
+    except Exception:
+        return DRR_HIGH
+MARGIN_WEEKS = 8           # маржа товара «в обычное время» — за 8 недель
+LOW_STOCK_DAYS = 7         # остатка меньше чем на неделю — рекламу можно не крутить   # блок сигналов в ежедневной рассылке (если есть что показать)
 
 COLS = {"Продажи, шт": "q", "Возвраты, шт": "rq", "До СПП: продажи, ₽": "s",
         "До СПП: возвраты, ₽": "r", "После СПП: продажи, ₽": "bs"}
@@ -153,10 +164,11 @@ def _stock_now(b: date) -> pd.DataFrame:
 
 def _ads(a: date, b: date) -> pd.DataFrame:
     df = _query("""
-        SELECT nm_id AS nm, SUM(spend_rub) AS ad FROM ads.unpacked_ad_campaigns_stats_by_nm
+        SELECT nm_id AS nm, SUM(spend_rub) AS ad, SUM(revenue_rub) AS adrev
+        FROM ads.unpacked_ad_campaigns_stats_by_nm
         WHERE date BETWEEN $a AND $b GROUP BY 1""", {"a": a, "b": b})
     if df.empty:
-        return pd.DataFrame(columns=["nm", "ad"])
+        return pd.DataFrame(columns=["nm", "ad", "adrev"])
     df["nm"] = df["nm"].astype("int64")
     return df
 
@@ -177,9 +189,9 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
     m = (m.merge(st1.rename(columns={"din": "din1"}), on="nm", how="left")
           .merge(st0.rename(columns={"din": "din0"}), on="nm", how="left")
           .merge(_stock_now(b), on="nm", how="left")
-          .merge(_ads(a, b).rename(columns={"ad": "ad1"}), on="nm", how="left")
-          .merge(_ads(pa, pb).rename(columns={"ad": "ad0"}), on="nm", how="left"))
-    num_cols = [c + s for c in (*COLS.values(), "dsold") for s in ("1", "0")] + ["din1", "din0", "ad1", "ad0"]
+          .merge(_ads(a, b).rename(columns={"ad": "ad1", "adrev": "adrev1"}), on="nm", how="left")
+          .merge(_ads(pa, pb).rename(columns={"ad": "ad0", "adrev": "adrev0"}), on="nm", how="left"))
+    num_cols = [c + s for c in (*COLS.values(), "dsold") for s in ("1", "0")] + ["din1", "din0", "ad1", "ad0", "adrev1", "adrev0"]
     m[num_cols] = m[num_cols].fillna(0).astype(float)
 
     rows = []
@@ -242,7 +254,7 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
             "dpb": dpb * 100 if dpb is not None else None,
             "our_pct": (math.exp(x) - 1) * 100 if x is not None else None,
             **{"u_" + key: v for key, v in u.items()}, "s0": s0, "bs0": bs0, "s1": s1, "bs1": bs1,
-            "drr0": a0 / s0 * 100 if s0 > 0 else None,
+            "adrev0": r.adrev0, "drr0": r.ad0 / r.adrev0 * 100 if r.adrev0 > 0 else None,   # как в записке: расход / заказы с рекламы
             "ad0": a0, "ad1": a1, "stock_now": float(r.stock) if r.stock == r.stock else None})
     df = pd.DataFrame(rows)
     if df.empty:
@@ -268,7 +280,7 @@ def _with_margin(df, a, b, pa, pb, k):
         m1, m0 = margin(a, b, "nm"), margin(pa, pb, "nm")
     except Exception as e:
         print(f"[drop] маржа: {type(e).__name__}: {e}", flush=True)
-        df["pr0"] = df["pr1"] = df["rv0"] = df["rv1"] = float("nan")
+        df["pr0"] = df["pr1"] = df["rv0"] = df["rv1"] = df["m8"] = float("nan")
         return df
     def prep(m, mult, sfx):
         m = m.groupby("nm_id", as_index=False)[["rev", "res"]].sum()
@@ -276,7 +288,33 @@ def _with_margin(df, a, b, pa, pb, k):
         m = m.dropna(subset=["nm_id"]).astype({"nm_id": "int64"})
         return m.rename(columns={"nm_id": "nm", "rev": "rv" + sfx, "res": "pr" + sfx}).assign(
             **{"rv" + sfx: lambda t: t["rv" + sfx] * mult, "pr" + sfx: lambda t: t["pr" + sfx] * mult})
-    return df.merge(prep(m1, 1, "1"), on="nm", how="left").merge(prep(m0, k, "0"), on="nm", how="left")
+    out = df.merge(prep(m1, 1, "1"), on="nm", how="left").merge(prep(m0, k, "0"), on="nm", how="left")
+    try:
+        m8 = prep(margin(b - timedelta(days=7 * MARGIN_WEEKS - 1), b, "nm"), 1, "8")
+        m8["m8"] = m8["pr8"] / m8["rv8"].where(m8["rv8"] > 0) * 100
+        out = out.merge(m8[["nm", "m8"]], on="nm", how="left")
+    except Exception as e:
+        print(f"[drop] маржа 8 недель: {type(e).__name__}: {e}", flush=True)
+        out["m8"] = float("nan")
+    return out
+
+
+def ads_ok(r, n1: int = 7) -> str | None:
+    """Почему сократить рекламу было разумно (или None)."""
+    from .menu import num
+    st = r.get("stock_now")
+    daily = (r["q0"] or 0) / max(n1, 1)
+    if st is not None and st == st and (st <= 3 or st < daily * LOW_STOCK_DAYS):
+        return f"остаток всего {num(st)} шт — рекламировать почти нечего"
+    m8 = r.get("m8")
+    if m8 is not None and m8 == m8 and m8 < RESTOCK_MIN_MARGIN:
+        return f"маржа {num(m8)}% — реклама съедала бы прибыль"
+    if (r.get("ad0") or 0) > 0 and not (r.get("adrev0") or 0):
+        return "реклама не приносила заказов"
+    drr = r.get("drr0")
+    if drr is not None and drr == drr and drr > _drr_high():
+        return f"ДРР был {num(drr, 1)}% — выше {num(_drr_high())}%, по нашей шкале это плохо"
+    return None
 
 
 def profit(r) -> str:
@@ -312,6 +350,9 @@ def reason(r, n1: int) -> str:
         s = f"в наличии {num(r['d1'])} из {n1} дн. (было {num(r['d0'])} из {r['n0']})"
         if r["stock_now"] is not None and r["stock_now"] <= 0:
             s += " · сейчас 0 шт"
+            m8 = r.get("m8")
+            if m8 is not None and m8 == m8 and m8 < RESTOCK_MIN_MARGIN:
+                s += f" · маржа {num(m8)}% — довозить не нужно"
         return s
     if w in ("our", "spp") and r["dpb"] is not None:
         parts = []
@@ -323,15 +364,12 @@ def reason(r, n1: int) -> str:
         return f"покупателю {'дороже' if r['dpb'] > 0 else 'дешевле'} на {num(abs(r['dpb']))}%" + (
             f" ({', '.join(parts)})" if parts else "")
     if w == "ads":
-        drr = r["drr0"] if r["drr0"] == r["drr0"] else None
-        tail = ""
-        if drr:
-            tail = f", ДРР был {num(drr)}%" + (" — реклама была дорогой, возможно, выключили верно"
-                                              if drr >= DRR_HIGH else "")
+        ok = ads_ok(r, n1)
+        tail = f" — это нормально: {ok} ✅" if ok else " — товар есть, стоит вернуть рекламу ⚠️"
         if r["ad0"] > 0 and r["ad1"] < 1:
-            return f"рекламу выключили (было {num(r['ad0'] / 1000)} тыс ₽{tail})"
+            return f"рекламу выключили (было {num(r['ad0'] / 1000)} тыс ₽){tail}"
         if r["ad0"] > 0:
-            return f"реклама {_pct((r['ad1'] / r['ad0'] - 1) * 100)} ({num(r['ad1'] / 1000)} тыс ₽{tail})"
+            return f"реклама {_pct((r['ad1'] / r['ad0'] - 1) * 100)} ({num(r['ad1'] / 1000)} тыс ₽){tail}"
         return f"реклама {num(r['ad1'] / 1000)} тыс ₽ (раньше не было)"
     if w == "price" and r["p0"] and r["p1"]:
         return f"цена до СПП {_pct((r['p1'] / r['p0'] - 1) * 100)}"
@@ -445,13 +483,23 @@ def report(a: date, b: date) -> dict | None:
         checks.append(f"🏷 Подняли цену на <b>{num(len(up))}</b> арт.: продажи {'+' if ds >= 0 else '−'}{rub(abs(ds))}, "
                       f"прибыль {'+' if dp >= 0 else '−'}{rub(abs(dp))} — "
                       + ("повышение окупилось ✅" if dp >= 0 else "повышение не окупилось ⚠️"))
-    off = df[(df["ad0"] > 0) & (df["ad1"] < (1 - ADS_STEP) * df["ad0"])]
-    g = _group_profit(off)
-    if g and len(off):
-        ds, dp = g
-        checks.append(f"📣 Сократили рекламу на <b>{num(len(off))}</b> арт.: продажи {'+' if ds >= 0 else '−'}{rub(abs(ds))}, "
-                      f"прибыль {'+' if dp >= 0 else '−'}{rub(abs(dp))} — "
-                      + ("экономия на рекламе себя оправдала ✅" if dp >= 0 else "стоит вернуть рекламу ⚠️"))
+    off = df[(df["ad0"] > 0) & (df["ad1"] < (1 - ADS_STEP) * df["ad0"])].copy()
+    if len(off):
+        off["ok"] = [ads_ok(r, res["n1"]) for _, r in off.iterrows()]
+        good, bad = off[off["ok"].notna()], off[off["ok"].isna()]
+        line = f"📣 Сократили рекламу на <b>{num(len(off))}</b> арт."
+        if len(good):
+            line += f" По <b>{num(len(good))}</b> — оправданно (мало остатка, низкая маржа или дорогая реклама) ✅."
+        g = _group_profit(bad)
+        if len(bad):
+            line += f" По <b>{num(len(bad))}</b> товар есть и маржа нормальная"
+            if g:
+                ds, dp = g
+                line += (f": продажи {'+' if ds >= 0 else '−'}{rub(abs(ds))}, прибыль {'+' if dp >= 0 else '−'}"
+                         f"{rub(abs(dp))} — " + ("экономия себя оправдала ✅" if dp >= 0 else "стоит вернуть рекламу ⚠️"))
+            else:
+                line += "."
+        checks.append(line)
     if checks:
         lines += ["", "<b>Правильно ли сделали — по прибыли*</b>"] + checks
     todo = _todo(df, res)
@@ -497,8 +545,10 @@ def _todo(df, res) -> list[str]:
         out.append(f"💸 Цены: <b>{num(len(pr))}</b> артикулов, где покупателю стало дороже и штуки упали — "
                    f"{rub(-(pr['our'] + pr['spp']).sum())}, лист «Цена».")
     ad = df[df["ads"] < 0]
+    ad = ad[[ads_ok(r, res["n1"]) is None for _, r in ad.iterrows()]]
     if len(ad):
-        out.append(f"📣 Реклама: <b>{num(len(ad))}</b> артикулов, где сократили рекламу и упали продажи — "
+        out.append(f"📣 Реклама: <b>{num(len(ad))}</b> артикулов, где рекламу сократили зря (товар есть, маржа нормальная), "
+                   f"и продажи упали на {num(-ad['u_ads'].sum())} шт — "
                    f"{rub(-ad['ads'].sum())}, лист «Реклама».")
     return out
 
@@ -516,7 +566,7 @@ def _res(a, b):
 
 
 def file(code: str, a: date, b: date):
-    from .menu import XLSX, _book, span
+    from .menu import XLSX, _book, num, span
     if code == "el":
         return file_elasticity(a, b)
     res = _res(a, b)
@@ -536,41 +586,51 @@ def file(code: str, a: date, b: date):
     head = ["Бренд", "Категория", "Артикул продавца", "Артикул WB", "Наименование"]
     info = lambda r: [r["brand"], r["category"], r["sa"], r["nm"], r["title"]]  # noqa: E731
     nz = lambda v: None if v != v else v  # noqa: E731
-    main = [info(r) + [r["net0"], r["net1"], r["delta"], nz(r["pr0"]), nz(r["pr1"]),
+    main = [info(r) + [r["q0"], r["q1"], r["net0"], r["net1"], r["delta"], nz(r["pr0"]), nz(r["pr1"]),
                        nz(r["pr1"] - r["pr0"]), *[r[k] for k in NAMES], plain(r["why"], r[r["why"]]),
                        reason(r, n1), r["d0"], r["d1"], r["stock_now"], r["p0"], r["p1"], r["spp0"], r["spp1"],
                        r["ad0"], r["ad1"]] for _, r in df.iterrows()]
-    main_cols = head + ["Продажи было, ₽", "Продажи стало, ₽", "Изменение продаж, ₽", "Прибыль было*, ₽",
+    main_cols = head + ["Продано было, шт", "Продано стало, шт", "Продажи было, ₽", "Продажи стало, ₽", "Изменение продаж, ₽", "Прибыль было*, ₽",
                         "Прибыль стало*, ₽", "Изменение прибыли*, ₽", *[NAMES[k] + ", ₽" for k in NAMES],
                         "Главная причина", "Пояснение", "Дней в наличии (было)", "Дней в наличии (стало)",
-                        "Остаток сейчас, шт", "Цена до СПП (было)", "Цена до СПП (стало)", "СПП было, %",
+                        "Остаток сейчас, шт", "Наша цена до СПП было, ₽", "Наша цена до СПП стало, ₽", "СПП было, %",
                         "СПП стало, %", "Реклама было, ₽", "Реклама стало, ₽"]
     no = restock(df)
     nz = lambda v: None if v != v else v  # noqa: E731
     no_rows = [info(r) + [nz(r["day_profit"]), nz(r["mpct"]), r["day_loss"], r["v0"], r["p0"], r["d0"], r["d1"],
                           r["net0"], r["net1"]] for _, r in no.iterrows()]
     sk = restock_skip(df)
-    sk_rows = [info(r) + [nz(r["mpct"]), nz(r["day_profit"]), r["day_loss"], r["p0"], r["net0"]]
+    sk_rows = [info(r) + [nz(r["mpct"]), nz(r["day_profit"]), r["day_loss"], r["v0"], r["p0"], r["net0"]]
                for _, r in sk.iterrows()]
-    pr = df[(df["our"] + df["spp"]) < 0].assign(x=lambda t: t["our"] + t["spp"]).sort_values("x")
-    pr_rows = [info(r) + [r["x"], r["dpb"], r["our_pct"], r["spp0"], r["spp1"], r["p0"], r["p1"]]
-               for _, r in pr.iterrows()]
+    bp = lambda r, i: (r["bs" + i] / r["q" + i]) if r["q" + i] else None  # noqa: E731
+    pr = df[(df["our"] + df["spp"]) < 0].assign(x=lambda t: t["our"] + t["spp"],
+                                                 xu=lambda t: t["u_our"] + t["u_spp"]).sort_values("x")
+    pr_rows = [info(r) + [r["x"], r["xu"], r["q0"], r["q1"], bp(r, "0"), bp(r, "1"), r["dpb"], r["p0"], r["p1"],
+                          r["our_pct"], r["spp0"], r["spp1"], nz(r["pr1"] - r["pr0"])] for _, r in pr.iterrows()]
     ad = df[df["ads"] < 0].sort_values("ads")
-    ad_rows = [info(r) + [r["ads"], r["ad0"], r["ad1"], r["delta"]] for _, r in ad.iterrows()]
+    ad_rows = []
+    for _, r in ad.iterrows():
+        ok = ads_ok(r, n1)
+        ad_rows.append(info(r) + [r["ads"], r["u_ads"], r["q0"], r["q1"], r["ad0"], r["ad1"], nz(r["drr0"]),
+                                  r["stock_now"], nz(r["m8"]), ("оправданно: " + ok) if ok else "стоит вернуть рекламу",
+                                  nz(r["pr1"] - r["pr0"])])
     sheets = [("Итог", ["Показатель", "Сумма, ₽", "Доля в изменении продаж, %"], s_rows, {"totals": False}),
               ("Артикулы", main_cols, main),
-              ("Довезти", head + ["Прибыль в день*, ₽", "Маржа после расходов WB*, %", "Продажи в день, ₽",
+              ("Довезти", head + ["Прибыль в день*, ₽", f"Маржа за {MARGIN_WEEKS} недель*, %", "Продажи в день, ₽",
                                   "Продавали шт в день", "Цена до СПП, ₽",
                                   f"Дней в наличии {span(res['pa'], res['pb'])}",
                                   f"Дней в наличии {span(a, b)}",
                                   f"Продажи {span(res['pa'], res['pb'])}, ₽", f"Продажи {span(a, b)}, ₽"],
                no_rows),
-              ("Не довозить", head + ["Маржа после расходов WB*, %", "Прибыль в день*, ₽", "Продажи в день, ₽",
-                                     "Цена до СПП, ₽", f"Продажи {span(res['pa'], res['pb'])}, ₽"], sk_rows),
-              ("Цена", head + ["Потеря из-за цены, ₽", "Цена для покупателя, %", "Наша цена, %", "СПП было, %",
-                               "СПП стало, %", "Цена до СПП (было)", "Цена до СПП (стало)"], pr_rows),
-              ("Реклама", head + ["Потеря из-за рекламы, ₽", "Реклама было, ₽", "Реклама стало, ₽",
-                                  "Изменение продаж, ₽"], ad_rows)]
+              ("Не довозить", head + [f"Маржа за {MARGIN_WEEKS} недель*, %", "Прибыль в день*, ₽", "Продажи в день, ₽",
+                                     "Продавали шт в день", "Цена до СПП, ₽", f"Продажи {span(res['pa'], res['pb'])}, ₽"], sk_rows),
+              ("Цена", head + ["Потеря продаж из-за цены, ₽", "Потеря, шт", "Продано было, шт", "Продано стало, шт",
+                               "Покупатель платил за шт, ₽", "Покупатель платит за шт, ₽",
+                               "Цена для покупателя, изм. %", "Наша цена до СПП было, ₽", "Наша цена до СПП стало, ₽",
+                               "Наша цена, изм. %", "СПП было, %", "СПП стало, %", "Изменение прибыли*, ₽"], pr_rows),
+              ("Реклама", head + ["Потеря продаж, ₽", "Потеря, шт", "Продано было, шт", "Продано стало, шт",
+                                  "Реклама было, ₽", "Реклама стало, ₽", "ДРР был (по рекламируемым товарам), %", "Остаток сейчас, шт",
+                                  f"Маржа за {MARGIN_WEEKS} недель*, %", "Оценка", "Изменение прибыли*, ₽"], ad_rows)]
     notes = [
         ("Продажи", "Как на сайте WB: до СПП, с НДС, по дате операции в отчёте реализации; без коррекций WB."),
         ("Итог", "Каждая строка — на сколько рублей эта причина изменила продажи. Минус (в скобках) — уменьшила. "
@@ -585,6 +645,15 @@ def file(code: str, a: date, b: date):
         ("Не довозить", "Товары без остатка, которые продавались в минус или с маржой ниже 10%: распродажа, "
                         "демпинг или высокие расходы WB. В «Довезти» они не попадают. Везти их по прежней цене "
                         "убыточно."),
+        ("Цены", "Покупатель платит за шт — средняя цена после СПП (что реально платит покупатель на WB). "
+                  "Наша цена до СПП — цена, которую ставим мы. СПП — скидка, которую даёт WB за свой счёт. "
+                  "Изм. % — на сколько процентов цена стала выше (+) или ниже (−) по сравнению с прошлым периодом."),
+        ("Реклама", "«Оправданно» — рекламу сократили, когда товара почти не осталось (меньше чем на неделю), "
+                    f"маржа за {MARGIN_WEEKS} недель ниже {RESTOCK_MIN_MARGIN}% или ДРР был выше {num(_drr_high())}% "
+                    "(шкала из отчёта о рекламе: до 7% — отлично, 7–9% — нормально, выше 9% — плохо). "
+                    "Иначе — «стоит вернуть рекламу»."),
+        ("Маржа", f"Для решений «довезти / не довозить» берём маржу за {MARGIN_WEEKS} недель — так распродажа или "
+                  "одна неудачная неделя не искажают картину."),
         ("Прибыль*", "Управленческий учёт, как в дашборде продаж: выручка без НДС минус себестоимость (FIFO), "
                      "комиссия и расходы WB, распределённые на штуки по неделям."),
         ("Разложение", "Выручка = дни в наличии × штук в день × цена. Наличие = (дни₁ − дни₀) × штук в день₀ "

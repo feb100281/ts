@@ -821,19 +821,24 @@ def report_ads(a: date, b: date) -> dict | None:
         return None
     pa, pb = date.fromisoformat(str(bnd["prev_start"])[:10]), date.fromisoformat(str(bnd["prev_end"])[:10])
     g = lambda d, k: d.get(k) or 0
-    rating = ad._drr_rating(t.get("drr"))
+    dd = lambda d: d.get("drr_direct") if d.get("drr_direct") is not None else d.get("drr")  # noqa: E731
+    rating = ad._drr_rating(dd(t))
     lines = [f"<b>📣 Реклама WB · {span(a, b)}</b>",
              f"<i>сравнение с {span(pa, pb)}</i>", "",
              f"Расход: <b>{rub(g(t, 'spend_rub'))}</b>  {chg(g(t, 'spend_rub'), g(o, 'spend_rub'))}",
              f"Выручка с рекламы: <b>{rub(g(t, 'revenue_rub'))}</b>  "
              f"{chg(g(t, 'revenue_rub'), g(o, 'revenue_rub'))}",
-             f"ДРР: <b>{num(g(t, 'drr'), 1)}%</b>  {chg(g(t, 'drr'), g(o, 'drr'), pp=True)}"
-             + (f" · {rating.lower()}" if rating else ""),
+             f"ДРР по рекламируемым товарам: <b>{num(dd(t) or 0, 1)}%</b>  "
+             f"{chg(dd(t) or 0, dd(o) or 0, pp=True)}" + (f" · {rating.lower()}" if rating else ""),
+             f"ДРР с учётом связанных заказов: {num(g(t, 'drr'), 1)}%",
              f"Заказы: <b>{num(g(t, 'orders'))}</b>  {chg(g(t, 'orders'), g(o, 'orders'))}",
              f"Стоимость заказа: <b>{rub(g(t, 'cpo'))}</b>  {chg(g(t, 'cpo'), g(o, 'cpo'))}",
              f"Показы: {num(g(t, 'views'))} · клики: {num(g(t, 'clicks'))} · CTR {num(g(t, 'ctr'), 2)}%"]
     c = bnd.get("campaigns")
     if c is not None and not c.empty:
+        c = c.copy()
+        if "drr_direct" in c.columns:                 # как в записке: по рекламируемым товарам
+            c["drr"] = c["drr_direct"]
         top = c.sort_values("spend_rub", ascending=False).head(5)
         lines += ["", "<b>Больше всего тратят</b>"] + [
             f"• {esc(str(n)[:40])} — {rub(s_)} · ДРР "
