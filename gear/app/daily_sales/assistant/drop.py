@@ -38,8 +38,8 @@ PLAIN = {  # понятная подпись: (если минус, если п�
     "our": ("Подняли цену — купили меньше штук", "Снизили цену — купили больше штук"),
     "spp": ("WB снизил скидку СПП — купили меньше", "WB увеличил скидку СПП — купили больше"),
     "ads": ("Меньше рекламы", "Больше рекламы"),
-    "ret": ("Больше возвратов", "Меньше возвратов"),
-    "new": ("Новые и вернувшиеся товары", "Новые и вернувшиеся товары"),
+    "ret": ("Вернули больше товара", "Вернули меньше товара"),
+    "new": ("Товары, которых раньше не было в продаже", "Товары, которых раньше не было в продаже"),
     "demand": ("Спрос: покупают меньше без видимой причины", "Спрос: покупают больше без видимой причины"),
 }
 PRICE_KEYS = ("spp", "our", "price")
@@ -54,7 +54,8 @@ ADS_STEP = 0.3             # реклама изменилась заметно 
 SIG_MIN_DAY = 2000         # сигналы: артикул продавал в среднем от 2 тыс ₽ в день
 SIG_DROP = 0.3             # сигналы: падение от 30%
 SIG_MIN_LOSS = 10000       # сигналы: потеря за неделю от 10 тыс ₽
-SIGNALS_IN_DIGEST = True   # блок сигналов в ежедневной рассылке (если есть что показать)
+SIGNALS_IN_DIGEST = True
+DRR_HIGH = 25              # ДРР выше — реклама считается дорогой   # блок сигналов в ежедневной рассылке (если есть что показать)
 
 COLS = {"Продажи, шт": "q", "Возвраты, шт": "rq", "До СПП: продажи, ₽": "s",
         "До СПП: возвраты, ₽": "r", "После СПП: продажи, ₽": "bs"}
@@ -167,12 +168,15 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
         d1, d0 = min(d1, n1), min(d0, n0) * k
         a0, a1 = r.ad0 * k, r.ad1
         e = dict.fromkeys(NAMES, 0.0)
+        u = dict.fromkeys(NAMES, 0.0)                              # то же в штуках
         e["ret"] = -(rr1 - rr0)
+        u["ret"] = -(r.rq1 - r.rq0 * k)
         p0 = s0 / q0 if q0 > 0 else None
         p1 = s1 / q1 if q1 > 0 else None
         dpb = x = y = None
         if q0 <= 0:
             e["new"] = s1 - s0
+            u["new"] = q1 - q0
             why = "new"
         else:
             v0 = q0 / d0 if d0 > 0 else 0.0
@@ -198,6 +202,8 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
             else:
                 key = "demand"
             e[key] = dem
+            u[key] = dem / p0
+            u["stock"] = e["stock"] / p0
             delta = sum(e.values())
             why = (min if delta < 0 else max)(e, key=e.get)
         net0, net1 = s0 - rr0, s1 - rr1
@@ -209,12 +215,20 @@ def analyze(a: date, b: date, pa: date, pb: date) -> dict | None:
             "spp0": (1 - bs0 / s0) * 100 if s0 > 0 else None, "spp1": (1 - bs1 / s1) * 100 if s1 > 0 else None,
             "dpb": dpb * 100 if dpb is not None else None,
             "our_pct": (math.exp(x) - 1) * 100 if x is not None else None,
+            **{"u_" + key: v for key, v in u.items()}, "s0": s0, "bs0": bs0, "s1": s1, "bs1": bs1,
+            "drr0": a0 / s0 * 100 if s0 > 0 else None,
             "ad0": a0, "ad1": a1, "stock_now": float(r.stock) if r.stock == r.stock else None})
     df = pd.DataFrame(rows)
     if df.empty:
         return None
     tot = {key: float(df[key].sum()) for key in NAMES}
+    tot_u = {key: float(df["u_" + key].sum()) for key in NAMES}
+    q0, q1 = float(df["q0"].sum()), float(df["q1"].sum())
+    avg = {"p0": df["s0"].sum() / q0 if q0 else None, "p1": df["s1"].sum() / q1 if q1 else None,
+           "b0": df["bs0"].sum() / q0 if q0 else None, "b1": df["bs1"].sum() / q1 if q1 else None,
+           "q0": q0, "q1": q1}
     return {"a": a, "b": b, "pa": pa, "pb": pb, "n1": n1, "n0": n0, "k": k, "stock_known": stock_known,
+            "tot_u": tot_u, "avg": avg,
             "base": float(df["net0"].sum()), "cur": float(df["net1"].sum()), "tot": tot,
             "df": df.sort_values("delta")}
 
@@ -244,10 +258,15 @@ def reason(r, n1: int) -> str:
         return f"покупателю {'дороже' if r['dpb'] > 0 else 'дешевле'} на {num(abs(r['dpb']))}%" + (
             f" ({', '.join(parts)})" if parts else "")
     if w == "ads":
+        drr = r["drr0"] if r["drr0"] == r["drr0"] else None
+        tail = ""
+        if drr:
+            tail = f", ДРР был {num(drr)}%" + (" — реклама была дорогой, возможно, выключили верно"
+                                              if drr >= DRR_HIGH else "")
         if r["ad0"] > 0 and r["ad1"] < 1:
-            return f"рекламу выключили (было {num(r['ad0'] / 1000)} тыс ₽)"
+            return f"рекламу выключили (было {num(r['ad0'] / 1000)} тыс ₽{tail})"
         if r["ad0"] > 0:
-            return f"реклама {_pct((r['ad1'] / r['ad0'] - 1) * 100)} ({num(r['ad1'] / 1000)} тыс ₽)"
+            return f"реклама {_pct((r['ad1'] / r['ad0'] - 1) * 100)} ({num(r['ad1'] / 1000)} тыс ₽{tail})"
         return f"реклама {num(r['ad1'] / 1000)} тыс ₽ (раньше не было)"
     if w == "price" and r["p0"] and r["p1"]:
         return f"цена до СПП {_pct((r['p1'] / r['p0'] - 1) * 100)}"
@@ -321,19 +340,27 @@ def report(a: date, b: date) -> dict | None:
     groups = [("prices", prices)] + [(k, v) for k, v in tot.items() if k not in PRICE_KEYS]
     groups = [g for g in groups if abs(g[1]) >= lim]
     groups.sort(key=lambda g: g[1] if down else -g[1])
+    av, tu = res["avg"], res["tot_u"]
     if groups:
         k0, v0 = groups[0]
         what = "цены для покупателя" if k0 == "prices" else plain(k0, v0).lower()
-        lines += [f"Главное: <b>{what}</b> — {sg(v0)} из {sg(d)}.", ""]
-    lines.append("<b>Из чего сложилось</b>")
+        lines.append(f"Главное: <b>{what}</b> — {sg(v0)} из {sg(d)}.")
+    if av["b0"] and av["b1"] and av["p0"] and av["p1"]:
+        spp0, spp1 = (1 - av["b0"] / av["p0"]) * 100, (1 - av["b1"] / av["p1"]) * 100
+        lines += [f"Средняя цена для покупателя: {rub(av['b0'])} → <b>{rub(av['b1'])}</b> ({chg(av['b1'], av['b0'])})",
+                  f"Наша цена до СПП: {rub(av['p0'])} → <b>{rub(av['p1'])}</b> ({chg(av['p1'], av['p0'])}) · "
+                  f"СПП {num(spp0, 1)}% → <b>{num(spp1, 1)}%</b>",
+                  f"Продано штук: {num(av['q0'])} → <b>{num(av['q1'])}</b> ({chg(av['q1'], av['q0'])})"]
+    lines += ["", "<b>Из чего сложилось</b> — сколько это дало продажам, ₽"]
+    pcs = lambda v: f" ({'+' if v > 0 else '−'}{num(abs(v))} шт)" if abs(v) >= 1 else ""  # noqa: E731
     for key, v in groups:
         if key != "prices":
-            lines.append(f"{ICONS[key]} {plain(key, v)} — <b>{sg(v)}</b>")
+            lines.append(f"{ICONS[key]} {plain(key, v)} — <b>{sg(v)}</b>{pcs(tu[key])}")
             continue
         lines.append(f"💰 Цены — <b>{sg(v)}</b>")
         for k in PRICE_KEYS:
             if abs(tot[k]) >= lim:
-                lines.append(f"    · {plain(k, tot[k])} — {sg(tot[k])}")
+                lines.append(f"    · {plain(k, tot[k])} — {sg(tot[k])}{pcs(tu[k])}")
     worst = df.head(TOP) if down else df.sort_values("delta", ascending=False).head(TOP)
     worst = worst[(worst["delta"] < 0) if down else (worst["delta"] > 0)]
     if len(worst):
@@ -346,9 +373,11 @@ def report(a: date, b: date) -> dict | None:
         lines += ["", "<b>Что сделать</b>"] + todo
     if not res["stock_known"]:
         lines += ["", "<i>Нет данных об остатках за период — наличие не учтено.</i>"]
-    lines += ["", "<i>Разложение точное: сумма причин = изменение продаж. Изменение спроса относим к "
-                  "вероятной причине: цена для покупателя (от 3%), реклама (от 30%), иначе — спрос и прочее. "
-                  "Подробно по каждому артикулу — в Excel.</i>"]
+    lines += ["", "<i>Как читать: каждая строка — на сколько рублей эта причина изменила продажи, вместе они "
+                  "дают общее изменение. Продажи считаем за вычетом возвратов, поэтому «вернули меньше» — плюс. "
+                  "«Товары, которых раньше не было в продаже» — новинки и товары, вернувшиеся после паузы. "
+                  "Цена или реклама считаются причиной, если изменились заметно: цена от 3%, реклама от 30%. "
+                  "Маржинальность здесь не учитывается — только продажи. Подробно по каждому артикулу — в Excel.</i>"]
     photo = _photo(lambda: chart_reasons(tot, f"{'−' if down else '+'}{rub(abs(d))} к прошлому периоду",
                                          f"из чего сложилось · {span(a, b)} к {span(pa, pb)}"))
     rows = sorted([(NAMES[key], v) for key, v in tot.items() if abs(v) >= lim], key=lambda x: x[1])
@@ -550,14 +579,14 @@ def signals_text(res: dict, top: int = 10, short: bool = False) -> str | None:
     for i, (_, r) in enumerate(hit.head(top).iterrows(), 1):
         pct = max(r["delta"] / r["net0"] * 100, -100)
         v1 = r["q1"] / 7 if r["q1"] == r["q1"] else 0.0
-        qty = f" · {num(r['q0'] / 7, 1)} → {num(v1, 1)} шт/день" if r["q0"] > 0 else ""
+        qty = f" · продавали {num(r['q0'] / 7, 1)} → {num(v1, 1)} шт в день" if r["q0"] > 0 else ""
         lines.append(f"{i}. {_who(r)}\n    <b>{_pct(pct)}</b> (−{rub(-r['delta'])}){qty}"
                      f" · {ICONS[r['why']]} {reason(r, 7)}")
     if len(hit) > top:
         lines.append(f"…ещё {len(hit) - top} — " + ("кнопка «🚨 Сигналы» в боте." if short else "в Excel."))
     by = hit.groupby("why")["delta"].agg(["sum", "size"]).sort_values("sum")
     lines += ["", "<b>Почему просели — по всем этим товарам</b>"] + [
-        f"{ICONS[k]} {plain(k, r['sum'])} — <b>−{rub(-r['sum'])}</b> · {num(r['size'])} тов."
+        f"{ICONS[k]} {plain(k, r['sum'])} — <b>−{rub(-r['sum'])}</b> · {num(r['size'])} арт."
         for k, r in by.iterrows() if r["sum"] < 0]
     return "\n".join(lines)
 
