@@ -553,10 +553,16 @@ class Bot:
             try:
                 self.call("sendMessage", chat_id=chat_id, text=part, parse_mode="HTML",
                           disable_web_page_preview=True, **extra)
-            except urllib.error.HTTPError:
-                # разметка не прошла — отправляем простым текстом
-                self.call("sendMessage", chat_id=chat_id,
-                          text=re.sub(r"<[^>]+>", "", html.unescape(part))[:4000])
+            except urllib.error.HTTPError as e:
+                err = (e.read() or b"").decode("utf-8", "ignore")[:300]
+                print(f"[bot {self.profile}] sendMessage: {err}", flush=True)
+                plain = re.sub(r"<[^>]+>", "", html.unescape(part))[:4000]
+                try:                                  # простым текстом, но с теми же кнопками
+                    self.call("sendMessage", chat_id=chat_id, text=plain, **extra)
+                except urllib.error.HTTPError as e2:
+                    print(f"[bot {self.profile}] кнопки не приняты: "
+                          f"{(e2.read() or b'').decode('utf-8', 'ignore')[:300]}", flush=True)
+                    self.call("sendMessage", chat_id=chat_id, text=plain)
 
     def setup(self):
         """Меню команд и описание бота — задаются при каждом запуске."""

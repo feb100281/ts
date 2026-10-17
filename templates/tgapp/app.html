@@ -131,7 +131,7 @@ html.dark .tab.on{color:#7FC2A9;border-bottom-color:#7FC2A9}
 const tg = window.Telegram ? Telegram.WebApp : null;
 const INIT = tg ? tg.initData : "";
 let META = null, REP = "s", PRESET = "7";
-const ICON = {s:"📊",k:"📦",b:"🏷",c:"🗂",w:"💸",a:"📣",n:"📅",m:"💰",l:"🔻",d:"💳",r:"📑"};
+const ICON = {s:"📊",k:"📦",b:"🏷",c:"🗂",w:"💸",a:"📣",n:"📅",m:"💰",l:"🔻",d:"💳",r:"📑",z:"🔎",g:"🚨"};
 // рост этих показателей — плохо (красным)
 const BAD_UP = /^(возврат|себестоим|комисс|расход|дрр|стоимость заказа|доля от продаж|убыт)/i;
 const NEUTRAL = /^(спп|скидка wb|платит покупатель|показы)/i;   // ни хорошо, ни плохо
@@ -155,7 +155,7 @@ const label = t => t.replace(/^\S+\s/,"");
 
 function drawReports(){
   $("#reports").innerHTML = META.reports.map(r =>
-    `<button class="rep ${r.code===REP?"on":""}" data-r="${r.code}"><i>${ICON[r.code]||"•"}</i>${label(r.title)}</button>`).join("");
+    `<button class="rep ${r.code===REP?"on":""}" data-r="${r.code}"><i>${ICON[r.code]||r.title.split(" ")[0]}</i>${label(r.title)}</button>`).join("");
   document.querySelectorAll(".rep").forEach(b => b.onclick = () => {
     haptic(); REP = b.dataset.r; const r = cur();
     if (!r.presets.find(p => p.code===PRESET)) PRESET = r.presets[Math.min(1, r.presets.length-1)].code;

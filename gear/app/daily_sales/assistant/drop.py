@@ -145,9 +145,9 @@ def _stock_days(a: date, b: date) -> tuple[pd.DataFrame, int]:
 
 
 def _stock_now(b: date) -> pd.DataFrame:
-    """Остаток на последнюю дату не позже b: склады WB + в пути к клиенту + FBS."""
+    """Остаток на последнюю загруженную дату (текущий день): склады WB + FBS."""
     df = _query("""
-        WITH d AS (SELECT MAX(date_from::DATE) AS d FROM stocks.unpacked_stocks WHERE date_from::DATE <= $b),
+        WITH d AS (SELECT MAX(date_from::DATE) AS d FROM stocks.unpacked_stocks WHERE $b IS NOT NULL),
         x AS (
             SELECT nm_id, SUM(COALESCE(quantity, 0)) AS q FROM stocks.unpacked_stocks
             WHERE date_from::DATE = (SELECT d FROM d) GROUP BY 1
@@ -155,11 +155,33 @@ def _stock_now(b: date) -> pd.DataFrame:
             SELECT nm_id, SUM(COALESCE(quantity, 0)) FROM stocks.unpacked_fbs_stocks
             WHERE date_from::DATE = (SELECT d FROM d) GROUP BY 1
         )
-        SELECT nm_id AS nm, SUM(q) AS stock FROM x GROUP BY 1""", {"b": b})
+        SELECT nm_id AS nm, SUM(q) AS stock, (SELECT d FROM d) AS sd FROM x GROUP BY 1""", {"b": b})
     if df.empty:
         return pd.DataFrame(columns=["nm", "stock"])
+    _STOCK_DATE["d"] = df["sd"].iloc[0]
+    df = df.drop(columns=["sd"])
     df["nm"] = df["nm"].astype("int64")
     return df
+
+
+_STOCK_DATE: dict = {}
+
+
+def stock_label() -> str:
+    d = _STOCK_DATE.get("d")
+    try:
+        return f"Остаток на {pd.Timestamp(d):%d.%m.%Y}, шт" if d is not None else "Остаток сейчас, шт"
+    except Exception:
+        return "Остаток сейчас, шт"
+
+
+def cover(r, n1: int):
+    """На сколько дней хватит остатка при нынешних продажах (если продаж нет — при прошлых)."""
+    st = r.get("stock_now")
+    if st is None or st != st:
+        return None
+    daily = (r["q1"] if r["q1"] > 0 else r["q0"]) / max(n1, 1)
+    return round(st / daily) if daily > 0 else None
 
 
 def _ads(a: date, b: date) -> pd.DataFrame:
@@ -588,12 +610,12 @@ def file(code: str, a: date, b: date):
     nz = lambda v: None if v != v else v  # noqa: E731
     main = [info(r) + [r["q0"], r["q1"], r["net0"], r["net1"], r["delta"], nz(r["pr0"]), nz(r["pr1"]),
                        nz(r["pr1"] - r["pr0"]), *[r[k] for k in NAMES], plain(r["why"], r[r["why"]]),
-                       reason(r, n1), r["d0"], r["d1"], r["stock_now"], r["p0"], r["p1"], r["spp0"], r["spp1"],
+                       reason(r, n1), r["d0"], r["d1"], r["stock_now"], cover(r, n1), r["p0"], r["p1"], r["spp0"], r["spp1"],
                        r["ad0"], r["ad1"]] for _, r in df.iterrows()]
     main_cols = head + ["Продано было, шт", "Продано стало, шт", "Продажи было, ₽", "Продажи стало, ₽", "Изменение продаж, ₽", "Прибыль было*, ₽",
                         "Прибыль стало*, ₽", "Изменение прибыли*, ₽", *[NAMES[k] + ", ₽" for k in NAMES],
                         "Главная причина", "Пояснение", "Дней в наличии (было)", "Дней в наличии (стало)",
-                        "Остаток сейчас, шт", "Наша цена до СПП было, ₽", "Наша цена до СПП стало, ₽", "СПП было, %",
+                        stock_label(), "Хватит остатка, дней", "Наша цена до СПП было, ₽", "Наша цена до СПП стало, ₽", "СПП было, %",
                         "СПП стало, %", "Реклама было, ₽", "Реклама стало, ₽"]
     no = restock(df)
     nz = lambda v: None if v != v else v  # noqa: E731
@@ -606,13 +628,15 @@ def file(code: str, a: date, b: date):
     pr = df[(df["our"] + df["spp"]) < 0].assign(x=lambda t: t["our"] + t["spp"],
                                                  xu=lambda t: t["u_our"] + t["u_spp"]).sort_values("x")
     pr_rows = [info(r) + [r["x"], r["xu"], r["q0"], r["q1"], bp(r, "0"), bp(r, "1"), r["dpb"], r["p0"], r["p1"],
-                          r["our_pct"], r["spp0"], r["spp1"], nz(r["pr1"] - r["pr0"])] for _, r in pr.iterrows()]
+                          r["our_pct"], r["spp0"], r["spp1"], r["stock_now"], cover(r, n1),
+                          nz(r["pr1"] - r["pr0"])] for _, r in pr.iterrows()]
     ad = df[df["ads"] < 0].sort_values("ads")
     ad_rows = []
     for _, r in ad.iterrows():
         ok = ads_ok(r, n1)
         ad_rows.append(info(r) + [r["ads"], r["u_ads"], r["q0"], r["q1"], r["ad0"], r["ad1"], nz(r["drr0"]),
-                                  r["stock_now"], nz(r["m8"]), ("оправданно: " + ok) if ok else "стоит вернуть рекламу",
+                                  r["stock_now"], cover(r, n1), nz(r["m8"]),
+                                  ("оправданно: " + ok) if ok else "стоит вернуть рекламу",
                                   nz(r["pr1"] - r["pr0"])])
     sheets = [("Итог", ["Показатель", "Сумма, ₽", "Доля в изменении продаж, %"], s_rows, {"totals": False}),
               ("Артикулы", main_cols, main),
@@ -627,16 +651,19 @@ def file(code: str, a: date, b: date):
               ("Цена", head + ["Потеря продаж из-за цены, ₽", "Потеря, шт", "Продано было, шт", "Продано стало, шт",
                                "Покупатель платил за шт, ₽", "Покупатель платит за шт, ₽",
                                "Цена для покупателя, изм. %", "Наша цена до СПП было, ₽", "Наша цена до СПП стало, ₽",
-                               "Наша цена, изм. %", "СПП было, %", "СПП стало, %", "Изменение прибыли*, ₽"], pr_rows),
+                               "Наша цена, изм. %", "СПП было, %", "СПП стало, %", stock_label(),
+                               "Хватит остатка, дней", "Изменение прибыли*, ₽"], pr_rows),
               ("Реклама", head + ["Потеря продаж, ₽", "Потеря, шт", "Продано было, шт", "Продано стало, шт",
-                                  "Реклама было, ₽", "Реклама стало, ₽", "ДРР был (по рекламируемым товарам), %", "Остаток сейчас, шт",
+                                  "Реклама было, ₽", "Реклама стало, ₽", "ДРР был (по рекламируемым товарам), %", stock_label(), "Хватит остатка, дней",
                                   f"Маржа за {MARGIN_WEEKS} недель*, %", "Оценка", "Изменение прибыли*, ₽"], ad_rows)]
     notes = [
         ("Продажи", "Как на сайте WB: до СПП, с НДС, по дате операции в отчёте реализации; без коррекций WB."),
         ("Итог", "Каждая строка — на сколько рублей эта причина изменила продажи. Минус (в скобках) — уменьшила. "
                  "Доля в изменении — какая часть общего изменения пришлась на причину; у причин, которые "
                  "работали в обратную сторону, доля со знаком минус."),
-        ("Довезти", f"Товары, которых на {b:%d.%m.%Y} нет на складах WB и FBS, хотя раньше они продавались. "
+        ("Остаток", "Остаток на последний загруженный день: склады WB + наш склад FBS. «Хватит остатка» — на "
+                    "сколько дней его хватит при продажах текущего периода (если их нет — при прошлых)."),
+        ("Довезти", f"Товары, которых сейчас нет на складах WB и FBS, хотя раньше они продавались. "
                     "Если дней в наличии в текущем периоде почти столько же, сколько в прошлом, — товар "
                     "закончился только что, и потери впереди. «Теряем в день» — сколько он продавал в день, "
                     "пока был в наличии. Только прибыльные: маржа после расходов WB от 10% (или данных о марже нет). "
@@ -812,11 +839,11 @@ def file_signals(b: date):
     if not res or res["hit"].empty:
         return None
     rows = [[r["brand"], r["category"], r["sa"], r["nm"], r["title"], r["net0"], r["net1"], r["delta"],
-             r["delta"] / r["net0"] * 100, NAMES[r["why"]], reason(r, 7), r["stock_now"]]
+             r["delta"] / r["net0"] * 100, NAMES[r["why"]], reason(r, 7), r["stock_now"], cover(r, 7)]
             for _, r in res["hit"].iterrows()]
     cols = ["Бренд", "Категория", "Артикул продавца", "Артикул WB", "Наименование", "В среднем за неделю (4 недели до), ₽",
             "Последние 7 дней, ₽", "Изменение, ₽", "Изменение, %", "Главная причина", "Пояснение",
-            "Остаток сейчас, шт"]
+            stock_label(), "Хватит остатка, дней"]
     data = _book("Сигналы", f"{span(res['a'], b)} к среднему за 4 недели", [("Сигналы", cols, rows)])
     return f"Сигналы {b:%d.%m.%Y}.xlsx", data, XLSX
 
