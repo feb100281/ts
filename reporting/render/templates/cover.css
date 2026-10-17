@@ -1,0 +1,208 @@
+/* cover.css - стили для титульного листа */
+
+.cover-page {
+  height: 255mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18mm 12mm 12mm 12mm;
+  box-sizing: border-box;
+  position: relative;
+}
+
+
+
+.cover-top {
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.cover-logo {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.logo-img {
+  max-width: 120px;
+  max-height: 80px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.cover-company {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #1e3a5f;
+  margin-bottom: 8px;
+}
+
+.cover-system {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #7b8794;
+  font-weight: 500;
+}
+
+.cover-center {
+  text-align: center;
+  margin-top: auto;
+  margin-bottom: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.cover-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #4b5563;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.cover-title {
+  font-size: 42px;
+  line-height: 1.2;
+  color: #1e3a5f;
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  max-width: 80%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.cover-subtitle {
+  font-size: 18px;
+  line-height: 1.4;
+  color: #4b5563;
+  margin-top: 16px;
+  font-weight: 400;
+  max-width: 70%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.cover-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 28px 0 20px 0;
+}
+
+.cover-divider span {
+  display: inline-block;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #1e3a5f, transparent);
+}
+
+.cover-divider .dot {
+  width: 8px;
+  height: 8px;
+  background: #1e3a5f;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(30,58,95,0.2);
+}
+
+.cover-period {
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+.cover-bottom {
+  margin-top: 32px;
+  position: relative;
+  z-index: 1;
+}
+
+.cover-meta-grid {
+  width: 100%;
+  border-top: 2px solid #e5e9f0;
+  padding-top: 20px;
+  display: table;
+  table-layout: fixed;
+  margin-bottom: 16px;
+}
+
+.meta-block {
+  display: table-cell;
+  vertical-align: top;
+  padding-right: 16px;
+  text-align: center;
+}
+
+.meta-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #9aa5b1;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.meta-value {
+  font-size: 11px;
+  color: #243447;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cover-footer {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid #eef2f6;
+  font-size: 9.5px;
+  color: #9aa5b1;
+  font-weight: 500;
+}
+
+.cover-copyright {
+  float: left;
+}
+
+.cover-conf {
+  float: right;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.cover-footer::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+
+.cover-logo svg {
+  width: 120px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Адаптация для разных размеров логотипа */
+@media print {
+  .logo-img {
+    max-width: 100px;
+    max-height: 70px;
+  }
+  
+  .cover-title {
+    font-size: 38px;
+  }
+  
+  .cover-subtitle {
+    font-size: 16px;
+  }
+}

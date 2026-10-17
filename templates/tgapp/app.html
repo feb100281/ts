@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Продажи WB</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand:#2F6656;--brand-2:#1F5E4E;--brand-3:#3D7A67;--mint:#E7F1ED;--gold:#C9A24B;
+  --rise:#1F7A5C;--fall:#B5463B;--bg:#F3F6F5;--card:#FFFFFF;--ink:#17201D;--muted:#6B7A75;
+  --line:#E2E9E6;--soft:#EEF4F1;--shadow:0 8px 24px rgba(23,48,40,.08);
+}
+html.dark{
+  --bg:#0E1714;--card:#16221E;--ink:#E7EFEC;--muted:#8FA39C;--line:#22332D;--soft:#1B2A25;
+  --mint:#1D2E28;--rise:#4FC39A;--fall:#E5837A;--shadow:0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:15px/1.45 Inter,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit}
+b{font-weight:700}
+
+.top{position:relative;overflow:hidden;color:#fff;padding:20px 18px 64px;
+  background:radial-gradient(120% 140% at 100% 0%,#4E8F7B 0%,var(--brand) 45%,#163F35 100%)}
+.top:after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:0;
+  background:radial-gradient(circle,rgba(255,255,255,.18),transparent 70%)}
+.brand{font-size:11px;letter-spacing:.18em;font-weight:700;color:#CFE6DD;text-transform:uppercase}
+.hello{font-size:24px;font-weight:800;margin:6px 0 2px;letter-spacing:-.01em}
+.sub{color:#CFE6DD;font-size:13px}
+
+.reports{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:-46px 14px 14px;position:relative;z-index:2}
+.rep{border:0;background:var(--card);border-radius:0;padding:10px 4px 9px;box-shadow:var(--shadow);cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--muted);
+  transition:transform .12s,background .15s}
+.rep i{font-style:normal;font-size:21px;line-height:1}
+.rep:active{transform:scale(.96)}
+.rep.on{background:var(--brand);color:#fff}
+html.dark .rep.on{background:var(--brand-3)}
+
+.period{margin:0 14px 12px;background:var(--card);border-radius:0;padding:12px;box-shadow:var(--shadow)}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--soft);border-radius:0;padding:7px 13px;
+  font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.range{display:none;gap:8px;align-items:center;margin-top:10px}
+.range.show{display:flex}
+.range input{flex:1;min-width:0;height:40px;border-radius:0;border:1px solid var(--line);background:var(--soft);
+  color:var(--ink);padding:0 10px;font:inherit}
+.range button{height:40px;border:0;border-radius:0;background:var(--brand);color:#fff;font-weight:600;padding:0 14px}
+
+.head{margin:6px 18px 10px}
+.head h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.01em}
+.head p{margin:3px 0 0;color:var(--muted);font-size:13px}
+
+.kpis{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 14px 12px}
+.kpi{background:var(--card);border-radius:0;padding:12px 13px;box-shadow:var(--shadow);min-width:0;
+  animation:up .35s ease both}
+.kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.kpi .v{font-size:19px;font-weight:800;margin:4px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .d{font-size:12.5px;font-weight:600;color:var(--muted)}
+.kpi .d.good{color:var(--rise)} .kpi .d.bad{color:var(--fall)}
+.kpi.wide{grid-column:1/-1}
+
+.card{margin:0 14px 12px;background:var(--card);border-radius:0;box-shadow:var(--shadow);overflow:hidden;animation:up .35s ease both}
+.card h3{margin:0;padding:14px 16px 6px;font-size:14px;font-weight:700}
+.card .row{display:flex;gap:10px;padding:9px 16px;border-top:1px solid var(--line);font-size:14px}
+.card .row:first-of-type{border-top:0}
+.card .row .n{color:var(--muted);font-variant-numeric:tabular-nums;min-width:18px}
+.card .txt{padding:4px 16px 14px;font-size:14px}
+.card .txt p{margin:6px 0}
+.chartbox{padding:6px 12px 12px;min-height:220px}
+.up{color:var(--rise);font-weight:600} .down{color:var(--fall);font-weight:600}
+
+.files{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 14px 12px}
+.file{border:0;border-radius:0;background:var(--brand);color:#fff;font-weight:600;padding:12px 10px;
+  display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-size:13.5px;box-shadow:var(--shadow)}
+.file.alt{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.file:active{transform:scale(.97)}
+.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;border:0;background:none;padding:12px 16px 10px;font-weight:600;font-size:13.5px;color:var(--muted);
+  border-bottom:2px solid transparent;cursor:pointer}
+.tab.on{color:var(--brand);border-bottom-color:var(--brand)}
+html.dark .tab.on{color:#7FC2A9;border-bottom-color:#7FC2A9}
+.tbl{overflow-x:auto;max-height:420px;overflow-y:auto}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+.tbl th{position:sticky;top:0;background:var(--soft);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.03em;text-align:right;padding:8px 10px;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;max-width:150px;
+  overflow:hidden;text-overflow:ellipsis}
+.tbl th:first-child{background:var(--soft);z-index:2}
+.tbl td{padding:8px 10px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+.more{display:block;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:10px;color:var(--brand);font-weight:600;cursor:pointer}
+.dl-title{margin:4px 18px 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.legend{display:flex;gap:14px;padding:0 16px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle}
+.note{margin:4px 18px 16px;color:var(--muted);font-size:12px;line-height:1.45}
+
+.empty,.err{margin:28px 18px;text-align:center;color:var(--muted)}
+.sk{margin:0 14px 12px;border-radius:0;background:linear-gradient(90deg,var(--card),var(--soft),var(--card));
+  background-size:200% 100%;animation:sh 1.2s infinite linear}
+@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  background:#17201D;color:#fff;border-radius:0;padding:10px 14px;font-size:13px;opacity:0;transition:opacity .2s;
+  pointer-events:none;max-width:90%;text-align:center}
+.toast.show{opacity:.95}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand">Продажи · Wildberries</div>
+  <div class="hello" id="hello">Добрый день!</div>
+  <div class="sub" id="fresh">Загружаю…</div>
+</div>
+<div class="reports" id="reports"></div>
+<div class="period">
+  <div class="chips" id="presets"></div>
+  <div class="range" id="range">
+    <input type="date" id="da"><input type="date" id="db"><button id="go">OK</button>
+  </div>
+</div>
+<div id="out"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram ? Telegram.WebApp : null;
+const INIT = tg ? tg.initData : "";
+let META = null, REP = "s", PRESET = "7";
+const ICON = {s:"📊",k:"📦",b:"🏷",c:"🗂",w:"💸",a:"📣",n:"📅",m:"💰",l:"🔻",d:"💳",r:"📑"};
+// рост этих показателей — плохо (красным)
+const BAD_UP = /^(возврат|себестоим|комисс|расход|дрр|стоимость заказа|доля от продаж|убыт)/i;
+const NEUTRAL = /^(спп|скидка wb|платит покупатель|показы)/i;   // ни хорошо, ни плохо
+
+if (tg) {
+  tg.ready(); tg.expand();
+  if (tg.colorScheme === "dark") document.documentElement.classList.add("dark");
+  try { tg.setHeaderColor("#2F6656"); tg.setBackgroundColor(getComputedStyle(document.body).backgroundColor); } catch(e){}
+}
+const $ = s => document.querySelector(s);
+const haptic = () => { try { tg && tg.HapticFeedback.selectionChanged(); } catch(e){} };
+function toast(t){ const el=$("#toast"); el.textContent=t; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),2400); }
+async function api(path){
+  const r = await fetch(path, {headers: {"X-Telegram-Init-Data": INIT}});
+  const j = await r.json().catch(()=>({error:"Сервер не ответил"}));
+  if (!r.ok && !j.error) j.error = "Ошибка " + r.status;
+  return j;
+}
+const plain = s => (s||"").replace(/<[^>]+>/g,"");
+const label = t => t.replace(/^\S+\s/,"");
+
+function drawReports(){
+  $("#reports").innerHTML = META.reports.map(r =>
+    `<button class="rep ${r.code===REP?"on":""}" data-r="${r.code}"><i>${ICON[r.code]||"•"}</i>${label(r.title)}</button>`).join("");
+  document.querySelectorAll(".rep").forEach(b => b.onclick = () => {
+    haptic(); REP = b.dataset.r; const r = cur();
+    if (!r.presets.find(p => p.code===PRESET)) PRESET = r.presets[Math.min(1, r.presets.length-1)].code;
+    drawReports(); drawPresets(); load();
+  });
+}
+const cur = () => META.reports.find(r => r.code===REP);
+function drawPresets(){
+  const r = cur();
+  $("#presets").innerHTML = r.presets.map(p =>
+    `<button class="chip ${p.code===PRESET?"on":""}" data-p="${p.code}">${p.label}</button>`).join("")
+    + `<button class="chip ${PRESET==="custom"?"on":""}" data-p="custom">📅 ${r.single?"Дата":"Свой период"}</button>`;
+  $("#range").classList.toggle("show", PRESET==="custom");
+  $("#da").style.display = r.single ? "none" : "";
+  document.querySelectorAll(".chip").forEach(c => c.onclick = () => {
+    haptic(); PRESET = c.dataset.p; drawPresets(); if (PRESET!=="custom") load();
+  });
+}
+$("#go").onclick = () => { haptic(); load(); };
+
+function skeleton(){
+  $("#out").innerHTML = `<div class="sk" style="height:56px;margin-top:4px"></div>
+   <div class="kpis">${'<div class="sk" style="height:84px;margin:0"></div>'.repeat(4)}</div>
+   <div class="sk" style="height:240px"></div><div class="sk" style="height:180px"></div>`;
+}
+function deltaClass(lbl, rest){
+  const up = rest.includes("▲"), down = rest.includes("▼");
+  if ((!up && !down) || NEUTRAL.test(lbl.trim())) return "";
+  const inv = REP === "w" || BAD_UP.test(lbl.trim());
+  return (up !== inv) ? "good" : "bad";
+}
+function colorize(h){ return h.replace(/▲[^·<\n]*/g, m=>`<span class="up">${m}</span>`).replace(/▼[^·<\n]*/g, m=>`<span class="down">${m}</span>`); }
+
+async function load(){
+  let q = `rep=${REP}`;
+  if (PRESET === "custom") {
+    const a = $("#da").value, b = $("#db").value;
+    if (!b || (!cur().single && !a)) { toast("Выберите даты"); return; }
+    q += `&a=${cur().single ? b : a}&b=${b}`;
+  } else q += `&preset=${PRESET}`;
+  skeleton();
+  const d = await api(`/tg/api/report/?${q}`);
+  if (d.error) { $("#out").innerHTML = `<div class="err">${d.error}</div>`; return; }
+  if (d.empty) { $("#out").innerHTML = `<div class="empty">За этот период данных нет 🤷‍♀️</div>`; return; }
+  let h = `<div class="head"><h1>${d.title}</h1><p>${d.sub || d.period}</p></div>`;
+  if (d.kpis.length) {
+    h += `<div class="kpis">` + d.kpis.map((k,i) => {
+      const odd = d.kpis.length % 2 === 1 && i === d.kpis.length - 1;
+      return `<div class="kpi ${odd?"wide":""}" style="animation-delay:${i*30}ms"><div class="l">${k.label}</div>
+        <div class="v">${k.value}</div><div class="d ${deltaClass(k.label,k.rest)}">${k.rest||"&nbsp;"}</div></div>`;
+    }).join("") + `</div>`;
+  }
+  (d.charts||[]).forEach((c,i) => h += `<div class="card"><h3>${c.title}</h3>${legend(c)}<div class="chartbox" id="ch${i}"></div></div>`);
+  if ((d.tables||[]).length) h += `<div class="card" id="tblcard"><div class="tabs">` + d.tables.map((t,i) =>
+    `<button class="tab ${i?"":"on"}" data-t="${i}">${t.title}</button>`).join("") + `</div><div id="tblbody"></div></div>`;
+  d.sections.forEach((s,i) => {
+    h += `<div class="card" style="animation-delay:${80+i*40}ms">` + (s.title?`<h3>${s.title}</h3>`:"")
+      + s.rows.map((r,j)=>`<div class="row"><span class="n">${j+1}</span><span>${colorize(r)}</span></div>`).join("")
+      + (s.text.length?`<div class="txt">${s.text.map(t=>`<p>${colorize(t)}</p>`).join("")}</div>`:"") + `</div>`;
+  });
+  if (d.files.length) h += `<div class="dl-title">⬇️ Скачать файлом</div><div class="files">` + d.files.map((f,i) =>
+    `<button class="file ${i?"alt":""}" data-i="${i}">⬇️ ${/pdf/i.test(f.label)?"PDF":"Excel"}: ${f.label.replace(/^(Excel|PDF):\s*/,"")}</button>`).join("") + `</div>`;
+  d.notes.forEach(n => h += `<div class="note">${n}</div>`);
+  $("#out").innerHTML = h;
+  document.querySelectorAll(".file").forEach(b => b.onclick = () => download(d, d.files[+b.dataset.i]));
+  (d.charts||[]).forEach((c,i) => drawChart(c, "ch"+i));
+  if ((d.tables||[]).length) {
+    const show = i => { document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", +t.dataset.t===i)); drawTable(d.tables[i], 15); };
+    document.querySelectorAll(".tab").forEach(t => t.onclick = () => { haptic(); show(+t.dataset.t); });
+    show(0);
+  }
+}
+
+const SERIES_COLORS = ["var(--brand)", "#C9A24B", "#8FA39C"];
+function legend(c){
+  if (!c.series || c.series.length < 2) return "";
+  return `<div class="legend">` + c.series.map((s,i) => `<span><i style="background:${SERIES_COLORS[i]}"></i>${s.name}</span>`).join("") + `</div>`;
+}
+function cell(v, k){
+  if (v == null || v === "") return "—";
+  if (k === "text") return String(v).replace(/</g,"&lt;");
+  const n = +v, abs = Math.abs(n).toLocaleString("ru-RU", {maximumFractionDigits: k==="pct"||k==="signed_pct" ? 1 : 0});
+  if (k === "rub") return (n < 0 ? "−" : "") + abs + " ₽";
+  if (k === "pct") return (n < 0 ? "−" : "") + abs + "%";
+  if (k === "signed_pct") return `<span class="${n>0?"up":n<0?"down":""}">${n>0?"+":n<0?"−":""}${abs}%</span>`;
+  if (k === "signed") return `<span class="${n>0?"up":n<0?"down":""}">${n>0?"+":n<0?"−":""}${abs}</span>`;
+  return (n < 0 ? "−" : "") + abs;
+}
+function drawTable(t, limit){
+  const rows = limit ? t.rows.slice(0, limit) : t.rows;
+  let h = `<div class="tbl"><table><thead><tr>${t.cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`
+    + rows.map(r => `<tr>${r.map((v,i)=>`<td>${cell(v, t.kinds[i])}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>`;
+  if (limit && t.rows.length > limit) h += `<button class="more" id="more">Показать все (${t.rows.length})</button>`;
+  $("#tblbody").innerHTML = h;
+  const m = $("#more"); if (m) m.onclick = () => { haptic(); drawTable(t, 0); };
+}
+function fmtShort(v){
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v/1e6).toFixed(a >= 1e7 ? 0 : 1).replace(".",",") + " млн";
+  if (a >= 1e4) return Math.round(v/1e3) + " тыс";
+  if (a >= 100) return Math.round(v).toLocaleString("ru-RU");
+  return (Math.round(v*10)/10).toString().replace(".",",");
+}
+function drawChart(c, id){
+  // свой SVG без внешних библиотек: столбики, линия (одна или несколько) или горизонтальные столбики
+  const box = document.getElementById(id); if (!box) return;
+  const css = getComputedStyle(document.documentElement);
+  const brand = css.getPropertyValue("--brand").trim(), muted = css.getPropertyValue("--muted").trim();
+  const dark = document.documentElement.classList.contains("dark");
+  const pale = dark ? "#2C463E" : "#CBD9D4", grid = dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.07)";
+  const series = c.series || [{values: c.values}];
+  const W = (box.clientWidth || 364) - 24, vals = series[0].values.map(v => v == null ? null : +v), n = vals.length;
+  const allVals = series.flatMap(s => s.values).filter(v => v != null).map(Number);
+  const ns = "http://www.w3.org/2000/svg";
+  let svg = "";
+  if (c.type === "hbar") {
+    const H = 34 * n + 10, mx = Math.max(...vals.map(v => Math.abs(v||0))) || 1, hasNeg = vals.some(v => v < 0);
+    const x0 = hasNeg ? W * 0.5 : W * 0.38, span = hasNeg ? W * 0.3 : W * 0.42;
+    vals.forEach((v, i) => {
+      const y = 6 + i * 34, w = Math.abs(v) / mx * span, x = v >= 0 ? x0 : x0 - w;
+      const name = c.labels[i].length > 18 ? c.labels[i].slice(0,17) + "…" : c.labels[i];
+      svg += `<rect x="${x}" y="${y}" width="${Math.max(w,2)}" height="22" rx="0" fill="${v>=0?brand:"#C0705F"}"/>`;
+      svg += `<text x="${v>=0 ? x0-8 : x0+8}" y="${y+15}" font-size="12" fill="${muted}" text-anchor="${v>=0?"end":"start"}">${name}</text>`;
+      svg += `<text x="${v>=0 ? x+w+6 : x-6}" y="${y+15}" font-size="12" font-weight="700" fill="currentColor" text-anchor="${v>=0?"start":"end"}">${(v>0&&hasNeg?"+":"")+fmtShort(v)}</text>`;
+    });
+    box.innerHTML = `<svg xmlns="${ns}" width="${W}" height="${H}" style="color:var(--ink)">${svg}</svg>`;
+    box.style.height = H + "px";
+    return;
+  }
+  const H = 220, L = 46, R = 8, T = 18, B = 26, iw = W - L - R, ih = H - T - B;
+  const nums = allVals, lo = c.type === "line" ? Math.min(...nums) : 0, hi = Math.max(...nums) || 1;
+  const pad = c.type === "line" ? (hi - lo) * 0.15 || hi * 0.05 || 1 : 0;
+  const y0 = lo - pad, y1 = hi + pad * 1.2 + (c.type === "line" ? 0 : hi * 0.08);
+  const Y = v => T + ih - (v - y0) / (y1 - y0) * ih, X = i => L + (n === 1 ? iw/2 : i * iw / (c.type==="line" ? n-1 : n));
+  for (let k = 0; k <= 3; k++) {
+    const v = y0 + (y1 - y0) * k / 3, y = Y(v);
+    svg += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="${grid}"/><text x="${L-6}" y="${y+4}" font-size="10.5" fill="${muted}" text-anchor="end">${fmtShort(v)}</text>`;
+  }
+  const step = Math.ceil(n / 7), ncur = c.n_cur || n;
+  if (c.type === "line") {
+    series.forEach((s, si) => {
+      const col = si ? (si === 1 ? "#C9A24B" : "#8FA39C") : brand;
+      const pts = s.values.map((v, i) => v == null ? null : [X(i), Y(+v), +v]).filter(Boolean);
+      if (!pts.length) return;
+      const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+      if (series.length === 1) svg += `<path d="${d} L${pts[pts.length-1][0]} ${T+ih} L${pts[0][0]} ${T+ih} Z" fill="${brand}" opacity=".12"/>`;
+      svg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+      pts.forEach((p, i) => {
+        const lastPt = i === pts.length - 1;
+        if (!(c.label_all && n <= 14) && !lastPt) return;
+        svg += `<circle cx="${p[0]}" cy="${p[1]}" r="${lastPt?5:3.5}" fill="${col}" stroke="#fff" stroke-width="2"/>`;
+        const above = si === 0;
+        svg += `<text x="${lastPt ? Math.min(p[0], W-R) : p[0]}" y="${p[1] + (above ? -9 : 16)}" font-size="${lastPt?12:10.5}" font-weight="${lastPt?700:600}" fill="currentColor" text-anchor="${lastPt?"end":"middle"}">${fmtShort(p[2])}</text>`;
+      });
+    });
+  } else {
+    const bw = iw / n * 0.72;
+    vals.forEach((v, i) => {
+      if (v == null) return;
+      const x = X(i) + (iw / n - bw) / 2, y = Y(Math.max(v,0)), h = Math.max(Y(0) - y, 1);
+      svg += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="0" fill="${i >= n-ncur ? brand : pale}"><title>${c.labels[i]}: ${Math.round(v).toLocaleString("ru-RU")}</title></rect>`;
+    });
+    if (c.label_all && n <= 16) {
+      vals.forEach((v, i) => { if (v == null) return;
+        svg += `<text x="${X(i)+iw/n/2}" y="${Y(Math.max(v,0))-6}" font-size="${i===n-1?11.5:10.5}" font-weight="${i===n-1?700:600}" fill="${i===n-1?"currentColor":muted}" text-anchor="middle">${fmtShort(v)}</text>`; });
+    } else {
+      const lv = vals[n-1];
+      if (lv != null) svg += `<text x="${W-R}" y="${Y(lv)-7}" font-size="11.5" font-weight="700" fill="currentColor" text-anchor="end">${fmtShort(lv)}</text>`;
+    }
+  }
+  c.labels.forEach((t, i) => {
+    if ((n - 1 - i) % step) return;
+    const x = c.type === "line" ? X(i) : X(i) + iw / n / 2;
+    svg += `<text x="${x}" y="${H-8}" font-size="10.5" fill="${muted}" text-anchor="middle">${t}</text>`;
+  });
+  box.innerHTML = `<svg xmlns="${ns}" width="${W}" height="${H}" style="color:var(--ink)">${svg}</svg>`;
+}
+
+function download(d, f){
+  haptic();
+  const url = location.origin + f.url;
+  const ext = /pdf/i.test(f.label) ? "pdf" : "xlsx";
+  const name = `${plain(d.title).replace(/^\S+\s/,"").split(" · ")[0]} — ${f.label.replace(/^(Excel|PDF):\s*/,"")} ${d.period}.${ext}`;
+  if (tg && tg.downloadFile && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0")) {
+    try { tg.downloadFile({url, file_name: name}); return; } catch(e){}
+  }
+  if (tg && tg.openLink) tg.openLink(url); else window.open(url, "_blank");
+  toast("Файл готовится — откроется в браузере");
+}
+
+(async function init(){
+  if (!INIT) { $("#out").innerHTML = `<div class="err">Откройте приложение из бота продаж в Telegram.</div>`; $("#fresh").textContent=""; return; }
+  META = await api("/tg/api/meta/");
+  if (META.error) { $("#out").innerHTML = `<div class="err">${META.error}</div>`; $("#fresh").textContent=""; return; }
+  const h = new Date().getHours();
+  $("#hello").textContent = (h<6?"Доброй ночи":h<12?"Доброе утро":h<18?"Добрый день":"Добрый вечер") + (META.name?`, ${META.name}!`:"!");
+  const hi = new Date(META.hi);
+  $("#fresh").textContent = `Данные по ${hi.toLocaleDateString("ru-RU",{day:"numeric",month:"long"})} · как на сайте WB`;
+  $("#da").min = $("#db").min = META.lo; $("#da").max = $("#db").max = META.hi;
+  $("#db").value = META.hi; $("#da").value = META.hi.slice(0,8) + "01";
+  drawReports(); drawPresets(); load();
+})();
+</script>
+</body>
+</html>

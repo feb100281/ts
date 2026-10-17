@@ -1,0 +1,111 @@
+-- ============================================================
+-- ОСТАТКИ ДЕНЕЖНЫХ СРЕДСТВ НА ОТЧЁТНУЮ ДАТУ
+--
+-- Одна длинная таблица на два блока:
+--   block = 'BANK' — расшифровка по банковским счетам;
+--   block = 'WB'   — баланс личного кабинета маркетплейса.
+--
+-- Источники — витрины учётной системы: ba_balance_csv (обороты по
+-- счетам), corporate_bankaccount (справочник счетов, валюта и признак
+-- действующего), wb_balance_for_csv (ежедневный баланс WB).
+-- ============================================================
+
+CREATE OR REPLACE TEMP TABLE treasury AS
+
+WITH ba AS (
+
+    SELECT
+        t."Банковский счет" AS name,
+        ba.currency AS currency,
+
+        CASE
+            WHEN ba.is_active THEN 'Действующий'
+            ELSE 'Закрыт'
+        END AS status,
+
+        ROUND(SUM(t."Поступления"), 2) AS inflow,
+        ROUND(SUM(t."Расход"), 2) AS outflow,
+        ROUND(SUM(t."Поступления") - SUM(t."Расход"), 2) AS balance
+
+    FROM pg.ba_balance_csv t
+
+    JOIN pg.corporate_bankaccount ba
+        ON ba.bs_acc_id = t.acc_id
+
+    WHERE t.date_from <= $date_from
+
+    GROUP BY
+        t."Банковский счет",
+        ba.currency,
+        ba.is_active
+),
+
+
+-- накопительно с начала работы с площадкой
+wb_agg AS (
+
+    SELECT
+        ROUND(SUM("К перечислению продавцу"), 2) AS payable,
+        ROUND(SUM("Вывод средств"), 2) AS withdrawn
+
+    FROM pg.wb_balance_for_csv
+
+    WHERE date_from <= $date_from
+),
+
+
+-- состояние баланса на последнюю доступную дату не позже отчётной
+wb_last AS (
+
+    SELECT
+        date_from,
+        ROUND("Конечный баланс без ДВП ", 2) AS balance_no_transit,
+        ROUND("Деньги в пути (ДВП)", 2) AS transit,
+        ROUND("Конечный баланс", 2) AS balance
+
+    FROM pg.wb_balance_for_csv
+
+    WHERE date_from = (
+        SELECT MAX(date_from)
+        FROM pg.wb_balance_for_csv
+        WHERE date_from <= $date_from
+    )
+)
+
+
+SELECT
+    'BANK' AS block,
+    name,
+    currency,
+    status,
+    inflow,
+    outflow,
+    balance,
+    NULL::DOUBLE AS transit,
+    NULL::DOUBLE AS balance_no_transit,
+    NULL::DATE AS as_of
+
+FROM ba
+
+UNION ALL
+
+SELECT
+    'WB' AS block,
+    'Баланс маркетплейса WB' AS name,
+    'RUB' AS currency,
+    'Личный кабинет' AS status,
+    a.payable AS inflow,
+    a.withdrawn AS outflow,
+    l.balance,
+    l.transit,
+    l.balance_no_transit,
+    l.date_from::DATE AS as_of
+
+FROM wb_agg a
+CROSS JOIN wb_last l
+
+ORDER BY
+    block,
+    status,
+    balance DESC
+;

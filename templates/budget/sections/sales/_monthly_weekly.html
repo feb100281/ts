@@ -1,0 +1,185 @@
+<div id="section-sales-dynamics"></div>
+
+<div class="page-break"></div>
+
+<!-- Раздел I.4: Месячная и недельная динамика -->
+<div class="section-header">
+    <span class="section-number">I.4</span>
+    <div class="section-title-with-num">Месячная и недельная динамика</div>
+</div>
+
+<!-- Подраздел I.4.1: Динамика за последние 12 месяцев -->
+<div class="subsection-header">
+    <span class="subsection-number">I.4.1</span>
+    <div class="subsection-title">Динамика за последние 12 месяцев</div>
+</div>
+
+<table class="data compact months-table">
+    <thead>
+        <tr>
+            <th style="width:12%;">Период</th>
+            <th style="width:18%;">Чистая выручка</th>
+            <th style="width:13%;">Оборот</th>
+            <th style="width:13%;">Возвраты</th>
+            <th style="width:9%;">Продажи, шт.</th>
+            <th style="width:9%;">Возвраты, шт.</th>
+            <th style="width:8%;">Net, шт.</th>
+            <th style="width:12%;">Цена/шт</th>
+            <th style="width:6%;">Тренд</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in sales_block.months_12 %}
+        <tr>
+            <td class="left nowrap">{{ row.month_label }}</td>
+            <td class="bar-cell">
+                <div class="bar-wrap">
+                    <div class="bar-fill bar-net" style="width: {{ row.net_bar_pct }}%;"></div>
+                    <div class="bar-text">{{ row.net_amount_fmt }}</div>
+                </div>
+            </div>
+            <td class="right">{{ row.sales_amount_fmt }}</div>
+            <td class="right negative">{{ row.returns_amount_fmt }}</div>
+            <td class="right">{{ row.sales_qty_fmt }}</div>
+            <td class="right">{{ row.returns_qty_fmt }}</div>
+            <td class="right">{{ row.net_qty_fmt }}</div>
+            <td class="right nowrap">{{ row.avg_price_fmt }}</div>
+            <td class="center {{ row.net_trend_class }}">{{ row.net_trend }}</div>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if monthly_comment %}
+<div class="insight-box">
+    <strong>Комментарий по месячной динамике:</strong><br>
+    Изменение к предыдущему закрытому месяцу: {{ monthly_comment.value }}.<br>
+    {{ monthly_comment.comment }}
+
+    {% if monthly_comment.top_categories %}
+        <br><br><strong>Лидирующие категории месяца:</strong>
+        <ul>
+            {% for row in monthly_comment.top_categories %}
+                <li>{{ row.subject_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if monthly_comment.top_products %}
+        <strong>Лидирующие товары месяца:</strong>
+        <ul>
+            {% for row in monthly_comment.top_products %}
+                <li>{{ row.product_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <span class="muted">{{ monthly_comment.note }}</span>
+
+    {% if monthly_comment.open_month_note %}
+        <br><br><span class="muted">{{ monthly_comment.open_month_note }}</span>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="page-break"></div>
+
+<!-- Подраздел I.4.2: Недельная динамика продаж -->
+<div class="subsection-header">
+    <span class="subsection-number">I.4.2</span>
+    <div class="subsection-title">Недельная динамика продаж</div>
+</div>
+
+{% if weekly_trends %}
+<div class="small-note">
+    Период анализа: последние 12 недель, агрегировано по неделям.
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th style="width:28%;">Период</th>
+            <th style="width:18%;">Чистая выручка</th>
+            <th style="width:16%;">Оборот</th>
+            <th style="width:16%;">Возвраты</th>
+            <th style="width:11%;">Продажи, шт.</th>
+            <th style="width:11%;">Возвраты, шт.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in weekly_trends %}
+        <tr>
+            <td class="left nowrap">{{ row.week_label }}</div>
+            <td class="bar-cell">
+                <div class="bar-wrap">
+                    <div class="bar-fill bar-net" style="width: {{ row.net_fill_pct }}%;"></div>
+                    <div class="bar-text">{{ row.net_amount_fmt }}</div>
+                </div>
+            </div>
+            <td class="right">{{ row.sales_amount_fmt }}</div>
+            <td class="right negative">{{ row.returns_amount_fmt }}</div>
+            <td class="right">{{ row.sales_qty_fmt }}</div>
+            <td class="right">{{ row.returns_qty_fmt }}</div>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if weekly_comment %}
+<div class="insight-box">
+    <strong>Комментарий по недельной динамике:</strong><br>
+    Изменение к предыдущей закрытой неделе: {{ weekly_comment.value }}.<br>
+    {{ weekly_comment.comment }}
+
+    {% if weekly_comment.top_categories %}
+        <br><br><strong>Лидирующие категории недели:</strong>
+        <ul>
+            {% for row in weekly_comment.top_categories %}
+                <li>{{ row.subject_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if weekly_comment.top_products %}
+        <strong>Лидирующие товары недели:</strong>
+        <ul>
+            {% for row in weekly_comment.top_products %}
+                <li>{{ row.product_name }} ({{ row.net_amount_fmt }} руб.)</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <span class="muted">{{ weekly_comment.note }}</span>
+
+    {% if weekly_comment.open_week_note %}
+        <br><br><span class="muted">{{ weekly_comment.open_week_note }}</span>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Подраздел I.4.3: Графики недельной динамики -->
+<div class="page-break"></div>
+<div class="subsection-header">
+    <span class="subsection-number">I.4.3</span>
+    <div class="subsection-title">Визуализация недельной динамики</div>
+</div>
+
+{% if weekly_trends_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ weekly_trends_chart_base64 }}" alt="Недельная динамика чистой выручки">
+</div>
+{% endif %}
+
+{% if weekly_qty_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ weekly_qty_chart_base64 }}" alt="Недельная динамика количества продаж">
+</div>
+{% endif %}
+
+{% if weekly_avg_price_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ weekly_avg_price_chart_base64 }}" alt="Недельная динамика средней цены продажи">
+</div>
+{% endif %}
+
+{% endif %}
