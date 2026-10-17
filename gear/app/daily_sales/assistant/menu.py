@@ -305,6 +305,19 @@ def _photo(fn):
         return None
 
 
+HL_FILL = "E7F1ED"                                   # светло-зелёная заливка ключевых колонок
+
+
+def _highlight(ws, mp, cols, n):
+    """Колонки остатка — светло-зелёной заливкой (данные, без шапки)."""
+    from openpyxl.styles import PatternFill
+    fill = PatternFill("solid", start_color=HL_FILL, end_color=HL_FILL)
+    for i, c in enumerate(cols):
+        if str(c).startswith("Остаток") or str(c).startswith("Хватит остатка"):
+            for r in range(8, 8 + n):
+                ws.cell(row=r, column=mp.COL_CODE + i).fill = fill
+
+
 def _book(title: str, subtitle: str, sheets: list[tuple[str, list, list]], notes=None) -> bytes:
     """Excel в стиле мэн пака: листы (имя, колонки, строки) + описание."""
     import io
@@ -320,6 +333,7 @@ def _book(title: str, subtitle: str, sheets: list[tuple[str, list, list]], notes
         ws = wb.create_sheet(name[:31])
         _write_table(ws, mp, f"{title} — {name.lower()}", subtitle, None, cols, rows,
                      totals=opts.get("totals", True))
+        _highlight(ws, mp, cols, len(rows))
         if "Наименование" in cols:                          # закрепляем до наименования включительно
             ws.freeze_panes = ws.cell(row=8, column=mp.COL_CODE + cols.index("Наименование") + 1)
     if notes:
