@@ -85,7 +85,7 @@ def keyboard() -> dict:
                          [{"text": r["z"]}, {"text": r["g"]}],
                          [{"text": r["r"]}, {"text": BTN_AI}],
                          [{"text": BTN_HELP}]] + app_row(),
-            "resize_keyboard": True, "is_persistent": True,
+            "resize_keyboard": True, "is_persistent": False,   # можно свернуть значком у поля ввода
             "input_field_placeholder": "Кнопка или вопрос своими словами…"}
 
 

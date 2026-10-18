@@ -545,8 +545,9 @@ class Bot:
 
     def say(self, chat_id: int, text: str, markup: dict | None = None, raw: bool = False,
             silent: bool = False):
-        if markup is None and self.profile in ("sales", "finance"):
-            markup = keyboard(self.profile)          # меню внизу не теряется: ставим к каждому простому ответу
+        if markup is None and self.profile in ("sales", "finance") and chat_id not in self.menu_shown:
+            self.menu_shown.add(chat_id)             # после перезапуска меню ставим один раз, не навязываем
+            markup = keyboard(self.profile)
         parts = split(text if raw else to_html(text))
         for k, part in enumerate(parts):
             extra = {"reply_markup": markup} if markup and k == len(parts) - 1 else {}

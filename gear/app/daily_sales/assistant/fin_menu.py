@@ -85,7 +85,7 @@ def keyboard() -> dict:
                          [{"text": r["l"]}, {"text": r["x"]}],
                          [{"text": r["u"]}, {"text": r["mp"]}],
                          [{"text": BTN_AI}, {"text": BTN_HELP}] if AI else [{"text": BTN_HELP}]],
-            "resize_keyboard": True, "is_persistent": True,
+            "resize_keyboard": True, "is_persistent": False,   # можно свернуть значком у поля ввода
             "input_field_placeholder": "Кнопка, название, ИНН или сумма…"}
 
 
