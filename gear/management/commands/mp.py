@@ -180,9 +180,9 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     """
     L = []
     add = L.append
-    # corrected — цифры дашборда после СПП + строки корректировки до «P&L после СПП»
+    # corrected — лестница дашборда (до СПП) + корректировка до «P&L после СПП»
     if corrected:
-        after_spp, dashboard = True, True
+        after_spp, dashboard = False, True
     rev = "1.18" if corrected else "1.4"
 
     # ------------------------------------------------ 1. Выручка и маржа
@@ -196,8 +196,7 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("ratio", "1.5", "Скидка WB (СПП), %",
          ("__spp__", "1.1", -1), 2, FMT_PCT))
     add(("item", "1.4",
-         "Продажи без НДС после СПП (как в дашборде)" if corrected
-         else "Продажи без НДС после СПП (чистая выручка)" if after_spp
+"Продажи без НДС после СПП (чистая выручка)" if after_spp
          else "Продажи без НДС (как в дашборде)" if dashboard
          else "Продажи без НДС до СПП (чистая выручка)",
          (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
@@ -208,8 +207,7 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("ratio", "1.8", "Маржа продаж, % к выручке",
          ("1.7", "1.4", 1), 2, FMT_PCT))
     add(("item", "1.9",
-         "Комиссия WB без СПП (как в дашборде)" if corrected
-         else "Комиссия WB без СПП" if after_spp
+"Комиссия WB без СПП" if after_spp
          else "Комиссия WB (как в дашборде)" if dashboard
          else "Комиссия WB",
          (SEC_REVENUE, "1.9. Комиссия WB", 1), 1, FMT_MONEY))
@@ -226,9 +224,9 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     if corrected:
         add(("blank", None, None, None, 1, None))
         add(("band", None, "КОРРЕКТИРОВКА МАРЖИ ДАШБОРДА", None, 0, None))
-        add(("item", "1.14", "НДС с выручки: с цены покупателя, как в отчёте WB",
+        add(("item", "1.14", "НДС с выручки: до НДС из отчёта WB (с цены покупателя)",
              (SEC_REVENUE, CORR_VAT_REV, 1), 1, FMT_MONEY))
-        add(("item", "1.15", "НДС с комиссии WB: комиссия с НДС, как в P&L",
+        add(("item", "1.15", "Комиссия WB: до комиссии как в P&L (с НДС)",
              (SEC_REVENUE, CORR_VAT_COMM, 1), 1, FMT_MONEY))
         add(("calc", "1.16", "КОРРЕКТИРОВКА МАРЖИ",
              [("1.14", 1), ("1.15", 1)], 0, FMT_MONEY))
@@ -929,25 +927,30 @@ CORR_REV = "1.18 Продажи без НДС после СПП (P&L)"
 
 
 def pl_dashboard_corrected(pl_data, dash_rows):
-    """Дашборд после СПП + корректировка до «P&L после СПП».
+    """Лестница дашборда (до СПП) + корректировка до «P&L после СПП».
 
-    Разделы 3–8 — как в P&L, поэтому валовая прибыль и ниже совпадают
-    с листом «P&L после СПП». Корректировка = разница НДС с выручки
-    и НДС с комиссии между P&L и дашбордом.
+    Раздел 1 — цифры дашборда как есть. Корректировка доводит маржу после
+    комиссии до P&L; разделы 3–8 — как в P&L, поэтому прибыль ниже
+    совпадает с листом «P&L после СПП».
     """
     out = pl_after_spp(pl_data)
     for me, amount, retail, rev, cogs, comm, wb in dash_rows:
         p = lambda itm: pl_data.get((me, SEC_REVENUE, itm)) or 0.0
-        spp = p("1.1. Продажи до СПП") - p("1.3. Продажи после СПП")
-        true_rev = out.get((me, SEC_REVENUE, "1.4 Продажи без НДС")) or 0.0
-        true_comm = out.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0
-        d_rev, d_comm = rev - spp, comm + spp
-        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(d_rev, 2)
-        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(d_comm, 2)
-        out[(me, SEC_REVENUE, CORR_VAT_REV)] = round(true_rev - d_rev, 2)
-        out[(me, SEC_REVENUE, CORR_VAT_COMM)] = round(true_comm - d_comm, 2)
-        out[(me, SEC_REVENUE, CORR_REV)] = round(true_rev, 2)
+        out[(me, SEC_REVENUE, "1.1. Продажи до СПП")] = round(amount, 2)
+        out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
+        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
+        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(comm, 2)
+        out[(me, SEC_REVENUE, CORR_VAT_REV)] = round(p("1.4 Продажи без НДС") - rev, 2)
+        out[(me, SEC_REVENUE, CORR_VAT_COMM)] = round(p("1.9. Комиссия WB") - comm, 2)
+        # себестоимость дашборда совпадает с P&L — оставлена из P&L
+        out[(me, SEC_REVENUE, CORR_REV)] = round(pl_after_spp_rev(pl_data, me), 2)
     return out
+
+
+def pl_after_spp_rev(pl_data, me):
+    """Продажи без НДС после СПП, как на листе «P&L после СПП»."""
+    p = lambda itm: pl_data.get((me, SEC_REVENUE, itm)) or 0.0
+    return p("1.4 Продажи без НДС") - (p("1.1. Продажи до СПП") - p("1.3. Продажи после СПП"))
 
 
 def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
@@ -975,7 +978,7 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
         else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) ПОСЛЕ СПП" if after_spp
         else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) КАК В ДАШБОРДЕ" if dashboard
         else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L)",
-        ("Маржа дашборда после СПП + корректировка НДС · с валовой прибыли "
+        ("Лестница дашборда (до СПП) + корректировка маржи · с валовой прибыли "
          "цифры совпадают с листом «P&L после СПП»") if corrected
         else ("Выручка и комиссия WB по цене покупателя (после СПП) · "
          "прибыль та же, что на листе «P&L»") if after_spp
@@ -4702,8 +4705,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                                   "покупателя (после СПП), как в бухгалтерии"),
         (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
                                   "дашборда продаж — для сравнения"),
-        (PL_CORRECTED_SHEET_NAME, "Маржа дашборда после СПП и строка корректировки "
-                                  "НДС до маржи «P&L после СПП»"),
+        (PL_CORRECTED_SHEET_NAME, "P&L как в дашборде (до СПП) с корректировкой "
+                                  "маржи до итогов «P&L после СПП»"),
         (PL_BRIDGE_SHEET_NAME, "Почему маржа дашборда отличается от P&L: разница "
                                "по слагаемым, поправка в ₽ и %, НДС с СПП по брендам"),
         (NOTES_SHEET_NAME, "Расшифровка каждой строки P&L: статья, "
