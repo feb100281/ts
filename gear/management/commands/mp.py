@@ -171,7 +171,7 @@ SEC_FIN = "8. ФИНАНСОВЫЕ РАСХОДЫ"
 TAX_SUBITEM = "125200 Налог на прибыль"
 
 
-def pl_layout(after_spp=False, dashboard=False):
+def pl_layout(after_spp=False, dashboard=False, corrected=False):
     """Возвращает список строк P&L в порядке вывода.
 
     after_spp — вариант «после СПП»: выручка и комиссия по цене покупателя.
@@ -180,6 +180,10 @@ def pl_layout(after_spp=False, dashboard=False):
     """
     L = []
     add = L.append
+    # corrected — цифры дашборда после СПП + строки корректировки до «P&L после СПП»
+    if corrected:
+        after_spp, dashboard = True, True
+    rev = "1.18" if corrected else "1.4"
 
     # ------------------------------------------------ 1. Выручка и маржа
     add(("band", "1", "ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ", None, 0, None))
@@ -192,7 +196,8 @@ def pl_layout(after_spp=False, dashboard=False):
     add(("ratio", "1.5", "Скидка WB (СПП), %",
          ("__spp__", "1.1", -1), 2, FMT_PCT))
     add(("item", "1.4",
-         "Продажи без НДС после СПП (чистая выручка)" if after_spp
+         "Продажи без НДС после СПП (как в дашборде)" if corrected
+         else "Продажи без НДС после СПП (чистая выручка)" if after_spp
          else "Продажи без НДС (как в дашборде)" if dashboard
          else "Продажи без НДС до СПП (чистая выручка)",
          (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
@@ -203,7 +208,8 @@ def pl_layout(after_spp=False, dashboard=False):
     add(("ratio", "1.8", "Маржа продаж, % к выручке",
          ("1.7", "1.4", 1), 2, FMT_PCT))
     add(("item", "1.9",
-         "Комиссия WB без СПП" if after_spp
+         "Комиссия WB без СПП (как в дашборде)" if corrected
+         else "Комиссия WB без СПП" if after_spp
          else "Комиссия WB (как в дашборде)" if dashboard
          else "Комиссия WB",
          (SEC_REVENUE, "1.9. Комиссия WB", 1), 1, FMT_MONEY))
@@ -216,15 +222,34 @@ def pl_layout(after_spp=False, dashboard=False):
     if after_spp:
         add(("calc", "1.13", "Справочно: СПП, исключённая из выручки и комиссии",
              [("1.1", 1), ("1.3", -1)], 2, FMT_MONEY))
+    gp_base = "1.11"
+    if corrected:
+        add(("blank", None, None, None, 1, None))
+        add(("band", None, "КОРРЕКТИРОВКА МАРЖИ ДАШБОРДА", None, 0, None))
+        add(("item", "1.14", "НДС с выручки: с цены покупателя, как в отчёте WB",
+             (SEC_REVENUE, CORR_VAT_REV, 1), 1, FMT_MONEY))
+        add(("item", "1.15", "НДС с комиссии WB: комиссия с НДС, как в P&L",
+             (SEC_REVENUE, CORR_VAT_COMM, 1), 1, FMT_MONEY))
+        add(("calc", "1.16", "КОРРЕКТИРОВКА МАРЖИ",
+             [("1.14", 1), ("1.15", 1)], 0, FMT_MONEY))
+        add(("ratio", "1.16%", "Корректировка, % к выручке дашборда",
+             ("1.16", "1.4", 1), 2, FMT_PCT))
+        add(("calc", "1.17", "МАРЖА ПОСЛЕ КОМИССИИ С КОРРЕКТИРОВКОЙ",
+             [("1.11", 1), ("1.16", 1)], 0, FMT_MONEY))
+        add(("item", "1.18", "Продажи без НДС после СПП (как в «P&L после СПП»)",
+             (SEC_REVENUE, CORR_REV, 1), 2, FMT_MONEY))
+        add(("ratio", "1.19", "Маржа после комиссии с корректировкой, % к выручке",
+             ("1.17", "1.18", 1), 2, FMT_PCT))
+        gp_base = "1.17"
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ 3. Расходы на реализацию
     add(("band", "3", "РАСХОДЫ НА РЕАЛИЗАЦИЮ", None, 0, None))
     add(("sum", "3", "Итого расходы на реализацию", SEC_SELLING, 0, FMT_MONEY))
     add(("calc", "GP1", "ВАЛОВАЯ ПРИБЫЛЬ ДО ПРОДВИЖЕНИЯ WB",
-         [("1.11", 1), ("3", 1)], 0, FMT_MONEY))
+         [(gp_base, 1), ("3", 1)], 0, FMT_MONEY))
     add(("ratio", "GP1%", "Рентабельность до продвижения, % к выручке",
-         ("GP1", "1.4", 1), 2, FMT_PCT))
+         ("GP1", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ 4. Продвижение WB
@@ -233,7 +258,7 @@ def pl_layout(after_spp=False, dashboard=False):
     add(("calc", "GP2", "ВАЛОВАЯ ПРИБЫЛЬ ПОСЛЕ ПРОДВИЖЕНИЯ WB",
          [("GP1", 1), ("4", 1)], 0, FMT_MONEY))
     add(("ratio", "GP2%", "Рентабельность после продвижения, % к выручке",
-         ("GP2", "1.4", 1), 2, FMT_PCT))
+         ("GP2", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ 5. Прочие доходы/расходы
@@ -242,7 +267,7 @@ def pl_layout(after_spp=False, dashboard=False):
     add(("calc", "GP3", "ПРИБЫЛЬ ПОСЛЕ ПРОЧИХ ДОХОДОВ/РАСХОДОВ",
          [("GP2", 1), ("5", 1)], 0, FMT_MONEY))
     add(("ratio", "GP3%", "Рентабельность после прочих, % к выручке",
-         ("GP3", "1.4", 1), 2, FMT_PCT))
+         ("GP3", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ 6-7. Накладные и корп.
@@ -256,7 +281,7 @@ def pl_layout(after_spp=False, dashboard=False):
     add(("calc", "EBITDA", "EBITDA (до финансовых расходов)",
          [("GP3", 1), ("6", 1), ("7", 1)], 0, FMT_MONEY))
     add(("ratio", "EBITDA%", "Рентабельность по EBITDA, % к выручке",
-         ("EBITDA", "1.4", 1), 2, FMT_PCT))
+         ("EBITDA", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ 8. Финансовые расходы
@@ -268,7 +293,7 @@ def pl_layout(after_spp=False, dashboard=False):
          None, 1, FMT_MONEY))
     add(("calc", "NP", "ЧИСТАЯ ПРИБЫЛЬ", [("EBT", 1), ("TAX", 1)], 0, FMT_MONEY))
     add(("ratio", "NP%", "Рентабельность по чистой прибыли, % к выручке",
-         ("NP", "1.4", 1), 2, FMT_PCT))
+         ("NP", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ Справочно: юнит-экономика
@@ -897,9 +922,37 @@ def pl_after_spp(pl_data):
     return out
 
 
+PL_CORRECTED_SHEET_NAME = "P&L дашборд с корректировкой"
+CORR_VAT_REV = "1.14 Корректировка НДС с выручки"
+CORR_VAT_COMM = "1.15 Корректировка НДС с комиссии"
+CORR_REV = "1.18 Продажи без НДС после СПП (P&L)"
+
+
+def pl_dashboard_corrected(pl_data, dash_rows):
+    """Дашборд после СПП + корректировка до «P&L после СПП».
+
+    Разделы 3–8 — как в P&L, поэтому валовая прибыль и ниже совпадают
+    с листом «P&L после СПП». Корректировка = разница НДС с выручки
+    и НДС с комиссии между P&L и дашбордом.
+    """
+    out = pl_after_spp(pl_data)
+    for me, amount, retail, rev, cogs, comm, wb in dash_rows:
+        p = lambda itm: pl_data.get((me, SEC_REVENUE, itm)) or 0.0
+        spp = p("1.1. Продажи до СПП") - p("1.3. Продажи после СПП")
+        true_rev = out.get((me, SEC_REVENUE, "1.4 Продажи без НДС")) or 0.0
+        true_comm = out.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0
+        d_rev, d_comm = rev - spp, comm + spp
+        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(d_rev, 2)
+        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(d_comm, 2)
+        out[(me, SEC_REVENUE, CORR_VAT_REV)] = round(true_rev - d_rev, 2)
+        out[(me, SEC_REVENUE, CORR_VAT_COMM)] = round(true_comm - d_comm, 2)
+        out[(me, SEC_REVENUE, CORR_REV)] = round(true_rev, 2)
+    return out
+
+
 def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
              note_anchors=None, rowmap_out=None, after_spp=False,
-             dashboard=False):
+             dashboard=False, corrected=False):
     as_of = as_of or report_date
     """
     pl_data      — {(me, section, item): value}
@@ -918,10 +971,13 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     sheet_setup(ws)
     title_band(
         ws,
-        "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) ПОСЛЕ СПП" if after_spp
+        "P&L ДАШБОРДА С КОРРЕКТИРОВКОЙ МАРЖИ" if corrected
+        else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) ПОСЛЕ СПП" if after_spp
         else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L) КАК В ДАШБОРДЕ" if dashboard
         else "ОТЧЁТ О ПРИБЫЛЯХ И УБЫТКАХ (P&L)",
-        ("Выручка и комиссия WB по цене покупателя (после СПП) · "
+        ("Маржа дашборда после СПП + корректировка НДС · с валовой прибыли "
+         "цифры совпадают с листом «P&L после СПП»") if corrected
+        else ("Выручка и комиссия WB по цене покупателя (после СПП) · "
          "прибыль та же, что на листе «P&L»") if after_spp
         else ("Продажи, себестоимость, комиссия и расходы WB — те же цифры, что "
               "в дашборде продаж; валовая прибыль после продвижения = "
@@ -939,7 +995,7 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
     columns_header(ws, cols, hdr_year, hdr, report_date.year, note_header="НОТА")
 
     # ---- раскладка строк: сначала распределяем номера строк
-    layout = pl_layout(after_spp, dashboard)
+    layout = pl_layout(after_spp, dashboard, corrected)
     plan = []          # (kind, code, label, spec, level, fmt)
     for spec in layout:
         kind, code, label, src, level, fmt = spec
@@ -4256,17 +4312,23 @@ def bridge_rows(pl_data, dash_pl, months):
 
 
 def brand_vat_spp(start, end):
-    """НДС с СПП по брендам за период: (brand, до СПП, после СПП, СПП, НДС с СПП)."""
+    """По брендам: (brand, до СПП, после СПП, НДС с СПП, НДС с комиссии, итог).
+
+    Комиссия = до СПП − к перечислению. НДС — расчёт по ставке.
+    """
     from gear.app.daily_sales import wb_sales_export as wse
     df = wse.fetch(start, end, "brand", [])
     if df is None or df.empty:
         return []
-    r = vat_rate(end)
+    k = vat_rate(end) / (100 + vat_rate(end))
+    num = lambda x, c: float(x.get(c) or 0)
     rows = []
     for _, x in df.iterrows():
-        a, b = float(x.get("rp_net") or 0), float(x.get("ra_net") or 0)
-        rows.append((str(x.get("brand") or "—"), a, b, a - b, (a - b) * r / (100 + r)))
-    return sorted(rows, key=lambda t: -t[4])
+        a, b = num(x, "До СПП: итого, ₽"), num(x, "После СПП: итого, ₽")
+        comm = a - num(x, "К перечислению, ₽")
+        v_spp, v_comm = -(a - b) * k, comm * k
+        rows.append((str(x.get("Бренд") or "—"), a, b, v_spp, v_comm, v_spp + v_comm))
+    return sorted(rows, key=lambda t: -abs(t[5]))
 
 
 def build_pl_bridge(ws, pl_data, dash_pl, months, report_date, as_of=None):
@@ -4376,44 +4438,43 @@ def build_pl_bridge(ws, pl_data, dash_pl, months, report_date, as_of=None):
         brands = []
     if brands:
         r += 1
-        write(ws, r, COL_LABEL, "НДС С СПП ПО БРЕНДАМ ЗА %s" % report_date.strftime("%m.%Y"),
+        write(ws, r, COL_LABEL, "ОЦЕНКА ПО БРЕНДАМ ЗА %s (РАСЧЁТ ПО СТАВКЕ)" % report_date.strftime("%m.%Y"),
               font=f_bold, indent=1)
         r += 1
-        heads = ["Бренд", "До СПП", "После СПП", "СПП", "НДС с СПП",
-                 "Равномерно %", "Перекос"]
+        heads = ["Бренд", "До СПП", "После СПП", "НДС с СПП", "НДС с комиссии",
+                 "Итог по бренду", "Равномерно %", "Перекос"]
         cols = [COL_LABEL] + [COL_FIRST + i for i in range(len(heads) - 1)]
         for c, h in zip(cols, heads):
             write(ws, r, c, h, font=f_hdr, fillc=NAVY, align="left" if c == COL_LABEL else "right",
                   indent=1 if c == COL_LABEL else 0, wrap=True)
         ws.row_dimensions[r].height = 28
         r += 1
-        tot_a = sum(b[1] for b in brands) or 1.0
-        tot_v = sum(b[4] for b in brands)
-        for name, a, b, s, v in brands:
-            even = a / tot_a * tot_v
-            vals = [a, b, s, v, even, v - even]
+        tot_a = sum(x[1] for x in brands) or 1.0
+        tot_n = sum(x[5] for x in brands)
+        for name, a_, b_, vs, vc, net in brands:
+            even = a_ / tot_a * tot_n
             write(ws, r, COL_LABEL, name, font=f_txt, border=B_BOTTOM, indent=1)
-            for c, x in zip(cols[1:], vals):
+            for c, x in zip(cols[1:], [a_, b_, vs, vc, net, even, net - even]):
                 write(ws, r, c, round(x, 2), font=f_txt, fmt=FMT_MONEY,
                       border=B_BOTTOM, align="right")
             r += 1
         write(ws, r, COL_LABEL, "Итого", font=f_bold, border=B_TOTAL, indent=1)
-        for c, x in zip(cols[1:], [tot_a, sum(b[2] for b in brands),
-                                   sum(b[3] for b in brands), tot_v, tot_v, 0]):
+        tots = [sum(x[i] for x in brands) for i in (1, 2, 3, 4, 5)] + [tot_n, 0]
+        for c, x in zip(cols[1:], tots):
             write(ws, r, c, round(x, 2), font=f_bold, fmt=FMT_MONEY,
                   border=B_TOTAL, align="right")
         r += 1
 
     notes = [
-        "Как читать. В P&L НДС берётся из отчёта WB — он начислен на цену покупателя "
-        "(после СПП). Дашборд снимает НДС ставкой с цены до СПП, то есть дополнительно "
-        "с суммы СПП, которую мы не получаем от покупателя. Поэтому маржа дашборда ниже.",
-        "Строки «НДС с суммы СПП» и «Перекос» — расчёт по ставке (22 % с 2026 г., 20 % "
+        "Как читать. Дашборд отличается от P&L двумя встречными эффектами: снимает НДС "
+        "с цены до СПП (в P&L — НДС из отчёта WB, с цены покупателя) — маржа ниже; "
+        "берёт комиссию WB без НДС (в P&L — с НДС) — маржа выше.",
+        "Строки «НДС с суммы СПП» и таблица по брендам — расчёт по ставке (22 % с 2026 г., 20 % "
         "ранее), а не данные отчёта. Остальные строки — те же цифры, что на листах "
         "«P&L» и «P&L дашборд».",
         "«Равномерно %» — как распределилась бы общая поправка пропорционально продажам "
-        "до СПП. «Перекос» показывает, насколько единый процент ошибается по бренду: "
-        "у брендов с большой СПП поправка должна быть больше.",
+        "до СПП. «Перекос» показывает, насколько единый процент ошибается по бренду. "
+        "Бренды — оценка по ставке, их итог не обязан совпасть с помесячной разницей.",
         "«Проверка» должна быть 0: слагаемые полностью объясняют разницу.",
     ]
     r += 1
@@ -4539,6 +4600,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_pl = wb.create_sheet("P&L")
     ws_pl_spp = wb.create_sheet(PL_AFTER_SPP_SHEET_NAME)
     ws_pl_dash = wb.create_sheet(PL_DASHBOARD_SHEET_NAME)
+    ws_pl_corr = wb.create_sheet(PL_CORRECTED_SHEET_NAME)
     ws_bridge = wb.create_sheet(PL_BRIDGE_SHEET_NAME)
     ws_notes_pl = wb.create_sheet(NOTES_SHEET_NAME)
     ws_unit = wb.create_sheet("Юнит-экономика")
@@ -4564,6 +4626,9 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors,
              dashboard=True)
+    build_pl(ws_pl_corr, pl_dashboard_corrected(pl_data, dash_rows), tax_by_month,
+             months, report_date, as_of=date_from, note_anchors=note_anchors,
+             corrected=True)
     build_pl_bridge(ws_bridge, pl_data, pl_dashboard(pl_data, dash_rows), months,
                     report_date, as_of=date_from)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
@@ -4637,6 +4702,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                                   "покупателя (после СПП), как в бухгалтерии"),
         (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
                                   "дашборда продаж — для сравнения"),
+        (PL_CORRECTED_SHEET_NAME, "Маржа дашборда после СПП и строка корректировки "
+                                  "НДС до маржи «P&L после СПП»"),
         (PL_BRIDGE_SHEET_NAME, "Почему маржа дашборда отличается от P&L: разница "
                                "по слагаемым, поправка в ₽ и %, НДС с СПП по брендам"),
         (NOTES_SHEET_NAME, "Расшифровка каждой строки P&L: статья, "
