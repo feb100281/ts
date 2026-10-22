@@ -188,11 +188,11 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
 
     # ------------------------------------------------ 1. Выручка и маржа
     add(("band", "1", "ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ", None, 0, None))
-    add(("item", "1.1", "Продажи до СПП (валовый оборот)",
+    add(("item", "1.1", "Продажи до СПП с НДС (валовый оборот)",
          (SEC_REVENUE, "1.1. Продажи до СПП", 1), 1, FMT_MONEY))
-    add(("item", "1.2", "Продажи по отчёту WB",
+    add(("item", "1.2", "Продажи по отчёту WB с НДС",
          (SEC_REVENUE, "1.2. Продажи по отчету WB", 1), 1, FMT_MONEY))
-    add(("item", "1.3", "Продажи после СПП",
+    add(("item", "1.3", "Продажи после СПП с НДС",
          (SEC_REVENUE, "1.3. Продажи после СПП", 1), 1, FMT_MONEY))
     add(("ratio", "1.5", "Скидка WB (СПП), %",
          ("__spp__", "1.1", -1), 2, FMT_PCT))
@@ -209,8 +209,8 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("ratio", "1.8", "Маржа продаж, % к выручке",
          ("1.7", "1.4", 1), 2, FMT_PCT))
     add(("item", "1.9",
-         "Комиссия WB без НДС (НДС снят расчётно по ставке)" if calc_vat
-         else "Комиссия WB без СПП" if after_spp
+         "Комиссия WB без НДС (НДС по ставке со всей комиссии до СПП)" if calc_vat
+         else "Комиссия WB без СПП, без НДС" if after_spp
          else "Комиссия WB (как в дашборде)" if dashboard
          else "Комиссия WB",
          (SEC_REVENUE, "1.9. Комиссия WB", 1), 1, FMT_MONEY))
@@ -227,9 +227,9 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     if corrected:
         add(("blank", None, None, None, 1, None))
         add(("band", None, "КОРРЕКТИРОВКА МАРЖИ ПО НДС", None, 0, None))
-        add(("item", "1.14", "Корректировка НДС с продаж: расчётный НДС → НДС по отчёту WB (с цены после СПП)",
+        add(("item", "1.14", "Корректировка НДС с продаж: НДС с цены до СПП → НДС с цены покупателя (после СПП)",
              (SEC_REVENUE, CORR_VAT_REV, 1), 1, FMT_MONEY))
-        add(("item", "1.15", "Корректировка комиссии WB: расчётный НДС возвращён в комиссию (комиссия с НДС)",
+        add(("item", "1.15", "Корректировка комиссии WB: НДС по ставке со всей комиссии → фактический НДС WB с вознаграждения",
              (SEC_REVENUE, CORR_VAT_COMM, 1), 1, FMT_MONEY))
         add(("calc", "1.16", "ИТОГО КОРРЕКТИРОВКА МАРЖИ ПО НДС",
              [("1.14", 1), ("1.15", 1)], 0, FMT_MONEY))
@@ -237,7 +237,7 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
              ("1.16", "1.4", 1), 2, FMT_PCT))
         add(("calc", "1.17", "МАРЖА ПОСЛЕ КОМИССИИ С КОРРЕКТИРОВКОЙ",
              [("1.11", 1), ("1.16", 1)], 0, FMT_MONEY))
-        add(("item", "1.18", "Продажи без НДС после СПП (НДС по отчёту WB) — база для % ниже",
+        add(("item", "1.18", "Продажи без НДС после СПП (НДС с цены покупателя) — база для % ниже",
              (SEC_REVENUE, CORR_REV, 1), 2, FMT_MONEY))
         add(("ratio", "1.19", "Маржа после комиссии с корректировкой, % к выручке",
              ("1.17", "1.18", 1), 2, FMT_PCT))
@@ -524,7 +524,8 @@ NOTES_PL = [
         "(после СПП), как в бухгалтерии и в УПД WB.",
         "Выручка без НДС после СПП = продажи до СПП − СПП − НДС; комиссия WB без "
         "СПП = комиссия WB + СПП. Сумма СПП — справочно в строке 1.13.",
-        "НДС — по отчёту WB, с цены покупателя. Комиссия WB — с НДС.",
+        "НДС с продаж — с цены покупателя. Комиссия WB — без НДС: вычитается "
+        "фактический НДС с вознаграждения из отчёта WB.",
     ]),
     ("Лист «P&L дашборд»", [
         "Раздел 1 (продажи, себестоимость, комиссия) взят из того же запроса, "
@@ -540,13 +541,14 @@ NOTES_PL = [
         "«P&L после СПП».",
     ]),
     ("Лист «P&L дашборд с корректировкой»", [
-        "Раздел 1 — расчётная лестница: НДС с продаж снят по ставке карточки с цены "
-        "до СПП, из комиссии WB НДС тоже снят расчётно по ставке.",
-        "Строка 1.14 — корректировка НДС с продаж: расчётный НДС заменяется НДС по "
-        "отчёту WB. В отчёте WB НДС начислен на цену покупателя (после СПП), поэтому "
-        "он меньше расчётного на НДС с суммы СПП.",
-        "Строка 1.15 — корректировка комиссии WB: расчётно снятый НДС возвращается "
-        "в комиссию, так как в учёте комиссия WB отражается с НДС.",
+        "Раздел 1 — расчётная лестница: НДС снят по ставке карточки с цены до СПП "
+        "и со всей комиссии WB до СПП.",
+        "Строка 1.14 — корректировка НДС с продаж: НДС с цены до СПП заменяется НДС "
+        "с цены покупателя (после СПП). Разница — в основном НДС с суммы СПП.",
+        "Строка 1.15 — корректировка комиссии WB: НДС по ставке со всей комиссии "
+        "заменяется фактическим НДС с вознаграждения из отчёта WB. В комиссии до СПП "
+        "сидят СПП, ПВЗ и эквайринг, на которые WB НДС не начисляет, поэтому "
+        "расчётный НДС завышен и комиссия занижена.",
         "Строка 1.16 — итого корректировка маржи по НДС. Маржа после комиссии с "
         "корректировкой (1.17) и всё, что ниже, совпадают с листом «P&L после СПП». "
         "Проценты рентабельности ниже считаются от продаж без НДС после СПП (1.18).",
@@ -939,7 +941,7 @@ PL_CORRECTED_SHEET_NAME = "P&L дашборд с корректировкой"
 CORR_VAT_REV = "1.14 Корректировка НДС с выручки"
 CORR_VAT_COMM = "1.15 Корректировка НДС с комиссии"
 CORR_REV = "1.18 Продажи без НДС после СПП (P&L)"
-CORR_FILL = "FFF2CC"    # блок корректировки — светло-жёлтый
+CORR_FILL = "FFFAEB"    # блок корректировки — бледно-жёлтый
 CORR_CODES = {"1.14", "1.15", "1.16", "1.16%", "1.17", "1.18", "1.19"}
 
 
@@ -999,7 +1001,7 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
          "по отчёту WB · с валовой прибыли цифры совпадают с листом «P&L после СПП»")
         if corrected
         else ("Выручка и комиссия WB по цене покупателя (после СПП) · "
-         "НДС по отчёту WB · основной P&L пакета") if after_spp
+         "НДС с цены покупателя · основной P&L пакета") if after_spp
         else ("Продажи, себестоимость, комиссия и расходы WB — те же цифры, что "
               "в дашборде продаж; валовая прибыль после продвижения = "
               "«Финансовый результат» дашборда") if dashboard
@@ -1738,6 +1740,10 @@ U_COMISSION = "net_comission"
 U_WB_COSTS = "wb_costs_vatless"
 U_PROMO = "promo_vatless"
 U_NET_PROFIT = "net_profit"
+U_CORR_REV = "corr_vat_rev"        # корректировка НДС с продаж до P&L
+U_CORR_COMM = "corr_vat_comm"      # корректировка комиссии WB до P&L
+U_REV_AFTER = "rev_after_spp"      # продажи без НДС после СПП, как в P&L
+UNIT_CORR_CODES = {"3.5", "3.6", "3.7", "3.8"}
 
 
 def unit_layout():
@@ -1764,8 +1770,10 @@ def unit_layout():
          (U_RETAIL, 1), "income", FMT_MONEY))
     add(("ratio", "1.4", "Скидка WB (СПП), % к продажам до СПП",
          ("__spp__", "1.2", 100), "ratio_cost", FMT_PCT))
-    add(("data", "1.5", "Продажи до СПП без НДС (база маржинальности)",
+    add(("data", "1.5", "Продажи до СПП без НДС, расчётный НДС по ставке",
          (U_VATLESS, 1), "total", FMT_MONEY))
+    add(("data", "1.6", "Продажи без НДС после СПП (НДС с цены покупателя) — база для % ниже",
+         (U_REV_AFTER, 1), "income", FMT_MONEY))
     add(("blank", None, None, None, None, None))
 
     add(("band", "2", "ПОКАЗАТЕЛИ НА ЕДИНИЦУ", None, None, None))
@@ -1793,25 +1801,38 @@ def unit_layout():
          (U_PROMO, 1), "expense", FMT_MONEY))
     add(("blank", None, None, None, None, None))
 
+    add(("band", None, "КОРРЕКТИРОВКА МАРЖИ ПО НДС", None, None, None))
+    add(("data", "3.5", "Корректировка НДС с продаж: НДС с цены до СПП → НДС с цены "
+                        "покупателя (после СПП)",
+         (U_CORR_REV, 1), "income", FMT_MONEY))
+    add(("data", "3.6", "Корректировка комиссии WB: НДС по ставке со всей комиссии → "
+                        "фактический НДС WB с вознаграждения",
+         (U_CORR_COMM, 1), "expense", FMT_MONEY))
+    add(("calc", "3.7", "ИТОГО КОРРЕКТИРОВКА МАРЖИ ПО НДС",
+         [("3.5", 1), ("3.6", 1)], "total", FMT_MONEY))
+    add(("ratio", "3.8", "Корректировка, % к расчётным продажам без НДС (стр. 1.5)",
+         ("3.7", "1.5", 100), "ratio_cost", FMT_PCT))
+    add(("blank", None, None, None, None, None))
+
     add(("band", "4", "МАРЖИНАЛЬНОСТЬ", None, None, None))
     add(("calc", "4.1", "ВАЛОВАЯ ПРИБЫЛЬ",
          [("1.5", 1), ("3.1", 1)], "total", FMT_MONEY))
     add(("ratio", "4.2", "Маржинальность по валовой прибыли, %",
          ("4.1", "1.5", 100), "ratio_good", FMT_PCT))
-    add(("calc", "4.3", "МАРЖИНАЛЬНАЯ ПРИБЫЛЬ (без продвижения)",
-         [("4.1", 1), ("3.2", 1), ("3.3", 1)], "total", FMT_MONEY))
+    add(("calc", "4.3", "МАРЖИНАЛЬНАЯ ПРИБЫЛЬ (без продвижения, с корректировкой)",
+         [("4.1", 1), ("3.2", 1), ("3.3", 1), ("3.7", 1)], "total", FMT_MONEY))
     add(("ratio", "4.4", "Маржинальность по марж. прибыли (без продвижения), %",
-         ("4.3", "1.5", 100), "ratio_good", FMT_PCT))
-    add(("calc", "4.5", "МАРЖИНАЛЬНАЯ ПРИБЫЛЬ (с продвижением)",
+         ("4.3", "1.6", 100), "ratio_good", FMT_PCT))
+    add(("calc", "4.5", "МАРЖИНАЛЬНАЯ ПРИБЫЛЬ (с продвижением, с корректировкой)",
          [("4.3", 1), ("3.4", 1)], "total", FMT_MONEY))
     add(("ratio", "4.6", "Маржинальность по марж. прибыли (с продвижением), %",
-         ("4.5", "1.5", 100), "ratio_good", FMT_PCT))
+         ("4.5", "1.6", 100), "ratio_good", FMT_PCT))
     add(("blank", None, None, None, None, None))
 
     add(("data", "4.7", "ЧИСТАЯ ПРИБЫЛЬ (из P&L, после налога)",
          (U_NET_PROFIT, 1), "grand", FMT_MONEY))
     add(("ratio", "4.8", "Рентабельность по чистой прибыли, %",
-         ("4.7", "1.5", 100), "grand", FMT_PCT))
+         ("4.7", "1.6", 100), "grand", FMT_PCT))
     return L
 
 
@@ -1878,10 +1899,12 @@ def build_unit_economics(ws, unit_data, months, report_date, as_of=None):
         if kind == "band":
             ws.merge_cells(start_row=r, start_column=COL_CODE,
                            end_row=r, end_column=COL_LABEL)
-            write(ws, r, COL_CODE, "%s. %s" % (code, label), font=f_band,
-                  align="left", indent=1, border=B_SECTION)
+            write(ws, r, COL_CODE, "%s. %s" % (code, label) if code else label,
+                  font=f_band, align="left", indent=1, border=B_SECTION)
             for cc in range(COL_CODE, ncols + 1):
                 ws.cell(row=r, column=cc).border = B_SECTION
+                if code is None:
+                    ws.cell(row=r, column=cc).fill = fill(CORR_FILL)
             ws.row_dimensions[r].height = 18
             r += 1
             continue
@@ -1899,6 +1922,9 @@ def build_unit_economics(ws, unit_data, months, report_date, as_of=None):
             bd = B_BOTTOM
             fnt_label = f_label_ratio if is_ratio else f_label
 
+        hl = code in UNIT_CORR_CODES
+        if hl:
+            bg = CORR_FILL
         fnt_num = NUM_FONTS[role]
 
         write(ws, r, COL_CODE, code, font=f_grand if is_grand else f_code,
@@ -1944,7 +1970,7 @@ def build_unit_economics(ws, unit_data, months, report_date, as_of=None):
                          % (cl, rd, sign, cl, rn, cl, rd, tail))
 
             fillv = bg
-            if cols[i][0] != "month" and not (is_total or is_grand):
+            if cols[i][0] != "month" and not (is_total or is_grand or hl):
                 fillv = SURFACE_3
             write(ws, r, COL_FIRST + i, v, font=fnt_num, fmt=fmt,
                   fillc=fillv, border=bd, align="right")
@@ -2057,6 +2083,15 @@ NOTES_UNIT = [
         "В колонках «Итого <год>» и «Итого за период» суммы складываются, а "
         "проценты и показатели на единицу пересчитываются по формуле от "
         "годовых сумм.",
+    ]),
+    ("Корректировка маржи по НДС (строки 3.5–3.8)", [
+        "Строки 1.5, 3.1–3.4 — расчётные: НДС с продаж и с комиссии WB снят по ставке "
+        "карточки с цены до СПП.",
+        "3.5 — НДС с продаж пересчитывается с цены покупателя (после СПП); 3.6 — "
+        "вместо НДС по ставке со всей комиссии берётся фактический НДС WB с "
+        "вознаграждения. 3.7 — итог корректировки.",
+        "Маржинальная прибыль (4.3, 4.5) — с корректировкой; проценты 4.4, 4.6 и 4.8 "
+        "считаются от продаж без НДС после СПП (1.6), как на листе «P&L после СПП».",
     ]),
 ]
 
@@ -4611,8 +4646,15 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     # чистая прибыль для листа юнит-экономики — тот же каскад, что в P&L,
     # чтобы рентабельность по чистой прибыли сходилась между листами
     for me in months:
-        unit_data.setdefault(me, {})[U_NET_PROFIT] = net_profit_of(
-            pl_data, tax_by_month, me)
+        ud = unit_data.setdefault(me, {})
+        ud[U_NET_PROFIT] = net_profit_of(pl_data, tax_by_month, me)
+        # корректировка маржи по НДС: расчётные цифры → P&L
+        p = lambda itm, m=me: pl_data.get((m, SEC_REVENUE, itm))
+        if p("1.4 Продажи без НДС") is not None and U_VATLESS in ud:
+            ud[U_CORR_REV] = round(p("1.4 Продажи без НДС") - ud[U_VATLESS], 2)
+            ud[U_CORR_COMM] = round((p("1.9. Комиссия WB") or 0.0)
+                                    - ud.get(U_COMISSION, 0.0), 2)
+            ud[U_REV_AFTER] = round(pl_after_spp_rev(pl_data, me), 2)
 
     # остаток ДС на начало первого показанного месяца
     first = months[0]
@@ -4628,7 +4670,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_pl_spp = wb.create_sheet(PL_AFTER_SPP_SHEET_NAME)
     ws_pl_dash = wb.create_sheet(PL_DASHBOARD_SHEET_NAME)
     ws_pl_corr = wb.create_sheet(PL_CORRECTED_SHEET_NAME)
-    ws_bridge = wb.create_sheet(PL_BRIDGE_SHEET_NAME)
     ws_notes_pl = wb.create_sheet(NOTES_SHEET_NAME)
     ws_unit = wb.create_sheet("Юнит-экономика")
     ws_be = wb.create_sheet(BREAKEVEN_SHEET_NAME)
@@ -4655,8 +4696,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_pl(ws_pl_corr, pl_dashboard_corrected(pl_data, dash_rows), tax_by_month,
              months, report_date, as_of=date_from, note_anchors=note_anchors,
              corrected=True)
-    build_pl_bridge(ws_bridge, pl_data, pl_dashboard(pl_data, dash_rows), months,
-                    report_date, as_of=date_from)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
                     conv_by_month=conv_by_month)
@@ -4723,11 +4762,11 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         (SUMMARY_SHEET_NAME, "Главное за отчётный месяц простым языком: результат, "
                              "точка безубыточности, отклонения, прогноз"),
         (PL_AFTER_SPP_SHEET_NAME, "Отчёт о прибылях и убытках: выручка и комиссия WB "
-                                  "по цене покупателя (после СПП), НДС по отчёту WB"),
-        (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
-                                  "дашборда продаж — для сравнения"),
+                                  "по цене покупателя (после СПП)"),
         (PL_CORRECTED_SHEET_NAME, "P&L как в дашборде (до СПП) с корректировкой "
                                   "маржи до итогов «P&L после СПП»"),
+        (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
+                                  "дашборда продаж — для сравнения"),
         (PL_BRIDGE_SHEET_NAME, "Почему маржа дашборда отличается от P&L: разница "
                                "по слагаемым, поправка в ₽ и %, НДС с СПП по брендам"),
         (NOTES_SHEET_NAME, "Расшифровка каждой строки P&L: статья, "
@@ -4766,7 +4805,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
 
     # порядок листов: отчёты, затем пояснения
     order = [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, PL_AFTER_SPP_SHEET_NAME,
-             PL_DASHBOARD_SHEET_NAME, PL_CORRECTED_SHEET_NAME, PL_BRIDGE_SHEET_NAME,
+             PL_CORRECTED_SHEET_NAME, PL_DASHBOARD_SHEET_NAME, PL_BRIDGE_SHEET_NAME,
              NOTES_SHEET_NAME, "Юнит-экономика",
              BREAKEVEN_SHEET_NAME, "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
              VAT_CHECK_SHEET_NAME,
