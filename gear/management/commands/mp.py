@@ -1792,7 +1792,7 @@ def unit_layout():
          None, None, None))
     add(("data", "3.1", "Себестоимость проданного товара (FIFO)",
          (U_COGS, -1), "expense", FMT_MONEY))
-    add(("data", "3.2", "Комиссия WB с продаж",
+    add(("data", "3.2", "Комиссия WB без НДС (НДС по ставке со всей комиссии до СПП)",
          (U_COMISSION, 1), "expense", FMT_MONEY))
     add(("data", "3.3", "Расходы ВБ без продвижения "
                         "(логистика, хранение, приёмка)",
@@ -1834,6 +1834,27 @@ def unit_layout():
     add(("ratio", "4.8", "Рентабельность по чистой прибыли, %",
          ("4.7", "1.6", 100), "grand", FMT_PCT))
     return L
+
+
+def unit_vat_correction(unit_data, pl_data, dash_rows):
+    """Юнит-экономика как лист «P&L дашборд с корректировкой».
+
+    Продажи без НДС и комиссия — расчётные (НДС по ставке с цены до СПП
+    и со всей комиссии), корректировка доводит маржу до P&L.
+    """
+    dash = {me: (rev, comm) for me, _a, _r, rev, _c, comm, _w in dash_rows}
+    for me, ud in unit_data.items():
+        p = lambda itm: pl_data.get((me, SEC_REVENUE, itm))
+        if p("1.4 Продажи без НДС") is None:
+            continue
+        ud[U_REV_AFTER] = round(pl_after_spp_rev(pl_data, me), 2)
+        if me not in dash:
+            continue
+        rev, comm = dash[me]
+        # корректировка — от исходных цифр листа (они по методу P&L)
+        ud[U_CORR_REV] = round(ud.get(U_VATLESS, 0.0) - rev, 2)
+        ud[U_CORR_COMM] = round(ud.get(U_COMISSION, 0.0) - comm, 2)
+        ud[U_VATLESS], ud[U_COMISSION] = round(rev, 2), round(comm, 2)
 
 
 def build_unit_economics(ws, unit_data, months, report_date, as_of=None):
@@ -4648,13 +4669,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     for me in months:
         ud = unit_data.setdefault(me, {})
         ud[U_NET_PROFIT] = net_profit_of(pl_data, tax_by_month, me)
-        # корректировка маржи по НДС: расчётные цифры → P&L
-        p = lambda itm, m=me: pl_data.get((m, SEC_REVENUE, itm))
-        if p("1.4 Продажи без НДС") is not None and U_VATLESS in ud:
-            ud[U_CORR_REV] = round(p("1.4 Продажи без НДС") - ud[U_VATLESS], 2)
-            ud[U_CORR_COMM] = round((p("1.9. Комиссия WB") or 0.0)
-                                    - ud.get(U_COMISSION, 0.0), 2)
-            ud[U_REV_AFTER] = round(pl_after_spp_rev(pl_data, me), 2)
 
     # остаток ДС на начало первого показанного месяца
     first = months[0]
@@ -4696,6 +4710,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_pl(ws_pl_corr, pl_dashboard_corrected(pl_data, dash_rows), tax_by_month,
              months, report_date, as_of=date_from, note_anchors=note_anchors,
              corrected=True)
+    unit_vat_correction(unit_data, pl_data, dash_rows)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
                     conv_by_month=conv_by_month)
