@@ -9,3 +9,4 @@ class SalesConfig(AppConfig):
     def ready(self):       
         # Импортируем Dash-приложение при старте Django
         from .dash_apps.dailysales.app import app as dailysales_app
+        from .dash_apps.productcard.app import app as products_app

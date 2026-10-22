@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>{{ document_number }}</title>
+</head>
+
+<body>
+  <header class="document-header">
+    <div class="brand-block">
+      <div class="brand-mark">КЗ</div>
+
+      <div>
+        <div class="company">
+          {{ company }}
+        </div>
+
+        <div class="document-type">
+          Внутренний управленческий документ
+        </div>
+      </div>
+    </div>
+
+    <div class="document-number">
+      <div class="number-label">
+        Документ
+      </div>
+
+      <div class="number-value">
+        {{ document_number }}
+      </div>
+
+      <div class="number-date">
+        сформирован {{ generated_at|date:"d.m.Y H:i" }}
+      </div>
+    </div>
+  </header>
+
+  <section class="title-section">
+    <h1>
+      Справка о корректировке остатка по договору займа
+    </h1>
+
+    <p>
+      Документ отражает изменение расчётной задолженности
+      на конец {{ adjustment.adjustment_date|date:"d.m.Y" }}.
+    </p>
+  </section>
+
+  <section class="
+      status-line
+      {% if adjustment.is_active %}
+        status-active
+      {% else %}
+        status-inactive
+      {% endif %}
+  ">
+    {{ status_text }}
+  </section>
+
+  <section class="section">
+    <div class="section-title">
+      Сведения о корректировке
+    </div>
+
+    <table class="details-table">
+      <tr>
+        <th>Контрагент</th>
+        <td>{{ counterparty }}</td>
+      </tr>
+
+      <tr>
+        <th>Договор</th>
+        <td>
+          № {{ contract_number }}
+
+          {% if contract_date %}
+            от {{ contract_date|date:"d.m.Y" }}
+          {% endif %}
+        </td>
+      </tr>
+
+      <tr>
+        <th>Дата корректировки</th>
+        <td>
+          {{ adjustment.adjustment_date|date:"d.m.Y" }},
+          на конец дня
+        </td>
+      </tr>
+
+      <tr>
+        <th>Причина</th>
+        <td>{{ reason_text }}</td>
+      </tr>
+
+      <tr>
+        <th>Комментарий</th>
+        <td>{{ adjustment.comment }}</td>
+      </tr>
+    </table>
+  </section>
+
+  <section class="section">
+    <div class="section-title">
+      Изменение задолженности
+    </div>
+
+    {% if comparison.has_calculation %}
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Показатель</th>
+            <th>До корректировки</th>
+            <th>После корректировки</th>
+            <th>Изменение</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr>
+            <td>
+              Основной долг
+            </td>
+
+            <td class="text-right">
+              {{ principal_before_text }} {{ currency }}
+            </td>
+
+            <td class="text-right">
+              {{ principal_after_text }} {{ currency }}
+            </td>
+
+            <td class="text-right">
+              {{ principal_delta_text }} {{ currency }}
+            </td>
+          </tr>
+
+          <tr>
+            <td>
+              Процентный долг
+            </td>
+
+            <td class="text-right">
+              {{ interest_before_text }} {{ currency }}
+            </td>
+
+            <td class="text-right">
+              {{ interest_after_text }} {{ currency }}
+            </td>
+
+            <td class="text-right">
+              {{ interest_delta_text }} {{ currency }}
+            </td>
+          </tr>
+
+          <tr class="comparison-total">
+            <td>
+              Общая задолженность
+            </td>
+
+            <td class="text-right">
+              {{ total_before_text }} {{ currency }}
+            </td>
+
+            <td class="text-right">
+              {{ total_after_text }} {{ currency }}
+            </td>
+
+            <td class="text-right">
+              {{ total_delta_text }} {{ currency }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    {% else %}
+      <div class="calculation-warning">
+        Расчётное состояние займа на дату корректировки
+        не найдено. В документе отображается только итоговое
+        состояние, установленное корректировкой.
+      </div>
+
+      <div class="amount-grid">
+        <div class="amount-card">
+          <div class="amount-label">
+            Остаток основного долга
+          </div>
+
+          <div class="amount-value">
+            {{ principal_after_text }}
+          </div>
+
+          <div class="amount-currency">
+            {{ currency }}
+          </div>
+        </div>
+
+        <div class="amount-card amount-card-interest">
+          <div class="amount-label">
+            Остаток процентов
+          </div>
+
+          <div class="amount-value">
+            {{ interest_after_text }}
+          </div>
+
+          <div class="amount-currency">
+            {{ currency }}
+          </div>
+        </div>
+
+        <div class="amount-card amount-card-total">
+          <div class="amount-label">
+            Общая задолженность
+          </div>
+
+          <div class="amount-value">
+            {{ total_after_text }}
+          </div>
+
+          <div class="amount-currency">
+            {{ currency }}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="legal-note">
+    {% if comparison.has_calculation %}
+      По состоянию на конец
+      {{ adjustment.adjustment_date|date:"d.m.Y" }}
+      расчётная задолженность составляла
+      {{ total_before_text }} {{ currency }}.
+
+      После корректировки задолженность установлена
+      в размере {{ total_after_text }} {{ currency }}.
+
+      Изменение общей задолженности составило
+      {{ total_delta_text }} {{ currency }},
+      в том числе по основному долгу —
+      {{ principal_delta_text }} {{ currency }},
+      по процентам —
+      {{ interest_delta_text }} {{ currency }}.
+    {% else %}
+      На дату {{ adjustment.adjustment_date|date:"d.m.Y" }}
+      расчётный остаток основного долга установлен
+      в размере {{ principal_after_text }} {{ currency }},
+      а остаток процентов —
+      {{ interest_after_text }} {{ currency }}.
+    {% endif %}
+
+    Со следующего календарного дня начисление процентов
+    производится исходя из скорректированного остатка тела займа.
+  </section>
+
+  <section class="signatures">
+    <div class="signature-block">
+      <div class="signature-label">
+        Справку подготовила
+      </div>
+
+
+
+      <div class="signature-name">
+        {{ author }}
+      </div>
+    </div>
+
+   
+  </section>
+
+  <footer>
+    Внутренний управленческий документ ·
+    ID корректировки {{ adjustment.id }}
+  </footer>
+</body>
+</html>

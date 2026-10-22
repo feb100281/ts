@@ -1,0 +1,188 @@
+{% if revenue_analysis and revenue_analysis.semi_analysis %}
+
+<div class="section-header">
+    <div class="section-number">I.</div>
+    <div class="section-title-with-num">Выполнение целевого оборота по соглашению с WB</div>
+</div>
+
+{# KPI карточки #}
+<div class="kpi-grid-3">
+    <div class="kpi-card-compact">
+        <div class="kpi-label-compact">Годовой план</div>
+        <div class="kpi-value-compact">{{ revenue_analysis.totals.plan_fmt }} ₽</div>
+    </div>
+    <div class="kpi-card-compact">
+        <div class="kpi-label-compact">Факт YTD</div>
+        <div class="kpi-value-compact">{{ revenue_analysis.totals.fact_fmt }} ₽</div>
+    </div>
+    <div class="kpi-card-compact">
+        <div class="kpi-label-compact">Выполнение</div>
+        <div class="kpi-value-compact {% if revenue_analysis.totals.exec_pct >= 100 %}positive-text{% else %}negative-text{% endif %}">
+            {{ revenue_analysis.totals.exec_pct|floatformat:1 }}%
+        </div>
+    </div>
+</div>
+
+{# Таблица полугодовых планов #}
+<table class="data">
+    <thead>
+        <tr>
+            <th>Полугодие</th>
+            <th>План, ₽</th>
+            <th>Факт, ₽</th>
+            <th>Выполнение, %</th>
+            <th>Остаток, ₽</th>
+            <th>Статус</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in revenue_analysis.semi_analysis %}
+        <tr>
+            <td class="left"><strong>{{ s.period }}</strong></td>
+            <td class="right">{{ s.plan_fmt }}</td>
+            <td class="right">{{ s.fact_fmt }}</td>
+            <td class="right {% if s.exec_pct >= 100 %}positive-text{% else %}negative-text{% endif %}">
+                {{ s.exec_pct|floatformat:1 }}%
+            </td>
+            <td class="right">
+                {% if s.remaining > 0 %}
+                    {{ s.remaining_fmt }}
+                {% else %}
+                    <span class="positive-text">+{{ s.overachievement_fmt }}</span>
+                {% endif %}
+            </td>
+            <td class="center">
+                {% if s.is_completed %}
+                    {% if s.exec_pct >= 100 %}
+                        <span class="positive-text">Выполнен</span>
+                    {% else %}
+                        <span class="negative-text">Не выполнен</span>
+                    {% endif %}
+                {% elif s.is_current %}
+                    <span class="neutral">В процессе</span>
+                {% else %}
+                    <span class="neutral">Не начат</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td class="left"><strong>ИТОГО:</strong></td>
+            <td class="right"><strong>{{ revenue_analysis.totals.plan_fmt }}</strong></td>
+            <td class="right"><strong>{{ revenue_analysis.totals.fact_fmt }}</strong></td>
+            <td class="right"><strong>{{ revenue_analysis.totals.exec_pct|floatformat:1 }}%</strong></td>
+            <td colspan="2"></td>
+        </tr>
+    </tfoot>
+</table>
+
+{# Прогноз для текущего полугодия #}
+{% for s in revenue_analysis.semi_analysis %}
+    {% if s.is_current and not s.is_completed %}
+    <div class="forecast-box">
+        <div class="forecast-title">Прогноз по {{ s.period }}</div>
+        <div class="forecast-grid">
+            <div>
+                <span class="forecast-label">Темп за последние {{ s.rate_window_days }} дн.</span>
+                <strong class="forecast-value">{{ s.current_daily_rate_fmt }} ₽/день</strong>
+            </div>
+            <div>
+                <span class="forecast-label">Необходимый темп</span>
+                <strong class="forecast-value">{{ s.required_daily_rate_fmt }} ₽/день</strong>
+            </div>
+            <div>
+                <span class="forecast-label">Осталось дней</span>
+                <strong class="forecast-value">{{ s.days_remaining }}</strong>
+            </div>
+        </div>
+        {% if s.projected_end >= s.plan %}
+            <div class="forecast-success">План будет выполнен при текущем темпе продаж.</div>
+        {% else %}
+            <div class="forecast-warning">
+                <strong>План под риском невыполнения.</strong><br>
+                Для выполнения плана необходимо увеличить среднедневную выручку на
+                <strong>{{ s.gap_daily_rate_fmt }} ₽/день</strong>.<br>
+                За оставшиеся {{ s.days_remaining }} дн. это составляет дополнительно
+                <strong>{{ s.gap_total_fmt }} ₽</strong> выручки.
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endfor %}
+
+{# Таблица последних 10 дней с полной аналитикой #}
+{% if revenue_analysis.daily_analysis and revenue_analysis.daily_analysis.last_10_days %}
+<div class="subsection-header">
+    <div class="subsection-number">II.</div>
+    <div class="subsection-title">Динамика выручки за последние 10 дней</div>
+</div>
+
+<div class="info-compact">
+    <span>Средняя дневная выручка</span>
+    <strong class="info-value">{{ revenue_analysis.daily_analysis.avg_daily_rate_fmt }} ₽</strong>
+    <span class="info-note">за {{ revenue_analysis.daily_analysis.days_count }} дней</span>
+</div>
+
+<table class="data">
+    <thead>
+        <tr>
+            <th>Дата</th>
+            <th>День недели</th>
+            <th>Выручка, ₽</th>
+            <th>Продажи, ₽</th>
+            <th>Возвраты, ₽</th>
+            <th>Кол-во, шт</th>
+            <th>Ср.цена, ₽</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for day in revenue_analysis.daily_analysis.last_10_days %}
+        <tr>
+            <td class="center"><strong>{{ day.date_str }}</strong></td>
+            <td class="center">{{ day.weekday }}</td>
+            <td class="right {% if day.net_amount > 0 %}positive-text{% else %}muted{% endif %}">
+                {% if day.net_amount > 0 %}{{ day.net_amount_fmt }}{% else %}—{% endif %}
+            </td>
+            <td class="right">{{ day.sales_amount_fmt }}</td>
+            <td class="right negative-text">{{ day.returns_amount_fmt }}</td>
+            <td class="right">{{ day.net_qty }}</td>
+            <td class="right">{{ day.avg_price_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row">
+            <td class="right" colspan="2"><strong>Итого за 10 дней:</strong></td>
+            <td class="right"><strong>{{ revenue_analysis.daily_analysis.total_amount_fmt }}</strong></td>
+            <td class="right"><strong>{{ revenue_analysis.daily_analysis.total_sales_fmt|default:"—" }}</strong></td>
+            <td class="right"><strong>{{ revenue_analysis.daily_analysis.total_returns_fmt|default:"—" }}</strong></td>
+            <td colspan="2"></td>
+        </tr>
+    </tfoot>
+</table>
+<div class="small-note">* Выручка = Продажи − Возвраты. Данные за последние 10 дней.</div>
+{% endif %}
+
+{# ГРАФИК #}
+{% if revenue_analysis.chart_svg %}
+<div class="subsection-header">
+    <div class="subsection-number">III.</div>
+    <div class="subsection-title">Визуализация динамики выручки</div>
+</div>
+
+<div class="chart-container">
+    {{ revenue_analysis.chart_svg|safe }}
+</div>
+
+
+{% endif %}
+
+
+{% else %}
+    <p class="muted">Нет данных по выручке за указанный период</p>
+{% endif %}
+
+
+

@@ -1,0 +1,48 @@
+{% extends "admin/change_list.html" %}
+
+{% block bodyclass %}{{ block.super }} tga-page{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% include "admin/gear/telegramaccess/_style.html" %}
+<style>
+  .tgq-sum { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #E3E8E6; border-top: 3px solid #2F6656; font-size: 13px; }
+  .tgq-sum th { text-align: left; padding: 9px 14px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; border-bottom: 1px solid #E3E8E6; }
+  .tgq-sum td { padding: 8px 14px; border-bottom: 1px solid #EEF1F0; }
+  .tgq-sum .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .tgq-sum tfoot td { font-weight: 700; border-bottom: 0; background: #F4F8F6; }
+  .tgq-err { color: #B45309; font-weight: 600; }
+  .tgq-text { display: block; max-width: 620px; white-space: pre-wrap; }
+</style>
+{% endblock %}
+
+{% block object-tools-items %}
+  <a class="tga-print tga-ghost" href="{% url 'admin:gear_telegramaccess_changelist' %}">Доступ к ботам</a>
+{% endblock %}
+
+{% block search %}
+<div class="tga">
+  {% if tgq_rows %}
+  <table class="tgq-sum">
+    <thead><tr><th>Кто</th><th>Помощник</th><th class="r">Вопросов</th><th class="r">С Excel</th><th class="r">Ошибок</th><th class="r">Стоимость, $</th></tr></thead>
+    <tbody>
+      {% for r in tgq_rows %}
+      <tr>
+        <td class="tga-name">{{ r.name }}</td>
+        <td><span class="tga-bot tga-bot-{{ r.code }}">{{ r.bot }}</span></td>
+        <td class="r">{{ r.n }}</td><td class="r">{{ r.files }}</td>
+        <td class="r{% if r.err %} tgq-err{% endif %}">{{ r.err }}</td>
+        <td class="r">{{ r.cost|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="2">Итого за выбранный период</td><td class="r">{{ tgq_total }}</td><td></td><td></td><td class="r">{{ tgq_cost|floatformat:2 }}</td></tr></tfoot>
+  </table>
+  {% endif %}
+  <div class="tga-how">
+    Сводка считается по тем же фильтрам, что и список ниже: выберите день или период в фильтре «Когда» или по датам над таблицей.
+    Ответы бота не сохраняются. Записи старше {{ tgq_days }} дней удаляются автоматически. Журнал виден только суперпользователю.
+  </div>
+</div>
+{{ block.super }}
+{% endblock %}

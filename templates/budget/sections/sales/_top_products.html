@@ -1,0 +1,118 @@
+<div id="section-sales-top-products"></div>
+
+<div class="page-break"></div>
+<div class="section-title">🏆 Топ-5 товаров по продажам</div>
+<div class="small-note">
+    Период анализа: {{ top_period_from }} — {{ top_period_to }}
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th>Артикул WB</th>
+            <th>Артикул поставщика</th>
+            <th>Название товара WB</th>
+            <th>Бренд</th>
+            <th>В продаже с</th>
+            <th>Продажи, руб.</th>
+            <th>Кол-во, шт.</th>
+            <th>Доля в выручке</th>
+            <th>Фото</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in top_products %}
+        <tr>
+            <td class="left nowrap">{{ product.nm_id_str }}</td>
+            <td class="left">{{ product.sa_name|truncatechars:25 }}</td>
+            <td class="left">{{ product.product_name|truncatechars:40 }}</td>
+            <td class="left">{{ product.brand|truncatechars:20 }}</td>
+            <td class="center">{{ product.first_sale_date_fmt }}</td>
+            <td class="right">{{ product.sales_amount_fmt }}</td>
+            <td class="right">{{ product.sales_qty_fmt }}</td>
+            <td class="center">{{ product.revenue_share_pct }}%</td>
+            <td class="center">
+                {% if product.photo_url %}
+                    <a href="{{ product.photo_url }}" target="_blank" rel="noopener noreferrer">Фото</a>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="section-title">⚠️ Топ-5 товаров по возвратам</div>
+<div class="small-note">
+    Период анализа: {{ top_period_from }} — {{ top_period_to }}
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th>Артикул WB</th>
+            <th>Название товара WB</th>
+            <th>Бренд</th>
+            <th>В продаже с</th>
+            <th>Возвраты, руб.</th>
+            <th>Кол-во, шт.</th>
+            <th>Доля возвратов, %</th>
+            <th>Фото</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in top_returns %}
+        <tr>
+            <td class="left nowrap">{{ product.nm_id_str }}</td>
+            <td class="left">{{ product.product_name|truncatechars:40 }}</td>
+            <td class="left">{{ product.brand|truncatechars:20 }}</td>
+            <td class="center">{{ product.first_sale_date_fmt }}</td>
+            <td class="right negative">{{ product.returns_amount_fmt }}</td>
+            <td class="right">{{ product.returns_qty_fmt }}</td>
+            <td class="center negative">{{ product.return_rate_pct }}%</td>
+            <td class="center">
+                {% if product.photo_url %}
+                    <a href="{{ product.photo_url }}" target="_blank" rel="noopener noreferrer">Фото</a>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if old_skus %}
+<div class="section-title">Товары с длинным жизненным циклом</div>
+<div class="small-note">
+    Товары, которые находятся в продаже с 2023 года и ранее, и продолжают формировать продажи.
+</div>
+
+<table class="data compact">
+    <thead>
+        <tr>
+            <th>Артикул WB</th>
+            <th>Название товара WB</th>
+            <th>Бренд</th>
+            <th>Категория</th>
+            <th>В продаже с</th>
+            <th>Продажи за период, руб.</th>
+            <th>Кол-во, шт.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in old_skus %}
+        <tr>
+            <td class="left nowrap">{{ product.nm_id_str }}</td>
+            <td class="left">{{ product.product_name|truncatechars:40 }}</td>
+            <td class="left">{{ product.brand|truncatechars:20 }}</td>
+            <td class="left">{{ product.subject_name|truncatechars:20 }}</td>
+            <td class="center">{{ product.first_sale_date_fmt }}</td>
+            <td class="right">{{ product.sales_amount_90d_fmt }}</td>
+            <td class="right">{{ product.sales_qty_90d_fmt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}

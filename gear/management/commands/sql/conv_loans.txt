@@ -1,0 +1,28 @@
+-- ============================================================
+-- ПРОЦЕНТЫ ПО ДОГОВОРАМ КОНВЕРТИРУЕМОГО ЗАЙМА
+--
+-- Для расчёта точки безубыточности без этих процентов.
+-- Тот же отбор, что у раздела 8 P&L (счета 630000), плюс фильтр
+-- по типу договора. Допсоглашения учитываются по типу основного
+-- договора. Знак — как в разделе 8 P&L.
+-- ============================================================
+
+CREATE OR REPLACE TEMP TABLE conv_loans AS
+
+SELECT
+    LAST_DAY(p.date_from)::DATE AS me,
+    SUM(p.amount)::DOUBLE AS value
+
+FROM pg.public.pl_for_csv p
+JOIN pg.public.contracts_contracts c
+    ON c.id = p.contract_id
+LEFT JOIN pg.public.contracts_contracts pc
+    ON pc.id = c.pid_id
+
+WHERE p.date_from <= $date_from
+  AND STARTS_WITH(p.account_name, '630000')
+  AND (c.title_id = $title_id OR pc.title_id = $title_id)
+
+GROUP BY 1
+ORDER BY 1
+;
