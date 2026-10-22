@@ -77,6 +77,8 @@ def _load(report_date: date) -> dict:
     for me, section, item, value in pl_rows:
         pl_data[(_as_date(me), section, item)] = (
             round(float(value), 2) if value is not None else None)
+    # как основной лист мэн пака «P&L после СПП»: выручка и комиссия без СПП
+    pl_data = mp.pl_after_spp(pl_data)
     tax = defaultdict(float)
     for me, v in tax_rows:
         tax[_as_date(me)] += float(v or 0)

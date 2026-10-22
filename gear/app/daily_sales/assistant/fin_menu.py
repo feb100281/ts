@@ -822,7 +822,7 @@ def report_mom(a: date, b: date) -> dict | None:
     except Exception as e:
         print(f"[fin_menu] выводы: {type(e).__name__}: {e}", flush=True)
     lines += ["", "<i>Расходы — со знаком минус, ▲▼ — изменение в рублях к прошлому месяцу. "
-                  "Как лист P&amp;L мэн пака.</i>"]
+                  "Как лист «P&amp;L после СПП» мэн пака.</i>"]
     files = (("pl", "Excel: P&L за 12 месяцев"),)
     ms = [m for m in months if m <= me][-6:]
     photo = _chart(lambda: chart_months(
@@ -843,7 +843,7 @@ def file_pl(a, b):
     cols = ["Показатель"] + [f"{m:%m.%Y}" for m in months]
     rows = [[l] + [data["derived"][m].get(k) for m in months] for k, l in keys]
     out = _book("P&L по месяцам", f"данные мэн пака на {data['report_date']:%d.%m.%Y}",
-                [("P&L", cols, rows)], notes=[("Источник", "Те же расчёты, что лист P&L мэн пака."),
+                [("P&L", cols, rows)], notes=[("Источник", "Те же расчёты, что лист «P&L после СПП» мэн пака."),
                                                ("Знаки", "Расходы со знаком минус.")])
     return "P&L по месяцам.xlsx", out, XLSX
 
@@ -858,6 +858,7 @@ def report_tbu(a: date, b: date) -> dict | None:
     me = _month_of(b, months) or closed[-1]
     show = [m for m in closed if m <= me][-3:] or closed[-3:]
     lines = ["<b>🎯 Точка безубыточности</b>", f"<i>по данным мэн пака на {rd:%d.%m.%Y} · "
+             "выручка без НДС после СПП · "
              "две ТБУ: с процентами по конвертируемым займам и без них</i>"]
     W, X = "с конв. займами", "без конв. займов"
 
