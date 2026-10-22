@@ -4198,6 +4198,232 @@ def section_sum(pl_data, me, section):
                if m == me and s == section and v is not None)
 
 
+# =============================================================================
+#  Лист «Корректировка маржи»: сверка P&L с дашбордом продаж
+# =============================================================================
+
+PL_BRIDGE_SHEET_NAME = "Корректировка маржи"
+
+
+def vat_rate(me):
+    return 22.0 if me.year >= 2026 else 20.0
+
+
+def _gp2(data, me):
+    g = lambda itm: data.get((me, SEC_REVENUE, itm)) or 0.0
+    return (g("1.4 Продажи без НДС") - g("1.6. Себестоимость") + g("1.9. Комиссия WB")
+            + section_sum(data, me, SEC_SELLING) + section_sum(data, me, SEC_PROMO))
+
+
+def bridge_rows(pl_data, dash_pl, months):
+    """Помесячная сверка валовой прибыли после продвижения: P&L → дашборд.
+
+    Все величины считаются из тех же данных, что листы «P&L» и «P&L дашборд».
+    Слагаемые разницы в сумме дают ровно ΔGP2 (проверка — отдельной строкой).
+    """
+    out = {}
+    for me in months:
+        p = lambda itm: pl_data.get((me, SEC_REVENUE, itm)) or 0.0
+        d = lambda itm: dash_pl.get((me, SEC_REVENUE, itm)) or 0.0
+        r = vat_rate(me)
+        p11, p13, p14 = p("1.1. Продажи до СПП"), p("1.3. Продажи после СПП"), p("1.4 Продажи без НДС")
+        d11, d14 = d("1.1. Продажи до СПП"), d("1.4 Продажи без НДС")
+        spp = p11 - p13
+        vat_p, vat_d = p11 - p14, d11 - d14
+        vat_spp = spp * r / (100 + r)
+        gp_p, gp_d = _gp2(pl_data, me), _gp2(dash_pl, me)
+        corr = dash_pl.get((me, SEC_SELLING, DASH_CORR_ITEM)) or 0.0
+        adj = dash_pl.get((me, SEC_SELLING, DASH_ADJ_ITEM)) or 0.0
+        parts = {
+            "sales": d11 - p11,
+            "vat": -(vat_d - vat_p),
+            "cogs": -(d("1.6. Себестоимость") - p("1.6. Себестоимость")),
+            "comm": d("1.9. Комиссия WB") - p("1.9. Комиссия WB"),
+            "corr": corr,
+            "adj": adj,
+        }
+        delta = gp_d - gp_p
+        out[me] = dict(
+            p11=p11, p13=p13, spp=spp, p14=p14, gp_p=gp_p, gp_p_cmp=gp_p + corr,
+            d11=d11, d14=d14, gp_d=gp_d, delta=delta,
+            vat_spp=-vat_spp, vat_other=parts["vat"] + vat_spp,
+            check=delta - sum(parts.values()),
+            fix=gp_p + corr - gp_d,
+            fix_pct=(gp_p + corr - gp_d) / d14 * 100 if d14 else None,
+            fix_spp_pct=(gp_p + corr - gp_d) / spp * 100 if spp else None,
+            **parts)
+    return out
+
+
+def brand_vat_spp(start, end):
+    """НДС с СПП по брендам за период: (brand, до СПП, после СПП, СПП, НДС с СПП)."""
+    from gear.app.daily_sales import wb_sales_export as wse
+    df = wse.fetch(start, end, "brand", [])
+    if df is None or df.empty:
+        return []
+    r = vat_rate(end)
+    rows = []
+    for _, x in df.iterrows():
+        a, b = float(x.get("rp_net") or 0), float(x.get("ra_net") or 0)
+        rows.append((str(x.get("brand") or "—"), a, b, a - b, (a - b) * r / (100 + r)))
+    return sorted(rows, key=lambda t: -t[4])
+
+
+def build_pl_bridge(ws, pl_data, dash_pl, months, report_date, as_of=None):
+    as_of = as_of or report_date
+    shown = months[-12:]
+    data = bridge_rows(pl_data, dash_pl, shown)
+    ncols = COL_FIRST + len(shown) + 1
+
+    sheet_setup(ws)
+    title_band(
+        ws,
+        "КОРРЕКТИРОВКА МАРЖИ: P&L ↔ ДАШБОРД",
+        "Почему валовая прибыль после продвижения в дашборде отличается от P&L "
+        "и какую поправку добавить в дашборд",
+        ncols,
+        extra="Российский рубль (RUB) · последние %d мес. по %s · «P&L после СПП» "
+              "даёт ту же прибыль, что «P&L»" % (len(shown), as_of.strftime("%d.%m.%Y")),
+    )
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions[get_column_letter(COL_CODE)].width = 7
+    ws.column_dimensions[get_column_letter(COL_LABEL)].width = 58
+    ws.column_dimensions[get_column_letter(COL_NOTE)].width = 2
+    for i in range(len(shown) + 1):
+        ws.column_dimensions[get_column_letter(COL_FIRST + i)].width = 13
+    tot_col = COL_FIRST + len(shown)
+
+    f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
+    f_band = Font(name=FONT, size=9, bold=True, color="FFFFFF")
+    f_txt = Font(name=FONT, size=9, color=TEXT)
+    f_bold = Font(name=FONT, size=9, bold=True, color=TEXT)
+    f_ref = Font(name=FONT, size=8, italic=True, color=TEXT_2)
+    f_code = Font(name=FONT, size=8, color=MUTED)
+    f_note = Font(name=FONT, size=8, color=MUTED)
+
+    r = 7
+    write(ws, r, COL_CODE, "", fillc=NAVY)
+    write(ws, r, COL_LABEL, "Показатель", font=f_hdr, fillc=NAVY, indent=1)
+    write(ws, r, COL_NOTE, "", fillc=NAVY)
+    for i, me in enumerate(shown):
+        write(ws, r, COL_FIRST + i, me.strftime("%m.%Y"), font=f_hdr, fillc=NAVY, align="right")
+    write(ws, r, tot_col, "Итого", font=f_hdr, fillc=NAVY_3, align="right")
+    ws.freeze_panes = ws.cell(row=r + 1, column=COL_FIRST)
+    r += 1
+
+    def band(text):
+        nonlocal r
+        r += 1
+        for c in range(COL_CODE, ncols + 1):
+            ws.cell(row=r, column=c).fill = fill(NAVY_3)
+        write(ws, r, COL_LABEL, text, font=f_band, fillc=NAVY_3, indent=1)
+        r += 1
+
+    def line(code, label, key, level=1, fmt=FMT_MONEY, total=True, border=B_BOTTOM):
+        nonlocal r
+        font = f_bold if level == 0 else f_ref if level == 2 else f_txt
+        write(ws, r, COL_CODE, code, font=f_code, border=border)
+        write(ws, r, COL_LABEL, label, font=font, border=border,
+              indent=1 if level < 2 else 3)
+        ws.cell(row=r, column=COL_NOTE).border = border
+        vals = []
+        for i, me in enumerate(shown):
+            v = data[me][key]
+            vals.append(v)
+            write(ws, r, COL_FIRST + i, None if v is None else round(v, 2),
+                  font=font, fmt=fmt, border=border, align="right")
+        tv = None
+        if total and fmt == FMT_MONEY:
+            tv = round(sum(v or 0 for v in vals), 2)
+        write(ws, r, tot_col, tv, font=font, fmt=fmt, border=border,
+              fillc=SURFACE_3, align="right")
+        r += 1
+
+    band("ВАЛОВАЯ ПРИБЫЛЬ ПОСЛЕ ПРОДВИЖЕНИЯ WB")
+    line("1.1", "Продажи до СПП", "p11")
+    line("1.3", "Продажи после СПП", "p13")
+    line("", "СПП (1.1 − 1.3)", "spp", level=2)
+    line("GP2", "P&L: валовая прибыль после продвижения", "gp_p", level=0)
+    line("", "P&L сопоставимо: + коррекции продаж (в дашборде они в расходах WB)",
+         "gp_p_cmp", level=0)
+    line("GP2", "Дашборд: валовая прибыль после продвижения (финансовый результат)",
+         "gp_d", level=0)
+    line("Δ", "Разница: дашборд − P&L", "delta", level=0, border=B_TOTAL)
+
+    band("ИЗ ЧЕГО СКЛАДЫВАЕТСЯ РАЗНИЦА")
+    line("1.1", "Продажи до СПП (дашборд − P&L)", "sales")
+    line("1.4", "НДС: дашборд снимает больше НДС", "vat")
+    line("", "в т.ч. НДС с суммы СПП (СПП × ставка / (100 + ставка))", "vat_spp", level=2)
+    line("", "в т.ч. прочее расхождение НДС", "vat_other", level=2)
+    line("1.6", "Себестоимость", "cogs")
+    line("1.9", "Комиссия WB", "comm")
+    line("3.7", "Коррекции продаж и возвратов (в P&L — раздел 5)", "corr")
+    line("3.8", "Расходы WB: распределение дашборда vs статьи P&L", "adj")
+    line("", "Проверка: разница − сумма слагаемых (должно быть 0)", "check", level=2)
+
+    band("КОРРЕКТИРОВКА МАРЖИ ДЛЯ ДАШБОРДА")
+    line("", "Корректировка: P&L сопоставимо − дашборд, ₽", "fix", level=0)
+    line("", "то же, % к продажам без НДС дашборда", "fix_pct", level=1,
+         fmt=FMT_PCT, total=False)
+    line("", "то же, % к сумме СПП", "fix_spp_pct", level=1, fmt=FMT_PCT, total=False)
+
+    # бренды за отчётный месяц
+    m0 = report_date.replace(day=1)
+    try:
+        brands = brand_vat_spp(m0, as_of if as_of < report_date else report_date)
+    except Exception as e:
+        logger.warning("Корректировка маржи: бренды не получены: %s", e)
+        brands = []
+    if brands:
+        r += 1
+        write(ws, r, COL_LABEL, "НДС С СПП ПО БРЕНДАМ ЗА %s" % report_date.strftime("%m.%Y"),
+              font=f_bold, indent=1)
+        r += 1
+        heads = ["Бренд", "До СПП", "После СПП", "СПП", "НДС с СПП",
+                 "Равномерно %", "Перекос"]
+        cols = [COL_LABEL] + [COL_FIRST + i for i in range(len(heads) - 1)]
+        for c, h in zip(cols, heads):
+            write(ws, r, c, h, font=f_hdr, fillc=NAVY, align="left" if c == COL_LABEL else "right",
+                  indent=1 if c == COL_LABEL else 0, wrap=True)
+        ws.row_dimensions[r].height = 28
+        r += 1
+        tot_a = sum(b[1] for b in brands) or 1.0
+        tot_v = sum(b[4] for b in brands)
+        for name, a, b, s, v in brands:
+            even = a / tot_a * tot_v
+            vals = [a, b, s, v, even, v - even]
+            write(ws, r, COL_LABEL, name, font=f_txt, border=B_BOTTOM, indent=1)
+            for c, x in zip(cols[1:], vals):
+                write(ws, r, c, round(x, 2), font=f_txt, fmt=FMT_MONEY,
+                      border=B_BOTTOM, align="right")
+            r += 1
+        write(ws, r, COL_LABEL, "Итого", font=f_bold, border=B_TOTAL, indent=1)
+        for c, x in zip(cols[1:], [tot_a, sum(b[2] for b in brands),
+                                   sum(b[3] for b in brands), tot_v, tot_v, 0]):
+            write(ws, r, c, round(x, 2), font=f_bold, fmt=FMT_MONEY,
+                  border=B_TOTAL, align="right")
+        r += 1
+
+    notes = [
+        "Как читать. В P&L НДС берётся из отчёта WB — он начислен на цену покупателя "
+        "(после СПП). Дашборд снимает НДС ставкой с цены до СПП, то есть дополнительно "
+        "с суммы СПП, которую мы не получаем от покупателя. Поэтому маржа дашборда ниже.",
+        "Строки «НДС с суммы СПП» и «Перекос» — расчёт по ставке (22 % с 2026 г., 20 % "
+        "ранее), а не данные отчёта. Остальные строки — те же цифры, что на листах "
+        "«P&L» и «P&L дашборд».",
+        "«Равномерно %» — как распределилась бы общая поправка пропорционально продажам "
+        "до СПП. «Перекос» показывает, насколько единый процент ошибается по бренду: "
+        "у брендов с большой СПП поправка должна быть больше.",
+        "«Проверка» должна быть 0: слагаемые полностью объясняют разницу.",
+    ]
+    r += 1
+    for t in notes:
+        ws.merge_cells(start_row=r, start_column=COL_LABEL, end_row=r, end_column=ncols)
+        write(ws, r, COL_LABEL, t, font=f_note, wrap=True, indent=1)
+        ws.row_dimensions[r].height = 30
+        r += 1
+
+
 def ebitda_of(pl_data, me):
     g = pl_data.get((me, SEC_REVENUE, "1.11. Маржа после комиссии")) or 0.0
     for sec in (SEC_SELLING, SEC_PROMO, SEC_OTHER, SEC_OVERHEAD, SEC_CORP):
@@ -4313,6 +4539,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_pl = wb.create_sheet("P&L")
     ws_pl_spp = wb.create_sheet(PL_AFTER_SPP_SHEET_NAME)
     ws_pl_dash = wb.create_sheet(PL_DASHBOARD_SHEET_NAME)
+    ws_bridge = wb.create_sheet(PL_BRIDGE_SHEET_NAME)
     ws_notes_pl = wb.create_sheet(NOTES_SHEET_NAME)
     ws_unit = wb.create_sheet("Юнит-экономика")
     ws_be = wb.create_sheet(BREAKEVEN_SHEET_NAME)
@@ -4337,6 +4564,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors,
              dashboard=True)
+    build_pl_bridge(ws_bridge, pl_data, pl_dashboard(pl_data, dash_rows), months,
+                    report_date, as_of=date_from)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
                     conv_by_month=conv_by_month)
@@ -4408,6 +4637,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                                   "покупателя (после СПП), как в бухгалтерии"),
         (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
                                   "дашборда продаж — для сравнения"),
+        (PL_BRIDGE_SHEET_NAME, "Почему маржа дашборда отличается от P&L: разница "
+                               "по слагаемым, поправка в ₽ и %, НДС с СПП по брендам"),
         (NOTES_SHEET_NAME, "Расшифровка каждой строки P&L: статья, "
                            "контрагент, договор"),
         ("Юнит-экономика", "Количества, цены и себестоимость на единицу, "
