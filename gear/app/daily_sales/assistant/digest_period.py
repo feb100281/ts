@@ -223,6 +223,9 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
             return None
         by = {r["date"]: r for r in ser}
         st, st_o = ser[-1], by.get(pb)
+        if not st["wb"]:                    # остатки WB за день не загрузились — блок не показываем
+            print(f"[digest] остатки WB на {st['date']} = 0 — блок остатков пропущен", flush=True)
+            return None
         places = (("на нашем складе FBS", "fbs"), ("на складах WB", "wb"),
                   ("едет к покупателям", "to_client"), ("возвращается от покупателей", "from_client"))
         head = f"На {_long(st['date'])} у нас <b>{_n(st['total'])} шт</b> товара"

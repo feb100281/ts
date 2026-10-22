@@ -309,6 +309,9 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
             return None
         by = {r["date"]: r for r in ser}
         st = ser[-1]
+        if not st["wb"]:                    # остатки WB за день не загрузились — блок не показываем
+            print(f"[digest] остатки WB на {st['date']} = 0 — блок остатков пропущен", flush=True)
+            return None
         st_d, st_w = by.get(st["date"] - timedelta(days=1)), by.get(st["date"] - timedelta(days=7))
         places = (("на нашем складе FBS", "fbs"), ("на складах WB", "wb"),
                   ("едет к покупателям", "to_client"), ("возвращается от покупателей", "from_client"))
