@@ -1143,12 +1143,12 @@ def report_margin(a: date, b: date) -> dict | None:
              f"Финансовый результат: <b>{num(m2, 1)}%</b> · {rub(T['res'])}  {chg(m2, om2, pp=True)}"]
     g = g[g["rev"] > max(T["rev"] * 0.005, 1)].copy()
     g["m2"] = g["res"] / g["rev"] * 100
-    best = g.sort_values("m2", ascending=False).head(5)
-    worst = g.sort_values("m2").head(5)
-    lines += ["", "<b>▲ Самые доходные бренды</b>"] + [
-        f"• {esc(n)} — {num(p, 1)}% · {rub(r)}" for n, p, r in zip(best["name"], best["m2"], best["res"])]
-    lines += ["", "<b>▼ Самые слабые бренды</b>"] + [
-        f"• {esc(n)} — {num(p, 1)}% · {rub(r)}" for n, p, r in zip(worst["name"], worst["m2"], worst["res"])]
+    # один список по убыванию финансового результата, %
+    top = g.sort_values("m2", ascending=False).head(15)
+    lines += ["", "<b>Бренды по финансовому результату</b>"] + [
+        f"• {esc(n)} — {num(p, 1)}% · {rub(r)}" for n, p, r in zip(top["name"], top["m2"], top["res"])]
+    if len(g) > len(top):
+        lines.append(f"<i>…и ещё {len(g) - len(top)} — в Excel по брендам</i>")
     lines += ["", "Маржинальность = выручка − себестоимость − комиссия; финансовый результат — "
                   "ещё минус расходы WB. % — от выручки без НДС.", "", MANAGEMENT_NOTE]
     files = (("brand", "Excel: по брендам"), ("category", "Excel: по категориям"),
