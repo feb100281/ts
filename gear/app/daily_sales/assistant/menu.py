@@ -716,8 +716,20 @@ def report_stocks(a: date, b: date) -> dict | None:
              ("nm", "Excel: по артикулам"))
     chart = {"type": "line", "title": "Остатки всего, шт", "labels": [f"{r['date']:%d.%m}" for r in ser],
              "values": [r["total"] for r in ser]} if len(ser) > 1 else None
-    return {"text": "\n".join(x for x in lines if x is not None), "photo": photo, "auto": "brand",
-            "chart": chart, "files": files, "tables": tables, "kb": _files_kb("k", a, b, files)}
+    # доступно к заказу по брендам — та же картинка, что в рассылке
+    photos = []
+    try:
+        from .stocks import brand_data
+        bd = brand_data(b, a - timedelta(days=1))
+        if bd:
+            extra = _photo(lambda: ch.stock_brands(bd))
+            if extra:
+                photos.append(extra)
+    except Exception as e:
+        print(f"[menu] остатки, доступно по брендам: {type(e).__name__}: {e}", flush=True)
+    return {"text": "\n".join(x for x in lines if x is not None), "photo": photo, "photos": photos,
+            "auto": "brand", "chart": chart, "files": files, "tables": tables,
+            "kb": _files_kb("k", a, b, files)}
 
 
 def file_stocks(by: str, a: date, b: date):
