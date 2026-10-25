@@ -60,9 +60,9 @@ BRAND_TOP = 12          # брендов в рассылке, остальные
 
 BRAND_SQL = """
     SELECT COALESCE(NULLIF(UPPER(TRIM(b.brand)), ''), 'БРЕНД НЕ УКАЗАН') AS brand,
-           SUM(s.wb_qty + s.to_client + s.from_client + s.fbs_qty) AS qty,
-           COUNT(DISTINCT CASE WHEN s.wb_qty + s.to_client + s.from_client + s.fbs_qty > 0
-                               THEN s.nm_id END) AS sku
+           SUM(s.wb_qty + s.fbs_qty) AS avail,
+           COUNT(DISTINCT CASE WHEN s.wb_qty + s.fbs_qty > 0 THEN s.nm_id END) AS sku,
+           SUM(s.wb_qty + s.to_client + s.from_client + s.fbs_qty) AS total
     FROM s LEFT JOIN b ON b.nm_id = s.nm_id
     GROUP BY 1"""
 
@@ -72,11 +72,13 @@ def _sg(v: int) -> str:
 
 
 def brand_data(asked: date, base: date | None = None) -> dict | None:
-    """Остатки по брендам: шт и артикулы WB в наличии, изменение к базовой дате.
+    """Остатки по брендам: доступно к заказу (склады WB + FBS), SKU с доступным
+    остатком и всего с учётом товара в пути; изменение к базовой дате.
 
     base — дата сравнения (по умолчанию предыдущий день). None, если остатки WB
     на дату не загрузились.
-    rows: [(бренд, шт, SKU, Δшт, ΔSKU)] по убыванию шт, хвост — «остальные (N)».
+    rows: [(бренд, доступно, SKU, Δдоступно, ΔSKU, всего)] по убыванию доступного,
+    хвост — «Остальные (N)».
     """
     with get_duckdb_conn_with_opt(ro=True) as con:
         d = _last_date(con, asked)
@@ -89,24 +91,24 @@ def brand_data(asked: date, base: date | None = None) -> dict | None:
         d0 = _last_date(con, base or d - timedelta(days=1))
         if d0 == d:
             d0 = None
-        q = lambda day: {r[0]: (int(r[1] or 0), int(r[2] or 0)) for r in
+        q = lambda day: {r[0]: (int(r[1] or 0), int(r[2] or 0), int(r[3] or 0)) for r in
                          con.execute(BASE_SQL + BRAND_SQL, {"d": day}).fetchall()}
         cur, old = q(d), (q(d0) if d0 else {})
     rows = []
     for br in set(cur) | set(old):
-        qty, sku = cur.get(br, (0, 0))
-        q0, s0 = old.get(br, (0, 0))
-        if qty or q0:
-            rows.append((br, qty, sku, qty - q0, sku - s0))
+        av, sku, tot = cur.get(br, (0, 0, 0))
+        a0, s0, t0 = old.get(br, (0, 0, 0))
+        if av or tot or a0:
+            rows.append((br, av, sku, av - a0, sku - s0, tot))
     if not rows:
         return None
-    rows.sort(key=lambda r: -r[1])
-    total = tuple(sum(r[i] for r in rows) for i in (1, 2, 3, 4))
+    rows.sort(key=lambda r: (-r[1], -r[5]))
+    total = tuple(sum(r[i] for r in rows) for i in (1, 2, 3, 4, 5))
     rest = rows[BRAND_TOP:]
     rows = rows[:BRAND_TOP]
     if rest:
         rows.append((f"Остальные ({len(rest)})",
-                     *[sum(r[i] for r in rest) for i in (1, 2, 3, 4)]))
+                     *[sum(r[i] for r in rest) for i in (1, 2, 3, 4, 5)]))
     return {"date": d, "base": d0, "rows": rows, "total": total}
 
 
@@ -114,20 +116,20 @@ def brand_text(data: dict) -> str:
     from html import escape
     d0 = data["base"]
 
-    def line(name, qty, sku, dq, ds):
-        t = f"{escape(name)} — <b>{_f(qty)} шт</b>"
-        if d0 and dq:
-            t += f" ({_sg(dq)})"
+    def line(name, av, sku, da, ds, tot):
+        t = f"{escape(name)} — доступно <b>{_f(av)} шт</b>"
+        if d0 and da:
+            t += f" ({_sg(da)})"
         t += f" · {_f(sku)} SKU"
         if d0 and ds:
             t += f" ({_sg(ds)})"
-        return t
+        return t + f" · всего {_f(tot)}"
 
     out = [f"<b>Остатки по брендам на {data['date']:%d.%m}</b>"]
     out += ["• " + line(*r) for r in data["rows"]]
     out.append(line("Итого", *data["total"]))
-    out.append("<i>Шт — все места вместе: склады WB, в пути, наш склад FBS. SKU — артикулы WB "
-               "с остатком больше нуля."
+    out.append("<i>Доступно к заказу — склады WB и наш склад FBS. Всего — ещё и товар в пути "
+               "к покупателям и от них. SKU — артикулы WB, которые можно заказать."
                + (f" В скобках — изменение к {d0:%d.%m}." if d0 else "") + "</i>")
     return "\n".join(out)
 
