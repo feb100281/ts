@@ -343,6 +343,11 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
     b = _safe("остатки", stock_block)
     if b:
         out.append(b)
+        from .stocks import brand_data, brand_text
+        bd = _safe("остатки по брендам", lambda: brand_data(day))
+        if bd:
+            out.append({"text": brand_text(bd),
+                        "photo": pic("остатки по брендам", lambda: ch.stock_brands(bd))})
 
     # ---- 4. маржинальность с начала месяца — по методике дашборда продаж
     def margin_block(group, title, whose, many):

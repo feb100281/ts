@@ -56,6 +56,82 @@ def _last_date(con, d: date):
     return row[0] if row and row[0] else None
 
 
+BRAND_TOP = 12          # брендов в рассылке, остальные — одной строкой
+
+BRAND_SQL = """
+    SELECT COALESCE(NULLIF(UPPER(TRIM(b.brand)), ''), 'БРЕНД НЕ УКАЗАН') AS brand,
+           SUM(s.wb_qty + s.to_client + s.from_client + s.fbs_qty) AS qty,
+           COUNT(DISTINCT CASE WHEN s.wb_qty + s.to_client + s.from_client + s.fbs_qty > 0
+                               THEN s.nm_id END) AS sku
+    FROM s LEFT JOIN b ON b.nm_id = s.nm_id
+    GROUP BY 1"""
+
+
+def _sg(v: int) -> str:
+    return ("+" if v > 0 else "−") + _f(abs(v)) if v else "0"
+
+
+def brand_data(asked: date, base: date | None = None) -> dict | None:
+    """Остатки по брендам: шт и артикулы WB в наличии, изменение к базовой дате.
+
+    base — дата сравнения (по умолчанию предыдущий день). None, если остатки WB
+    на дату не загрузились.
+    rows: [(бренд, шт, SKU, Δшт, ΔSKU)] по убыванию шт, хвост — «остальные (N)».
+    """
+    with get_duckdb_conn_with_opt(ro=True) as con:
+        d = _last_date(con, asked)
+        if d is None:
+            return None
+        wb = con.execute("SELECT SUM(COALESCE(quantity, 0)) FROM stocks.unpacked_stocks "
+                         "WHERE date_from::DATE = ?", [d]).fetchone()[0]
+        if not wb:
+            return None
+        d0 = _last_date(con, base or d - timedelta(days=1))
+        if d0 == d:
+            d0 = None
+        q = lambda day: {r[0]: (int(r[1] or 0), int(r[2] or 0)) for r in
+                         con.execute(BASE_SQL + BRAND_SQL, {"d": day}).fetchall()}
+        cur, old = q(d), (q(d0) if d0 else {})
+    rows = []
+    for br in set(cur) | set(old):
+        qty, sku = cur.get(br, (0, 0))
+        q0, s0 = old.get(br, (0, 0))
+        if qty or q0:
+            rows.append((br, qty, sku, qty - q0, sku - s0))
+    if not rows:
+        return None
+    rows.sort(key=lambda r: -r[1])
+    total = tuple(sum(r[i] for r in rows) for i in (1, 2, 3, 4))
+    rest = rows[BRAND_TOP:]
+    rows = rows[:BRAND_TOP]
+    if rest:
+        rows.append((f"Остальные ({len(rest)})",
+                     *[sum(r[i] for r in rest) for i in (1, 2, 3, 4)]))
+    return {"date": d, "base": d0, "rows": rows, "total": total}
+
+
+def brand_text(data: dict) -> str:
+    from html import escape
+    d0 = data["base"]
+
+    def line(name, qty, sku, dq, ds):
+        t = f"{escape(name)} — <b>{_f(qty)} шт</b>"
+        if d0 and dq:
+            t += f" ({_sg(dq)})"
+        t += f" · {_f(sku)} SKU"
+        if d0 and ds:
+            t += f" ({_sg(ds)})"
+        return t
+
+    out = [f"<b>Остатки по брендам на {data['date']:%d.%m}</b>"]
+    out += ["• " + line(*r) for r in data["rows"]]
+    out.append(line("Итого", *data["total"]))
+    out.append("<i>Шт — все места вместе: склады WB, в пути, наш склад FBS. SKU — артикулы WB "
+               "с остатком больше нуля."
+               + (f" В скобках — изменение к {d0:%d.%m}." if d0 else "") + "</i>")
+    return "\n".join(out)
+
+
 def totals(asked: date) -> dict | None:
     """Итоги остатков на последнюю дату не позже запрошенной (для сводки)."""
     with get_duckdb_conn_with_opt(ro=True) as con:

@@ -260,6 +260,11 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
     blk = _safe("остатки", stock_block)
     if blk:
         out.append(blk)
+        from .stocks import brand_data, brand_text
+        bd = _safe("остатки по брендам", lambda: brand_data(b, pb))
+        if bd:
+            out.append({"text": brand_text(bd),
+                        "photo": pic("остатки по брендам", lambda: ch.stock_brands(bd))})
 
     # ---- 4. маржинальность за период — по методике дашборда продаж
     def margin_block(group, head, whose, many):

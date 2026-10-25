@@ -307,3 +307,50 @@ def price_spp(labels, price, buyer, spp, title, sub) -> bytes:
     _head(fig, title, sub, y=0.955)
     fig.subplots_adjust(left=0.05, right=0.96, top=0.84, bottom=0.07)
     return _png(plt, fig)
+
+
+def stock_brands(data: dict) -> bytes:
+    """Остатки по брендам: полоса — шт сейчас, контур — на дату сравнения,
+    справа — число SKU. Изменения: рост зелёным, снижение — тёплым."""
+    plt = _plt()
+    rows, d0, tot = data["rows"], data["base"], data["total"]
+    n = len(rows)
+    fig, ax = plt.subplots(figsize=(10.8, 2.3 + 1.05 * n), dpi=100)
+    mx = max(max(r[1], r[1] - r[3]) for r in rows) or 1
+    share = lambda v: v / tot[0] * 100 if tot[0] else 0
+    chg = lambda v: (("▲ +" if v > 0 else "▼ −") + _num(abs(v))) if v else "без изменений"
+    col = lambda v: GREEN if v > 0 else WARM if v < 0 else MUTED
+    for i, (name, qty, sku, dq, ds) in enumerate(rows):
+        y = n - 1 - i
+        other = name.startswith("Остальные")
+        ax.barh(y, qty, height=0.5, color=PALE if other else MID, zorder=2)
+        if d0:
+            ax.barh(y, qty - dq, height=0.5, fill=False, edgecolor=AXIS, lw=1.2,
+                    ls=(0, (3, 2)), zorder=3)
+        nm = name if len(name) <= 18 else name[:17] + "…"
+        ax.text(-mx * 0.04, y + 0.12, nm, va="center", ha="right", fontsize=14.5,
+                fontweight="bold", color=INK)
+        ax.text(-mx * 0.04, y - 0.25, f"{_num(share(qty), 0)}% остатка", va="center",
+                ha="right", fontsize=11.5, color=MUTED)
+        x = max(qty, qty - dq) + mx * 0.03
+        ax.text(x, y + 0.12, _num(qty) + " шт", va="center", ha="left", fontsize=15,
+                fontweight="bold", color=INK)
+        if d0:
+            ax.text(x, y - 0.25, chg(dq), va="center", ha="left", fontsize=12, color=col(dq))
+        ax.text(mx * 1.72, y + 0.12, _num(sku), va="center", ha="center", fontsize=16,
+                fontweight="bold", color=GREEN)
+        if d0:
+            ax.text(mx * 1.72, y - 0.25, chg(ds) if ds else "SKU", va="center", ha="center",
+                    fontsize=11.5, color=col(ds) if ds else MUTED)
+    ax.text(mx * 1.72, n - 0.35, "SKU", ha="center", va="bottom", fontsize=12, color=MUTED)
+    ax.set_xlim(-mx * 0.62, mx * 1.9)
+    ax.set_ylim(-0.7, n - 0.2)
+    ax.axis("off")
+    h = fig.get_figheight()
+    sub = f"всего {_num(tot[0])} шт · {_num(tot[1])} SKU"
+    if d0:
+        sub += f" · {chg(tot[2])} шт к {d0:%d.%m} · контур — было {d0:%d.%m}"
+    _head(fig, f"Остатки по брендам на {data['date']:%d.%m}", sub, y=1 - 0.45 / h)
+    fig.subplots_adjust(left=0.03, right=0.97, top=1 - 1.35 / h, bottom=0.02)
+    return _png(plt, fig)
+
