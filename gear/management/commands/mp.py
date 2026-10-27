@@ -4597,6 +4597,185 @@ def month_columns(start_year, report_date):
     return months
 
 
+# =============================================================================
+#  Лист «НДС по операциям» (справочно)
+# =============================================================================
+
+VAT_OPS_SHEET_NAME = "НДС по операциям"
+VAT_GL_SECTIONS = [("610", "2.4", "Накладные расходы (по учёту)"),
+                   ("620", "2.5", "Корпоративные расходы (по учёту)"),
+                   ("420", "2.6", "Прочие расходы (по учёту)"),
+                   ("630", "2.7", "Финансовые расходы (по учёту)")]
+
+
+def fetch_vat_summary(con, date_from):
+    """Строки sql/vat_summary.txt: (me, kind, code, item, value)."""
+    try:
+        return con.execute(read_sql("vat_summary.txt"),
+                           parameters={"date_from": date_from}).fetchall()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("НДС по операциям: %s", e)
+        return []
+
+
+def vat_layout(rows):
+    """Строки листа: [(kind, code, label, {me: value}, level)].
+
+    НДС начисленный и к вычету — положительными суммами.
+    """
+    out_rev, comm, sel, promo = {}, {}, {}, {}
+    gl_in = defaultdict(lambda: defaultdict(float))      # (code, item) -> me -> НДС к вычету
+    gl_out = defaultdict(float)
+    for me, kind, code, item, v in rows:
+        me = me if isinstance(me, date) else date.fromisoformat(str(me)[:10])
+        v = float(v or 0)
+        if kind == "sales":
+            out_rev[me] = out_rev.get(me, 0.0) + v
+        elif kind == "comm":
+            comm[me] = comm.get(me, 0.0) + v
+        elif kind == "wb":
+            (promo if code == "promo" else sel)[me] = \
+                (promo if code == "promo" else sel).get(me, 0.0) + v
+        elif kind == "gl":
+            if v >= 0:
+                gl_in[(code, item)][me] += v
+            else:
+                gl_out[me] += -v
+
+    def add(*maps):
+        res = defaultdict(float)
+        for m in maps:
+            for k, v in m.items():
+                res[k] += v
+        return dict(res)
+
+    L = [("band", None, "НДС НАЧИСЛЕННЫЙ (С ПРОДАЖ И ДОХОДОВ)", None, 0),
+         ("row", "1.1", "НДС с продаж WB — с цены покупателя (после СПП)", out_rev, 1),
+         ("row", "1.2", "НДС с прочих доходов (по учёту)", dict(gl_out), 1)]
+    total_out = add(out_rev, gl_out)
+    L.append(("total", "1.3", "ИТОГО НДС НАЧИСЛЕННЫЙ", total_out, 0))
+    L.append(("band", None, "НДС К ВЫЧЕТУ (ВХОДЯЩИЙ)", None, 0))
+    L.append(("row", "2.1", "Комиссия WB — НДС с вознаграждения по отчёту WB", comm, 1))
+    L.append(("row", "2.2", "Расходы WB: логистика, хранение, приёмка — расчётно по ставке",
+              sel, 1))
+    L.append(("row", "2.3", "Продвижение WB — расчётно по ставке", promo, 1))
+    parts = [comm, sel, promo]
+    known = {c for c, _, _ in VAT_GL_SECTIONS}
+    for pfx, code, label in VAT_GL_SECTIONS + [(None, "2.8", "Другие счета (по учёту)")]:
+        items = {k: v for k, v in gl_in.items()
+                 if (k[0] == pfx if pfx else k[0] not in known)}
+        sec = add(*items.values())
+        if not sec:
+            continue
+        parts.append(sec)
+        L.append(("row", code, label, sec, 1))
+        for (_c, item), vals in sorted(items.items(), key=lambda kv: -sum(kv[1].values())):
+            L.append(("detail", "", item, dict(vals), 2))
+    total_in = add(*parts)
+    L.append(("total", "2.9", "ИТОГО НДС К ВЫЧЕТУ", total_in, 0))
+    L.append(("blank", None, None, None, 0))
+    pay = {m: total_out.get(m, 0.0) - total_in.get(m, 0.0)
+           for m in set(total_out) | set(total_in)}
+    L.append(("grand", "3", "НДС К УПЛАТЕ, ОЦЕНКА (начисленный − к вычету)", pay, 0))
+    return L
+
+
+def build_vat_ops(ws, rows, months, report_date, as_of=None):
+    as_of = as_of or report_date
+    shown = months[-12:]
+    ncols = COL_FIRST + len(shown) + 1
+    tot_col = COL_FIRST + len(shown)
+
+    sheet_setup(ws)
+    title_band(
+        ws,
+        "НДС ПО ОПЕРАЦИЯМ (СПРАВОЧНО)",
+        "НДС с продаж, комиссии и расходов WB, накладных и прочих расходов — "
+        "управленческая оценка, не декларация",
+        ncols,
+        extra="Российский рубль (RUB) · последние %d мес. по %s"
+              % (len(shown), as_of.strftime("%d.%m.%Y")),
+    )
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions[get_column_letter(COL_CODE)].width = 7
+    ws.column_dimensions[get_column_letter(COL_LABEL)].width = 62
+    ws.column_dimensions[get_column_letter(COL_NOTE)].width = 2
+    for i in range(len(shown) + 1):
+        ws.column_dimensions[get_column_letter(COL_FIRST + i)].width = 13
+
+    f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
+    f_band = Font(name=FONT, size=10, bold=True, color=TEXT)
+    f_txt = Font(name=FONT, size=9, color=TEXT)
+    f_det = Font(name=FONT, size=8, color=TEXT_2)
+    f_bold = Font(name=FONT, size=9, bold=True, color=TEXT)
+    f_code = Font(name=FONT, size=8, color=MUTED)
+    f_note = Font(name=FONT, size=8, color=MUTED)
+
+    r = 7
+    for c in (COL_CODE, COL_NOTE):
+        write(ws, r, c, "", fillc=NAVY)
+    write(ws, r, COL_LABEL, "Показатель", font=f_hdr, fillc=NAVY, indent=1)
+    for i, me in enumerate(shown):
+        write(ws, r, COL_FIRST + i, month_label(me), font=f_hdr, fillc=NAVY, align="right")
+    write(ws, r, tot_col, "Итого", font=f_hdr, fillc=NAVY_3, align="right")
+    ws.freeze_panes = ws.cell(row=r + 1, column=COL_FIRST)
+    r += 1
+
+    if not rows:
+        write(ws, r + 1, COL_LABEL, "Данные по НДС не получены.", font=f_txt, indent=1)
+        return
+
+    for kind, code, label, vals, level in vat_layout(rows):
+        if kind == "blank":
+            ws.row_dimensions[r].height = 6
+            r += 1
+            continue
+        if kind == "band":
+            r += 1
+            write(ws, r, COL_CODE, label, font=f_band, indent=1, border=B_SECTION)
+            for c in range(COL_CODE + 1, ncols + 1):
+                ws.cell(row=r, column=c).border = B_SECTION
+            r += 1
+            continue
+        strong = kind in ("total", "grand")
+        font = f_bold if strong else f_det if kind == "detail" else f_txt
+        bd = B_GRAND if kind == "grand" else B_TOTAL if strong else B_BOTTOM
+        bg = TOTAL_ROW if strong else None
+        write(ws, r, COL_CODE, code, font=f_code, border=bd, fillc=bg)
+        write(ws, r, COL_LABEL, label, font=font, border=bd, fillc=bg,
+              indent=1 if level < 2 else 3)
+        write(ws, r, COL_NOTE, None, border=bd, fillc=bg)
+        for i, me in enumerate(shown):
+            v = vals.get(me)
+            write(ws, r, COL_FIRST + i, round(v, 2) if v else None, font=font,
+                  fmt=FMT_MONEY, border=bd, fillc=bg, align="right")
+        tv = sum(vals.get(me, 0.0) for me in shown)
+        write(ws, r, tot_col, round(tv, 2) if tv else None, font=font, fmt=FMT_MONEY,
+              border=bd, fillc=bg if strong else SURFACE_3, align="right")
+        r += 1
+
+    notes = [
+        "1.1 — НДС с продаж WB так же, как в P&L: с цены покупателя (после СПП) по ставке "
+        "карточки.",
+        "2.1 — НДС с вознаграждения WB из отчёта WB: продажи − возвраты + технические строки, "
+        "как на листе «Сверка НДС WB», по дате отчёта.",
+        "2.2, 2.3 — удержания WB идут в отчёте с НДС, ставку берём по строке; это расчёт, "
+        "а не документ WB.",
+        "1.2, 2.4–2.8 — НДС, выделенный в учёте по договорам с режимом «НДС включён». "
+        "По договорам без НДС или с неуказанным режимом НДС не выделяется и здесь не виден. "
+        "Детализация — по группам статей.",
+        "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
+        "в бухгалтерии — по счетам-фактурам и в другие периоды.",
+    ]
+    r += 1
+    for t in notes:
+        ws.merge_cells(start_row=r, start_column=COL_LABEL, end_row=r, end_column=ncols)
+        write(ws, r, COL_LABEL, t, font=f_note, wrap=True, indent=1)
+        ws.row_dimensions[r].height = 26
+        r += 1
+
+
 def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=None):
     """
     Собирает управленческий пакет (Титул + P&L + Cash Flow + пояснения)
@@ -4613,6 +4792,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         (pl_rows, cf_rows, unit_rows, treasury_rows,
         deposit_balance, note_rows, payout_rows,
         conv_rows, vat_rows) = fetch_pack_data(con, date_from)
+        vat_ops_rows = fetch_vat_summary(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -4695,6 +4875,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_cash = wb.create_sheet("Остатки ДС")
     ws_payouts = wb.create_sheet(PAYOUTS_SHEET_NAME)
     ws_vat = wb.create_sheet(VAT_CHECK_SHEET_NAME)
+    ws_vat_ops = wb.create_sheet(VAT_OPS_SHEET_NAME)
     ws_npl = wb.create_sheet("Пояснения P&L")
     ws_nunit = wb.create_sheet("Пояснения Юнит-экономика")
     ws_nbe = wb.create_sheet(BE_NOTES_SHEET_NAME)
@@ -4747,6 +4928,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                      report_date, as_of=date_from)
 
     build_vat_check(ws_vat, vat_rows, report_date, as_of=date_from)
+    build_vat_ops(ws_vat_ops, vat_ops_rows, months, report_date, as_of=date_from)
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "
@@ -4803,6 +4985,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                              "даты, суммы и количество по месяцам"),
         (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
                                "отчётов — для сверки с отчётом о реализации и УПД"),
+        (VAT_OPS_SHEET_NAME, "Справочно: НДС с продаж, комиссии и расходов WB, накладных "
+                             "и прочих расходов по месяцам, оценка НДС к уплате"),
         ("Пояснения P&L", "Методика расчёта каждого раздела и промежуточного итога"),
         ("Пояснения Юнит-экономика", "Как считается каждый показатель "
                                      "и почему он не равен кассе"),
@@ -4827,7 +5011,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
              PL_CORRECTED_SHEET_NAME, PL_DASHBOARD_SHEET_NAME, PL_BRIDGE_SHEET_NAME,
              NOTES_SHEET_NAME, "Юнит-экономика",
              BREAKEVEN_SHEET_NAME, "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
-             VAT_CHECK_SHEET_NAME,
+             VAT_CHECK_SHEET_NAME, VAT_OPS_SHEET_NAME,
              "Пояснения P&L", "Пояснения Юнит-экономика", BE_NOTES_SHEET_NAME,
              "Пояснения Cash Flow"]
     ordered = [wb[n] for n in order if n in wb.sheetnames]
