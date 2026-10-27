@@ -4619,15 +4619,17 @@ def fetch_vat_summary(con, date_from):
         return []
 
 
-def vat_layout(rows):
+def vat_layout(rows, shown=None):
     """Строки листа: [(kind, code, label, {me: value}, level)].
 
-    НДС начисленный и к вычету — положительными суммами.
+    level: 1 — раздел, 2 — группа статей, 3 — статья, 4 — контрагент.
+    НДС начисленный и к вычету — положительными суммами. Строки без движения
+    в показанных месяцах (shown) не выводятся.
     """
     out_rev, comm, sel, promo = {}, {}, {}, {}
-    gl_in = defaultdict(lambda: defaultdict(float))      # (code, item) -> me -> НДС к вычету
-    gl_out = defaultdict(float)
-    for me, kind, code, item, v in rows:
+    gl_in = defaultdict(lambda: defaultdict(float))    # (code, группа, статья, контрагент)
+    gl_out = defaultdict(lambda: defaultdict(float))
+    for me, kind, code, grp, item, cp, v in rows:
         me = me if isinstance(me, date) else date.fromisoformat(str(me)[:10])
         v = float(v or 0)
         if kind == "sales":
@@ -4635,13 +4637,15 @@ def vat_layout(rows):
         elif kind == "comm":
             comm[me] = comm.get(me, 0.0) + v
         elif kind == "wb":
-            (promo if code == "promo" else sel)[me] = \
-                (promo if code == "promo" else sel).get(me, 0.0) + v
+            m = promo if code == "promo" else sel
+            m[me] = m.get(me, 0.0) + v
         elif kind == "gl":
             if v >= 0:
-                gl_in[(code, item)][me] += v
+                gl_in[(code, grp, item, cp)][me] += v
             else:
-                gl_out[me] += -v
+                gl_out[(code, grp, item, cp)][me] += -v
+
+    live = lambda vals: any(abs(vals.get(m, 0.0)) >= 0.5 for m in (shown or vals))
 
     def add(*maps):
         res = defaultdict(float)
@@ -4650,10 +4654,39 @@ def vat_layout(rows):
                 res[k] += v
         return dict(res)
 
+    def tree(src):
+        """Строки детализации: группа → статья → контрагент, по убыванию суммы."""
+        out = []
+        tot = lambda keys: add(*[src[k] for k in keys])
+        size = lambda vals: sum(vals.values())
+        by_grp = defaultdict(list)
+        for k in src:
+            by_grp[k[1]].append(k)
+        for grp in sorted(by_grp, key=lambda g: -size(tot(by_grp[g]))):
+            gv = tot(by_grp[grp])
+            if not live(gv):
+                continue
+            out.append(("detail", "", grp, gv, 2))
+            by_item = defaultdict(list)
+            for k in by_grp[grp]:
+                by_item[k[2]].append(k)
+            for item in sorted(by_item, key=lambda i: -size(tot(by_item[i]))):
+                iv = tot(by_item[item])
+                if not live(iv):
+                    continue
+                out.append(("detail", "", item, iv, 3))
+                for k in sorted(by_item[item], key=lambda k: -size(src[k])):
+                    if live(src[k]):
+                        out.append(("detail", "", k[3], dict(src[k]), 4))
+        return out
+
+    out_gl = add(*gl_out.values())
     L = [("band", None, "НДС НАЧИСЛЕННЫЙ (С ПРОДАЖ И ДОХОДОВ)", None, 0),
-         ("row", "1.1", "НДС с продаж WB — с цены покупателя (после СПП)", out_rev, 1),
-         ("row", "1.2", "НДС с прочих доходов (по учёту)", dict(gl_out), 1)]
-    total_out = add(out_rev, gl_out)
+         ("row", "1.1", "НДС с продаж WB — с цены покупателя (после СПП)", out_rev, 1)]
+    if live(out_gl):
+        L.append(("row", "1.2", "НДС с прочих доходов (по учёту)", out_gl, 1))
+        L += tree(gl_out)
+    total_out = add(out_rev, out_gl)
     L.append(("total", "1.3", "ИТОГО НДС НАЧИСЛЕННЫЙ", total_out, 0))
     L.append(("band", None, "НДС К ВЫЧЕТУ (ВХОДЯЩИЙ)", None, 0))
     L.append(("row", "2.1", "Комиссия WB — НДС с вознаграждения по отчёту WB", comm, 1))
@@ -4666,12 +4699,11 @@ def vat_layout(rows):
         items = {k: v for k, v in gl_in.items()
                  if (k[0] == pfx if pfx else k[0] not in known)}
         sec = add(*items.values())
-        if not sec:
-            continue
         parts.append(sec)
+        if not live(sec):
+            continue
         L.append(("row", code, label, sec, 1))
-        for (_c, item), vals in sorted(items.items(), key=lambda kv: -sum(kv[1].values())):
-            L.append(("detail", "", item, dict(vals), 2))
+        L += tree(items)
     total_in = add(*parts)
     L.append(("total", "2.9", "ИТОГО НДС К ВЫЧЕТУ", total_in, 0))
     L.append(("blank", None, None, None, 0))
@@ -4680,12 +4712,11 @@ def vat_layout(rows):
     L.append(("grand", "3", "НДС К УПЛАТЕ, ОЦЕНКА (начисленный − к вычету)", pay, 0))
     return L
 
-
 def build_vat_ops(ws, rows, months, report_date, as_of=None):
+    """Лист «НДС по операциям» — оформление и колонки как на листах P&L."""
     as_of = as_of or report_date
-    shown = months[-12:]
-    ncols = COL_FIRST + len(shown) + 1
-    tot_col = COL_FIRST + len(shown)
+    cols = make_columns(months)
+    ncols = COL_FIRST + len(cols) - 1
 
     sheet_setup(ws)
     title_band(
@@ -4694,87 +4725,108 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
         "НДС с продаж, комиссии и расходов WB, накладных и прочих расходов — "
         "управленческая оценка, не декларация",
         ncols,
-        extra="Российский рубль (RUB) · последние %d мес. по %s"
-              % (len(shown), as_of.strftime("%d.%m.%Y")),
+        extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s · "
+              "завершённые годы свёрнуты, их итоги видны"
+              % (as_of.strftime("%d.%m.%Y"),
+                 month_label(months[0]), month_label(months[-1])),
     )
-    ws.column_dimensions["A"].width = 3
-    ws.column_dimensions[get_column_letter(COL_CODE)].width = 7
-    ws.column_dimensions[get_column_letter(COL_LABEL)].width = 62
-    ws.column_dimensions[get_column_letter(COL_NOTE)].width = 2
-    for i in range(len(shown) + 1):
-        ws.column_dimensions[get_column_letter(COL_FIRST + i)].width = 13
+    hdr_year, hdr = 6, 7
+    columns_header(ws, cols, hdr_year, hdr, report_date.year)
 
-    f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
     f_band = Font(name=FONT, size=10, bold=True, color=TEXT)
-    f_txt = Font(name=FONT, size=9, color=TEXT)
-    f_det = Font(name=FONT, size=8, color=TEXT_2)
-    f_bold = Font(name=FONT, size=9, bold=True, color=TEXT)
     f_code = Font(name=FONT, size=8, color=MUTED)
+    f_label = Font(name=FONT, size=10, color=TEXT)
+    f_total = Font(name=FONT, size=10, bold=True, color=TEXT)
+    f_num = Font(name=FONT, size=10, color=TEXT)
+    det_font = {2: Font(name=FONT, size=9, color=TEXT),
+                3: Font(name=FONT, size=9, color=TEXT_2),
+                4: Font(name=FONT, size=8, italic=True, color=MUTED)}
     f_note = Font(name=FONT, size=8, color=MUTED)
 
-    r = 7
-    for c in (COL_CODE, COL_NOTE):
-        write(ws, r, c, "", fillc=NAVY)
-    write(ws, r, COL_LABEL, "Показатель", font=f_hdr, fillc=NAVY, indent=1)
-    for i, me in enumerate(shown):
-        write(ws, r, COL_FIRST + i, month_label(me), font=f_hdr, fillc=NAVY, align="right")
-    write(ws, r, tot_col, "Итого", font=f_hdr, fillc=NAVY_3, align="right")
-    ws.freeze_panes = ws.cell(row=r + 1, column=COL_FIRST)
-    r += 1
-
+    r = hdr + 1
     if not rows:
-        write(ws, r + 1, COL_LABEL, "Данные по НДС не получены.", font=f_txt, indent=1)
+        write(ws, r + 1, COL_LABEL, "Данные по НДС не получены.", font=f_label, indent=1)
         return
 
-    for kind, code, label, vals, level in vat_layout(rows):
+    # детализация сворачивается кнопками «+/−» слева: группа → статья → контрагент
+    ws.sheet_properties.outlinePr.summaryBelow = False
+    for kind, code, label, vals, level in vat_layout(rows, months):
         if kind == "blank":
             ws.row_dimensions[r].height = 6
             r += 1
             continue
         if kind == "band":
-            r += 1
-            write(ws, r, COL_CODE, label, font=f_band, indent=1, border=B_SECTION)
-            for c in range(COL_CODE + 1, ncols + 1):
-                ws.cell(row=r, column=c).border = B_SECTION
+            ws.merge_cells(start_row=r, start_column=COL_CODE, end_row=r, end_column=COL_LABEL)
+            write(ws, r, COL_CODE, label, font=f_band, align="left", indent=1,
+                  border=B_SECTION)
+            for cc in range(COL_CODE, ncols + 1):
+                ws.cell(row=r, column=cc).border = B_SECTION
+            ws.row_dimensions[r].height = 18
             r += 1
             continue
-        strong = kind in ("total", "grand")
-        font = f_bold if strong else f_det if kind == "detail" else f_txt
-        bd = B_GRAND if kind == "grand" else B_TOTAL if strong else B_BOTTOM
-        bg = TOTAL_ROW if strong else None
-        write(ws, r, COL_CODE, code, font=f_code, border=bd, fillc=bg)
-        write(ws, r, COL_LABEL, label, font=font, border=bd, fillc=bg,
-              indent=1 if level < 2 else 3)
-        write(ws, r, COL_NOTE, None, border=bd, fillc=bg)
-        for i, me in enumerate(shown):
-            v = vals.get(me)
-            write(ws, r, COL_FIRST + i, round(v, 2) if v else None, font=font,
-                  fmt=FMT_MONEY, border=bd, fillc=bg, align="right")
-        tv = sum(vals.get(me, 0.0) for me in shown)
-        write(ws, r, tot_col, round(tv, 2) if tv else None, font=font, fmt=FMT_MONEY,
-              border=bd, fillc=bg if strong else SURFACE_3, align="right")
+
+        is_grand, is_total = kind == "grand", kind == "total"
+        detail = kind == "detail"
+        if is_grand:
+            bg, bd, fl, fn = TOTAL_ROW, B_GRAND, f_total, f_total
+        elif is_total:
+            bg, bd, fl, fn = TOTAL_ROW, B_TOTAL, f_total, f_total
+        elif detail:
+            bg, bd, fl, fn = None, B_BOTTOM, det_font[level], det_font[level]
+        else:
+            bg, bd, fl, fn = None, B_BOTTOM, f_label, f_num
+
+        write(ws, r, COL_CODE, code, font=f_total if is_grand else f_code, fillc=bg,
+              border=bd, align="left", indent=1)
+        write(ws, r, COL_LABEL, label, font=fl, fillc=bg, border=bd, align="left",
+              indent={2: 4, 3: 6, 4: 8}.get(level, 1) if detail
+              else (1 if (is_total or is_grand) else 2))
+        write(ws, r, COL_NOTE, None, fillc=bg, border=bd)
+        for i in range(len(cols)):
+            v = period_formula(cols, i, r, lambda m, vv=vals: (
+                round(vv[m], 2) if vv.get(m) else None))
+            fillv = bg
+            if cols[i][0] != "month" and not (is_total or is_grand):
+                fillv = SURFACE_3
+            write(ws, r, COL_FIRST + i, v, font=fn, fmt=FMT_MONEY, fillc=fillv,
+                  border=bd, align="right")
+        if detail:
+            ws.row_dimensions[r].outline_level = level - 1
+            ws.row_dimensions[r].hidden = level == 4        # контрагенты свёрнуты
+        ws.row_dimensions[r].height = 19 if (is_total or is_grand) else 17
         r += 1
+
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions["B"].width = 9
+    ws.column_dimensions["C"].width = 66
+    ws.column_dimensions["D"].hidden = True
+    apply_zebra(ws, hdr + 1, r - 1, COL_CODE, ncols)
+    apply_column_dividers(ws, hdr, r - 1, COL_CODE, ncols)
+    columns_layout(ws, cols, report_date.year)
+    ws.freeze_panes = ws.cell(row=hdr + 1, column=COL_FIRST)
+    ws.print_title_rows = "1:%d" % hdr
 
     notes = [
         "1.1 — НДС с продаж WB так же, как в P&L: с цены покупателя (после СПП) по ставке "
         "карточки.",
         "2.1 — НДС с вознаграждения WB из отчёта WB: продажи − возвраты + технические строки, "
-        "как на листе «Сверка НДС WB», по дате отчёта.",
+        "как на листе «Сверка НДС WB», по дате отчёта. При большой СПП вознаграждение WB "
+        "и НДС с него бывают отрицательными.",
         "2.2, 2.3 — удержания WB идут в отчёте с НДС, ставку берём по строке; это расчёт, "
         "а не документ WB.",
         "1.2, 2.4–2.8 — НДС, выделенный в учёте по договорам с режимом «НДС включён». "
-        "По договорам без НДС или с неуказанным режимом НДС не выделяется и здесь не виден. "
-        "Детализация — по группам статей.",
+        "По договорам без НДС или с неуказанным режимом НДС не выделяется и здесь не виден.",
+        "Детализация: группа статей → статья → контрагент. Контрагенты свёрнуты — "
+        "раскрываются кнопкой «+» слева от строк.",
         "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
         "в бухгалтерии — по счетам-фактурам и в другие периоды.",
     ]
     r += 1
     for t in notes:
-        ws.merge_cells(start_row=r, start_column=COL_LABEL, end_row=r, end_column=ncols)
+        ws.merge_cells(start_row=r, start_column=COL_LABEL, end_row=r, end_column=COL_LABEL + 6)
         write(ws, r, COL_LABEL, t, font=f_note, wrap=True, indent=1)
         ws.row_dimensions[r].height = 26
         r += 1
-
 
 def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=None):
     """

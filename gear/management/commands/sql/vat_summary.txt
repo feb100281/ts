@@ -1,12 +1,13 @@
 -- НДС по операциям, справочно (лист «НДС по операциям»).
--- Строки: (me, kind, code, item, value), value — сумма НДС в рублях со знаком учёта.
+-- Строки: (me, kind, code, item, cost_item, cp, value), value — сумма НДС в рублях со знаком учёта.
 --   sales — НДС с продаж WB: с цены покупателя, как в P&L (pl_sales.vat_amount);
 --   comm  — НДС с вознаграждения WB по отчёту (как «Сверка НДС WB», стр. 2.2);
 --   wb    — НДС с расходов и продвижения WB: расчётно по ставке строки;
 --   gl    — НДС из учёта (gl.fact, chapter VAT_ACCURALS), разнесённый по счёту
---           и группе статей парной проводки P&L (тот же pid).
+--           группе статей, статье и контрагенту парной проводки P&L (тот же pid).
 WITH sales_vat AS (
     SELECT LAST_DAY(date_from)::DATE AS me, 'sales' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp,
            SUM(vat_amount) AS value
     FROM pl_sales
     WHERE date_from::DATE <= $date_from
@@ -14,6 +15,7 @@ WITH sales_vat AS (
 ),
 comm_vat AS (
     SELECT LAST_DAY(rr_dt::DATE)::DATE AS me, 'comm' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp,
            COALESCE(SUM(ppvz_vw_nds) FILTER (WHERE COALESCE(sop_name, '') = 'Продажа'), 0)
            - COALESCE(SUM(ppvz_vw_nds) FILTER (WHERE COALESCE(sop_name, '') = 'Возврат'), 0)
            + COALESCE(SUM(ppvz_vw_nds) FILTER (
@@ -25,7 +27,7 @@ comm_vat AS (
 wb_vat AS (
     SELECT me::DATE AS me, 'wb' AS kind,
            CASE WHEN account = 'WB Deduction' THEN 'promo' ELSE 'selling' END AS code,
-           '' AS item,
+           '' AS item, '' AS cost_item, '' AS cp,
            -SUM((dt - cr) * COALESCE(vat_rate, 20) / (100 + COALESCE(vat_rate, 20))) / 100
                AS value
     FROM wb_costs
@@ -37,6 +39,8 @@ gl_vat AS (
     SELECT LAST_DAY(v.date_from)::DATE AS me, 'gl' AS kind,
            LEFT(CAST(a.code AS VARCHAR), 3) AS code,
            COALESCE(NULLIF(TRIM(concat_ws(' ', sp.code, sp.name)), ''), 'Без группы') AS item,
+           COALESCE(NULLIF(TRIM(concat_ws(' ', s.code, s.name)), ''), 'Без статьи') AS cost_item,
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp,
            SUM(v.dt - v.cr) / 100.0 AS value
     FROM pg.gl.fact v
     JOIN pg.gl.fact p
@@ -44,9 +48,11 @@ gl_vat AS (
     JOIN pg.public.corporate_coa a ON a.id = p.acc_id
     LEFT JOIN pg.public.corporate_cfitems s ON s.id = p.subconto_id
     LEFT JOIN pg.public.corporate_cfitems sp ON sp.id = s.parent_id
+    LEFT JOIN pg.public.contracts_contracts c ON c.id = p.contract_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
     WHERE v.chapter = 'VAT_ACCURALS'
       AND v.date_from <= $date_from
-    GROUP BY 1, 2, 3, 4
+    GROUP BY 1, 2, 3, 4, 5, 6
 )
 SELECT * FROM sales_vat
 UNION ALL SELECT * FROM comm_vat
