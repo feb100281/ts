@@ -4608,6 +4608,37 @@ VAT_GL_SECTIONS = [("610", "2.4", "Накладные расходы (по уч�
                    ("630", "2.7", "Финансовые расходы (по учёту)")]
 
 
+VAT_WO_ITEM = "5.9. НДС, не принятый к вычету"
+
+
+def fetch_vat_adjustments(con, date_from):
+    """Корректировки НДС из админки (grossbook_vatadjustment): (me, kind, amount).
+
+    До применения миграции таблицы нет — тогда пусто, пакет собирается как раньше.
+    """
+    try:
+        rows = con.execute("""
+            SELECT LAST_DAY(date)::DATE, kind, SUM(amount)
+            FROM pg.public.grossbook_vatadjustment
+            WHERE date <= $date_from GROUP BY 1, 2""",
+            parameters={"date_from": date_from}).fetchall()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Корректировки НДС: %s", e)
+        return []
+    return [(me if isinstance(me, date) else date.fromisoformat(str(me)[:10]),
+             kind, float(v or 0)) for me, kind, v in rows]
+
+
+def apply_vat_writeoffs(pl_data, adjustments):
+    """НДС, списанный в расходы, — расход P&L, раздел 5 (знак расхода — минус)."""
+    for me, kind, amount in adjustments:
+        if kind == "writeoff" and amount:
+            key = (me, SEC_OTHER, VAT_WO_ITEM)
+            pl_data[key] = round((pl_data.get(key) or 0.0) - amount, 2)
+    return pl_data
+
+
 def fetch_vat_summary(con, date_from):
     """Строки sql/vat_summary.txt: (me, kind, code, item, value)."""
     try:
@@ -4746,7 +4777,7 @@ def vat_layout(rows, shown=None, paid=None):
         out.append((kind, code, label, vals, level))
     return out
 
-def vat_balance_block(ws, r, cols, months, est, paid, ncols):
+def vat_balance_block(ws, r, cols, months, est, paid, ncols, wo=None, adj=None):
     """Раздел 5 листа «НДС по операциям»: сальдо расчётов с бюджетом.
 
     est — оценка к уплате по месяцам (минус — должны), paid — оплачено по
@@ -4755,11 +4786,13 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols):
     """
     if not est and not paid:
         return r
-    every = sorted(set(est) | set(paid) | set(months))
+    wo, adj = wo or {}, adj or {}
+    every = sorted(set(est) | set(paid) | set(wo) | set(adj) | set(months))
     bal, start, end = 0.0, {}, {}
     for m in every:
         start[m] = bal
-        bal += est.get(m, 0.0) - paid.get(m, 0.0)
+        # списанный НДС (Кт 84, минус) уменьшает переплату: его уже не вернуть
+        bal += est.get(m, 0.0) - paid.get(m, 0.0) + wo.get(m, 0.0) + adj.get(m, 0.0)
         end[m] = bal
 
     f_band = Font(name=FONT, size=10, bold=True, color=TEXT)
@@ -4784,7 +4817,10 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols):
         ("5.1", "Сальдо на начало (накопительно с начала данных)", "start"),
         ("5.2", "НДС к уплате за период, оценка (стр. 3)", "est"),
         ("5.3", "НДС оплачено за период (стр. 4)", "paid"),
-        ("5.4", "САЛЬДО НА КОНЕЦ (минус — должны бюджету, плюс — переплата)", "end"),
+        ("5.4", "НДС списан в расходы — не принят к вычету (админка «Корректировки НДС»)",
+         "wo"),
+        ("5.5", "Корректировка сальдо НДС, без P&L (админка «Корректировки НДС»)", "adj"),
+        ("5.6", "САЛЬДО НА КОНЕЦ (минус — должны бюджету, плюс — переплата)", "end"),
     ]
     for code, label, key in lines:
         strong = key == "end"
@@ -4803,7 +4839,7 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols):
             elif key == "end":
                 v = end.get(b_)
             else:
-                src = est if key == "est" else paid
+                src = {"est": est, "paid": paid, "wo": wo, "adj": adj}[key]
                 v = sum(src.get(mm, 0.0) for mm in months if a_ <= mm <= b_)
             fillv = bg
             write(ws, r, COL_FIRST + i, round(v, 2) if v else None, font=fnt, fmt=FMT_MONEY,
@@ -4813,7 +4849,8 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols):
     return r
 
 
-def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
+def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None,
+                  adjustments=None):
     """Лист «НДС по операциям» — оформление и колонки как на листах P&L."""
     as_of = as_of or report_date
     cols = make_columns(months)
@@ -4905,7 +4942,15 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
         ws.row_dimensions[r].height = 19 if (is_total or is_grand) else 17
         r += 1
 
-    r = vat_balance_block(ws, r, cols, months, est, paid_tot, ncols)
+    # корректировки из админки: списание — минус (уменьшает переплату),
+    # корректировка сальдо — со знаком, как введена
+    wo, adj = defaultdict(float), defaultdict(float)
+    for me, kind, amount in adjustments or ():
+        if kind == "writeoff":
+            wo[me] -= amount
+        else:
+            adj[me] += amount
+    r = vat_balance_block(ws, r, cols, months, est, paid_tot, ncols, wo, adj)
 
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 9
@@ -4940,7 +4985,8 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
         "помесячно с оценкой (3) не совпадает; при едином налоговом платеже НДС отдельно "
         "не выделяется.",
         "5 — расчёты с бюджетом по НДС накопительно с начала данных: сальдо на начало + "
-        "оценка к уплате (3) − оплачено (4). Минус — по оценке мы должны бюджету, плюс — "
+        "оценка к уплате (3) − оплачено (4) − НДС, списанный в расходы (5.4) ± "
+        "корректировки сальдо (5.5); 5.4 и 5.5 вносятся в админке «Корректировки НДС». Минус — по оценке мы должны бюджету, плюс — "
         "оплачено больше оценки (переплата, ещё не полученное возмещение или в статье НДС "
         "есть другие таможенные платежи).",
         "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
@@ -4970,6 +5016,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         deposit_balance, note_rows, payout_rows,
         conv_rows, vat_rows) = fetch_pack_data(con, date_from)
         vat_ops_rows = fetch_vat_summary(con, date_from)
+        vat_adj = fetch_vat_adjustments(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -4979,6 +5026,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         me = me if isinstance(me, date) else date.fromisoformat(str(me))
         pl_data[(me, section, item)] = (round(float(value), 2)
                                         if value is not None else None)
+    apply_vat_writeoffs(pl_data, vat_adj)
 
     cf_data = {}
     for me, act, op, itm, sub, cp, contract, amount in cf_rows:
@@ -5111,7 +5159,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         if (str(key[3]).startswith("125") or sub.startswith("125")) and "НДС" in sub:
             taxes_paid[sub][key[0]] += v
     build_vat_ops(ws_vat_ops, vat_ops_rows, months, report_date, as_of=date_from,
-                  paid=taxes_paid)
+                  paid=taxes_paid, adjustments=vat_adj)
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "

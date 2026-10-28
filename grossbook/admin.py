@@ -19,7 +19,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import urlencode
 
-from .models import LoanAdjustment, Manual
+from .models import LoanAdjustment, Manual, VatAdjustment
 from .reporting.loan_adjustment_pdf import (
     generate_loan_adjustment_pdf,
     generate_loan_adjustments_registry_pdf,
@@ -880,3 +880,12 @@ class LoanAdjustmentAdmin(admin.ModelAdmin):
             ),
             url,
         )
+
+
+@admin.register(VatAdjustment)
+class VatAdjustmentAdmin(admin.ModelAdmin):
+    list_display = ("date", "kind", "amount", "comment")
+    list_filter = ("kind",)
+    date_hierarchy = "date"
+    search_fields = ("comment",)
+

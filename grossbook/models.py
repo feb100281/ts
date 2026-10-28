@@ -231,3 +231,36 @@ class LoanAdjustment(models.Model):
 #         return f"{self.date_from:} на сумму: ({(self.dt - self.cr):,.0f})"
     
 
+
+
+class VatAdjustment(models.Model):
+    """Корректировки НДС для управленческой отчётности (мэн пак).
+
+    Не проводка и не движение денег: учёт и Cash Flow не меняются.
+      writeoff — НДС не принят к вычету и списан в расходы: расход в P&L
+                 (раздел 5) и уменьшение переплаты в сальдо расчётов по НДС;
+      balance  — корректировка сальдо расчётов по НДС без влияния на P&L
+                 (плюс увеличивает переплату, минус — уменьшает).
+    """
+
+    class Kind(models.TextChoices):
+        WRITEOFF = "writeoff", "НДС списан в расходы (не принят к вычету)"
+        BALANCE = "balance", "Корректировка сальдо НДС (без P&L)"
+
+    date = models.DateField(verbose_name="Дата")
+    kind = models.CharField(max_length=20, choices=Kind.choices,
+                            default=Kind.WRITEOFF, verbose_name="Вид")
+    amount = models.DecimalField(
+        max_digits=14, decimal_places=2, verbose_name="Сумма, ₽",
+        help_text="Списание — положительной суммой. Корректировка сальдо — "
+                  "со знаком: плюс увеличивает переплату, минус уменьшает.")
+    comment = models.TextField(blank=True, verbose_name="Комментарий")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
+
+    class Meta:
+        verbose_name = "Корректировка НДС"
+        verbose_name_plural = "Корректировки НДС"
+        ordering = ("-date",)
+
+    def __str__(self):
+        return f"{self.date:%d.%m.%Y} · {self.get_kind_display()} · {self.amount:,.2f}"

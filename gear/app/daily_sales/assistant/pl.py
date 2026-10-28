@@ -72,11 +72,13 @@ def _load(report_date: date) -> dict:
             WHERE subitem = ? GROUP BY 1
         """, [mp.TAX_SUBITEM]).fetchall()
         conv_rows = con.execute("SELECT me, value FROM conv_loans").fetchall()
+        vat_adj = mp.fetch_vat_adjustments(con, report_date)
 
     pl_data = {}
     for me, section, item, value in pl_rows:
         pl_data[(_as_date(me), section, item)] = (
             round(float(value), 2) if value is not None else None)
+    mp.apply_vat_writeoffs(pl_data, vat_adj)          # НДС, списанный в расходы
     # как основной лист мэн пака «P&L после СПП»: выручка и комиссия без СПП
     pl_data = mp.pl_after_spp(pl_data)
     tax = defaultdict(float)
