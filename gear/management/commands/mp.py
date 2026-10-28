@@ -4720,7 +4720,7 @@ def vat_layout(rows, shown=None, paid=None):
     L.append(("blank", None, None, None, 0))
     pay = {m: total_out.get(m, 0.0) - total_in.get(m, 0.0)
            for m in set(total_out) | set(total_in)}
-    L.append(("grand", "3", "НДС К УПЛАТЕ, ОЦЕНКА (1.3 + 2.9; минус — платим в бюджет)",
+    L.append(("grand", "3", "НДС К УПЛАТЕ ЗА ПЕРИОД, ОЦЕНКА (1.3 + 2.9; без сальдо на начало)",
               pay, 0))
     # справочно: что фактически ушло в бюджет по Cash Flow (статья 125000),
     # знак как в Cash Flow: оплата — минус, возврат — плюс
@@ -4771,8 +4771,9 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols):
     ws.merge_cells(start_row=r, start_column=COL_CODE, end_row=r, end_column=COL_LABEL)
     write(ws, r, COL_CODE, "РАСЧЁТЫ С БЮДЖЕТОМ ПО НДС (САЛЬДО, ОЦЕНКА)", font=f_band,
           align="left", indent=1, border=B_SECTION)
-    for cc in range(COL_CODE, ncols + 1):
+    for cc in range(COL_CODE, ncols + 1):            # итоговый блок — бледно-жёлтый
         ws.cell(row=r, column=cc).border = B_SECTION
+        ws.cell(row=r, column=cc).fill = fill(CORR_FILL)
     r += 1
 
     def span(kind, y):
@@ -4787,8 +4788,7 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols):
     ]
     for code, label, key in lines:
         strong = key == "end"
-        bg, bd = (TOTAL_ROW, B_TOTAL) if strong else (SURFACE_4 if key == "start" else None,
-                                                     B_BOTTOM)
+        bg, bd = CORR_FILL, (B_TOTAL if strong else B_BOTTOM)
         fnt = f_bold if strong or key == "start" else f_txt
         write(ws, r, COL_CODE, code, font=f_code, fillc=bg, border=bd, align="left", indent=1)
         write(ws, r, COL_LABEL, label, font=fnt, fillc=bg, border=bd, align="left", indent=1)
@@ -4805,7 +4805,7 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols):
             else:
                 src = est if key == "est" else paid
                 v = sum(src.get(mm, 0.0) for mm in months if a_ <= mm <= b_)
-            fillv = bg if (kind == "month" or strong) else SURFACE_3
+            fillv = bg
             write(ws, r, COL_FIRST + i, round(v, 2) if v else None, font=fnt, fmt=FMT_MONEY,
                   fillc=fillv, border=bd, align="right")
         ws.row_dimensions[r].height = 19 if strong else 17
