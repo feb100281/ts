@@ -40,6 +40,34 @@ def _stock_on(d: date) -> pd.DataFrame:
     return df
 
 
+def _arrivals() -> pd.DataFrame:
+    """Первое появление товара: первый день с остатком на складах и первая/последняя
+    дата УПД поставщика. Два запроса: без УПД (нет связи с Postgres) остаётся склад."""
+    from .drop import _query
+    st = _query("""
+        SELECT nm_id AS nm, MIN(date_from::DATE) AS first_stock FROM (
+            SELECT nm_id, date_from FROM stocks.unpacked_stocks WHERE COALESCE(quantity, 0) > 0
+            UNION ALL
+            SELECT nm_id, date_from FROM stocks.unpacked_fbs_stocks WHERE COALESCE(quantity, 0) > 0
+        ) GROUP BY 1""", {})
+    upd = _query("""
+        SELECT l.nm_id AS nm, MIN(d.date) AS first_upd, MAX(d.date) AS last_upd
+        FROM pg.public.upd_income_lines l
+        JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+        WHERE l.nm_id IS NOT NULL GROUP BY 1""", {})
+    out = st if not st.empty else pd.DataFrame(columns=["nm", "first_stock"])
+    if not upd.empty:
+        out = out.merge(upd, on="nm", how="outer")
+    for c in ("first_stock", "first_upd", "last_upd"):
+        if c not in out:
+            out[c] = pd.NaT
+        out[c] = pd.to_datetime(out[c], errors="coerce")
+    out["first_in"] = out[["first_stock", "first_upd"]].min(axis=1)
+    out = out.dropna(subset=["nm"])
+    out["nm"] = out["nm"].astype("int64")
+    return out[["nm", "first_in", "last_upd"]]
+
+
 def _margin(a: date, b: date, tag: str) -> pd.DataFrame:
     from .menu import margin
     m = margin(a, b, "nm")
@@ -97,6 +125,9 @@ def analyze(d1: date, d2: date, last: date | None = None,
     df["lost"] = (df["p0"] - df["p1"]) * df["q1"]
     df = df.merge(_margin(a0, b0, "0"), on="nm", how="left").merge(_margin(d1, last, "1"),
                                                                     on="nm", how="left")
+    df = df.merge(_arrivals(), on="nm", how="left")
+    # сколько дней товар в продаже на первый день переоценки
+    df["age"] = (pd.Timestamp(d1) - df["first_in"]).dt.days
 
     cut_lim = -abs(min_cut) if min_cut is not None else MIN_CUT
     hit = df[(df["cut"] <= cut_lim) & (df["q1"] > 0) & df["p0"].notna()].copy()

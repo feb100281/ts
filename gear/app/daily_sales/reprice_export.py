@@ -24,14 +24,19 @@ DOWNLOAD_ID = "reprice-export-download"
 STATUS_ID = "reprice-export-status"
 
 FAST = 3          # «распродали за 1–3 дня»
+OVERSTOCK = 90    # остатка при старой цене на 3 месяца и больше — залежавшийся товар
+NEW_DAYS = 30     # в продаже меньше 30 дней — новинка
 WEEK = 7
 
 COLUMNS = [
     ("brand", "Бренд", "text"), ("sa", "Артикул продавца", "text"), ("nm", "Артикул WB", "id"),
     ("title", "Наименование", "text"),
+    ("groups", "Группа вывода", "wrap"),
     ("verdict", "Вывод", "wrap"),
     ("p0", "Цена до СПП ДО, ₽", "price"), ("pc", "Цена до СПП в дни переоценки, ₽", "price"),
     ("cut", "Изменение цены, %", "pct"),
+    ("first_in", "Первое поступление", "date"), ("age", "Дней в продаже на дату переоценки", "qty"),
+    ("last_upd", "Последняя поставка (УПД)", "date"),
     ("bp0", "Цена покупателя ДО, ₽", "price"), ("bp1", "Цена покупателя ПОСЛЕ, ₽", "price"),
     ("u0", "Продажи ДО, шт/день", "dec"), ("u1", "Продажи ПОСЛЕ, шт/день", "dec"),
     ("stock0", "Остаток перед переоценкой, шт", "qty"), ("stock", "Остаток сейчас, шт", "qty"),
@@ -55,10 +60,16 @@ NOTES = [
                             "не меньше чем «продано после + остаток сейчас»), делённый на продажи "
                             "в день ДО и ПОСЛЕ. Красным — остаток уходит за 3 дня и быстрее, "
                             "оранжевым — за неделю."),
-    ("Недополучено", "(Цена ДО − цена ПОСЛЕ) × штуки, проданные после переоценки. Оценка: "
-                     "предполагаем, что по старой цене этот объём продали бы, только дольше."),
+    ("Недополучено", "(Цена ДО − цена ПОСЛЕ) × штуки, проданные после переоценки — сколько "
+                     "отдали скидкой на фактически проданный объём. Оценка: предполагаем, что "
+                     "по старой цене этот объём продали бы, только дольше. Для залежавшегося "
+                     "остатка (по старой цене хватало на 90 дней и больше) сумма условная: "
+                     "по старой цене товар почти не продавался."),
     ("Фин. результат", "Выручка без НДС − себестоимость − комиссия − расходы WB, % к выручке, "
                        "по методике дашборда продаж. Отрицательный — продаём в убыток."),
+    ("Новинка", "Первое поступление — самая ранняя дата из первого дня с остатком на складах "
+                "WB/FBS и первой УПД поставщика. Новинка — товар в продаже меньше 30 дней на "
+                "первый день переоценки."),
     ("Важно", "Снижение цены может быть и из-за акции WB, а не нашей переоценки — сверяйте "
               "с историей цен в личном кабинете."),
 ]
@@ -87,8 +98,13 @@ def verdict(r) -> str:
             parts.append("Продажи почти не изменились — скидка не дала эффекта.")
     elif r.u0 == 0 and r.u1 > 0:
         parts.append("До скидки не продавался.")
+    new = pd.notna(r.age) and r.age < NEW_DAYS
+    over = pd.notna(r.days_old) and r.days_old >= OVERSTOCK and not new
+    if new:
+        parts.append(f"Новинка: в продаже {r.age:.0f} дн. (с {pd.Timestamp(r.first_in):%d.%m}).")
     if r.lost > 0:
-        parts.append(f"Недополучено ≈ {_rub(r.lost)} ₽.")
+        parts.append(f"Недополучено ≈ {_rub(r.lost)} ₽"
+                     + (" (условно: по старой цене товар почти не уходил)." if over else "."))
     if pd.notna(r.m_1):
         if pd.notna(r.m_0) and r.m_0 >= 0 > r.m_1:
             parts.append(f"Ушли в убыток: фин. результат {r.m_0:.0f}% → {r.m_1:.0f}%.")
@@ -96,6 +112,8 @@ def verdict(r) -> str:
             parts.append(f"Продаём в убыток: фин. результат {r.m_1:.0f}%.")
         elif pd.notna(r.m_0):
             parts.append(f"Фин. результат {r.m_0:.0f}% → {r.m_1:.0f}%.")
+        if over and r.m_1 >= 0 and r.u0 > 0 and r.u1 / r.u0 >= 1.2:
+            parts.append("Распродажа залежавшегося остатка в плюс — снижение оправдано.")
     return " ".join(parts)
 
 
@@ -107,42 +125,68 @@ def build(d1: date, d2: date, brands=None, min_cut: float = 10.0):
     hit = hit.copy()
     if not hit.empty:
         hit["verdict"] = [verdict(r) for r in hit.itertuples(index=False)]
+        hit["groups"] = tag_groups(hit)
+    else:
+        hit["groups"] = pd.Series(dtype=str)
     return hit, meta
 
 
-def findings(hit: pd.DataFrame) -> list[tuple[str, str, pd.DataFrame]]:
-    """Группы выводов: (заголовок, пояснение, артикулы-примеры)."""
+# группы выводов: (короткое имя для колонки, заголовок, пояснение, условие)
+def _k(h):
+    return h["u1"] / h["u0"].where(h["u0"] > 0)
+
+
+def _new(h):
+    return h["age"] < NEW_DAYS
+
+
+GROUPS = [
+    ("Скидка на новинку", "Скидка на новый товар (в продаже меньше 30 дней)",
+     lambda g: "Товар только поступил, а цену уже снизили — новинки обычно продают по полной "
+               f"цене. Недополучено ≈ {_rub(g['lost'].clip(lower=0).sum())} ₽.",
+     lambda h: _new(h).fillna(False)),
+    ("Скидка без роста продаж", "Снижение цены не увеличило продажи",
+     lambda g: f"Продажи выросли меньше чем на 20% или снизились. Недополучено ≈ "
+               f"{_rub(g['lost'].clip(lower=0).sum())} ₽ без прироста объёма.",
+     lambda h: (h["u0"] > 0) & (_k(h) < 1.2)),
+    ("Ускоренная распродажа", "Ускоренная распродажа ходового остатка",
+     lambda g: "При прежней цене остаток ушёл бы за 1–3 месяца, после снижения он уходит "
+               f"минимум втрое быстрее. Недополучено ≈ {_rub(g['lost'].clip(lower=0).sum())} ₽; "
+               "снижение можно было растянуть.",
+     lambda h: (h["days_old"] >= 30) & (h["days_old"] < OVERSTOCK)
+               & (h["days_new"] <= h["days_old"] / 3)),
+    ("Переход в убыток", "Переход в убыток после переоценки",
+     lambda g: "До снижения цены финансовый результат был положительным, после — отрицательный.",
+     lambda h: (h["m_0"] >= 0) & (h["m_1"] < 0)),
+    ("Скидка 40%+ на ходовом", "Глубокие скидки (40% и больше) на ходовом товаре",
+     lambda g: "Остатка при прежней цене хватало меньше чем на 3 месяца — такую скидку можно "
+               f"было не давать. Недополучено ≈ {_rub(g['lost'].clip(lower=0).sum())} ₽.",
+     lambda h: (h["cut"] <= -40) & ((h["days_old"] < OVERSTOCK) | h["days_old"].isna())),
+    ("Оправданная распродажа", "Оправданная распродажа залежавшегося остатка",
+     lambda g: "При прежней цене остатка хватало на 3 месяца и больше, после снижения товар "
+               "пошёл, а финансовый результат остался положительным. Это высвобождает деньги "
+               "и снижает платное хранение — снижение цены оправдано.",
+     lambda h: (h["days_old"] >= OVERSTOCK) & (h["m_1"] >= 0) & (_k(h) >= 1.2)
+               & ~_new(h).fillna(False)),
+]
+
+
+def tag_groups(hit: pd.DataFrame) -> pd.Series:
+    """Колонка «Группа вывода»: все группы артикула через «; »."""
+    marks = [(name, cond(hit).fillna(False)) for name, _t, _n, cond in GROUPS]
+    return pd.Series(["; ".join(n for n, m in marks if m.iloc[i]) for i in range(len(hit))],
+                     index=hit.index)
+
+
+def findings(hit: pd.DataFrame) -> list[tuple[str, str, str, pd.DataFrame]]:
+    """Группы выводов: (короткое имя, заголовок, пояснение, артикулы)."""
     if hit.empty:
         return []
-    h = hit.copy()
-    h["k"] = h["u1"] / h["u0"].where(h["u0"] > 0)
     out = []
-    no_effect = h[(h["u0"] > 0) & (h["k"] < 1.2)].sort_values("lost", ascending=False)
-    if len(no_effect):
-        out.append((
-            f"Снижение цены не увеличило продажи — {len(no_effect)} арт.",
-            f"Продажи выросли меньше чем на 20% или снизились. Недополучено ≈ "
-            f"{_rub(no_effect['lost'].clip(lower=0).sum())} ₽ без прироста объёма.",
-            no_effect))
-    fast = h[(h["days_old"] >= 30) & (h["days_new"] <= h["days_old"] / 3)].sort_values(
-        "lost", ascending=False)
-    if len(fast):
-        out.append((
-            f"Ускоренная распродажа ходового остатка — {len(fast)} арт.",
-            "При прежней цене остатка хватало на месяц и больше, после снижения он уходит "
-            f"минимум втрое быстрее. Недополучено ≈ {_rub(fast['lost'].clip(lower=0).sum())} ₽; "
-            "снижение можно было растянуть.", fast))
-    loss = h[(h["m_0"] >= 0) & (h["m_1"] < 0)].sort_values("lost", ascending=False)
-    if len(loss):
-        out.append((
-            f"Переход в убыток после переоценки — {len(loss)} арт.",
-            "До снижения цены финансовый результат был положительным, после — отрицательный.",
-            loss))
-    deep = h[h["cut"] <= -40].sort_values("lost", ascending=False)
-    if len(deep):
-        out.append((
-            f"Глубокие скидки, 40% и больше — {len(deep)} арт.",
-            f"Недополучено ≈ {_rub(deep['lost'].clip(lower=0).sum())} ₽.", deep))
+    for name, title, note, cond in GROUPS:
+        g = hit[cond(hit).fillna(False)].sort_values("lost", ascending=False)
+        if len(g):
+            out.append((name, f"{title} — {len(g)} арт.", note(g), g))
     return out
 
 
@@ -160,18 +204,31 @@ RECOMMENDATIONS = [
 
 def table_head(ws, fmt, r):
     """Шапка коротких таблиц артикулов на листах «Итог» и «Ключевые выводы»."""
-    for c, name in ((1, "БРЕНД · АРТИКУЛ ПРОДАВЦА · АРТИКУЛ WB"),
-                    (2, "НЕДОПОЛУЧЕНО, ₽"), (3, "ВЫВОД")):
+    for c, name in ((1, "БРЕНД · АРТИКУЛ ПРОДАВЦА · АРТИКУЛ WB"), (2, "НАИМЕНОВАНИЕ"),
+                    (3, "НЕДОПОЛУЧЕНО, ₽"), (4, "ВЫВОД")):
         ws.write(r, c, name, fmt["hdr"])
+    ws.set_row(r, 30)
+
+
+def table_widths(ws):
+    ws.set_column(1, 1, 40)
+    ws.set_column(2, 2, 34)
+    ws.set_column(3, 3, 21)
+    ws.set_column(4, 4, 100)
+
+
+def table_row(ws, fmt, r, row):
+    ws.write(r, 1, f"{row.brand} · {row.sa} · {int(row.nm)}", fmt["text"])
+    ws.write(r, 2, str(row.title or ""), fmt["wrap"])
+    ws.write_number(r, 3, max(row.lost, 0), fmt["money"])
+    ws.write(r, 4, row.verdict, fmt["wrap"])
     ws.set_row(r, 30)
 
 
 def findings_sheet(wb, fmt, head, hit, meta):
     ws = wb.add_worksheet("Ключевые выводы")
-    head(ws, "Ключевые выводы", 6)
-    ws.set_column(1, 1, 30)
-    ws.set_column(2, 2, 14)
-    ws.set_column(3, 3, 110)
+    head(ws, "Ключевые выводы", 4)
+    table_widths(ws)
     r = 6
     if hit.empty:
         ws.write(r, 1, "Снижений цены за выбранные дни нет.", fmt["text"])
@@ -181,16 +238,18 @@ def findings_sheet(wb, fmt, head, hit, meta):
     bins = [(-100, -40, "40% и больше"), (-40, -30, "30–40%"), (-30, -20, "20–30%"),
             (-20, -abs(0.01), "до 20%")]
     ws.write(r, 1, "Масштаб переоценки", fmt["lbl"])
-    ws.write(r, 3, f"{len(hit)} арт. ({', '.join(f'{b} — {n}' for b, n in hit['brand'].value_counts().head(4).items())}); "
+    ws.merge_range(r, 2, r, 4, "", fmt["wrap"])
+    ws.write(r, 2, f"{len(hit)} арт. ({', '.join(f'{b} — {n}' for b, n in hit['brand'].value_counts().head(4).items())}); "
                    f"средняя скидка по проданным штукам {avg_cut:.0f}%. Недополучено за "
                    f"{meta['n1']} дн. ≈ {_rub(hit['lost'].clip(lower=0).sum())} ₽.", fmt["wrap"])
     ws.set_row(r, 30)
     r += 1
     ws.write(r, 1, "Глубина снижения", fmt["lbl"])
-    ws.write(r, 3, "; ".join(f"{name} — {int(((hit['cut'] > lo) & (hit['cut'] <= hi)).sum())} арт."
+    ws.merge_range(r, 2, r, 4, "", fmt["wrap"])
+    ws.write(r, 2, "; ".join(f"{name} — {int(((hit['cut'] > lo) & (hit['cut'] <= hi)).sum())} арт."
                              for lo, hi, name in bins), fmt["wrap"])
     r += 2
-    for title, note, rows in findings(hit):
+    for name, title, note, rows in findings(hit):
         ws.write(r, 1, title, fmt["title"])
         r += 1
         ws.write(r, 1, note, fmt["sub"])
@@ -198,20 +257,18 @@ def findings_sheet(wb, fmt, head, hit, meta):
         table_head(ws, fmt, r)
         r += 1
         for row in rows.head(5).itertuples(index=False):
-            ws.write(r, 1, f"{row.brand} · {row.sa} · {int(row.nm)}", fmt["text"])
-            ws.write_number(r, 2, max(row.lost, 0), fmt["money"])
-            ws.write(r, 3, row.verdict, fmt["wrap"])
-            ws.set_row(r, 30)
+            table_row(ws, fmt, r, row)
             r += 1
         if len(rows) > 5:
-            ws.write(r, 1, f"…и ещё {len(rows) - 5} — на листе «Артикулы»", fmt["muted"])
+            ws.write(r, 1, f"…и ещё {len(rows) - 5} — на листе «Артикулы»: фильтр по колонке "
+                           f"«Группа вывода», текст содержит «{name}»", fmt["muted"])
             r += 1
         r += 1
     ws.write(r, 1, "Рекомендации", fmt["title"])
     r += 1
     for i, t in enumerate(RECOMMENDATIONS, 1):
         ws.write(r, 1, f"{i}.", fmt["lbl"])
-        ws.write(r, 3, t, fmt["wrap"])
+        ws.merge_range(r, 2, r, 4, t, fmt["wrap"])
         ws.set_row(r, 22)
         r += 1
 
@@ -235,7 +292,8 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
                  align="center", border=1, border_color="#" + mp.NAVY_2),
         "text": F(**line, indent=1), "wrap": F(**line, text_wrap=True, valign="top"),
         "id": F(**line, num_format="0", align="left"),
-        "qty": F(**line, num_format=mp.FMT_QTY), "money": F(**line, num_format=mp.FMT_MONEY),
+        "qty": F(**line, num_format=mp.FMT_QTY),
+        "date": F(**line, num_format="dd.mm.yyyy", align="center"), "money": F(**line, num_format=mp.FMT_MONEY),
         "price": F(**line, num_format=mp.FMT_MONEY), "dec": F(**line, num_format="0.0"),
         "pct": F(**line, num_format='0.0;[Red]-0.0'),
         "kpi_l": F(bold=True, font_color="#" + mp.NAVY_3, **line),
@@ -264,8 +322,7 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
     # ---- Итог
     ws = wb.add_worksheet("Итог")
     head(ws, f"Разбор переоценок {period}", 6)
-    ws.set_column(1, 1, 46)
-    ws.set_column(2, 2, 18)
+    table_widths(ws)
     fast = hit[hit["days_new"].round() <= FAST] if not hit.empty else hit
     week = hit[hit["days_new"].round() <= WEEK] if not hit.empty else hit
     loss = hit[hit["m_1"] < 0] if not hit.empty else hit
@@ -274,6 +331,9 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
             ("Остаток уходит за неделю и быстрее", len(week)),
             ("Продаются в убыток после переоценки", len(loss)),
             ("Недополучено к старой цене, ₽ (оценка)", float(hit["lost"].clip(lower=0).sum())
+             if not hit.empty else 0),
+            ("   в т. ч. по залежавшемуся остатку (условно), ₽",
+             float(hit.loc[hit["days_old"] >= OVERSTOCK, "lost"].clip(lower=0).sum())
              if not hit.empty else 0)]
     r = 6
     for name, v in kpis:
@@ -283,14 +343,10 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
     r += 1
     ws.write(r, 1, "Главное по артикулам (по недополученной сумме)", fmt["title"])
     r += 1
-    ws.set_column(3, 3, 110)
     table_head(ws, fmt, r)
     r += 1
     for row in hit.head(15).itertuples(index=False):
-        ws.write(r, 1, f"{row.brand} · {row.sa} · {int(row.nm)}", fmt["text"])
-        ws.write_number(r, 2, max(row.lost, 0), fmt["money"])
-        ws.write(r, 3, row.verdict, fmt["wrap"])
-        ws.set_row(r, 30)
+        table_row(ws, fmt, r, row)
         r += 1
 
     # ---- Ключевые выводы
@@ -302,10 +358,11 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
     hdr = 6
     ws.set_row(hdr, 42)
     widths = {"text": 14, "id": 13, "wrap": 70, "price": 12, "pct": 10, "dec": 11,
-              "qty": 11, "money": 14}
+              "qty": 11, "money": 14, "date": 12}
     for i, (key, name, k) in enumerate(COLUMNS):
         ws.write(hdr, 1 + i, name.upper(), fmt["hdr"])
-        ws.set_column(1 + i, 1 + i, 40 if key == "title" else widths[k])
+        ws.set_column(1 + i, 1 + i, 40 if key == "title" else 24 if key == "groups"
+                      else widths[k])
     r = hdr + 1
     for row in hit.itertuples(index=False):
         for i, (key, _n, k) in enumerate(COLUMNS):
@@ -313,10 +370,12 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
             f = fmt[k]
             if key == "days_new" and pd.notna(v):
                 f = fmt["red"] if round(v) <= FAST else fmt["amber"] if round(v) <= WEEK else f
-            if v is None or (isinstance(v, float) and pd.isna(v)):
+            if v is None or (not isinstance(v, str) and pd.isna(v)):
                 ws.write_blank(r, 1 + i, None, f)
             elif k in ("text", "wrap"):
                 ws.write_string(r, 1 + i, str(v), f)
+            elif k == "date":
+                ws.write_datetime(r, 1 + i, pd.Timestamp(v).to_pydatetime(), f)
             else:
                 ws.write_number(r, 1 + i, float(v), f)
         ws.set_row(r, 42)
