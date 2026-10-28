@@ -6,8 +6,8 @@
 --   расходы и продвижение WB — расчётно по ставке строки (wb_costs);
 --   учёт — проводки НДС (gl.fact, VAT_ACCURALS) со статьёй, контрагентом и
 --   договором парной проводки P&L.
--- «НДС, ₽» — сумма в своём направлении; «НДС к уплате, ₽» — начисленный
--- со знаком плюс, к вычету — со знаком минус.
+-- «НДС, ₽» — сумма в своём направлении; последняя колонка — знак как в деньгах:
+-- начисленный (к уплате) — минус, к вычету — плюс.
 WITH src AS (
     SELECT date_from::DATE AS d, '1. Начисленный' AS direction,
            '1.1 НДС с продаж WB' AS line, 'Продажи WB' AS grp, 'Продажи WB' AS item,
@@ -93,8 +93,8 @@ SELECT d AS "Дата",
        contract_id AS "ID договора",
        source AS "Источник",
        ROUND(SUM(vat), 2) AS "НДС, ₽",
-       ROUND(SUM(CASE WHEN direction = '1. Начисленный' THEN vat ELSE -vat END), 2)
-           AS "НДС к уплате, ₽"
+       ROUND(SUM(CASE WHEN direction = '1. Начисленный' THEN -vat ELSE vat END), 2)
+           AS "НДС: к уплате −, к вычету +, ₽"
 FROM src
 GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 HAVING ROUND(SUM(vat), 2) <> 0
