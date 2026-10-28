@@ -4728,11 +4728,10 @@ def vat_layout(rows, shown=None, paid=None):
         subs = [(k, dict(v)) for k, v in sorted(paid.items()) if live(v)]
         if subs:
             L.append(("blank", None, None, None, 0))
-            L.append(("band", None, "СПРАВОЧНО: НАЛОГИ, ОПЛАЧЕННЫЕ ПО CASH FLOW (125000)",
-                      None, 0))
+            L.append(("band", None, "СПРАВОЧНО: НДС, ОПЛАЧЕННЫЙ ПО CASH FLOW", None, 0))
             for i, (name, vals) in enumerate(subs, 1):
                 L.append(("row", "4.%d" % i, name, vals, 1))
-            L.append(("total", "4", "ИТОГО ОПЛАЧЕНО НАЛОГОВ (минус — оплата, плюс — возврат)",
+            L.append(("total", "4", "ИТОГО НДС ОПЛАЧЕНО (минус — оплата, плюс — возврат)",
                       add(*[v for _, v in subs]), 0))
     # знаки как в деньгах (P&L, Cash Flow): начисленный и к уплате — минус,
     # к вычету — плюс
@@ -4746,6 +4745,73 @@ def vat_layout(rows, shown=None, paid=None):
             vals = {m: -v for m, v in vals.items()}
         out.append((kind, code, label, vals, level))
     return out
+
+def vat_balance_block(ws, r, cols, months, est, paid, ncols):
+    """Раздел 5 листа «НДС по операциям»: сальдо расчётов с бюджетом.
+
+    est — оценка к уплате по месяцам (минус — должны), paid — оплачено по
+    Cash Flow (минус — оплата). Сальдо = накопительно est − paid с самого
+    первого месяца данных, в т. ч. до первого показанного месяца.
+    """
+    if not est and not paid:
+        return r
+    every = sorted(set(est) | set(paid) | set(months))
+    bal, start, end = 0.0, {}, {}
+    for m in every:
+        start[m] = bal
+        bal += est.get(m, 0.0) - paid.get(m, 0.0)
+        end[m] = bal
+
+    f_band = Font(name=FONT, size=10, bold=True, color=TEXT)
+    f_code = Font(name=FONT, size=8, color=MUTED)
+    f_txt = Font(name=FONT, size=10, color=TEXT)
+    f_bold = Font(name=FONT, size=10, bold=True, color=TEXT)
+
+    r += 1
+    ws.merge_cells(start_row=r, start_column=COL_CODE, end_row=r, end_column=COL_LABEL)
+    write(ws, r, COL_CODE, "РАСЧЁТЫ С БЮДЖЕТОМ ПО НДС (САЛЬДО, ОЦЕНКА)", font=f_band,
+          align="left", indent=1, border=B_SECTION)
+    for cc in range(COL_CODE, ncols + 1):
+        ws.cell(row=r, column=cc).border = B_SECTION
+    r += 1
+
+    def span(kind, y):
+        ms = [m for m in months if kind == "grand" or m.year == y]
+        return ms[0], ms[-1]
+
+    lines = [
+        ("5.1", "Сальдо на начало (накопительно с начала данных)", "start"),
+        ("5.2", "НДС к уплате за период, оценка (стр. 3)", "est"),
+        ("5.3", "НДС оплачено за период (стр. 4)", "paid"),
+        ("5.4", "САЛЬДО НА КОНЕЦ (минус — должны бюджету, плюс — переплата)", "end"),
+    ]
+    for code, label, key in lines:
+        strong = key == "end"
+        bg, bd = (TOTAL_ROW, B_TOTAL) if strong else (SURFACE_4 if key == "start" else None,
+                                                     B_BOTTOM)
+        fnt = f_bold if strong or key == "start" else f_txt
+        write(ws, r, COL_CODE, code, font=f_code, fillc=bg, border=bd, align="left", indent=1)
+        write(ws, r, COL_LABEL, label, font=fnt, fillc=bg, border=bd, align="left", indent=1)
+        write(ws, r, COL_NOTE, None, fillc=bg, border=bd)
+        for i, (kind, m, y) in enumerate(cols):
+            if kind == "month":
+                a_, b_ = m, m
+            else:
+                a_, b_ = span(kind, y)
+            if key == "start":
+                v = start.get(a_)
+            elif key == "end":
+                v = end.get(b_)
+            else:
+                src = est if key == "est" else paid
+                v = sum(src.get(mm, 0.0) for mm in months if a_ <= mm <= b_)
+            fillv = bg if (kind == "month" or strong) else SURFACE_3
+            write(ws, r, COL_FIRST + i, round(v, 2) if v else None, font=fnt, fmt=FMT_MONEY,
+                  fillc=fillv, border=bd, align="right")
+        ws.row_dimensions[r].height = 19 if strong else 17
+        r += 1
+    return r
+
 
 def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
     """Лист «НДС по операциям» — оформление и колонки как на листах P&L."""
@@ -4785,7 +4851,10 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
 
     # детализация сворачивается кнопками «+/−» слева: группа → статья → контрагент
     ws.sheet_properties.outlinePr.summaryBelow = False
-    for kind, code, label, vals, level in vat_layout(rows, months, paid):
+    layout = vat_layout(rows, months, paid)
+    est = next((v for k, c, _l, v, _lv in layout if k == "grand"), {}) or {}
+    paid_tot = next((v for k, c, _l, v, _lv in layout if k == "total" and c == "4"), {}) or {}
+    for kind, code, label, vals, level in layout:
         if kind == "blank":
             ws.row_dimensions[r].height = 6
             r += 1
@@ -4836,6 +4905,8 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
         ws.row_dimensions[r].height = 19 if (is_total or is_grand) else 17
         r += 1
 
+    r = vat_balance_block(ws, r, cols, months, est, paid_tot, ncols)
+
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 9
     ws.column_dimensions["C"].width = 76
@@ -4864,10 +4935,14 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
         "Знаки как в P&L и Cash Flow: начисленный НДС и НДС к уплате — минус (в скобках), "
         "к вычету — плюс. Минус в разделе «к вычету» увеличивает налог: так бывает у 2.1 "
         "при отрицательном НДС с вознаграждения WB.",
-        "4 — справочно: налоги, фактически оплаченные по Cash Flow (статья 125000), по "
-        "подстатьям. НДС за квартал платится тремя частями в следующем квартале, поэтому "
+        "4 — справочно: НДС, фактически оплаченный по Cash Flow (подстатьи налогов с «НДС» "
+        "в названии). НДС за квартал платится тремя частями в следующем квартале, поэтому "
         "помесячно с оценкой (3) не совпадает; при едином налоговом платеже НДС отдельно "
         "не выделяется.",
+        "5 — расчёты с бюджетом по НДС накопительно с начала данных: сальдо на начало + "
+        "оценка к уплате (3) − оплачено (4). Минус — по оценке мы должны бюджету, плюс — "
+        "оплачено больше оценки (переплата, ещё не полученное возмещение или в статье НДС "
+        "есть другие таможенные платежи).",
         "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
         "в бухгалтерии — по счетам-фактурам и в другие периоды.",
     ]
@@ -5030,10 +5105,11 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                      report_date, as_of=date_from)
 
     build_vat_check(ws_vat, vat_rows, report_date, as_of=date_from)
-    taxes_paid = defaultdict(lambda: defaultdict(float))     # подстатья 125xxx -> месяц
+    taxes_paid = defaultdict(lambda: defaultdict(float))     # подстатья НДС -> месяц
     for key, v in cf_data.items():
-        if str(key[3]).startswith("125") or str(key[4]).startswith("125"):
-            taxes_paid[key[4] or key[3]][key[0]] += v
+        sub = str(key[4] or key[3])
+        if (str(key[3]).startswith("125") or sub.startswith("125")) and "НДС" in sub:
+            taxes_paid[sub][key[0]] += v
     build_vat_ops(ws_vat_ops, vat_ops_rows, months, report_date, as_of=date_from,
                   paid=taxes_paid)
 
