@@ -4623,12 +4623,14 @@ def vat_layout(rows, shown=None):
     """Строки листа: [(kind, code, label, {me: value}, level)].
 
     level: 1 — раздел, 2 — группа статей, 3 — статья, 4 — контрагент.
-    НДС начисленный и к вычету — положительными суммами. Строки без движения
+    НДС начисленный — со знаком плюс, к вычету — минус. Строки без движения
     в показанных месяцах (shown) не выводятся.
     """
     out_rev, comm, sel, promo = {}, {}, {}, {}
     gl_in = defaultdict(lambda: defaultdict(float))    # (code, группа, статья, контрагент)
     gl_out = defaultdict(lambda: defaultdict(float))
+    goods = defaultdict(lambda: defaultdict(float))     # (—, ставка, поставщик, УПД)
+    goods_base = {}
     for me, kind, code, grp, item, cp, v in rows:
         me = me if isinstance(me, date) else date.fromisoformat(str(me)[:10])
         v = float(v or 0)
@@ -4636,6 +4638,10 @@ def vat_layout(rows, shown=None):
             out_rev[me] = out_rev.get(me, 0.0) + v
         elif kind == "comm":
             comm[me] = comm.get(me, 0.0) + v
+        elif kind == "goods":
+            goods[(code, grp, item, cp)][me] += v
+        elif kind == "goods_base":
+            goods_base[me] = goods_base.get(me, 0.0) + v
         elif kind == "wb":
             m = promo if code == "promo" else sel
             m[me] = m.get(me, 0.0) + v
@@ -4689,11 +4695,16 @@ def vat_layout(rows, shown=None):
     total_out = add(out_rev, out_gl)
     L.append(("total", "1.3", "ИТОГО НДС НАЧИСЛЕННЫЙ", total_out, 0))
     L.append(("band", None, "НДС К ВЫЧЕТУ (ВХОДЯЩИЙ)", None, 0))
+    goods_sec = add(*goods.values())
+    L.append(("row", "2.0", "Закупка товаров — НДС по УПД поставщиков", goods_sec, 1))
+    L += tree(goods)
+    if live(goods_base):
+        L.append(("ref", "", "справочно: закупки товаров по УПД без НДС", goods_base, 1))
     L.append(("row", "2.1", "Комиссия WB — НДС с вознаграждения по отчёту WB", comm, 1))
     L.append(("row", "2.2", "Расходы WB: логистика, хранение, приёмка — расчётно по ставке",
               sel, 1))
     L.append(("row", "2.3", "Продвижение WB — расчётно по ставке", promo, 1))
-    parts = [comm, sel, promo]
+    parts = [goods_sec, comm, sel, promo]
     known = {c for c, _, _ in VAT_GL_SECTIONS}
     for pfx, code, label in VAT_GL_SECTIONS + [(None, "2.8", "Другие счета (по учёту)")]:
         items = {k: v for k, v in gl_in.items()
@@ -4709,8 +4720,18 @@ def vat_layout(rows, shown=None):
     L.append(("blank", None, None, None, 0))
     pay = {m: total_out.get(m, 0.0) - total_in.get(m, 0.0)
            for m in set(total_out) | set(total_in)}
-    L.append(("grand", "3", "НДС К УПЛАТЕ, ОЦЕНКА (начисленный − к вычету)", pay, 0))
-    return L
+    L.append(("grand", "3", "НДС К УПЛАТЕ, ОЦЕНКА (1.3 + 2.9)", pay, 0))
+    # знаки как в сводной НДС: начисленный — плюс, к вычету — минус
+    out, minus = [], False
+    for kind, code, label, vals, level in L:
+        if kind == "band":
+            minus = label.startswith("НДС К ВЫЧЕТУ")
+        elif kind == "grand":
+            minus = False
+        if minus and vals:
+            vals = {m: -v for m, v in vals.items()}
+        out.append((kind, code, label, vals, level))
+    return out
 
 def build_vat_ops(ws, rows, months, report_date, as_of=None):
     """Лист «НДС по операциям» — оформление и колонки как на листах P&L."""
@@ -4773,6 +4794,8 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
             bg, bd, fl, fn = TOTAL_ROW, B_TOTAL, f_total, f_total
         elif detail:
             bg, bd, fl, fn = None, B_BOTTOM, det_font[level], det_font[level]
+        elif kind == "ref":
+            bg, bd, fl, fn = None, B_BOTTOM, det_font[4], det_font[4]
         else:                                   # основные статьи — как в «Расшифровках P&L»
             bg, bd, fl, fn = SURFACE_4, B_BOTTOM, f_total, f_num
 
@@ -4786,7 +4809,7 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
             v = period_formula(cols, i, r, lambda m, vv=vals: (
                 round(vv[m], 2) if vv.get(m) else None))
             fillv = bg
-            if cols[i][0] != "month" and not (is_total or is_grand or kind == "row"):
+            if cols[i][0] != "month" and not (is_total or is_grand or kind in ("row", "ref")):
                 fillv = SURFACE_3
             write(ws, r, COL_FIRST + i, v, font=fn, fmt=FMT_MONEY, fillc=fillv,
                   border=bd, align="right")
@@ -4817,10 +4840,16 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
         "и НДС с него бывают отрицательными.",
         "2.2, 2.3 — удержания WB идут в отчёте с НДС, ставку берём по строке; это расчёт, "
         "а не документ WB.",
+        "2.0 — НДС из УПД поставщиков товара (рублёвые УПД), по дате УПД: ставка → "
+        "поставщик → документ. Импорт со ставкой 0 показан отдельной группой; ввозной "
+        "НДС, уплаченный на таможне, сюда не входит.",
         "1.2, 2.4–2.8 — НДС, выделенный в учёте по договорам с режимом «НДС включён». "
         "По договорам без НДС или с неуказанным режимом НДС не выделяется и здесь не виден.",
         "Детализация: группа статей → статья → контрагент. При открытии видны группы; "
         "статьи и контрагенты раскрываются кнопками «+» слева или цифрами 1–4 вверху.",
+        "Знаки: начисленный НДС — плюс, к вычету — минус (в скобках), как в сводной НДС. "
+        "Плюс в разделе «к вычету» увеличивает налог: так бывает у 2.1 при отрицательном "
+        "НДС с вознаграждения WB.",
         "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
         "в бухгалтерии — по счетам-фактурам и в другие периоды.",
     ]

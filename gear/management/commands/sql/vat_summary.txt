@@ -55,8 +55,34 @@ gl_vat AS (
     WHERE v.chapter = 'VAT_ACCURALS'
       AND v.date_from <= $date_from
     GROUP BY 1, 2, 3, 4, 5, 6
+),
+-- НДС по закупке товаров — из УПД поставщиков (upd_income_lines), по дате УПД.
+-- goods_base — справочно сумма закупок без НДС в рублях, для сверки полноты.
+goods_vat AS (
+    SELECT LAST_DAY(d.date)::DATE AS me, 'goods' AS kind, '' AS code,
+           CASE WHEN COALESCE(l.upd_vat_rate, 0) = 0 THEN 'НДС 0% (импорт / без НДС)'
+                ELSE 'НДС ' || CAST(CAST(l.upd_vat_rate AS INTEGER) AS VARCHAR) || '%' END AS item,
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика') AS cost_item,
+           'УПД № ' || d.number || ' от ' || strftime(d.date, '%d.%m.%Y') AS cp,
+           SUM(COALESCE(l.upd_vat_amount,
+                        l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100)) AS value
+    FROM pg.public.upd_income_lines l
+    JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = d.counterparty_id
+    WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+    GROUP BY 1, 2, 3, 4, 5, 6
+),
+goods_base AS (
+    SELECT LAST_DAY(d.date)::DATE AS me, 'goods_base' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp, SUM(l.upd_amount_vatless) AS value
+    FROM pg.public.upd_income_lines l
+    JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+    WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+    GROUP BY 1
 )
 SELECT * FROM sales_vat
+UNION ALL SELECT * FROM goods_vat
+UNION ALL SELECT * FROM goods_base
 UNION ALL SELECT * FROM comm_vat
 UNION ALL SELECT * FROM wb_vat
 UNION ALL SELECT * FROM gl_vat

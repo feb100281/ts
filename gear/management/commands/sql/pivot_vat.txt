@@ -1,5 +1,6 @@
 -- Источник сводной по НДС (лист raw_vat файла сводных).
 -- Те же правила, что на листе «НДС по операциям» пакета, но построчно по дням:
+--   закупка товаров — НДС из УПД поставщиков (upd_income_lines);
 --   НДС с продаж WB — с цены покупателя (pl_sales.vat_amount);
 --   комиссия WB — НДС с вознаграждения по отчёту WB (sales.wb_raw.ppvz_vw_nds);
 --   расходы и продвижение WB — расчётно по ставке строки (wb_costs);
@@ -15,6 +16,21 @@ WITH src AS (
            vat_amount AS vat
     FROM pl_sales
     WHERE date_from::DATE <= $date_from
+
+    UNION ALL
+    SELECT d.date::DATE, '2. К вычету', '2.0 Закупка товаров',
+           CASE WHEN COALESCE(l.upd_vat_rate, 0) = 0 THEN 'НДС 0% (импорт / без НДС)'
+                ELSE 'НДС ' || CAST(CAST(l.upd_vat_rate AS INTEGER) AS VARCHAR) || '%' END,
+           'Товары по УПД',
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
+           'УПД № ' || d.number || ' от ' || strftime(d.date, '%d.%m.%Y')
+               || ' · id ' || CAST(d.id AS VARCHAR),
+           d.contract_id, 'УПД поставщика',
+           COALESCE(l.upd_vat_amount, l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100)
+    FROM pg.public.upd_income_lines l
+    JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = d.counterparty_id
+    WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
 
     UNION ALL
     SELECT rr_dt::DATE, '2. К вычету',
