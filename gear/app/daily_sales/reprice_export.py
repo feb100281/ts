@@ -39,7 +39,12 @@ COLUMNS = [
     ("last_upd", "Последняя поставка (УПД)", "date"),
     ("bp0", "Цена покупателя ДО, ₽", "price"), ("bp1", "Цена покупателя ПОСЛЕ, ₽", "price"),
     ("u0", "Продажи ДО, шт/день", "dec"), ("u1", "Продажи ПОСЛЕ, шт/день", "dec"),
-    ("stock0", "Остаток перед переоценкой, шт", "qty"), ("stock", "Остаток сейчас, шт", "qty"),
+    ("stock0", "Остаток перед переоценкой (на день до неё), шт", "qty"),
+    ("stock", "Остаток на последнюю дату остатков, шт", "qty"),
+    ("to0", "В пути к покупателю перед переоценкой (справочно), шт", "qty"),
+    ("frm0", "В пути от покупателя перед переоценкой (справочно), шт", "qty"),
+    ("to_n", "В пути к покупателю сейчас (справочно), шт", "qty"),
+    ("frm_n", "В пути от покупателя сейчас (справочно), шт", "qty"),
     ("days_old", "Хватило бы при старой цене, дней", "dec"),
     ("days_new", "Уходит при новой цене, дней", "dec"),
     ("q1", "Продано после переоценки, шт", "qty"),
@@ -67,6 +72,10 @@ NOTES = [
                      "по старой цене товар почти не продавался."),
     ("Фин. результат", "Выручка без НДС − себестоимость − комиссия − расходы WB, % к выручке, "
                        "по методике дашборда продаж. Отрицательный — продаём в убыток."),
+    ("В пути", "Справочно, в остаток не входит. «К покупателю» — уже заказано: склад "
+               "уменьшается при заказе, а продажа появляется при выкупе, поэтому сразу после "
+               "скидки часть товара видна здесь, а не в продажах. «От покупателя» — возвраты, "
+               "в продажу вернётся только часть."),
     ("Новинка", "Первое поступление — самая ранняя дата из первого дня с остатком на складах "
                 "WB/FBS и первой УПД поставщика. Новинка — товар в продаже меньше 30 дней на "
                 "первый день переоценки."),
@@ -79,14 +88,19 @@ def _rub(v):
     return f"{v:,.0f}".replace(",", " ")
 
 
-def verdict(r) -> str:
+def verdict(r, b0: date | None = None) -> str:
     """Короткий вывод по артикулу для разговора."""
     parts = [f"Цена {r.p0:,.0f} → {r.pc:,.0f} ₽ ({r.cut:+.0f}%).".replace(",", " ")]
     if pd.notna(r.days_new) and r.stock0 > 0:
         old = (f"при старой цене хватило бы на {r.days_old:.0f} дн."
                if pd.notna(r.days_old) else "при старой цене почти не продавался.")
-        parts.append(f"Остаток {_rub(r.stock0)} шт уходит за {r.days_new:.0f} дн., {old}"
-                     .replace("..", "."))
+        on = f" на {b0:%d.%m}" if b0 else ""
+        parts.append(f"Остаток{on} {_rub(r.stock0)} шт при новой цене уходит за "
+                     f"{r.days_new:.0f} дн., {old}".replace("..", "."))
+    to_n = getattr(r, "to_n", 0) or 0
+    if to_n > 0:
+        parts.append(f"Сейчас на складах {_rub(r.stock)} шт, в пути к покупателям ещё "
+                     f"{_rub(to_n)} шт.")
     if r.u0 > 0 and r.u1 > 0:
         k = r.u1 / r.u0
         if k >= 1.2:
@@ -124,7 +138,7 @@ def build(d1: date, d2: date, brands=None, min_cut: float = 10.0):
         hit = hit[hit["brand"].astype(str).str.upper().isin([b.upper() for b in brands])]
     hit = hit.copy()
     if not hit.empty:
-        hit["verdict"] = [verdict(r) for r in hit.itertuples(index=False)]
+        hit["verdict"] = [verdict(r, meta["b0"]) for r in hit.itertuples(index=False)]
         hit["groups"] = tag_groups(hit)
     else:
         hit["groups"] = pd.Series(dtype=str)
@@ -225,6 +239,48 @@ def table_row(ws, fmt, r, row):
     ws.set_row(r, 30)
 
 
+JUSTIFIED = "Оправданная распродажа"
+
+
+def structure_block(ws, fmt, r, hit) -> int:
+    """Из чего складывается недополученная сумма: проблемные (без двойного
+    счёта), оправданная распродажа, без замечаний."""
+    if hit.empty:
+        return r
+    lost = hit["lost"].clip(lower=0)
+    g = hit["groups"].fillna("")
+    ok = g.str.contains(JUSTIFIED, regex=False)
+    bad = (g != "") & ~ok
+    rows = [("Проблемные — хотя бы одна группа замечаний (без двойного счёта)", bad, "kpi")]
+    for name, title, _n, _c in GROUPS:
+        if name == JUSTIFIED:
+            continue
+        m = g.str.contains(name, regex=False)
+        if m.any():
+            rows.append((f"   в т. ч. {title.lower()}", m, "sub"))
+    rows += [("Оправданная распродажа залежавшегося остатка", ok, "kpi"),
+             ("Без замечаний: продажи выросли, остались в плюсе", g == "", "kpi")]
+    ws.write(r, 1, "Из чего складывается недополученная сумма", fmt["title"])
+    r += 1
+    for c, name in ((1, "КАТЕГОРИЯ"), (2, "АРТИКУЛОВ"), (3, "НЕДОПОЛУЧЕНО, ₽")):
+        ws.write(r, c, name, fmt["hdr"])
+    ws.set_row(r, 22)
+    r += 1
+    for label, m, kind in rows:
+        lf, vf = (fmt["kpi_l"], fmt["kpi_v"]) if kind == "kpi" else (fmt["muted"], fmt["money"])
+        ws.write(r, 1, label, lf)
+        ws.write_number(r, 2, int(m.sum()), fmt["qty"] if kind == "sub" else fmt["kpi_v"])
+        ws.write_number(r, 3, float(lost[m].sum()), vf)
+        r += 1
+    ws.write(r, 1, "Итого", fmt["tot_l"])
+    ws.write_number(r, 2, len(hit), fmt["tot"])
+    ws.write_number(r, 3, float(lost.sum()), fmt["tot"])
+    r += 1
+    ws.write(r, 1, "Группы «в т. ч.» пересекаются: один артикул может попасть в несколько, "
+                   "поэтому их сумма больше строки «Проблемные».", fmt["muted"])
+    return r + 2
+
+
 def findings_sheet(wb, fmt, head, hit, meta):
     ws = wb.add_worksheet("Ключевые выводы")
     head(ws, "Ключевые выводы", 4)
@@ -307,6 +363,9 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
     period = f"{meta['d1']:%d.%m}–{meta['d2']:%d.%m.%Y}"
     sub = (f"Снижение цены от {min_cut:.0f}% · ДО: {meta['a0']:%d.%m}–{meta['b0']:%d.%m} · "
            f"ПОСЛЕ: {meta['d1']:%d.%m}–{meta['last']:%d.%m} ({meta['n1']} дн.)"
+           + f" · остаток перед переоценкой — на {meta['b0']:%d.%m}"
+           + (f", сейчас — на {pd.Timestamp(meta['stock_date']):%d.%m}"
+              if meta.get("stock_date") is not None else "")
            + (" · бренды: " + ", ".join(brands) if brands else ""))
 
     def head(ws, title, ncol):
@@ -341,6 +400,7 @@ def to_excel(hit: pd.DataFrame, meta: dict, min_cut: float, brands) -> tuple[byt
         ws.write_number(r, 2, v, fmt["kpi_v"])
         r += 1
     r += 1
+    r = structure_block(ws, fmt, r, hit)
     ws.write(r, 1, "Главное по артикулам (по недополученной сумме)", fmt["title"])
     r += 1
     table_head(ws, fmt, r)

@@ -24,18 +24,27 @@ MIN_CUT = -10.0           # снижение цены, %, начиная с ко
 FAST_DAYS = 7             # «распродали за неделю и быстрее» — отдельная пометка
 
 
-def _stock_on(d: date) -> pd.DataFrame:
+def _stock_on(d, tag: str = "0") -> pd.DataFrame:
+    """Остаток на дату: склады WB + FBS (stock), в пути к покупателю (to),
+    в пути от покупателя (frm)."""
     from .drop import _query
+    cols = ["nm", f"stock{tag}", f"to{tag}", f"frm{tag}"]
+    if d is None:
+        return pd.DataFrame(columns=cols)
     df = _query("""
         WITH x AS (
-            SELECT nm_id, SUM(COALESCE(quantity, 0)) AS q FROM stocks.unpacked_stocks
-            WHERE date_from::DATE = $d GROUP BY 1
+            SELECT nm_id, SUM(COALESCE(quantity, 0)) AS q,
+                   SUM(COALESCE(in_way_to_client, 0)) AS t,
+                   SUM(COALESCE(in_way_from_client, 0)) AS f
+            FROM stocks.unpacked_stocks WHERE date_from::DATE = $d GROUP BY 1
             UNION ALL
-            SELECT nm_id, SUM(COALESCE(quantity, 0)) FROM stocks.unpacked_fbs_stocks
+            SELECT nm_id, SUM(COALESCE(quantity, 0)), 0, 0 FROM stocks.unpacked_fbs_stocks
             WHERE date_from::DATE = $d GROUP BY 1)
-        SELECT nm_id AS nm, SUM(q) AS stock0 FROM x GROUP BY 1""", {"d": d})
+        SELECT nm_id AS nm, SUM(q) AS s, SUM(t) AS t, SUM(f) AS f FROM x GROUP BY 1""",
+               {"d": pd.Timestamp(d).date()})
     if df.empty:
-        return pd.DataFrame(columns=["nm", "stock0"])
+        return pd.DataFrame(columns=cols)
+    df.columns = cols
     df["nm"] = df["nm"].astype("int64")
     return df
 
@@ -113,6 +122,11 @@ def analyze(d1: date, d2: date, last: date | None = None,
     df["u1"] = df["q1"] / n1
 
     df = df.merge(_stock_on(b0), on="nm", how="left").merge(_stock_now(last), on="nm", how="left")
+    from .drop import _STOCK_DATE
+    now = _stock_on(_STOCK_DATE.get("d"), "_n")[["nm", "to_n", "frm_n"]]
+    df = df.merge(now, on="nm", how="left")
+    for c in ("to0", "frm0", "to_n", "frm_n"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
     df["stock0"] = df["stock0"].fillna(0)
     df["stock"] = df["stock"].fillna(0)
     # снимок остатков бывает неполным (0 при продажах после) — тогда остаток на
@@ -133,7 +147,9 @@ def analyze(d1: date, d2: date, last: date | None = None,
     hit = df[(df["cut"] <= cut_lim) & (df["q1"] > 0) & df["p0"].notna()].copy()
     hit["fast"] = hit["days_new"] <= FAST_DAYS
     hit = hit.sort_values("lost", ascending=False)
-    meta = {"d1": d1, "d2": d2, "last": last, "a0": a0, "b0": b0, "n1": n1}
+    from .drop import _STOCK_DATE
+    meta = {"d1": d1, "d2": d2, "last": last, "a0": a0, "b0": b0, "n1": n1,
+            "stock_date": _STOCK_DATE.get("d")}
     return hit, meta
 
 
