@@ -243,6 +243,26 @@ PIVOTS = {
 }
 
 
+# Сводная по НДС: источник — лист raw_vat (mp.py, sql/pivot_vat.txt).
+# Колонки должны совпадать с выдачей pivot_vat.txt по порядку и названиям.
+VAT_BASE = ["Дата", "Год", "Месяц", "Направление", "Строка", "Группа статей",
+            "Статья", "Контрагент", "Договор", "ID договора", "Источник",
+            "НДС, ₽", "НДС к уплате, ₽"]
+VAT_VALUES = {3: ["1. Начисленный", "2. К вычету"], 4: ["—"], 5: ["—"], 6: ["—"],
+              7: ["—"], 8: ["—"]}
+PIVOTS["vat"] = {
+    "cache": "xl/pivotCache/pivotCacheDefinition3.xml",
+    "table": "xl/pivotTables/pivotTable3.xml",
+    "source": "raw_vat",
+    "cacheId": "545",
+    "base": VAT_BASE,
+    "values": VAT_VALUES,
+    "rows": [3, 4, 5, 6, 7, 8],            # направление → строка → группа →
+                                           # статья → контрагент → договор
+    "amount": 12,                          # НДС к уплате: + начислен, − к вычету
+}
+
+
 def build_cache(cfg):
     n = len(cfg["base"])
     months_i, years_i = n, n + 2
@@ -436,12 +456,104 @@ for key, cfg in PIVOTS.items():
     repl[cfg["cache"]] = build_cache(cfg)
     repl[cfg["table"]] = build_table(cfg)
 
-# порядок листов: сначала обе сводные, источники — в конец
+# ------------------------------------------------- лист и источник НДС
+REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+CT = "application/vnd.openxmlformats-officedocument.spreadsheetml."
+
+
+def col_letter(n):
+    s = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def vat_parts(src):
+    """Части книги для сводной по НДС: лист сводной, лист raw_vat с
+    «умной таблицей», кэш и сводная; правки workbook, rels, content types."""
+    parts = {}
+    # лист сводной — копия листа «Сводная P&L» с другим заголовком
+    sheet = src.read("xl/worksheets/sheet4.xml").decode("utf-8")
+    sheet = re.sub(r'(<c r="A1" t="inlineStr"><is><t>).*?(</t>)',
+                   lambda m: m.group(1) + "СВОДНАЯ: НДС ПО ОПЕРАЦИЯМ (СПРАВОЧНО)"
+                   + m.group(2), sheet, count=1)
+    parts["xl/worksheets/sheet5.xml"] = sheet
+    parts["xl/worksheets/_rels/sheet5.xml.rels"] = (
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+        'relationships"><Relationship Type="%s/pivotTable" '
+        'Target="/xl/pivotTables/pivotTable3.xml" Id="rId1"/></Relationships>' % REL)
+    parts["xl/pivotTables/_rels/pivotTable3.xml.rels"] = (
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+        'relationships"><Relationship Type="%s/pivotCacheDefinition" '
+        'Target="/xl/pivotCache/pivotCacheDefinition3.xml" Id="rId1"/>'
+        '</Relationships>' % REL)
+
+    # источник raw_vat: строка заголовков + «умная таблица»
+    last = col_letter(len(VAT_BASE))
+    head = "".join('<c r="%s1" s="9" t="inlineStr"><is><t>%s</t></is></c>'
+                   % (col_letter(i), esc(n)) for i, n in enumerate(VAT_BASE, 1))
+    parts["xl/worksheets/sheet6.xml"] = (
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<sheetPr><tabColor theme="3" tint="0.7999816888943144"/></sheetPr>'
+        '<dimension ref="A1:%s1"/>%s'
+        '<sheetFormatPr baseColWidth="10" defaultColWidth="16" defaultRowHeight="16"/>'
+        '<sheetData><row r="1">%s</row></sheetData>'
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3"'
+        ' footer="0.3"/><tableParts count="1"><tablePart xmlns:r="%s" r:id="rId1"/>'
+        '</tableParts></worksheet>' % (last, RAW_VIEW, head, REL))
+    parts["xl/worksheets/_rels/sheet6.xml.rels"] = (
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+        'relationships"><Relationship Type="%s/table" '
+        'Target="/xl/tables/table3.xml" Id="rId1"/></Relationships>' % REL)
+    cols = "".join('<tableColumn id="%d" name="%s"/>' % (i, esc(n))
+                   for i, n in enumerate(VAT_BASE, 1))
+    parts["xl/tables/table3.xml"] = (
+        '<table id="3" name="raw_vat" displayName="raw_vat" ref="A1:%s2"'
+        ' headerRowCount="1" totalsRowShown="0"'
+        ' xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<autoFilter ref="A1:%s2"/><tableColumns count="%d">%s</tableColumns>'
+        '<tableStyleInfo name="TableStyleLight1" showFirstColumn="0"'
+        ' showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>'
+        % (last, last, len(VAT_BASE), cols))
+
+    wbx = src.read("xl/workbook.xml").decode("utf-8")
+    wbx = wbx.replace("</sheets>",
+                      '<sheet xmlns:r="%s" name="Сводная НДС" sheetId="5" state="visible"'
+                      ' r:id="rId20"/><sheet xmlns:r="%s" name="raw_vat" sheetId="6"'
+                      ' state="visible" r:id="rId21"/></sheets>' % (REL, REL), 1)
+    wbx = wbx.replace("</pivotCaches>",
+                      '<pivotCache xmlns:r="%s" cacheId="%s" r:id="rId22"/></pivotCaches>'
+                      % (REL, PIVOTS["vat"]["cacheId"]), 1)
+    parts["xl/workbook.xml"] = wbx
+
+    rels = src.read("xl/_rels/workbook.xml.rels").decode("utf-8")
+    rels = rels.replace("</Relationships>",
+                        '<Relationship Type="%s/worksheet" Target="/xl/worksheets/sheet5.xml"'
+                        ' Id="rId20"/><Relationship Type="%s/worksheet"'
+                        ' Target="/xl/worksheets/sheet6.xml" Id="rId21"/>'
+                        '<Relationship Type="%s/pivotCacheDefinition"'
+                        ' Target="/xl/pivotCache/pivotCacheDefinition3.xml" Id="rId22"/>'
+                        '</Relationships>' % (REL, REL, REL), 1)
+    parts["xl/_rels/workbook.xml.rels"] = rels
+
+    ctx = src.read("[Content_Types].xml").decode("utf-8")
+    add = "".join('<Override PartName="%s" ContentType="%s%s"/>' % (n, CT, t) for n, t in (
+        ("/xl/worksheets/sheet5.xml", "worksheet+xml"),
+        ("/xl/worksheets/sheet6.xml", "worksheet+xml"),
+        ("/xl/tables/table3.xml", "table+xml"),
+        ("/xl/pivotTables/pivotTable3.xml", "pivotTable+xml"),
+        ("/xl/pivotCache/pivotCacheDefinition3.xml", "pivotCacheDefinition+xml")))
+    parts["[Content_Types].xml"] = ctx.replace("</Types>", add + "</Types>", 1)
+    return parts
+
+
+# порядок листов: сначала сводные, источники — в конец
 def reorder_sheets(xml):
     import re as _re
     block = _re.search(r"<sheets>(.*?)</sheets>", xml, _re.S)
     tags = _re.findall(r"<sheet [^>]*/>", block.group(1))
-    order = ["Сводная CF", "Сводная P&amp;L", "raw_cf", "raw_pl"]
+    order = ["Сводная CF", "Сводная P&amp;L", "Сводная НДС", "raw_vat", "raw_cf", "raw_pl"]
     by_name = {}
     for t in tags:
         by_name[_re.search(r'name="([^"]*)"', t).group(1)] = t
@@ -450,8 +562,6 @@ def reorder_sheets(xml):
     return xml[:block.start(1)] + "".join(ordered) + xml[block.end(1):]
 
 
-repl["xl/workbook.xml"] = reorder_sheets(
-    src.read("xl/workbook.xml").decode("utf-8"))
 
 
 # Закрепление строк. Шапка сводной занимает три строки: год, месяц и день,
@@ -483,15 +593,23 @@ SHEET_VIEWS = {
     "xl/worksheets/sheet3.xml": RAW_VIEW,     # raw_pl
 }
 
+repl.update(vat_parts(src))
+repl["xl/workbook.xml"] = reorder_sheets(repl["xl/workbook.xml"])
+SHEET_VIEWS["xl/worksheets/sheet5.xml"] = PIVOT_VIEW          # Сводная НДС
+
 for part, view in SHEET_VIEWS.items():
     if part in src.namelist():
         repl[part] = set_view(src.read(part).decode("utf-8"), view)
+    elif part in repl:
+        repl[part] = set_view(repl[part], view)
 
 out = zipfile.ZipFile(DST, "w", zipfile.ZIP_DEFLATED)
 for info in src.infolist():
     data = repl.get(info.filename)
     out.writestr(info.filename,
                  data.encode("utf-8") if data else src.read(info.filename))
+for name in sorted(set(repl) - set(src.namelist())):         # новые части (НДС)
+    out.writestr(name, repl[name].encode("utf-8"))
 out.close()
 src.close()
 print("готово:", DST)

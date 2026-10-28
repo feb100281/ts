@@ -4773,8 +4773,8 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
             bg, bd, fl, fn = TOTAL_ROW, B_TOTAL, f_total, f_total
         elif detail:
             bg, bd, fl, fn = None, B_BOTTOM, det_font[level], det_font[level]
-        else:
-            bg, bd, fl, fn = None, B_BOTTOM, f_label, f_num
+        else:                                   # основные статьи — как в «Расшифровках P&L»
+            bg, bd, fl, fn = SURFACE_4, B_BOTTOM, f_total, f_num
 
         write(ws, r, COL_CODE, code, font=f_total if is_grand else f_code, fillc=bg,
               border=bd, align="left", indent=1)
@@ -4786,19 +4786,22 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
             v = period_formula(cols, i, r, lambda m, vv=vals: (
                 round(vv[m], 2) if vv.get(m) else None))
             fillv = bg
-            if cols[i][0] != "month" and not (is_total or is_grand):
+            if cols[i][0] != "month" and not (is_total or is_grand or kind == "row"):
                 fillv = SURFACE_3
             write(ws, r, COL_FIRST + i, v, font=fn, fmt=FMT_MONEY, fillc=fillv,
                   border=bd, align="right")
         if detail:
+            # при открытии видны группы статей; статьи и контрагенты свёрнуты
             ws.row_dimensions[r].outline_level = level - 1
-            ws.row_dimensions[r].hidden = level == 4        # контрагенты свёрнуты
+            ws.row_dimensions[r].hidden = level >= 3
+        if detail and level == 2:
+            ws.row_dimensions[r].collapsed = True
         ws.row_dimensions[r].height = 19 if (is_total or is_grand) else 17
         r += 1
 
     ws.column_dimensions["A"].width = 3
     ws.column_dimensions["B"].width = 9
-    ws.column_dimensions["C"].width = 66
+    ws.column_dimensions["C"].width = 76
     ws.column_dimensions["D"].hidden = True
     apply_zebra(ws, hdr + 1, r - 1, COL_CODE, ncols)
     apply_column_dividers(ws, hdr, r - 1, COL_CODE, ncols)
@@ -4816,8 +4819,8 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
         "а не документ WB.",
         "1.2, 2.4–2.8 — НДС, выделенный в учёте по договорам с режимом «НДС включён». "
         "По договорам без НДС или с неуказанным режимом НДС не выделяется и здесь не виден.",
-        "Детализация: группа статей → статья → контрагент. Контрагенты свёрнуты — "
-        "раскрываются кнопкой «+» слева от строк.",
+        "Детализация: группа статей → статья → контрагент. При открытии видны группы; "
+        "статьи и контрагенты раскрываются кнопками «+» слева или цифрами 1–4 вверху.",
         "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
         "в бухгалтерии — по счетам-фактурам и в другие периоды.",
     ]
@@ -5035,8 +5038,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                        "и депозиты с расшифровкой по счетам"),
         (PAYOUTS_SHEET_NAME, "Поступления от площадки на расчётный счёт: "
                              "даты, суммы и количество по месяцам"),
-        (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
-                               "отчётов — для сверки с отчётом о реализации и УПД"),
         (VAT_OPS_SHEET_NAME, "Справочно: НДС с продаж, комиссии и расходов WB, накладных "
                              "и прочих расходов по месяцам, оценка НДС к уплате"),
         ("Пояснения P&L", "Методика расчёта каждого раздела и промежуточного итога"),
@@ -5045,6 +5046,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         (BE_NOTES_SHEET_NAME, "Методика ТБУ: какие затраты переменные и "
                               "постоянные, помесячный и годовой расчёт, пример"),
         ("Пояснения Cash Flow", "Структура потоков, остатки и связь с P&L"),
+        (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
+                               "отчётов — для сверки с отчётом о реализации и УПД"),
     ]
     contents = [c for c in contents if c[0] in wb.sheetnames]
     build_cover(ws_cover, report_date, months, kpi, path.name,
@@ -5063,11 +5066,14 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
              PL_CORRECTED_SHEET_NAME, PL_DASHBOARD_SHEET_NAME, PL_BRIDGE_SHEET_NAME,
              NOTES_SHEET_NAME, "Юнит-экономика",
              BREAKEVEN_SHEET_NAME, "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
-             VAT_CHECK_SHEET_NAME, VAT_OPS_SHEET_NAME,
+             VAT_OPS_SHEET_NAME,
              "Пояснения P&L", "Пояснения Юнит-экономика", BE_NOTES_SHEET_NAME,
              "Пояснения Cash Flow"]
     ordered = [wb[n] for n in order if n in wb.sheetnames]
-    ordered += [ws for ws in wb.worksheets if ws not in ordered]
+    ordered += [ws for ws in wb.worksheets
+                if ws not in ordered and ws.title != VAT_CHECK_SHEET_NAME]
+    if VAT_CHECK_SHEET_NAME in wb.sheetnames:        # сверка — в самом конце книги
+        ordered.append(wb[VAT_CHECK_SHEET_NAME])
     wb._sheets = ordered
     wb.save(path)
 
@@ -5297,6 +5303,15 @@ PIVOT_LAYOUT = {
                  "cost_item", "cp_name", "contract_name"],
         # раскрыты только разделы P&L; строки P&L свёрнуты под «+»
         "open_levels": 1,
+        "row_stripes": False,
+    },
+    "xl/pivotTables/pivotTable3.xml": {
+        "cache": "xl/pivotCache/pivotCacheDefinition3.xml",
+        "source": "raw_vat",
+        # направление → строка → группа статей → статья → контрагент → договор
+        "rows": ["Направление", "Строка", "Группа статей", "Статья", "Контрагент",
+                 "Договор"],
+        "open_levels": 2,
         "row_stripes": False,
     },
 }
@@ -5572,6 +5587,39 @@ def polish_pivot_style(path):
     return True
 
 
+def write_raw_vat(wb, columns, rows):
+    """Лист raw_vat: НДС построчно, «умная таблица» с фильтрами.
+
+    Сводной в скелете для НДС нет — из таблицы её строят в Excel:
+    Вставка → Сводная таблица, источник — таблица raw_vat.
+    """
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+    ws = wb.create_sheet("raw_vat")
+    f_hdr = Font(name=FONT, size=9, bold=True, color="FFFFFF")
+    for j, name in enumerate(columns, start=1):
+        write(ws, 1, j, name, font=f_hdr, fillc=NAVY, align="center", wrap=True)
+    money = {j for j, n in enumerate(columns, start=1) if n.endswith("₽")}
+    for i, row in enumerate(rows, start=2):
+        for j, v in enumerate(row, start=1):
+            c = ws.cell(row=i, column=j, value=_pivot_cell(v))
+            if j in money:
+                c.number_format = FMT_MONEY_DEC
+            elif isinstance(c.value, date):
+                c.number_format = FMT_DATE
+    last = max(2, len(rows) + 1)
+    t = Table(displayName="raw_vat", ref="A1:%s%d" % (get_column_letter(len(columns)), last))
+    t.tableStyleInfo = TableStyleInfo(name="TableStyleLight8", showRowStripes=True)
+    ws.add_table(t)
+    widths = {"Дата": 11, "Год": 7, "Месяц": 9, "Направление": 13, "Строка": 26,
+              "Группа статей": 30, "Статья": 36, "Контрагент": 30, "Договор": 44,
+              "ID договора": 11, "Источник": 24}
+    for j, name in enumerate(columns, start=1):
+        ws.column_dimensions[get_column_letter(j)].width = widths.get(name, 16)
+    ws.row_dimensions[1].height = 30
+    ws.freeze_panes = "A2"
+    return len(rows)
+
+
 def build_pivots_workbook(date_from, out_path=None):
     """Собирает книгу со сводными на отчётную дату."""
     if isinstance(date_from, str):
@@ -5589,6 +5637,12 @@ def build_pivots_workbook(date_from, out_path=None):
             data[name] = ([d[0] for d in cur.description], cur.fetchall())
         pl_columns, pl_rows, mismatches = pivot_pl_source(con, date_from)
         data["raw_pl"] = (pl_columns, pl_rows)
+        try:                     # витрины pl_sales и wb_costs уже собраны выше
+            cur = con.execute(read_sql("pivot_vat.txt"), parameters={"date_from": date_from})
+            vat_src = ([d[0] for d in cur.description], cur.fetchall())
+        except Exception as e:
+            print("Источник по НДС не собран: %s: %s" % (type(e).__name__, e))
+            vat_src = None
 
     wb = load_workbook(PIVOTS_SKELETON)
 
@@ -5596,6 +5650,13 @@ def build_pivots_workbook(date_from, out_path=None):
     for name, (columns, rows) in data.items():
         if name in wb.sheetnames:
             counts[name] = fill_pivot_source(wb[name], name, columns, rows)
+
+    if vat_src:
+        if "raw_vat" in wb.sheetnames:      # сводная НДС есть в скелете
+            data["raw_vat"] = vat_src
+            counts["raw_vat"] = fill_pivot_source(wb["raw_vat"], "raw_vat", *vat_src)
+        else:                               # старый скелет — только таблица
+            counts["raw_vat"] = write_raw_vat(wb, *vat_src)
 
     # сводные обновятся сами при открытии файла
     for sheet in wb.worksheets:
@@ -5606,7 +5667,7 @@ def build_pivots_workbook(date_from, out_path=None):
     wb.active = 0
 
     # порядок листов: сначала обе сводные, источники — в конец
-    order = ["Сводная CF", "Сводная P&L", "raw_cf", "raw_pl"]
+    order = ["Сводная CF", "Сводная P&L", "Сводная НДС", "raw_vat", "raw_cf", "raw_pl"]
     ordered = [wb[n] for n in order if n in wb.sheetnames]
     ordered += [ws for ws in wb.worksheets if ws not in ordered]
     wb._sheets = ordered
