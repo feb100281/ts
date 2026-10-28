@@ -4619,7 +4619,7 @@ def fetch_vat_summary(con, date_from):
         return []
 
 
-def vat_layout(rows, shown=None):
+def vat_layout(rows, shown=None, paid=None):
     """Строки листа: [(kind, code, label, {me: value}, level)].
 
     level: 1 — раздел, 2 — группа статей, 3 — статья, 4 — контрагент.
@@ -4722,6 +4722,18 @@ def vat_layout(rows, shown=None):
            for m in set(total_out) | set(total_in)}
     L.append(("grand", "3", "НДС К УПЛАТЕ, ОЦЕНКА (1.3 + 2.9; минус — платим в бюджет)",
               pay, 0))
+    # справочно: что фактически ушло в бюджет по Cash Flow (статья 125000),
+    # знак как в Cash Flow: оплата — минус, возврат — плюс
+    if paid:
+        subs = [(k, dict(v)) for k, v in sorted(paid.items()) if live(v)]
+        if subs:
+            L.append(("blank", None, None, None, 0))
+            L.append(("band", None, "СПРАВОЧНО: НАЛОГИ, ОПЛАЧЕННЫЕ ПО CASH FLOW (125000)",
+                      None, 0))
+            for i, (name, vals) in enumerate(subs, 1):
+                L.append(("row", "4.%d" % i, name, vals, 1))
+            L.append(("total", "4", "ИТОГО ОПЛАЧЕНО НАЛОГОВ (минус — оплата, плюс — возврат)",
+                      add(*[v for _, v in subs]), 0))
     # знаки как в деньгах (P&L, Cash Flow): начисленный и к уплате — минус,
     # к вычету — плюс
     out, minus = [], False
@@ -4735,7 +4747,7 @@ def vat_layout(rows, shown=None):
         out.append((kind, code, label, vals, level))
     return out
 
-def build_vat_ops(ws, rows, months, report_date, as_of=None):
+def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None):
     """Лист «НДС по операциям» — оформление и колонки как на листах P&L."""
     as_of = as_of or report_date
     cols = make_columns(months)
@@ -4773,7 +4785,7 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
 
     # детализация сворачивается кнопками «+/−» слева: группа → статья → контрагент
     ws.sheet_properties.outlinePr.summaryBelow = False
-    for kind, code, label, vals, level in vat_layout(rows, months):
+    for kind, code, label, vals, level in vat_layout(rows, months, paid):
         if kind == "blank":
             ws.row_dimensions[r].height = 6
             r += 1
@@ -4852,6 +4864,10 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None):
         "Знаки как в P&L и Cash Flow: начисленный НДС и НДС к уплате — минус (в скобках), "
         "к вычету — плюс. Минус в разделе «к вычету» увеличивает налог: так бывает у 2.1 "
         "при отрицательном НДС с вознаграждения WB.",
+        "4 — справочно: налоги, фактически оплаченные по Cash Flow (статья 125000), по "
+        "подстатьям. НДС за квартал платится тремя частями в следующем квартале, поэтому "
+        "помесячно с оценкой (3) не совпадает; при едином налоговом платеже НДС отдельно "
+        "не выделяется.",
         "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
         "в бухгалтерии — по счетам-фактурам и в другие периоды.",
     ]
@@ -5014,7 +5030,12 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                      report_date, as_of=date_from)
 
     build_vat_check(ws_vat, vat_rows, report_date, as_of=date_from)
-    build_vat_ops(ws_vat_ops, vat_ops_rows, months, report_date, as_of=date_from)
+    taxes_paid = defaultdict(lambda: defaultdict(float))     # подстатья 125xxx -> месяц
+    for key, v in cf_data.items():
+        if str(key[3]).startswith("125") or str(key[4]).startswith("125"):
+            taxes_paid[key[4] or key[3]][key[0]] += v
+    build_vat_ops(ws_vat_ops, vat_ops_rows, months, report_date, as_of=date_from,
+                  paid=taxes_paid)
 
     build_notes(ws_npl, "ПОЯСНЕНИЯ К ОТЧЁТУ О ПРИБЫЛЯХ И УБЫТКАХ",
                 "Методика расчёта разделов, промежуточных итогов и "
