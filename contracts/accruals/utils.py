@@ -44,6 +44,13 @@ def split_vat(amount: Decimal, vat_mode: str, vat_rate: Decimal | None) -> dict:
     amount = Decimal(str(amount or "0"))
     vat_rate = Decimal(str(vat_rate or "0"))
 
+    if vat_mode == VatMode.VAT_ONLY:            # платёж целиком — НДС
+        return {
+            "amount_net": Decimal("0.00"),
+            "vat_amount": q2(amount),
+            "amount_gross": q2(amount),
+        }
+
     if vat_mode == VatMode.EXEMPT or vat_rate == 0:
         return {
             "amount_net": q2(amount),

@@ -43,12 +43,14 @@ gl_vat AS (
            COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp,
            SUM(v.dt - v.cr) / 100.0 AS value
     FROM pg.gl.fact v
-    JOIN pg.gl.fact p
-      ON p.pid = v.pid AND p.chapter = 'PL_ACCURALS'
-    JOIN pg.public.corporate_coa a ON a.id = p.acc_id
-    LEFT JOIN pg.public.corporate_cfitems s ON s.id = p.subconto_id
+    -- статья и договор — из строки начисления (accural_distribution): при режиме
+    -- vat_only проводки в P&L нет, а счёт P&L в начислении есть
+    LEFT JOIN pg.gl.accural_distribution p ON p.id = v.pid
+    LEFT JOIN pg.gl.fact pf ON pf.pid = v.pid AND pf.chapter = 'PL_ACCURALS'
+    JOIN pg.public.corporate_coa a ON a.id = COALESCE(p.acc_pl, pf.acc_id)
+    LEFT JOIN pg.public.corporate_cfitems s ON s.id = COALESCE(p.subconto_pl, pf.subconto_id)
     LEFT JOIN pg.public.corporate_cfitems sp ON sp.id = s.parent_id
-    LEFT JOIN pg.public.contracts_contracts c ON c.id = p.contract_id
+    LEFT JOIN pg.public.contracts_contracts c ON c.id = COALESCE(p.contract_id, v.contract_id)
     LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
     WHERE v.chapter = 'VAT_ACCURALS'
       AND v.date_from <= $date_from
