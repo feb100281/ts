@@ -87,6 +87,9 @@ def analyze(d1: date, d2: date, last: date | None = None,
     df = df.merge(_stock_on(b0), on="nm", how="left").merge(_stock_now(last), on="nm", how="left")
     df["stock0"] = df["stock0"].fillna(0)
     df["stock"] = df["stock"].fillna(0)
+    # снимок остатков бывает неполным (0 при продажах после) — тогда остаток на
+    # начало не меньше, чем «продано после + остаток сейчас»
+    df["stock0"] = df[["stock0"]].assign(est=df["stock"] + df["q1"]).max(axis=1)
     # оборачиваемость остатка на начало переоценки
     df["days_old"] = df["stock0"] / df["u0"].where(df["u0"] > 0)
     df["days_new"] = df["stock0"] / df["u1"].where(df["u1"] > 0)
