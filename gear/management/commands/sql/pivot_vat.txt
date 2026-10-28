@@ -93,6 +93,21 @@ WITH src AS (
            CASE WHEN kind = 'writeoff' THEN -amount ELSE amount END
     FROM pg.public.grossbook_vatadjustment
     WHERE date <= $date_from
+
+    -- НДС, уплаченный по Cash Flow (подстатьи налогов с «НДС» в названии,
+    -- в т. ч. ввозной). Оплата уменьшает долг перед бюджетом — знак плюс,
+    -- поэтому итог сводной = сальдо расчётов по НДС (как раздел 5 листа)
+    UNION ALL
+    SELECT date_from::DATE, '4. Оплачено в бюджет', '4.1 НДС оплачено (Cash Flow)',
+           COALESCE(NULLIF(TRIM(subitem), ''), 'Без подстатьи'),
+           COALESCE(NULLIF(TRIM(item), ''), 'Без статьи'),
+           COALESCE(NULLIF(TRIM(cp_name), ''), 'Без контрагента'),
+           COALESCE(NULLIF(TRIM(contract_name), ''), 'без договора')
+               || COALESCE(' · id ' || CAST(TRY_CAST(contract_id AS BIGINT) AS VARCHAR), ''),
+           TRY_CAST(contract_id AS BIGINT), 'Cash Flow',
+           -amount
+    FROM cf
+    WHERE STARTS_WITH(COALESCE(subitem, ''), '125') AND subitem LIKE '%НДС%'
 )
 SELECT d AS "Дата",
        YEAR(d) AS "Год",
