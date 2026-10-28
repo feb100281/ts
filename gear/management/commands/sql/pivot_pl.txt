@@ -7,7 +7,8 @@
 --                комиссия WB), как month_margins_wb_long;
 --   разделы 3-5 (WB) — wb_costs, как opex.txt (3 и 4 без НДС, 5 с НДС);
 --   разделы 5-8 (учёт) — pl_for_csv с фильтрами opex.txt;
---   раздел 9   — налог на прибыль из cash flow (125200).
+--   раздел 9   — налог на прибыль из cash flow (125200);
+--   раздел 5   — также НДС, списанный в расходы (grossbook_vatadjustment).
 --
 -- Перед запуском должны существовать временные таблицы
 -- base, stocks_daily, wb_costs, pl_sales, cf (см. build_pivots_workbook).
@@ -103,6 +104,14 @@ gl AS (
       )
 ),
 
+-- НДС, не принятый к вычету и списанный в расходы (админка «Корректировки НДС»),
+-- как в mp.apply_vat_writeoffs: раздел 5, расход со знаком минус
+vat_wo AS (
+    SELECT date::DATE AS date_from, amount::DOUBLE AS amount, comment
+    FROM pg.public.grossbook_vatadjustment
+    WHERE kind = 'writeoff' AND date <= $date_from
+),
+
 tax AS (
     SELECT *
     FROM cf
@@ -185,5 +194,22 @@ SELECT
     amount::DOUBLE,
     CAST(description AS VARCHAR)
 FROM tax
+
+UNION ALL
+
+SELECT
+    date_from,
+    NULL, NULL, NULL, NULL, NULL,
+    '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ',
+    '5.9. НДС, не принятый к вычету',
+    'НДС, не принятый к вычету',
+    'НДС, не принятый к вычету',
+    'Без договора',
+    'Без контрагента',
+    amount,
+    0.0,
+    -amount,
+    CAST(comment AS VARCHAR)
+FROM vat_wo
 ) u
 ;

@@ -4775,7 +4775,8 @@ def vat_layout(rows, shown=None, paid=None):
         if minus and vals:
             vals = {m: -v for m, v in vals.items()}
         out.append((kind, code, label, vals, level))
-    return out
+    # строки без сумм за показанный период не выводим (итоги остаются)
+    return [r for r in out if r[0] != "row" or live(r[3] or {})]
 
 def vat_balance_block(ws, r, cols, months, est, paid, ncols, wo=None, adj=None):
     """Раздел 5 листа «НДС по операциям»: сальдо расчётов с бюджетом.
@@ -4817,11 +4818,14 @@ def vat_balance_block(ws, r, cols, months, est, paid, ncols, wo=None, adj=None):
         ("5.1", "Сальдо на начало (накопительно с начала данных)", "start"),
         ("5.2", "НДС к уплате за период, оценка (стр. 3)", "est"),
         ("5.3", "НДС оплачено за период (стр. 4)", "paid"),
-        ("5.4", "НДС списан в расходы — не принят к вычету (админка «Корректировки НДС»)",
-         "wo"),
-        ("5.5", "Корректировка сальдо НДС, без P&L (админка «Корректировки НДС»)", "adj"),
+        ("5.4", "НДС списан в расходы — не принят к вычету", "wo"),
+        ("5.5", "Корректировка сальдо НДС", "adj"),
         ("5.6", "САЛЬДО НА КОНЕЦ (минус — должны бюджету, плюс — переплата)", "end"),
     ]
+    # строки корректировок без сумм не выводим
+    lines = [ln for ln in lines
+             if ln[2] not in ("wo", "adj")
+             or any(abs(v) >= 0.005 for v in {"wo": wo, "adj": adj}[ln[2]].values())]
     for code, label, key in lines:
         strong = key == "end"
         bg, bd = CORR_FILL, (B_TOTAL if strong else B_BOTTOM)
@@ -4986,7 +4990,7 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None,
         "не выделяется.",
         "5 — расчёты с бюджетом по НДС накопительно с начала данных: сальдо на начало + "
         "оценка к уплате (3) − оплачено (4) − НДС, списанный в расходы (5.4) ± "
-        "корректировки сальдо (5.5); 5.4 и 5.5 вносятся в админке «Корректировки НДС». Минус — по оценке мы должны бюджету, плюс — "
+        "корректировки сальдо (5.5). Минус — по оценке мы должны бюджету, плюс — "
         "оплачено больше оценки (переплата, ещё не полученное возмещение или в статье НДС "
         "есть другие таможенные платежи).",
         "3 — оценка: начисленный минус к вычету. С декларацией может не совпасть: вычеты "
@@ -5373,6 +5377,10 @@ PIVOT_PL_CHECK_SQL = """
         UNION ALL
         SELECT LAST_DAY(date_from)::DATE, '9. НАЛОГ НА ПРИБЫЛЬ', amount
         FROM cf WHERE subitem = '125200 Налог на прибыль'
+        UNION ALL
+        SELECT LAST_DAY(date)::DATE, '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ', -amount
+        FROM pg.public.grossbook_vatadjustment
+        WHERE kind = 'writeoff' AND date <= $date_from
     ),
     a AS (SELECT me, section, SUM(value) AS v FROM pl GROUP BY 1, 2),
     b AS (SELECT LAST_DAY(date_from)::DATE AS me, parent_account_name AS section,
@@ -5407,7 +5415,7 @@ def pivot_pl_source(con, date_from):
 
     con.execute(read_sql("margin.txt"), parameters=params)
     con.execute(read_sql("opex.txt"), parameters=params)
-    mismatches = con.execute(PIVOT_PL_CHECK_SQL).fetchall()
+    mismatches = con.execute(PIVOT_PL_CHECK_SQL, parameters=params).fetchall()
     return columns, rows, mismatches
 
 

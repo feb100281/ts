@@ -80,6 +80,19 @@ WITH src AS (
     LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = c.title_id
     LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
     WHERE v.chapter = 'VAT_ACCURALS' AND v.date_from <= $date_from AND v.dt - v.cr <> 0
+
+    -- корректировки сальдо из «Корректировок НДС»: списание (не принят к вычету) —
+    -- минус, корректировка сальдо — со знаком, как введена
+    UNION ALL
+    SELECT date::DATE, '3. Корректировки сальдо',
+           CASE WHEN kind = 'writeoff' THEN '5.4 НДС списан в расходы'
+                ELSE '5.5 Корректировка сальдо НДС' END,
+           CASE WHEN kind = 'writeoff' THEN 'Не принят к вычету' ELSE 'Корректировка' END,
+           COALESCE(NULLIF(TRIM(comment), ''), 'Без комментария'),
+           'ИФНС', 'без договора', NULL, 'корректировка',
+           CASE WHEN kind = 'writeoff' THEN -amount ELSE amount END
+    FROM pg.public.grossbook_vatadjustment
+    WHERE date <= $date_from
 )
 SELECT d AS "Дата",
        YEAR(d) AS "Год",
