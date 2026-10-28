@@ -32,6 +32,7 @@ from .wb_plan_monitor import register_wb_plan_callbacks
 from .ai_analysis import register_ai_analysis_callbacks
 from .assistant import register_assistant_callbacks
 from .wb_sales_export import register_wb_sales_export_callbacks
+from .reprice_export import register_reprice_export_callbacks
 from .price_analysis import register_price_analysis_export_callbacks
 from .stocks.dashboard import (
     StocksDashboard,
@@ -614,6 +615,7 @@ class MainWindow:
         register_ai_analysis_callbacks(app)
         register_assistant_callbacks(app)
         register_wb_sales_export_callbacks(app)
+        register_reprice_export_callbacks(app)
         register_price_analysis_export_callbacks(app)
         register_stock_dashboard_callbacks(app)
         register_daily_brief_callbacks(app)

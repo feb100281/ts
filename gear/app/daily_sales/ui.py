@@ -11,6 +11,7 @@ from .wb_plan_monitor import wb_plan_button, wb_plan_modal
 from .ai_analysis import ai_analysis_button, ai_analysis_modal
 from .assistant import assistant_widget
 from .wb_sales_export import wb_sales_menu_item, wb_sales_modal, wb_sales_download
+from .reprice_export import reprice_menu_item, reprice_modal, reprice_download
 from .price_analysis.config import (
     PRICE_ANALYSIS_EXPORT_BTN_ID,
     PRICE_ANALYSIS_DOWNLOAD_ID,
@@ -591,6 +592,7 @@ panel_block(
                                                 dmc.MenuDivider(),
                                                 dmc.MenuLabel("Выгрузки"),
                                                 wb_sales_menu_item(),
+                                                reprice_menu_item(),
                                             ]
                                         ),
                                     ],
@@ -694,6 +696,8 @@ panel_block(
             assistant_widget(),
             wb_sales_modal(),
             wb_sales_download(),
+            reprice_modal(),
+            reprice_download(),
         ],
     )
 
