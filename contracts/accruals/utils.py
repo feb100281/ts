@@ -58,7 +58,7 @@ def split_vat(amount: Decimal, vat_mode: str, vat_rate: Decimal | None) -> dict:
             "amount_gross": q2(amount),
         }
 
-    if vat_mode == VatMode.INCLUDED:
+    if vat_mode in (VatMode.INCLUDED, VatMode.BY_PAYMENT):   # by_payment: ставка уже из платежа
         coef = Decimal("1") + vat_rate / Decimal("100")
         net = amount / coef
         vat = amount - net

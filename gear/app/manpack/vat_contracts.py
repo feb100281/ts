@@ -68,7 +68,8 @@ GROUP BY 1, 2
 """
 
 MODE_NAME = {"included": "НДС включён", "excluded": "НДС сверху", "exempt": "Без НДС",
-             "unknown": "Не задан", "vat_only": "Только НДС", "none": "Нет условий"}
+             "unknown": "Не задан", "vat_only": "Только НДС", "none": "Нет условий",
+             "by_payment": "По назначению платежа"}
 WITH_VAT = ("included", "excluded", "vat_only")
 
 # флаг: (короткое название, что сделать, порядок в итоге)
@@ -189,6 +190,8 @@ def _classify(r) -> str:
             return "goods_no_upd"
         if abs(upd) >= TOL_RUB or r["vat_mode"] == "exempt":
             return "goods_ok"
+    if r["vat_mode"] == "by_payment":          # ставка из назначения каждого платежа
+        return "ok"
     if r["vat_mode"] in ("unknown", "none"):
         if abs(act) >= TOL_RUB:
             return "vat_no_mode"
@@ -356,7 +359,7 @@ def build(report_date: date, con) -> dict:
         df["wb"] = df["cp"].astype(str).str.upper().apply(lambda s: any(n in s for n in WB_NAMES))
         df["fcode"] = df.apply(_classify, axis=1)
         # для товара сверка по УПД, ожидаемый по оплатам не показываем
-        df.loc[df["goods"] | df["wb"], ["exp"]] = float("nan")
+        df.loc[df["goods"] | df["wb"] | df["vat_mode"].eq("by_payment"), ["exp"]] = float("nan")
         df["diff"] = (df["actual"] - df["exp"]).where(df["exp"].notna())
         df.loc[df["fcode"].isin(["wb", "goods_ok", "goods_double", "nodoc"]), "potential"] = 0.0
         df.loc[df["fcode"].eq("goods_no_upd"), "potential"] = (

@@ -44,6 +44,7 @@ class VatMode(models.TextChoices):
     EXEMPT = "exempt", "Без НДС / не облагается"
     UNKNOWN = "unknown", "Не задано"
     VAT_ONLY = "vat_only", "Только НДС (вся сумма — НДС)"
+    BY_PAYMENT = "by_payment", "По назначению платежа (Cash Based)"
     
     
 class Contracts(models.Model):

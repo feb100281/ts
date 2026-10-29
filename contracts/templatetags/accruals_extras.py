@@ -94,5 +94,6 @@ def vat_mode_ru(value):
         "excluded": "НДС сверху",
         "exempt": "Без НДС",
         "vat_only": "Только НДС",
+        "by_payment": "По назначению платежа",
     }
     return mapping.get(value, "Не задано")

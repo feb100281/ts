@@ -90,7 +90,8 @@ WHERE date_from::DATE <= ? AND COALESCE(amount, 0) <> 0
 """
 
 MODE = {"included": "НДС включён", "excluded": "НДС сверху", "exempt": "Без НДС",
-        "unknown": "Не задан", "vat_only": "Только НДС"}
+        "unknown": "Не задан", "vat_only": "Только НДС",
+        "by_payment": "По назначению платежа"}
 PERIOD = {"week": "Неделя", "month": "Месяц", "quarter": "Квартал", "year": "Год"}
 PAY_RULE = {"month": "За месяц", "quarter": "За квартал", "half_year": "За полугодие",
             "year": "За год", "m2": "За 2 месяца", "m3": "За 3 месяца", "m4": "За 4 месяца",
