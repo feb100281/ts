@@ -42,7 +42,8 @@ LEFT JOIN pg.public.contracts_accountingmethod am ON am.id = c.accounting_method
 CONTRACT_SQL = """
 SELECT k.id AS cid,
        COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(k.number, 'б/н') || ' от '
-           || COALESCE(strftime(k.date, '%d.%m.%Y'), 'б/д') AS contract,
+           || COALESCE(strftime(k.date, '%d.%m.%Y'), 'б/д') || ' · id ' || CAST(k.id AS VARCHAR)
+           AS contract,
        COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp
 FROM pg.public.contracts_contracts k
 LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = k.title_id
@@ -397,7 +398,7 @@ YR_COLS = [("cp", "Контрагент", "wrap", 28), ("contract", "Догов�
            ("exp", "НДС ожидаемый, ₽", "money", 14), ("gl", "НДС в проводках, ₽", "money", 14),
            ("upd", "НДС по УПД, ₽", "money", 13), ("diff", "Разница, ₽", "money", 14)]
 OPS_COLS = [("n", "№ замечания", "id", 8), ("cp", "Контрагент", "wrap", 26),
-            ("contract", "Договор", "wrap", 28), ("d", "Дата", "date", 11),
+            ("contract", "Договор", "wrap", 28), ("cid", "ID", "id", 7), ("d", "Дата", "date", 11),
             ("item", "Статья CF", "wrap", 26), ("subitem", "Подстатья CF", "wrap", 26),
             ("amount", "Сумма CF, ₽", "money", 14), ("mode", "Режим НДС", "text", 12),
             ("rate", "Ставка, %", "dec", 8), ("exp", "НДС ожидаемый, ₽", "money", 14)]
