@@ -51,9 +51,16 @@ WITH src AS (
     WHERE date_from::DATE <= $date_from AND account != 'Other income / loss'
 
     UNION ALL
+    SELECT date_from::DATE, '1. Начисленный', '1.2 НДС с выплат WB по программе сотрудничества',
+           'Выплаты WB', cost_item, 'ВАЙЛДБЕРРИЗ', 'без договора', NULL, 'расчёт 22/122 от суммы',
+           (dt - cr) * COALESCE(vat_rate, 22) / (100 + COALESCE(vat_rate, 22)) / 100
+    FROM wb_costs
+    WHERE date_from::DATE <= $date_from AND cost_item = '5.4. Выплаты WB по программе сотрудничества'
+
+    UNION ALL
     SELECT v.date_from::DATE,
            CASE WHEN v.dt - v.cr < 0 THEN '1. Начисленный' ELSE '2. К вычету' END,
-           CASE WHEN v.dt - v.cr < 0 THEN '1.2 НДС с прочих доходов'
+           CASE WHEN v.dt - v.cr < 0 THEN '1.3 НДС с прочих доходов'
                 WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '610' THEN '2.4 Накладные расходы'
                 WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '620' THEN '2.5 Корпоративные расходы'
                 WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '420' THEN '2.6 Прочие расходы'

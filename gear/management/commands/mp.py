@@ -4657,7 +4657,7 @@ def vat_layout(rows, shown=None, paid=None):
     Знаки как в деньгах: начисленный и к уплате — минус, к вычету — плюс. Строки без движения
     в показанных месяцах (shown) не выводятся.
     """
-    out_rev, comm, sel, promo = {}, {}, {}, {}
+    out_rev, wbpay, comm, sel, promo = {}, {}, {}, {}, {}
     gl_in = defaultdict(lambda: defaultdict(float))    # (code, группа, статья, контрагент)
     gl_out = defaultdict(lambda: defaultdict(float))
     goods = defaultdict(lambda: defaultdict(float))     # (—, ставка, поставщик, УПД)
@@ -4669,6 +4669,8 @@ def vat_layout(rows, shown=None, paid=None):
             out_rev[me] = out_rev.get(me, 0.0) + v
         elif kind == "comm":
             comm[me] = comm.get(me, 0.0) + v
+        elif kind == "wbpay":
+            wbpay[me] = wbpay.get(me, 0.0) + v
         elif kind == "goods":
             goods[(code, grp, item, cp)][me] += v
         elif kind == "goods_base":
@@ -4720,11 +4722,14 @@ def vat_layout(rows, shown=None, paid=None):
     out_gl = add(*gl_out.values())
     L = [("band", None, "НДС НАЧИСЛЕННЫЙ (С ПРОДАЖ И ДОХОДОВ)", None, 0),
          ("row", "1.1", "НДС с продаж WB — с цены покупателя (после СПП)", out_rev, 1)]
+    if live(wbpay):
+        L.append(("row", "1.2", "НДС с выплат WB по программе сотрудничества (22/122 от суммы)",
+                  wbpay, 1))
     if live(out_gl):
-        L.append(("row", "1.2", "НДС с прочих доходов (по учёту)", out_gl, 1))
+        L.append(("row", "1.3", "НДС с прочих доходов (по учёту)", out_gl, 1))
         L += tree(gl_out)
-    total_out = add(out_rev, out_gl)
-    L.append(("total", "1.3", "ИТОГО НДС НАЧИСЛЕННЫЙ", total_out, 0))
+    total_out = add(out_rev, wbpay, out_gl)
+    L.append(("total", "1.4", "ИТОГО НДС НАЧИСЛЕННЫЙ", total_out, 0))
     L.append(("band", None, "НДС К ВЫЧЕТУ (ВХОДЯЩИЙ)", None, 0))
     goods_sec = add(*goods.values())
     L.append(("row", "2.0", "Закупка товаров — НДС по УПД поставщиков", goods_sec, 1))
@@ -4751,7 +4756,7 @@ def vat_layout(rows, shown=None, paid=None):
     L.append(("blank", None, None, None, 0))
     pay = {m: total_out.get(m, 0.0) - total_in.get(m, 0.0)
            for m in set(total_out) | set(total_in)}
-    L.append(("grand", "3", "НДС К УПЛАТЕ ЗА ПЕРИОД, ОЦЕНКА (1.3 + 2.9; без сальдо на начало)",
+    L.append(("grand", "3", "НДС К УПЛАТЕ ЗА ПЕРИОД, ОЦЕНКА (1.4 + 2.9; без сальдо на начало)",
               pay, 0))
     # справочно: что фактически ушло в бюджет по Cash Flow (статья 125000),
     # знак как в Cash Flow: оплата — минус, возврат — плюс

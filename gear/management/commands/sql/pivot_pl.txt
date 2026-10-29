@@ -69,7 +69,9 @@ wb AS (
         SUM(
             CASE
                 WHEN account = 'Other income / loss'
-                    THEN (dt - cr) / 100
+                    THEN (CASE WHEN cost_item = '5.4. Выплаты WB по программе сотрудничества'
+                         THEN (dt - cr) * 100 / (100 + COALESCE(vat_rate, 22))
+                         ELSE (dt - cr) END) / 100
                 ELSE (dt - cr) / (100 + COALESCE(vat_rate, 20)) * 100 / 100
             END
         ) AS amount

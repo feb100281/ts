@@ -38,7 +38,10 @@ WITH wb_costs AS (
         date_from,
         rrd_id,
         'Other income / loss' AS account,
-        '5.2. Корректировки по прогамме WB' AS cost_item,
+        -- выплаты по программе сотрудничества — с НДС внутри (22/122), отдельной статьёй
+        CASE WHEN STARTS_WITH(btn, 'РКВВ.ИУ.Выплата по Программе сотрудничества')
+             THEN '5.4. Выплаты WB по программе сотрудничества'
+             ELSE '5.2. Корректировки по прогамме WB' END AS cost_item,
 
         COALESCE(
             SUM(val) FILTER (WHERE oper = 'dt'),
@@ -58,7 +61,7 @@ WITH wb_costs AS (
     GROUP BY
         date_from,
         rrd_id,
-        sop_name
+        cost_item
 
 
     UNION ALL

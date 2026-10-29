@@ -42,7 +42,10 @@ WITH base AS (
         YEAR(me) AS year,
         '5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ' AS section,
         cost_item AS item,
-        SUM((dt - cr) / 100) AS value
+        -- выплаты WB по программе сотрудничества — без НДС (НДС внутри суммы)
+        SUM(CASE WHEN cost_item = '5.4. Выплаты WB по программе сотрудничества'
+                         THEN (dt - cr) * 100 / (100 + COALESCE(vat_rate, 22))
+                         ELSE (dt - cr) END) / 100 AS value
 
     FROM wb_costs
 

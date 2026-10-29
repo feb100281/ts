@@ -35,6 +35,15 @@ wb_vat AS (
       AND account != 'Other income / loss'
     GROUP BY 1, 2, 3
 ),
+-- НДС с выплат WB по программе сотрудничества: НДС внутри суммы, по ставке строки
+wbpay_vat AS (
+    SELECT me::DATE AS me, 'wbpay' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp,
+           SUM((dt - cr) * COALESCE(vat_rate, 22) / (100 + COALESCE(vat_rate, 22))) / 100 AS value
+    FROM wb_costs
+    WHERE date_from::DATE <= $date_from AND cost_item = '5.4. Выплаты WB по программе сотрудничества'
+    GROUP BY 1
+),
 gl_vat AS (
     SELECT LAST_DAY(v.date_from)::DATE AS me, 'gl' AS kind,
            LEFT(CAST(a.code AS VARCHAR), 3) AS code,
@@ -85,4 +94,5 @@ UNION ALL SELECT * FROM goods_vat
 UNION ALL SELECT * FROM goods_base
 UNION ALL SELECT * FROM comm_vat
 UNION ALL SELECT * FROM wb_vat
+UNION ALL SELECT * FROM wbpay_vat
 UNION ALL SELECT * FROM gl_vat

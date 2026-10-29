@@ -37,6 +37,7 @@ REPORTS = {
     "l": "🔻 Продаём в убыток",
     "z": "🔎 Почему упали продажи",
     "g": "🚨 Сигналы",
+    "p": "🔖 Переоценки",
 }
 SINGLE_DAY = {"r", "g"}                 # отчёт на дату, а не за период
 BTN_AI = "🤖 Спросить ИИ"
@@ -83,7 +84,8 @@ def keyboard() -> dict:
                          [{"text": r["n"]}, {"text": r["m"]}],
                          [{"text": r["l"]}, {"text": r["d"]}],
                          [{"text": r["z"]}, {"text": r["g"]}],
-                         [{"text": r["r"]}, {"text": BTN_AI}],
+                         [{"text": r["r"]}, {"text": r["p"]}],
+                         [{"text": BTN_AI}],
                          [{"text": BTN_HELP}]] + app_row(),
             "resize_keyboard": True, "is_persistent": False,   # можно свернуть значком у поля ввода
             "input_field_placeholder": "Кнопка или вопрос своими словами…"}
@@ -197,6 +199,8 @@ def period_kb(rep: str) -> dict:
         btn = [{"text": t, "callback_data": f"mn:p:n:{c}"} for c, t in WEEK_PRESETS]
         return {"inline_keyboard": [btn[:2], btn[2:],
                                     [{"text": "📅 Выбрать недели", "callback_data": "mn:c:n::0"}]]}
+    if rep == "p":
+        return {"inline_keyboard": [[{"text": "📅 Выбрать дни переоценки", "callback_data": "mn:c:p::0"}]]}
     if rep in SINGLE_DAY:
         return {"inline_keyboard": [[{"text": "Вчера", "callback_data": f"mn:p:{rep}:y"},
                                      {"text": "📅 Другая дата", "callback_data": f"mn:c:{rep}::0"}]]}
@@ -249,6 +253,9 @@ def calendar_kb(rep: str, year: int, month: int, start: date | None, lo: date, h
 
 
 def ask_text(rep: str) -> str:
+    if rep == "p":
+        return (f"<b>{REPORTS[rep]}</b>\nВ какие дни снижали цены? Выберите в календаре или "
+                "напишите даты: <code>22.10–23.10</code>, <code>22.10</code>")
     if rep in SINGLE_DAY:
         return (f"<b>{REPORTS[rep]}</b>\nНа какую дату? Нажмите кнопку или напишите дату: "
                 "<code>15.10</code>")
@@ -1432,6 +1439,74 @@ def file_weeks(code: str, a: date, b: date):
     return f"{what} по неделям {span(weeks[0][0], b)}.xlsx", data, XLSX
 
 
+# ---------------------------------------------------------------- 🔖 переоценки
+_rcache: dict = {}
+
+
+def _reprice(a: date, b: date):
+    from .. import reprice_export as rx
+    key = (a, b, loaded())
+    if key not in _rcache:
+        _rcache.clear()
+        _rcache[key] = rx.build(a, b)
+    return _rcache[key]
+
+
+def report_reprice(a: date, b: date) -> dict | None:
+    from .. import reprice_export as rx
+    if a > loaded():
+        return None
+    hit, meta = _reprice(a, b)
+    head = f"<b>🔖 Переоценки {span(a, b)}</b>"
+    sub = (f"ДО: {meta['a0']:%d.%m}–{meta['b0']:%d.%m} · ПОСЛЕ: {meta['d1']:%d.%m}–"
+           f"{meta['last']:%d.%m} ({meta['n1']} дн.) · снижение цены от 10%")
+    kb = {"inline_keyboard": [[{"text": "🔁 Другие дни", "callback_data": "mn:o:p"}]]}
+    if hit.empty:
+        return {"text": f"{head}\n{sub}\n\nСнижений цены в эти дни нет.", "photo": None,
+                "auto": None, "files": (), "kb": kb}
+    lost = hit["lost"].clip(lower=0)
+    q = hit["q1"].sum()
+    cut = float((hit["cut"] * hit["q1"]).sum() / q) if q else float(hit["cut"].mean())
+    bad, ok, lim = rx.split(hit)
+    rest = ~(bad | ok | lim)
+    lines = [head, f"<i>{sub}</i>", "",
+             f"Подешевело <b>{len(hit)}</b> арт., средняя скидка {abs(cut):.0f}%.",
+             f"Отдано скидкой к старой цене ≈ <b>{rx._rub(lost.sum())} ₽</b> (оценка), из них:"]
+    for t, m in (("проблемные", bad), ("оправданная распродажа залежавшегося остатка", ok),
+                 ("продажи упирались в остаток", lim), ("без замечаний", rest)):
+        if m.any():
+            lines.append(f"• {t} — {int(m.sum())} арт., ≈ {rub(lost[m].sum())}")
+    g = hit["groups"].fillna(rx.NO_REMARKS)
+    rows = [(title, int(g.str.contains(name, regex=False).sum()))
+            for name, title, _n, _c in rx.GROUPS if name not in rx.NEUTRAL]
+    rows = [r for r in rows if r[1]]
+    if rows:
+        lines += ["", "<b>Замечания</b> (артикул может попасть в несколько):"]
+        lines += [f"• {esc(t)} — {n} арт." for t, n in rows]
+    top = hit[bad].sort_values("lost", ascending=False).head(3)
+    if len(top):
+        lines += ["", "<b>Больше всего отдано по проблемным:</b>"]
+        for r in top.itertuples(index=False):
+            lines.append(f"• {esc(r.brand)} {esc(r.sa)} — {abs(r.cut):.0f}%, "
+                         f"≈ {rub(max(r.lost, 0))}")
+    if meta["n1"] < 10:
+        lines += ["", f"<i>Прошло {meta['n1']} дн.: продажи считаются по дате выкупа, часть "
+                      "заказов ещё не выкуплена — оценка предварительная, надёжнее через "
+                      "10–14 дней.</i>"]
+    lines += ["", "<i>Подробно по каждому артикулу и выводы — в Excel.</i>"]
+    return {"text": "\n".join(lines), "photo": None, "auto": "x",
+            "files": (("x", "Excel: разбор"),), "kb": kb}
+
+
+def file_reprice(a: date, b: date):
+    from .. import reprice_export as rx
+    hit, meta = _reprice(a, b)
+    if hit.empty:
+        return None
+    data, name = rx.to_excel(hit, meta, 10.0, [])
+    return name, data, XLSX
+
+
 # ---------------------------------------------------------------- диспетчер
 def build(rep: str, a: date, b: date) -> dict | None:
     if rep == "s":
@@ -1460,6 +1535,8 @@ def build(rep: str, a: date, b: date) -> dict | None:
     if rep == "g":
         from . import drop
         return drop.report_signals(a, b)
+    if rep == "p":
+        return report_reprice(a, b)
     return None
 
 
@@ -1488,6 +1565,8 @@ def file(rep: str, code: str, a: date, b: date):
         return file_margin(code, a, b)
     if rep == "l":
         return file_margin(code, a, b, only_loss=True)
+    if rep == "p":
+        return file_reprice(a, b)
     return None
 
 
@@ -1506,6 +1585,8 @@ HELP = ("<b>Как пользоваться</b>\n"
         "• «📑 Коммерческий обзор» — PDF коммерческого обзора 2.0 на выбранную дату.\n"
         "• «💰 Маржинальность» и «🔻 Продаём в убыток» — по управленческому учёту, как в "
         "дашборде: себестоимость FIFO, продажи скорректированы на возвраты.\n"
+        "• «🔖 Переоценки» — выберите дни, когда снижали цены: что стало с продажами, "
+        "остатком и фин. результатом, сколько отдали скидкой; по каждому артикулу — в Excel.\n"
         "• Нужного отчёта нет на кнопках — просто напишите вопрос своими словами, ответит ИИ.\n\n"
         "Важные цифры сверяйте с дашбордом. Если что-то не так — напишите Дарье.")
 
