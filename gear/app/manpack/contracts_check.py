@@ -5,9 +5,12 @@
 Суммы — оборот gl.fact по договору, dt − cr:
   деньги (счета с parent_id = 3): + поступление, − оплата (запись без пары);
   начисления: счёт расчётов ST против P&L / баланса / НДС;
-  остаток по расчётам = деньги − ST (как apar в contracts_gl_check):
-  + получили больше, чем начислено (долг перед контрагентом / аванс получен),
+  остаток по расчётам = деньги + списано (P&L, баланс, НДС): не зависит от того,
+  на каком счёте функция держит расчёты (у депозитов и займов — свои счета);
+  + получили больше, чем списано (долг перед контрагентом / аванс получен),
   − заплатили больше (аванс выдан / долг контрагента).
+График — gl.accural_distribution: всё, что функции начислили, в том числе после
+отчётной даты; по нему видно, спишется ли остаток к концу условий.
 
 Счета договора — как в начислениях (gl.accurals_args): ST — contracts.bs_id,
 BS — условия.acc_bs_id или contracts.st_id, P&L — условия.acc_pl_id или contracts.pl_id.
@@ -24,7 +27,7 @@ TOL_RUB = 1000.0
 WB_NAMES = ("ВАЙЛДБЕРРИЗ", "WILDBERRIES", "РВБ")
 SKIP_ITEMS = (("4", "Переводы между счетами и конвертация"), ("125", "Налоги и сборы"))
 CASH_PARENT, VAT_PARENT = 3, 31
-GOODS_CODE, GOODS_BS = "121", "130"
+GOODS_SUB, GOODS_BS = "1211", "130"     # подстатья «Закупка товара», счёт BS товара
 
 FACT_SQL = """
 SELECT f.contract_id AS cid, LAST_DAY(f.date_from)::DATE AS me, f.acc_id,
@@ -63,13 +66,24 @@ LEFT JOIN pg.public.contracts_accuralfn f ON f.id = t.fn_id
 LEFT JOIN pg.public.contracts_accountingmethod am ON am.id = t.accounting_method_id
 LEFT JOIN pg.public.contracts_accountingmethod am2 ON am2.id = f.accounting_method_id
 """
+AD_SQL = """
+SELECT contract_id AS cid,
+       SUM(CASE WHEN acc_pl IS NOT NULL THEN dt_pl - cr_pl ELSE 0 END
+           + CASE WHEN acc_bs IS NOT NULL THEN dt_bs - cr_bs ELSE 0 END
+           + CASE WHEN acc_vat IS NOT NULL THEN dt_vat - cr_vat ELSE 0 END)
+           FILTER (WHERE date_from > ?) / 100.0 AS future,
+       MAX(date_from) AS ad_last
+FROM pg.gl.accural_distribution
+WHERE contract_id IS NOT NULL
+GROUP BY 1
+"""
 ITEM_SQL = """
 SELECT CAST(id AS BIGINT) AS id, CAST(code AS VARCHAR) || ' ' || name AS name
 FROM pg.public.corporate_cfitems
 """
 CF_SQL = """
 SELECT date_from::DATE AS d, CAST(amount AS DOUBLE) AS amount, COALESCE(item, '') AS item,
-       TRY_CAST(contract_id AS BIGINT) AS cid,
+       COALESCE(subitem, '') AS subitem, TRY_CAST(contract_id AS BIGINT) AS cid,
        COALESCE(NULLIF(TRIM(cp_name), ''), 'Без контрагента') AS cp_name
 FROM pg.cf_to_csv
 WHERE date_from::DATE <= ? AND COALESCE(amount, 0) <> 0
@@ -98,8 +112,9 @@ FLAGS = {
     "both": ("Списание и в P&L, и на баланс",
              "Проверить, нет ли двойного списания: обычно указывают что-то одно — P&L или BS.", 4),
     "goods_pl": ("Закупка товара списывается в P&L",
-                 "Оплаты по статье 121… (товар) — их место на балансе (130…), в себестоимость "
-                 "товар попадает при продаже. Указать счёт BS 130… вместо P&L.", 5),
+                 "Если это товар — в условиях указать счёт BS 130001 вместо P&L (в себестоимость "
+                 "он попадёт при продаже). Если это не товар (услуги, логистика) — поменять "
+                 "подстатью в Cash Flow.", 5),
     "plan": ("Списано не по графику условий",
              "Сравнить начисления с условиями: сумма в месяц, даты, НДС сверху/внутри. Частая "
              "причина — после правки условий не запущен GL ETL или условия пересекаются.", 6),
@@ -184,6 +199,12 @@ def build(report_date: date, con) -> dict:
     cond = con.execute(COND_SQL).df()
     items = con.execute(ITEM_SQL).df()
     cf = con.execute(CF_SQL, [report_date]).df()
+    try:
+        ad = con.execute(AD_SQL, [report_date]).df()
+    except Exception as e:                       # без графика — отчёт всё равно собирается
+        import logging
+        logging.getLogger(__name__).warning("Списание договоров: график: %s", e)
+        ad = pd.DataFrame(columns=["cid", "future", "ad_last"])
 
     coa = coa.set_index("id")
     acc_name = (coa["code"].fillna("") + " " + coa["name"].fillna("")).str.strip()
@@ -269,7 +290,7 @@ def build(report_date: date, con) -> dict:
         return not ok.any()
     by_c = {c: g for c, g in cond.groupby("cid")}
     cf["outside"] = [outside(r) for r in cf.itertuples(index=False)]
-    cf["goods"] = cf["item"].str.startswith(GOODS_CODE)
+    cf["goods"] = cf["subitem"].str.startswith(GOODS_SUB)
     cf["a"] = cf["amount"].abs()
     cfa = cf.groupby("cid").agg(
         turn=("a", "sum"),
@@ -280,9 +301,10 @@ def build(report_date: date, con) -> dict:
     ).reset_index()
 
     df = (ctr.merge(t, on="cid", how="left").merge(cinfo, on="cid", how="left")
-          .merge(cfa, on="cid", how="left").merge(cplan, on="cid", how="left"))
+          .merge(cfa, on="cid", how="left").merge(cplan, on="cid", how="left")
+          .merge(ad, on="cid", how="left"))
     num = ["cash", "st", "pl", "bs", "vat", "other", "got", "paid", "turn", "goods", "out_sum",
-           "out_n", "n_cond", "n_fn"]
+           "out_n", "n_cond", "n_fn", "future"]
     df[num] = df[num].apply(pd.to_numeric, errors="coerce").fillna(0.0)
     moved = (df["got"] + df["paid"] + df["turn"] + df["pl"].abs() + df["bs"].abs()
              + df["st"].abs()) > 0
@@ -295,7 +317,28 @@ def build(report_date: date, con) -> dict:
     df["bs_goods"] = bs_codes.map(lambda cs: any(x.startswith(GOODS_BS) for x in cs))
     df["cash_based"] = df["method"].fillna("").str.contains("cash", case=False)
     df["written"] = df["pl"] + df["bs"] + df["vat"]
-    df["bal"] = df["cash"] - df["st"]           # остаток по расчётам, как apar
+    df["bal"] = df["cash"] + df["written"]      # остаток по расчётам
+    # аванс закрывается будущими начислениями; долг — оплатой
+    df["final"] = (df["bal"] + df["future"]).where(df["bal"] < 0, df["bal"])
+
+    def outcome(r):
+        bal, fut = r["bal"], r["future"]
+        end = f" к {_d(r['ad_last'])}" if pd.notna(r["ad_last"]) else ""
+        if abs(bal) < TOL_RUB:
+            if abs(fut) >= TOL_RUB:
+                return f"Остатка нет; по графику ещё начислится {_rub(fut)}{end}"
+            return "Закрыт: остатка нет"
+        if bal > 0:
+            return f"Долг перед контрагентом / аванс получен {_rub(bal)}"
+        left = bal + fut
+        if left >= -TOL_RUB:
+            tail = f", дальше к оплате {_rub(left)}" if left >= TOL_RUB else ""
+            return f"Аванс {_rub(bal)} спишется по графику{end}{tail}"
+        if abs(fut) >= TOL_RUB:
+            return (f"Аванс {_rub(bal)}: по графику спишется {_rub(fut)}, останется "
+                    f"{_rub(left)} — разобрать")
+        return f"Аванс {_rub(bal)}: графика нет — разобрать"
+    df["outcome"] = df.apply(outcome, axis=1)
 
     def skip_reason(r):
         if any(n in str(r["cp"]).upper() for n in WB_NAMES):
@@ -380,8 +423,9 @@ def build(report_date: date, con) -> dict:
         if f == "both":
             return f"Деньги: {money}. Списано {wo}. Счета: P&L {r['pl_name']}; BS {r['bs_name']}."
         if f == "goods_pl":
-            return (f"Оплаты товара {_rub(r['goods'])} из {_rub(r['turn'])} оборота, а списано в "
-                    f"P&L {_rub(r['pl'])} (счёт {r['pl_name']}), на баланс — ничего.")
+            return (f"Платежи по подстатье «Закупка товара» (1211…) — {_rub(r['goods'])} из "
+                    f"{_rub(r['turn'])}, а списываются в P&L ({r['pl_name']}) — "
+                    f"{_rub(r['pl'])}, на баланс 130… — ничего.")
         if f == "plan":
             more = "больше" if r["plan_diff"] > 0 else "меньше"
             return (f"По условиям на отчётную дату должно быть списано {_rub(r['plan_date'])} "
@@ -421,10 +465,11 @@ def build(report_date: date, con) -> dict:
                     for r in nc.itertuples(index=False)]})
         add["flag"], add["todo"] = FLAGS["no_contract"][0], FLAGS["no_contract"][1]
         df = pd.concat([df, add], ignore_index=True)
-    issues = df[df["weight"] >= TOL_RUB].sort_values(["weight", "cp"], ascending=[False, True])
-    issues = issues.copy()
+    alpha = lambda x: x.astype(str).str.upper()
+    issues = df[df["weight"] >= TOL_RUB].sort_values(["cp", "contract"], key=alpha).copy()
     issues.insert(0, "n", range(1, len(issues) + 1))
-    df["n"] = df["cid"].map(issues.dropna(subset=["cid"]).set_index("cid")["n"])
+    key = lambda d: d["cid"].astype(str).where(d["cid"].notna(), "cp:" + d["cp"].astype(str))
+    df["n"] = key(df).map(dict(zip(key(issues), issues["n"])))
     df = df.sort_values(["cp", "contract"], key=lambda x: x.astype(str).str.upper())
 
     # условия построчно
@@ -444,7 +489,8 @@ def build(report_date: date, con) -> dict:
     # по месяцам — договоры с замечаниями
     mm = m[m["cid"].isin(set(issues["cid"]))].merge(ctr[["cid", "cp", "contract"]], on="cid")
     mm["n"] = mm["cid"].map(nmap)
-    mm = mm.sort_values(["n", "me"])
+    mm = mm.sort_values(["cp", "contract", "me"], key=lambda x: x.astype(str).str.upper()
+                        if x.dtype == object else x)
     return {"all": df, "issues": issues, "cond": cn, "months": mm}
 
 
@@ -461,24 +507,26 @@ ISSUE_COLS = [
 ]
 ALL_COLS = [
     ("cp", "Контрагент", "wrap", 26), ("contract", "Договор", "wrap", 30), ("cid", "ID", "id", 7),
-    ("flag", "Статус", "flag", 24), ("n", "№ в «Что проверить»", "id", 9),
-    ("why", "Пояснение", "wrap", 48),
+    ("flag", "Статус", "flag", 22), ("n", "№ в «Что проверить»", "id", 9),
+    ("outcome", "Итог по графику", "wrap", 30),
     ("paid", "Оплачено, ₽", "money", 13), ("got", "Получено, ₽", "money", 13),
-    ("written", "Списано: P&L + баланс + НДС, ₽", "money", 14),
-    ("bal", "Остаток по расчётам (+ долг наш, − аванс выдан), ₽", "money", 15),
-    ("plan_left", "Осталось списать по условиям, ₽", "money", 14),
+    ("pl", "Списано в P&L, ₽", "money", 13), ("bs", "Списано на баланс, ₽", "money", 13),
+    ("vat", "НДС, ₽", "money", 12),
+    ("bal", "Остаток сейчас (+ долг наш, − аванс выдан), ₽", "money", 14),
+    ("future", "Спишется по графику после отчётной даты, ₽", "money", 14),
+    ("final", "Останется после графика (без новых оплат), ₽", "money", 14),
+    ("why", "Пояснение", "wrap", 44),
     # подробности — свёрнуты, «+» над колонками
     ("method", "Метод учёта", "wrap", 13, 1), ("fn", "Функция начисления", "wrap", 20, 1),
     ("vat_modes", "Режим НДС", "wrap", 12, 1), ("start", "Условия с", "date", 10, 1),
-    ("finish", "Условия по", "date", 10, 1), ("item_name", "Основная статья CF", "wrap", 24, 1),
+    ("finish", "Условия по", "date", 10, 1), ("ad_last", "График до", "date", 10, 1),
+    ("item_name", "Основная статья CF", "wrap", 24, 1),
     ("st_name", "Счёт расчётов (ST)", "wrap", 20, 1), ("pl_name", "Счёт P&L", "wrap", 20, 1),
-    ("bs_name", "Счёт BS", "wrap", 20, 1),
-    ("pl", "Списано в P&L, ₽", "money", 13, 1), ("bs", "Списано на баланс, ₽", "money", 13, 1),
-    ("vat", "НДС, ₽", "money", 12, 1), ("other", "Прочие счета, ₽", "money", 12, 1),
-    ("plan_how", "План списания", "wrap", 16, 1),
-    ("plan_total", "План за весь срок условий, ₽", "money", 14, 1),
-    ("plan_date", "План на отчётную дату, ₽", "money", 14, 1),
-    ("plan_diff", "Списано сверх плана (+) / недосписано (−), ₽", "money", 14, 1),
+    ("bs_name", "Счёт BS", "wrap", 20, 1), ("other", "Прочие счета, ₽", "money", 12, 1),
+    ("plan_how", "Проверка по условиям", "wrap", 16, 1),
+    ("plan_total", "По условиям за весь срок, ₽", "money", 14, 1),
+    ("plan_date", "По условиям на отчётную дату, ₽", "money", 14, 1),
+    ("plan_diff", "Списано сверх условий (+) / меньше (−), ₽", "money", 14, 1),
 ]
 COND_COLS = [
     ("n", "№ замечания", "id", 8), ("cp", "Контрагент", "wrap", 26),
@@ -511,10 +559,14 @@ NOTES = [
     ("Откуда суммы", "Проводки gl.fact по договору до отчётной даты. Счета договора — как в "
                      "начислениях: расчёты (ST) из договора, P&L и BS — из условий, а если в "
                      "условиях пусто — из договора."),
-    ("Остаток по расчётам", "Деньги минус начисления по договору. «+» — денег получили больше, "
-                            "чем начислено, или заплатили меньше: долг перед контрагентом. «−» — "
-                            "заплатили больше, чем начислено: аванс выдан. При Cash Based должен "
-                            "быть около нуля; по актам — нормальный аванс или долг (справочно)."),
+    ("Остаток сейчас", "Деньги плюс списания по договору. «+» — денег получили больше, чем "
+                       "списано (или заплатили меньше): долг перед контрагентом. «−» — заплатили "
+                       "больше, чем списано: аванс выдан. При Cash Based — около нуля."),
+    ("Итог по графику", "Начисления функций уже рассчитаны до конца условий "
+                        "(gl.accural_distribution). «Спишется после отчётной даты» — их сумма "
+                        "после отчётной даты, «Останется после графика» — остаток, когда всё "
+                        "спишется. Ноль — аванс или долг закроется сам (например, лицензия, "
+                        "оплаченная вперёд). Не ноль — реальный долг или аванс к разбору."),
     ("Не проверяется", "Переводы между своими счетами и конвертация (статьи 4…), налоги (125…) и "
                        "WB — их списание идёт не через условия договоров."),
     ("Знаки", "Оплачено и получено — положительные суммы. Списано: + расход, актив, вычет НДС; "

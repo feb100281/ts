@@ -257,6 +257,20 @@ def _nodoc(con, report_date: date) -> pd.DataFrame:
     return df[["key", "nodoc"]]
 
 
+def _bs130(con) -> set:
+    """Договоры со счётом BS 130… (товар на баланс) — из того же фрагмента, что строка 2.0а."""
+    try:
+        from gear.management.commands.sql.read_query import read_sql
+        frag = read_sql("vat_bs130.txt")
+        frag = frag[:frag.index("bs130_pay AS (")].rstrip().rstrip(",")
+        rows = con.execute("WITH\n" + frag + "\nSELECT cid FROM bs130").fetchall()
+        return {int(r[0]) for r in rows}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Сверка НДС: договоры на баланс 130: %s", e)
+        return set()
+
+
 def build(report_date: date, con) -> dict:
     cf = con.execute(CF_SQL, [report_date]).df()
     cond = con.execute(COND_SQL).df()
@@ -264,6 +278,7 @@ def build(report_date: date, con) -> dict:
     gl = con.execute(GL_SQL, [report_date]).df()
     upd = con.execute(UPD_SQL, [report_date]).df()
     nodoc = _nodoc(con, report_date)
+    bs130_ids = _bs130(con)
 
     cf["d"] = pd.to_datetime(cf["d"])
     for c in ("date_start", "date_finish"):
@@ -332,8 +347,8 @@ def build(report_date: date, con) -> dict:
         df["contract"] = idx.map(info["contract"]).fillna("")
         df.loc[idx.str.startswith("cp:"), "contract"] = "без договора"
         df["actual"] = df["gl"] + df["upd"]
-        df["goods"] = (df["upd"].abs() >= TOL_RUB) | (
-            df["goods_turn"] >= 0.5 * (df["paid"] + df["got"]).where(lambda s: s > 0))
+        # товар — есть УПД или договор идёт на баланс 130001
+        df["goods"] = (df["upd"].abs() >= TOL_RUB) | df["cid"].isin(bs130_ids)
         df["goods"] = df["goods"].fillna(False).astype(bool)
         base = df["net"].abs() - df["actual"].abs()
         df["eff_rate"] = (df["actual"].abs() / base.where(base > 0) * 100).where(
@@ -358,17 +373,17 @@ def build(report_date: date, con) -> dict:
         return df
 
     tot = finish(agg(cf, ["key"]), acc_t, ["key"])
-    tot = tot.sort_values(["weight", "cp"], ascending=[False, True])
+    tot = tot.sort_values(["cp", "contract"], key=lambda x: x.astype(str).str.upper() if x.dtype == object else x)
     yr = finish(agg(cf, ["key", "y"]), acc_y, ["key", "y"])
     yr = yr.sort_values(["cp", "contract", "y"])
     issues = tot[tot["weight"] > 0].copy()
-    issues.insert(0, "n", range(1, len(issues) + 1))
+    issues.insert(0, "n", range(1, len(issues) + 1))      # по алфавиту, как остальные листы
     ops = cf[cf["key"].isin(set(issues["key"]))].copy()
     ops["cp"] = ops["key"].map(tot.set_index("key")["cp"])
     ops["contract"] = ops["key"].map(tot.set_index("key")["contract"])
     ops["mode"] = ops["vat_mode"].map(MODE_NAME)
     ops["n"] = ops["key"].map(issues.set_index("key")["n"])
-    ops = ops.sort_values(["n", "d"])
+    ops = ops.sort_values(["cp", "contract", "d"], key=lambda x: x.astype(str).str.upper() if x.dtype == object else x)
     return {"tot": tot, "yr": yr, "issues": issues, "ops": ops, "skipped": skipped}
 
 
@@ -415,8 +430,8 @@ NOTES = [
     ("Оплаты без УПД", "Договоры со счётом BS 130…: НДС из назначения платежей минус НДС по УПД, "
                        "нарастающим итогом, не меньше нуля — то же, что строка 2.0а листа НДС. "
                        "Это оценка: вычет возможен только по УПД, поэтому их надо запросить."),
-    ("Товарные договоры", "Договоры с УПД или где больше половины оборота — оплата товаров "
-                          "(статья 121…): НДС по ним — только по УПД, с оплатами не сравнивается "
+    ("Товарные договоры", "Договоры с УПД или со счётом BS 130001 (товар на баланс): НДС "
+                          "по ним — по УПД и строке 2.0а, с оплатами по ставке не сравнивается "
                           "(поставки и оплаты идут в разное время)."),
     ("Не проверяется", "Финансирование (займы, взносы, проценты — статьи 3…) и налоги (125…): "
                        "НДС в них нет. Суммы — на листе «Не проверялось». WB сверяется на листе "
