@@ -497,7 +497,10 @@ def to_excel(res: dict, report_date: date) -> bytes:
                 elif k in ("flag",):
                     ws.write(i, j, v, flag_fmt(v))
                 elif t in ("money", "dec", "id"):
-                    ws.write_number(i, j, float(v), fmt[t])
+                    v = float(v)
+                    if t == "money" and abs(v) < 0.5:   # копейки и хвосты округления — прочерк
+                        v = 0.0
+                    ws.write_number(i, j, v, fmt[t])
                 elif t == "date":
                     ws.write_datetime(i, j, pd.Timestamp(v).to_pydatetime(), fmt["date"])
                 else:
