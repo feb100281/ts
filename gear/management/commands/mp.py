@@ -4747,25 +4747,21 @@ def vat_layout(rows, shown=None, paid=None):
     L += tree(goods, order=_rate_key)          # ставки по возрастанию: 0, 5, 7, 10, 20, 22
     if live(goods_base):
         L.append(("ref", "", "справочно: закупки товаров по УПД без НДС", goods_base, 1))
-    cash_sec = add(*goods_cash.values())
-    if live(cash_sec):
-        L.append(("row", "2.0а", "Товары без УПД — НДС по назначению платежа", cash_sec, 1))
-        L += tree(goods_cash)
-    # проводки НДС по закупкам на баланс (счета 1…: упаковка, материалы)
-    bs_in = {k: v for k, v in gl_in.items() if str(k[0]).startswith("1")}
-    bs_sec = add(*bs_in.values())
+    # закупки на баланс (счёт BS 130…): НДС оплат по назначению платежа минус НДС УПД
+    bs_sec = add(*goods_cash.values())
     if live(bs_sec):
-        L.append(("row", "2.0б", "Закупки на баланс: упаковка, материалы (по учёту)", bs_sec, 1))
-        L += tree(bs_in)
+        L.append(("row", "2.0а", "Закупки на баланс (130001): НДС по оплатам, не покрытый УПД",
+                  bs_sec, 1))
+        L += tree(goods_cash, order=lambda g: str(g).upper())   # поставщики по алфавиту
     L.append(("row", "2.1", "Комиссия WB — НДС с вознаграждения по отчёту WB", comm, 1))
     L.append(("row", "2.2", "Расходы WB: логистика, хранение, приёмка — расчётно по ставке",
               sel, 1))
     L.append(("row", "2.3", "Продвижение WB — расчётно по ставке", promo, 1))
-    parts = [goods_sec, cash_sec, bs_sec, comm, sel, promo]
+    parts = [goods_sec, bs_sec, comm, sel, promo]
     known = {c for c, _, _ in VAT_GL_SECTIONS}
     for pfx, code, label in VAT_GL_SECTIONS + [(None, "2.8", "Другие счета (по учёту)")]:
         items = {k: v for k, v in gl_in.items()
-                 if (k[0] == pfx if pfx else k[0] not in known and k not in bs_in)}
+                 if (k[0] == pfx if pfx else k[0] not in known)}
         sec = add(*items.values())
         parts.append(sec)
         if not live(sec):

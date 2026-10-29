@@ -5,7 +5,15 @@ SQL_DIR = Path(__file__).resolve().parent
 
 
 def read_sql(name: str) -> str:
-    return (SQL_DIR / name).read_text(encoding="utf-8")
+    """Текст запроса; строка «-- @include <файл>» заменяется текстом файла из sql/."""
+    out = []
+    for line in (SQL_DIR / name).read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if s.startswith("-- @include "):
+            out.append(read_sql(s[len("-- @include "):].strip()))
+        else:
+            out.append(line)
+    return "\n".join(out)
 
 
 def ensure_pl_src(con) -> bool:

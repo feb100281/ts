@@ -9,49 +9,7 @@
 -- «НДС, ₽» — сумма в своём направлении; последняя колонка — знак как в деньгах:
 -- начисленный (к уплате) — минус, к вычету — плюс.
 WITH
--- Товар без УПД: НДС из назначения платежа (выписки, с учётом сплитов).
--- Только договоры с оплатой товара (статьи 121…), по которым нет ни одного УПД.
--- Сумма НДС из текста берётся, если сходится со ставкой из назначения (±5%) или
--- не больше 22/122 платежа; иначе — расчётно по ставке. Оплата — плюс (к вычету).
-goods_cash_pay AS (
-    SELECT t.date::DATE AS d, t.contract_id, t.cfitem_id, t.temp, t.vat_rate,
-           COALESCE(t.cr, 0) - COALESCE(t.dt, 0) AS out_amt
-    FROM pg.public.treasury_cfdata t
-    UNION ALL
-    SELECT t.date::DATE, s.contract_id, s.cfitem_id, COALESCE(s.temp, t.temp),
-           COALESCE(s.vat_rate, t.vat_rate), COALESCE(s.cr, 0) - COALESCE(s.dt, 0)
-    FROM pg.public.treasury_cfsplits s
-    JOIN pg.public.treasury_cfdata t ON t.id = s.transaction_id
-),
-goods_cash_rows AS (
-    SELECT p.d, p.contract_id, p.out_amt, p.vat_rate AS r,
-           TRY_CAST(REPLACE(REPLACE(REPLACE(REGEXP_EXTRACT(p.temp,
-               '(?i)ндс[^0-9]{0,20}(?:[0-9]{1,2}(?:[.,][0-9]+)?\s*%[^0-9]{0,15})?([0-9][0-9 ]{0,12}[.,-][0-9]{2})',
-               1), ' ', ''), ',', '.'), '-', '.') AS DOUBLE) AS vat_txt,
-           p.out_amt * COALESCE(p.vat_rate, 0) / (100 + COALESCE(p.vat_rate, 0)) AS vat_calc
-    FROM goods_cash_pay p
-    JOIN pg.public.corporate_cfitems i ON i.id = p.cfitem_id
-    WHERE p.d <= $date_from AND p.out_amt <> 0 AND p.contract_id IS NOT NULL
-      AND CAST(i.code AS VARCHAR) LIKE '121%'
-      AND p.contract_id NOT IN (
-          SELECT DISTINCT d.contract_id FROM pg.public.cards_upddocument d
-          JOIN pg.public.upd_income_lines l ON l.upd_document_id = d.id
-          WHERE d.contract_id IS NOT NULL)
-),
-goods_cash AS (
-    SELECT d, contract_id,
-           CASE WHEN vat_txt > 0 AND r > 0 AND ABS(vat_txt - ABS(vat_calc)) <= 0.05 * ABS(vat_calc) + 1
-                    THEN SIGN(out_amt) * vat_txt
-                WHEN vat_txt > 0 AND r IS NULL AND vat_txt <= ABS(out_amt) * 22 / 122 * 1.01
-                    THEN SIGN(out_amt) * vat_txt
-                WHEN r > 0 THEN vat_calc
-                ELSE 0 END AS vat,
-           CASE WHEN vat_txt > 0 AND ((r > 0 AND ABS(vat_txt - ABS(vat_calc)) <= 0.05 * ABS(vat_calc) + 1)
-                                      OR (r IS NULL AND vat_txt <= ABS(out_amt) * 22 / 122 * 1.01))
-                    THEN 'сумма из назначения платежа'
-                ELSE 'расчётно по ставке из назначения' END AS src
-    FROM goods_cash_rows
-),
+-- @include vat_bs130.txt
 src AS (
     SELECT date_from::DATE AS d, '1. Начисленный' AS direction,
            '1.1 НДС с продаж WB' AS line, 'Продажи WB' AS grp, 'Продажи WB' AS item,
@@ -77,17 +35,17 @@ src AS (
     WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
 
     UNION ALL
-    SELECT g.d, '2. К вычету', '2.0а Товары без УПД (по назначению платежа)',
-           'Товары без УПД', COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
+    SELECT g.me, '2. К вычету', '2.0а Закупки на баланс 130: НДС по оплатам без УПД',
+           'Закупки на баланс без УПД', COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
            COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
            COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(c.number, 'б/н') || ' · id '
                || CAST(c.id AS VARCHAR),
-           c.id, g.src, g.vat
-    FROM goods_cash g
-    JOIN pg.public.contracts_contracts c ON c.id = g.contract_id
+           c.id, 'назначение платежа минус УПД', g.vat
+    FROM bs130_vat g
+    JOIN pg.public.contracts_contracts c ON c.id = g.cid
     LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = c.title_id
     LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
-    WHERE g.vat <> 0
+    WHERE ABS(g.vat) >= 0.01
 
     UNION ALL
     SELECT rr_dt::DATE, '2. К вычету',
@@ -118,7 +76,6 @@ src AS (
     SELECT v.date_from::DATE,
            CASE WHEN v.dt - v.cr < 0 THEN '1. Начисленный' ELSE '2. К вычету' END,
            CASE WHEN v.dt - v.cr < 0 THEN '1.3 НДС с прочих доходов'
-                WHEN LEFT(CAST(a.code AS VARCHAR), 1) = '1' THEN '2.0б Закупки на баланс (упаковка, материалы)'
                 WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '610' THEN '2.4 Накладные расходы'
                 WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '620' THEN '2.5 Корпоративные расходы'
                 WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '420' THEN '2.6 Прочие расходы'
@@ -146,6 +103,7 @@ src AS (
     LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = c.title_id
     LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
     WHERE v.chapter = 'VAT_ACCURALS' AND v.date_from <= $date_from AND v.dt - v.cr <> 0
+      AND COALESCE(p.contract_id, v.contract_id) NOT IN (SELECT cid FROM bs130)
 
     -- корректировки сальдо из «Корректировок НДС»: списание (не принят к вычету) —
     -- минус, корректировка сальдо — со знаком, как введена

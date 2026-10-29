@@ -84,6 +84,9 @@ FLAGS = {
              3),
     "sign": ("Знак НДС не совпадает с движением денег",
              "Проверить направление начислений: вычет вместо начисленного или наоборот.", 4),
+    "nodoc": ("НДС по оплатам без УПД",
+              "Запросить УПД у поставщика или бухгалтерии и загрузить — НДС перейдёт из "
+              "строки 2.0а листа НДС в строку 2.0.", 5),
     "goods_no_upd": ("Товар оплачен, УПД с НДС нет",
                      "Загрузить УПД поставщика. Если поставка без НДС (импорт) — указать в "
                      "условиях договора «Без НДС».", 5),
@@ -176,6 +179,8 @@ def _classify(r) -> str:
     if r["wb"]:
         return "wb"
     exp, act, gl, upd = r["exp"], r["actual"], r["gl"], r["upd"]
+    if r["nodoc"] >= TOL_RUB:
+        return "nodoc"
     if r["goods"]:
         if abs(gl) >= TOL_RUB and abs(upd) >= TOL_RUB:
             return "goods_double"
@@ -220,6 +225,9 @@ def _explain(r) -> str:
         return (f"По Cash Flow {money}, режим «{r['mode']}» {rate}: ожидаемый НДС "
                 f"{_rub(r['exp'])}, в учёте {_rub(r['actual'])} — {more} на "
                 f"{_rub(r['diff'])}{eff}.")
+    if f == "nodoc":
+        return (f"По назначению платежей НДС к вычету ≈ {_rub(r['nodoc'])} сверх УПД "
+                f"(по УПД {_rub(r['upd'])}). На листе НДС — строка 2.0а.")
     if f == "goods_no_upd":
         return (f"Оплачено за товар {_rub(r['paid'])}, УПД с НДС нет. При ставке "
                 f"{'22' if r['ymax'] >= 2026 else '20'}% вычет был бы ≈ {_rub(r['potential'])}.")
@@ -233,12 +241,28 @@ def _explain(r) -> str:
     return ""
 
 
+def _nodoc(con, report_date: date) -> pd.DataFrame:
+    """НДС по оплатам без УПД (счёт BS 130…) — тот же расчёт, что строка 2.0а листа НДС."""
+    try:
+        from gear.management.commands.sql.read_query import read_sql
+        frag = read_sql("vat_bs130.txt").rstrip().rstrip(",")
+        sql = "WITH\n" + frag + "\nSELECT cid, SUM(vat) AS nodoc FROM bs130_vat GROUP BY 1"
+        df = con.execute(sql, parameters={"date_from": report_date}).df()
+    except Exception as e:                       # отчёт без этой колонки, но собирается
+        import logging
+        logging.getLogger(__name__).warning("Сверка НДС: оплаты без УПД: %s", e)
+        df = pd.DataFrame(columns=["cid", "nodoc"])
+    df["key"] = pd.to_numeric(df["cid"], errors="coerce").astype("Int64").astype(str)
+    return df[["key", "nodoc"]]
+
+
 def build(report_date: date, con) -> dict:
     cf = con.execute(CF_SQL, [report_date]).df()
     cond = con.execute(COND_SQL).df()
     ctr = con.execute(CONTRACT_SQL).df()
     gl = con.execute(GL_SQL, [report_date]).df()
     upd = con.execute(UPD_SQL, [report_date]).df()
+    nodoc = _nodoc(con, report_date)
 
     cf["d"] = pd.to_datetime(cf["d"])
     for c in ("date_start", "date_finish"):
@@ -289,7 +313,11 @@ def build(report_date: date, con) -> dict:
 
     def finish(df, accd, keys):
         df = df.merge(accd, on=keys, how="outer")
-        for c in ("paid", "got", "net", "exp", "potential", "gl", "upd", "goods_turn"):
+        if keys == ["key"]:
+            df = df.merge(nodoc, on="key", how="left")
+        else:
+            df["nodoc"] = 0.0
+        for c in ("paid", "got", "net", "exp", "potential", "gl", "upd", "goods_turn", "nodoc"):
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
         df["ymax"] = pd.to_numeric(df["ymax"], errors="coerce").fillna(report_date.year)
         df["vat_mode"] = df["vat_mode"].fillna("none")
@@ -314,13 +342,14 @@ def build(report_date: date, con) -> dict:
         # для товара сверка по УПД, ожидаемый по оплатам не показываем
         df.loc[df["goods"] | df["wb"], ["exp"]] = float("nan")
         df["diff"] = (df["actual"] - df["exp"]).where(df["exp"].notna())
-        df.loc[df["fcode"].isin(["wb", "goods_ok", "goods_double"]), "potential"] = 0.0
+        df.loc[df["fcode"].isin(["wb", "goods_ok", "goods_double", "nodoc"]), "potential"] = 0.0
         df.loc[df["fcode"].eq("goods_no_upd"), "potential"] = (
             df["paid"] * df["ymax"].map(_std) / (100 + df["ymax"].map(_std)))
         df["flag"] = df["fcode"].map(lambda f: FLAGS[f][0])
         df["todo"] = df["fcode"].map(lambda f: FLAGS[f][1])
         df["mode"] = df["vat_mode"].map(MODE_NAME).fillna(df["vat_mode"])
         df["weight"] = pd.concat([df["diff"].abs().fillna(0), df["potential"].abs(),
+                                  df["nodoc"].where(df["fcode"].eq("nodoc"), 0),
                                   df["gl"].abs().where(df["fcode"].eq("goods_double"), 0)],
                                  axis=1).max(axis=1)
         df.loc[df["fcode"].isin(["ok", "wb", "goods_ok"]), "weight"] = 0.0
@@ -360,6 +389,7 @@ ALL_COLS = [
     ("actual", "НДС в учёте итого, ₽", "money", 14),
     ("diff", "Разница: учёт − ожидаемый, ₽", "money", 14),
     ("eff_rate", "Ставка по факту, %", "dec", 8),
+    ("nodoc", "НДС по оплатам без УПД, ₽", "money", 14),
 ]
 YR_COLS = [("cp", "Контрагент", "wrap", 28), ("contract", "Договор", "wrap", 30),
            ("cid", "ID", "id", 7), ("y", "Год", "id", 6), ("mode", "Режим НДС", "text", 12),
@@ -381,6 +411,9 @@ NOTES = [
                       "условий договора на дату платежа. «Только НДС» — вся сумма. «Без НДС» и "
                       "«Не задан» — ноль."),
     ("НДС в учёте", "Проводки НДС (начисления по договору) плюс НДС по УПД поставщиков товаров."),
+    ("Оплаты без УПД", "Договоры со счётом BS 130…: НДС из назначения платежей минус НДС по УПД, "
+                       "нарастающим итогом, не меньше нуля — то же, что строка 2.0а листа НДС. "
+                       "Это оценка: вычет возможен только по УПД, поэтому их надо запросить."),
     ("Товарные договоры", "Договоры с УПД или где больше половины оборота — оплата товаров "
                           "(статья 121…): НДС по ним — только по УПД, с оплатами не сравнивается "
                           "(поставки и оплаты идут в разное время)."),
