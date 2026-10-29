@@ -2205,6 +2205,7 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
   const CF_CSV_URL = "/admin/export/management-pack/cf-csv/";
   const PL_CSV_URL = "/admin/export/management-pack/pl-csv/";
   const PIVOTS_URL = "/admin/export/management-pack/pivots/";
+  const VAT_CONTRACTS_URL = "/admin/export/management-pack/vat-contracts/";
 
   function toYmd(dateObj) {
     const y = dateObj.getFullYear();
@@ -2256,6 +2257,13 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
         <div class="jm-manpack-quick">
           <button type="button" class="jm-manpack-quick-btn" id="jmMp2Pivots">
             Cash Flow и P&amp;L, xlsx
+          </button>
+        </div>
+
+        <label class="jm-manpack-label" for="jmMp2Date">Проверки</label>
+        <div class="jm-manpack-quick">
+          <button type="button" class="jm-manpack-quick-btn" id="jmMp2VatContracts">
+            Сверка НДС по договорам, xlsx
           </button>
         </div>
 
@@ -2339,6 +2347,10 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
 
     backdrop.querySelector("#jmMp2Pivots").addEventListener("click", function () {
       download(PIVOTS_URL);
+    });
+
+    backdrop.querySelector("#jmMp2VatContracts").addEventListener("click", function () {
+      download(VAT_CONTRACTS_URL);
     });
 
     backdrop.querySelector("#jmMp2CsvCf").addEventListener("click", function () {

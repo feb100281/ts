@@ -18,6 +18,7 @@ from .admin_exports import (
     export_cf_csv,
     export_pl_csv,
     export_pivots,
+    export_vat_contracts,
     api_budgets,                   
     export_budget_analysis,        
 )
@@ -81,6 +82,7 @@ urlpatterns = [
     path("admin/export/management-pack/cf-csv/", export_view(export_cf_csv, "export_management_pack"), name="export_cf_csv"),
     path("admin/export/management-pack/pl-csv/", export_view(export_pl_csv, "export_management_pack"), name="export_pl_csv"),
     path("admin/export/management-pack/pivots/", export_view(export_pivots, "export_management_pack"), name="export_pivots"),
+    path("admin/export/management-pack/vat-contracts/", export_view(export_vat_contracts, "export_management_pack"), name="export_vat_contracts"),
     path("admin/api/budgets/", export_view(api_budgets, "export_budget_analysis"), name="api_budgets"),
     path("admin/export/budget-analysis/", export_view(export_budget_analysis, "export_budget_analysis"), name="export_budget_analysis"),
     path("admin/assistant/file/<str:fid>/", admin.site.admin_view(assistant_file), name="assistant_file"),

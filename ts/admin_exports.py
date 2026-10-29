@@ -312,6 +312,30 @@ def export_pl_csv(request):
     return _export_manpack_csv(request, "pl", "pl")
 
 
+def export_vat_contracts(request):
+    """Сверка НДС по договорам: Cash Flow и режим НДС против проводок и УПД."""
+    date_str = request.GET.get("report_date")
+    if not date_str:
+        return HttpResponseBadRequest("Не передана дата report_date")
+    try:
+        report_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return HttpResponseBadRequest("Некорректный формат даты. Ожидается YYYY-MM-DD")
+
+    from gear.app.manpack.vat_contracts import build_vat_contracts_workbook
+
+    def build():
+        data, name = build_vat_contracts_workbook(report_date)
+        resp = HttpResponse(
+            data,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        from urllib.parse import quote
+        resp["Content-Disposition"] = "attachment; filename*=UTF-8''%s" % quote(name)
+        return resp
+
+    return run_export(build)
+
+
 def export_pivots(request):
     """Книга со сводными таблицами по Cash Flow и P&L на отчётную дату."""
     date_str = request.GET.get("report_date")

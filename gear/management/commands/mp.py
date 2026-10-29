@@ -4650,6 +4650,13 @@ def fetch_vat_summary(con, date_from):
         return []
 
 
+def _rate_key(label: str) -> float:
+    """«НДС 22%» → 22.0; без числа — 0."""
+    import re
+    m = re.search(r"\d+(?:[.,]\d+)?", label or "")
+    return float(m.group().replace(",", ".")) if m else 0.0
+
+
 def vat_layout(rows, shown=None, paid=None):
     """Строки листа: [(kind, code, label, {me: value}, level)].
 
@@ -4693,15 +4700,16 @@ def vat_layout(rows, shown=None, paid=None):
                 res[k] += v
         return dict(res)
 
-    def tree(src):
-        """Строки детализации: группа → статья → контрагент, по убыванию суммы."""
+    def tree(src, order=None):
+        """Строки детализации: группа → статья → контрагент, по убыванию суммы
+        (группы — по order, если задан)."""
         out = []
         tot = lambda keys: add(*[src[k] for k in keys])
         size = lambda vals: sum(vals.values())
         by_grp = defaultdict(list)
         for k in src:
             by_grp[k[1]].append(k)
-        for grp in sorted(by_grp, key=lambda g: -size(tot(by_grp[g]))):
+        for grp in sorted(by_grp, key=order or (lambda g: -size(tot(by_grp[g])))):
             gv = tot(by_grp[grp])
             if not live(gv):
                 continue
@@ -4733,7 +4741,7 @@ def vat_layout(rows, shown=None, paid=None):
     L.append(("band", None, "НДС К ВЫЧЕТУ (ВХОДЯЩИЙ)", None, 0))
     goods_sec = add(*goods.values())
     L.append(("row", "2.0", "Закупка товаров — НДС по УПД поставщиков", goods_sec, 1))
-    L += tree(goods)
+    L += tree(goods, order=_rate_key)          # ставки по возрастанию: 0, 5, 7, 10, 20, 22
     if live(goods_base):
         L.append(("ref", "", "справочно: закупки товаров по УПД без НДС", goods_base, 1))
     L.append(("row", "2.1", "Комиссия WB — НДС с вознаграждения по отчёту WB", comm, 1))
