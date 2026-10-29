@@ -3,10 +3,11 @@
 и что осталось на счёте расчётов. Рядом — условия начисления договора.
 
 Суммы — оборот gl.fact по договору, dt − cr:
-  деньги (счета с parent_id = 3): + поступление, − оплата;
-  расчёты (счёт ST договора): + аванс выдан / дебиторка, − долг / аванс получен;
-  P&L, баланс, НДС: + расход / актив / вычет, − доход / начисленный.
-По каждому договору сумма всех счетов = 0 (двойная запись).
+  деньги (счета с parent_id = 3): + поступление, − оплата (запись без пары);
+  начисления: счёт расчётов ST против P&L / баланса / НДС;
+  остаток по расчётам = деньги − ST (как apar в contracts_gl_check):
+  + получили больше, чем начислено (долг перед контрагентом / аванс получен),
+  − заплатили больше (аванс выдан / долг контрагента).
 
 Счета договора — как в начислениях (gl.accurals_args): ST — contracts.bs_id,
 BS — условия.acc_bs_id или contracts.st_id, P&L — условия.acc_pl_id или contracts.pl_id.
@@ -20,6 +21,8 @@ from datetime import date
 import pandas as pd
 
 TOL_RUB = 1000.0
+WB_NAMES = ("ВАЙЛДБЕРРИЗ", "WILDBERRIES", "РВБ")
+SKIP_ITEMS = (("4", "Переводы между счетами и конвертация"), ("125", "Налоги и сборы"))
 CASH_PARENT, VAT_PARENT = 3, 31
 GOODS_CODE, GOODS_BS = "121", "130"
 
@@ -111,6 +114,7 @@ FLAGS = {
     "nowhere": ("Деньги есть, никуда не списано",
                 "Условия есть, а начислений нет: запустить GL ETL; проверить даты условий и "
                 "параметры (например, сумму в месяц).", 4),
+    "skip": ("Не проверяется", "", 98),
     "ok": ("OK", "", 99),
 }
 
@@ -291,6 +295,17 @@ def build(report_date: date, con) -> dict:
     df["bs_goods"] = bs_codes.map(lambda cs: any(x.startswith(GOODS_BS) for x in cs))
     df["cash_based"] = df["method"].fillna("").str.contains("cash", case=False)
     df["written"] = df["pl"] + df["bs"] + df["vat"]
+    df["bal"] = df["cash"] - df["st"]           # остаток по расчётам, как apar
+
+    def skip_reason(r):
+        if any(n in str(r["cp"]).upper() for n in WB_NAMES):
+            return "Маркетплейс WB — по отчёту WB"
+        code = str(r["item"] or "").split(" ")[0]
+        for pfx, name in SKIP_ITEMS:
+            if code.startswith(pfx):
+                return name
+        return ""
+    df["skip"] = df.apply(skip_reason, axis=1)
     cb = df["cash_based"] & df["plan_total"].isna()
     df.loc[cb, "plan_date"] = df.loc[cb, "paid"] - df.loc[cb, "got"]   # списывается по оплатам
     df.loc[cb, "plan_total"] = df.loc[cb, "plan_date"]
@@ -303,7 +318,9 @@ def build(report_date: date, con) -> dict:
 
     def classify(r):
         money = max(r["got"] + r["paid"], r["turn"])
-        if money < TOL_RUB and abs(r["st"]) < TOL_RUB:
+        if r["skip"]:
+            return "skip"
+        if money < TOL_RUB and abs(r["bal"]) < TOL_RUB:
             return "ok"
         if r["n_cond"] == 0:
             return "no_cond"
@@ -322,7 +339,7 @@ def build(report_date: date, con) -> dict:
             return "plan"
         if r["out_sum"] >= TOL_RUB:
             return "outside"
-        if abs(r["st"]) >= max(TOL_RUB, 0.01 * money):
+        if abs(r["bal"]) >= max(TOL_RUB, 0.01 * money):
             return "unwritten" if r["cash_based"] else "balance"
         return "ok"
 
@@ -338,17 +355,17 @@ def build(report_date: date, con) -> dict:
             return r["out_sum"]
         if f == "plan":
             return abs(r["plan_diff"])
-        if f in ("unwritten", "balance"):
-            return abs(r["st"])
-        return 0.0
+        if f == "unwritten":
+            return abs(r["bal"])
+        return 0.0                               # «balance» — справочно, не замечание
 
     def explain(r):
         f = r["fcode"]
         money = ", ".join(x for x in (f"оплачено {_rub(r['paid'])}" if r["paid"] >= 1 else "",
                                       f"получено {_rub(r['got'])}" if r["got"] >= 1 else "") if x)
         wo = (f"в P&L {_rub(r['pl'])}, на баланс {_rub(r['bs'])}, НДС {_rub(r['vat'])}")
-        st = (f"{'аванс выдан / дебиторка' if r['st'] > 0 else 'долг / аванс получен'} "
-              f"{_rub(r['st'])}")
+        st = (f"{'долг перед контрагентом / аванс получен' if r['bal'] > 0 else 'аванс выдан / контрагент должен нам'} "
+              f"{_rub(r['bal'])}")
         if not money and r["turn"] >= 1:
             money = f"оборот по Cash Flow {_rub(r['turn'])}"
         if f == "no_cond":
@@ -379,8 +396,10 @@ def build(report_date: date, con) -> dict:
         return ""
 
     df["fcode"] = df.apply(classify, axis=1)
+    df.loc[df["fcode"].eq("skip"), "flag_skip"] = "Не проверяется: " + df["skip"]
     df["weight"] = df.apply(weight, axis=1)
     df["flag"] = df["fcode"].map(lambda f: FLAGS[f][0])
+    df.loc[df["fcode"].eq("skip"), "flag"] = df["flag_skip"]
     df["todo"] = df["fcode"].map(lambda f: FLAGS[f][1])
     df["why"] = df.apply(explain, axis=1)
     df["item_name"] = df["item"].fillna("")
@@ -390,7 +409,9 @@ def build(report_date: date, con) -> dict:
             paid=("amount", lambda x: abs(x[x < 0].sum())), got=("amount", lambda x: x[x > 0].sum()),
             turn=("a", "sum"), n=("a", "size"), d0=("d", "min"), d1=("d", "max"),
             item=("item", lambda x: x.value_counts().index[0])).reset_index()
-        nc = nc[nc["turn"] >= TOL_RUB]
+        nc = nc[(nc["turn"] >= TOL_RUB)
+                & ~nc["item"].str.split(" ").str[0].fillna("").str.startswith(
+                    tuple(p for p, _ in SKIP_ITEMS))]
         add = pd.DataFrame({
             "cid": pd.NA, "cp": nc["cp_name"], "contract": "без договора", "fcode": "no_contract",
             "weight": nc["turn"], "paid": nc["paid"], "got": nc["got"], "turn": nc["turn"],
@@ -400,9 +421,11 @@ def build(report_date: date, con) -> dict:
                     for r in nc.itertuples(index=False)]})
         add["flag"], add["todo"] = FLAGS["no_contract"][0], FLAGS["no_contract"][1]
         df = pd.concat([df, add], ignore_index=True)
-    df = df.sort_values(["weight", "cp"], ascending=[False, True])
-    issues = df[df["weight"] >= TOL_RUB].copy()
+    issues = df[df["weight"] >= TOL_RUB].sort_values(["weight", "cp"], ascending=[False, True])
+    issues = issues.copy()
     issues.insert(0, "n", range(1, len(issues) + 1))
+    df["n"] = df["cid"].map(issues.dropna(subset=["cid"]).set_index("cid")["n"])
+    df = df.sort_values(["cp", "contract"], key=lambda x: x.astype(str).str.upper())
 
     # условия построчно
     cn = cond.merge(ctr[["cid", "cp", "contract"]], on="cid", how="left")
@@ -437,23 +460,25 @@ ISSUE_COLS = [
     ("todo", "Что сделать", "wrap", 44),
 ]
 ALL_COLS = [
-    ("cp", "Контрагент", "wrap", 26), ("contract", "Договор", "wrap", 28), ("cid", "ID", "id", 7),
-    ("flag", "Статус", "flag", 24), ("method", "Метод учёта", "wrap", 13),
-    ("fn", "Функция начисления", "wrap", 20), ("vat_modes", "Режим НДС", "wrap", 12),
-    ("start", "Условия с", "date", 10), ("finish", "Условия по", "date", 10),
-    ("item_name", "Основная статья CF", "wrap", 24),
-    ("st_name", "Счёт расчётов (ST)", "wrap", 20), ("pl_name", "Счёт P&L", "wrap", 20),
-    ("bs_name", "Счёт BS", "wrap", 20),
+    ("cp", "Контрагент", "wrap", 26), ("contract", "Договор", "wrap", 30), ("cid", "ID", "id", 7),
+    ("flag", "Статус", "flag", 24), ("n", "№ в «Что проверить»", "id", 9),
+    ("why", "Пояснение", "wrap", 48),
     ("paid", "Оплачено, ₽", "money", 13), ("got", "Получено, ₽", "money", 13),
-    ("pl", "Списано в P&L, ₽", "money", 13), ("bs", "Списано на баланс, ₽", "money", 13),
-    ("vat", "НДС, ₽", "money", 12), ("other", "Прочие счета, ₽", "money", 12),
-    ("st", "Остаток на расчётах, ₽", "money", 13),
-    ("plan_how", "План списания", "wrap", 16),
-    ("plan_total", "План за весь срок условий, ₽", "money", 14),
-    ("plan_date", "План на отчётную дату, ₽", "money", 14),
-    ("written", "Списано всего (P&L + BS + НДС), ₽", "money", 14),
-    ("plan_diff", "Списано сверх плана (+) / недосписано (−), ₽", "money", 14),
-    ("plan_left", "Осталось списать до конца условий, ₽", "money", 14),
+    ("written", "Списано: P&L + баланс + НДС, ₽", "money", 14),
+    ("bal", "Остаток по расчётам (+ долг наш, − аванс выдан), ₽", "money", 15),
+    ("plan_left", "Осталось списать по условиям, ₽", "money", 14),
+    # подробности — свёрнуты, «+» над колонками
+    ("method", "Метод учёта", "wrap", 13, 1), ("fn", "Функция начисления", "wrap", 20, 1),
+    ("vat_modes", "Режим НДС", "wrap", 12, 1), ("start", "Условия с", "date", 10, 1),
+    ("finish", "Условия по", "date", 10, 1), ("item_name", "Основная статья CF", "wrap", 24, 1),
+    ("st_name", "Счёт расчётов (ST)", "wrap", 20, 1), ("pl_name", "Счёт P&L", "wrap", 20, 1),
+    ("bs_name", "Счёт BS", "wrap", 20, 1),
+    ("pl", "Списано в P&L, ₽", "money", 13, 1), ("bs", "Списано на баланс, ₽", "money", 13, 1),
+    ("vat", "НДС, ₽", "money", 12, 1), ("other", "Прочие счета, ₽", "money", 12, 1),
+    ("plan_how", "План списания", "wrap", 16, 1),
+    ("plan_total", "План за весь срок условий, ₽", "money", 14, 1),
+    ("plan_date", "План на отчётную дату, ₽", "money", 14, 1),
+    ("plan_diff", "Списано сверх плана (+) / недосписано (−), ₽", "money", 14, 1),
 ]
 COND_COLS = [
     ("n", "№ замечания", "id", 8), ("cp", "Контрагент", "wrap", 26),
@@ -486,9 +511,14 @@ NOTES = [
     ("Откуда суммы", "Проводки gl.fact по договору до отчётной даты. Счета договора — как в "
                      "начислениях: расчёты (ST) из договора, P&L и BS — из условий, а если в "
                      "условиях пусто — из договора."),
-    ("Знаки", "Деньги: + поступление, − оплата. P&L / баланс / НДС: + расход, актив, вычет; "
-              "− доход, начисленный НДС. Расчёты: + аванс выдан или дебиторка, − долг или аванс "
-              "получен. По договору сумма всех колонок = 0."),
+    ("Остаток по расчётам", "Деньги минус начисления по договору. «+» — денег получили больше, "
+                            "чем начислено, или заплатили меньше: долг перед контрагентом. «−» — "
+                            "заплатили больше, чем начислено: аванс выдан. При Cash Based должен "
+                            "быть около нуля; по актам — нормальный аванс или долг (справочно)."),
+    ("Не проверяется", "Переводы между своими счетами и конвертация (статьи 4…), налоги (125…) и "
+                       "WB — их списание идёт не через условия договоров."),
+    ("Знаки", "Оплачено и получено — положительные суммы. Списано: + расход, актив, вычет НДС; "
+              "− доход, начисленный НДС."),
     ("Cash Based", "Каждый платёж сразу списывается в P&L или на баланс — остаток на расчётах "
                    "должен быть около нуля. По актам (Accural) остаток — нормальный аванс или долг."),
     ("Прочие счета", "Проводки по договору на счета, которых нет ни в договоре, ни в условиях: "
@@ -534,19 +564,24 @@ def to_excel(res: dict, report_date: date) -> bytes:
     WARN = {FLAGS[k][0] for k in ("balance", "outside")}
 
     def flag_fmt(v):
-        return fmt["ok"] if v == "OK" else fmt["warn"] if v in WARN else fmt["bad"]
+        if v == "OK" or str(v).startswith("Не проверяется"):
+            return fmt["ok"]
+        return fmt["warn"] if v in WARN else fmt["bad"]
 
     def table(name, title, cols, df, total=False, freeze=2):
         ws = wb.add_worksheet(name)
         ws.write(0, 0, title, fmt["title"])
         ws.write(1, 0, sub, fmt["sub"])
         r0 = 3
-        for j, (_k, h, _t, w) in enumerate(cols):
+        for j, (_k, h, _t, w, *lvl) in enumerate(cols):
             ws.write(r0, j, h, fmt["hdr"])
-            ws.set_column(j, j, w)
+            if lvl:
+                ws.set_column(j, j, w, None, {"level": lvl[0], "hidden": True})
+            else:
+                ws.set_column(j, j, w)
         ws.set_row(r0, 40)
         for i, row in enumerate(df[[c[0] for c in cols]].itertuples(index=False), start=r0 + 1):
-            for j, ((k, _h, t, _w), v) in enumerate(zip(cols, row)):
+            for j, ((k, _h, t, _w, *_l), v) in enumerate(zip(cols, row)):
                 if v is None or (not isinstance(v, str) and pd.isna(v)) or v == "":
                     ws.write_blank(i, j, None, fmt["text"])
                 elif t == "flag":
@@ -560,7 +595,7 @@ def to_excel(res: dict, report_date: date) -> bytes:
         last = r0 + len(df)
         if total and len(df):
             ws.write(last + 1, 0, "Итого", fmt["tot_l"])
-            for j, (k, _h, t, _w) in enumerate(cols):
+            for j, (k, _h, t, _w, *_l) in enumerate(cols):
                 if t == "money":
                     ws.write_number(last + 1, j, float(df[k].sum()), fmt["tot"])
         ws.autofilter(r0, 0, max(last, r0), len(cols) - 1)
@@ -577,19 +612,26 @@ def to_excel(res: dict, report_date: date) -> bytes:
                                   ("Сумма вопросов, ₽", float(issues["weight"].sum()))), start=3):
         ws.write(r, 0, lbl, fmt["kpi_l"])
         ws.write_number(r, 1, v, fmt["kpi_v"])
-    r = 7
+    steps = ("Как работать: 1) «Что проверить» — список задач, сверху самое крупное. "
+             "2) По строке: что не так и что сделать. 3) Чтобы посмотреть условия договора — "
+             "лист «Условия», движение по месяцам — «По месяцам» (фильтр по № или ID). "
+             "«Договоры» — справочник всех договоров по алфавиту.")
+    ws.merge_range(6, 0, 6, 2, steps, fmt["wrap"])
+    ws.set_row(6, 48)
+    r = 8
     for j, h in enumerate(("ЗАМЕЧАНИЕ", "ДОГОВОРОВ", "СУММА ВОПРОСА, ₽")):
         ws.write(r, j, h, fmt["hdr"])
     order = {v[0]: v[2] for v in FLAGS.values()}
-    g = alld.groupby("flag").agg(n=("cid", "size"), w=("weight", "sum")).reset_index()
-    g = g.sort_values("flag", key=lambda s: s.map(order))
+    g = alld.groupby("flag").agg(n=("contract", "size"), w=("weight", "sum")).reset_index()
+    g = g.sort_values("flag", key=lambda s: s.map(lambda f: order.get(f, 98)))
     for r, row in enumerate(g.itertuples(index=False), start=r + 1):
         ws.write(r, 0, row.flag, flag_fmt(row.flag))
         ws.write_number(r, 1, int(row.n), fmt["id"])
         ws.write_number(r, 2, float(row.w), fmt["money"])
 
     table("Что проверить", "Что проверить — по убыванию суммы", ISSUE_COLS, issues)
-    table("Договоры", "Договоры: условия и куда списано", ALL_COLS, alld, total=True)
+    table("Договоры", "Все договоры по алфавиту — справочник. Подробности (счета, функция, "
+          "план) — «+» над колонками справа", ALL_COLS, alld, total=False, freeze=3)
     table("Условия", "Условия договоров", COND_COLS, res["cond"], freeze=3)
     table("По месяцам", "Движение по месяцам — договоры с замечаниями", MONTH_COLS,
           res["months"], freeze=3)
