@@ -1,10 +1,11 @@
 # gear/app/manpack/vat_contracts.py
-"""Сверка НДС по договорам: оборот Cash Flow → НДС, который должен быть по режиму
-и ставке условий договора, против НДС, который есть у нас (проводки НДС и УПД).
+"""Сверка НДС по договорам.
+
+По каждому договору: деньги по Cash Flow → НДС, который должен быть по режиму и
+ставке условий договора, против НДС, который есть у нас (проводки НДС и УПД).
+Товарные договоры сверяются по УПД, финансирование и налоги не проверяются.
 
 Знак как на листе «НДС по операциям»: к вычету — плюс, начисленный — минус.
-Оплата поставщику (минус в CF) даёт ожидаемый вычет (плюс), поступление
-(плюс в CF) — начисленный НДС (минус).
 """
 from __future__ import annotations
 
@@ -14,10 +15,12 @@ from datetime import date
 
 import pandas as pd
 
-TOL_RUB = 1000.0        # расхождение меньше — не считаем
-TOL_SHARE = 0.03        # и меньше 3% ожидаемого
-STD_RATE = {2026: 22.0}  # ставка «если бы облагалось», по году; иначе 20
+TOL_RUB = 1000.0          # меньше — не замечание
+TOL_SHARE = 0.03          # и меньше 3% ожидаемого
 WB_NAMES = ("ВАЙЛДБЕРРИЗ", "WILDBERRIES", "РВБ")
+GOODS_CODE = "121"        # статьи CF «Оплаты товаров для перепродажи»
+SKIP_CODES = (("3", "Финансирование: займы, взносы, проценты"),
+              ("125", "Налоги и сборы"))
 
 CF_SQL = """
 SELECT date_from::DATE AS d, CAST(amount AS DOUBLE) AS amount,
@@ -65,6 +68,51 @@ GROUP BY 1, 2
 
 MODE_NAME = {"included": "НДС включён", "excluded": "НДС сверху", "exempt": "Без НДС",
              "unknown": "Не задан", "vat_only": "Только НДС", "none": "Нет условий"}
+WITH_VAT = ("included", "excluded", "vat_only")
+
+# флаг: (короткое название, что сделать, порядок в итоге)
+FLAGS = {
+    "no_vat": ("НДС должен быть, а в учёте нет",
+               "Проверить, проведены ли начисления по договору. Если документы без НДС — "
+               "сменить режим в условиях на «Без НДС».", 1),
+    "vat_exempt": ("По условиям без НДС, а в учёте НДС есть",
+                   "Сверить с документами: если НДС есть — поправить режим в условиях "
+                   "договора; если нет — убрать НДС из начислений.", 2),
+    "diff": ("НДС в учёте не совпадает с оплатами",
+             "Больше — проверить задвоенные начисления или неоплаченные акты (долг перед "
+             "контрагентом это объясняет). Меньше — не все документы проведены или другая ставка.",
+             3),
+    "sign": ("Знак НДС не совпадает с движением денег",
+             "Проверить направление начислений: вычет вместо начисленного или наоборот.", 4),
+    "goods_no_upd": ("Товар оплачен, УПД с НДС нет",
+                     "Загрузить УПД поставщика. Если поставка без НДС (импорт) — указать в "
+                     "условиях договора «Без НДС».", 5),
+    "goods_double": ("НДС и по УПД, и в проводках",
+                     "Возможен двойной вычет: товарный НДС должен быть только по УПД.", 6),
+    "mode_unknown": ("Режим НДС не задан",
+                     "Задать режим НДС в условиях договора (если договор без НДС — «Без НДС»).", 7),
+    "vat_no_mode": ("НДС в учёте есть, режим не задан",
+                    "Задать режим НДС в условиях договора.", 8),
+    "no_cond": ("Нет условий договора",
+                "Завести условия договора с режимом НДС.", 9),
+    "no_contract": ("Платежи без договора",
+                    "Привязать платежи к договору в Cash Flow.", 10),
+    "wb": ("Маркетплейс WB — сверка на листе НДС", "", 90),
+    "goods_ok": ("Товар — НДС по УПД", "", 95),
+    "ok": ("OK", "", 99),
+}
+
+
+def _rub(v) -> str:
+    v = float(v or 0)
+    a = abs(v)
+    if a >= 1e6:
+        s = f"{a / 1e6:.2f}".replace(".", ",") + " млн ₽"
+    elif a >= 1e3:
+        s = f"{a / 1e3:.0f} тыс ₽"
+    else:
+        s = f"{a:.0f} ₽"
+    return s
 
 
 def _rate(vat_json: str | None, d: date) -> float | None:
@@ -85,18 +133,23 @@ def _rate(vat_json: str | None, d: date) -> float | None:
 
 
 def _std(y: int) -> float:
-    return STD_RATE.get(int(y), 22.0 if int(y) > 2026 else 20.0)
+    return 22.0 if int(y) >= 2026 else 20.0
+
+
+def _skip(code: str) -> str | None:
+    for pfx, name in SKIP_CODES:
+        if code.startswith(pfx):
+            return name
+    return None
 
 
 def _expected(cf: pd.DataFrame, cond: pd.DataFrame) -> pd.DataFrame:
     """К строкам CF — режим и ставка действующих условий, ожидаемый НДС."""
     cf = cf.copy()
-    cf["vat_mode"], cf["rate"], cf["method"] = "none", None, None
-    by_c = {c: g.sort_values("date_start", na_position="first")
-            for c, g in cond.groupby("cid")}
+    by_c = {c: g.sort_values("date_start", na_position="first") for c, g in cond.groupby("cid")}
     modes, rates, methods = [], [], []
     for cid, d in zip(cf["cid"], cf["d"]):
-        g = by_c.get(cid)
+        g = by_c.get(cid) if pd.notna(cid) else None
         if g is None:
             modes.append("none"), rates.append(None), methods.append(None)
             continue
@@ -104,7 +157,7 @@ def _expected(cf: pd.DataFrame, cond: pd.DataFrame) -> pd.DataFrame:
                & (g["date_finish"].isna() | (g["date_finish"] > d))]
         r = (ok if len(ok) else g).iloc[-1]
         modes.append(r["vat_mode"]), methods.append(r["method"])
-        rates.append(_rate(r["vat_json"], d.date()))
+        rates.append(_rate(r["vat_json"], d.date()) if r["vat_mode"] in WITH_VAT else None)
     cf["vat_mode"], cf["rate"], cf["method"] = modes, rates, methods
     r = pd.to_numeric(cf["rate"], errors="coerce")
     a = cf["amount"]
@@ -114,34 +167,73 @@ def _expected(cf: pd.DataFrame, cond: pd.DataFrame) -> pd.DataFrame:
     m = cf["vat_mode"].eq("vat_only")
     cf.loc[m, "exp"] = -a[m]
     std = cf["d"].map(lambda x: _std(x.year))
-    cf["potential"] = (-a * std / (100 + std)).where(cf["vat_mode"].isin(["unknown", "none"]), 0.0)
+    cf["potential"] = (-a * std / (100 + std)).where(
+        cf["vat_mode"].isin(["unknown", "none"]), 0.0)
     return cf
 
 
-def _flag(r) -> str:
+def _classify(r) -> str:
     if r["wb"]:
-        return "Маркетплейс: НДС по отчёту WB, сверка на листе НДС"
-    exp, act, diff = r["exp"], r["actual"], r["diff"]
-    big = abs(diff) >= max(TOL_RUB, TOL_SHARE * abs(exp))
+        return "wb"
+    exp, act, gl, upd = r["exp"], r["actual"], r["gl"], r["upd"]
+    if r["goods"]:
+        if abs(gl) >= TOL_RUB and abs(upd) >= TOL_RUB:
+            return "goods_double"
+        if abs(upd) < TOL_RUB and r["vat_mode"] not in ("exempt",) and r["paid"] >= TOL_RUB:
+            return "goods_no_upd"
+        if abs(upd) >= TOL_RUB or r["vat_mode"] == "exempt":
+            return "goods_ok"
     if r["vat_mode"] in ("unknown", "none"):
         if abs(act) >= TOL_RUB:
-            return "НДС в учёте есть, а режим НДС в договоре не задан"
+            return "vat_no_mode"
         if abs(r["potential"]) >= TOL_RUB:
-            return ("Нет договора" if pd.isna(r["cid"]) else
-                    "Нет условий договора" if r["vat_mode"] == "none" else "Режим НДС не задан")
-        return "OK"
-    if not big:
-        return "OK"
+            if r["key"].startswith("cp:"):
+                return "no_contract"
+            return "no_cond" if r["vat_mode"] == "none" else "mode_unknown"
+        return "ok"
+    if abs(act - exp) < max(TOL_RUB, TOL_SHARE * abs(exp)):
+        return "ok"
     if abs(exp) >= TOL_RUB and abs(act) < TOL_RUB:
-        return "НДС по договору должен быть, в учёте нет"
+        return "no_vat"
     if abs(exp) < TOL_RUB and abs(act) >= TOL_RUB:
-        return "По договору без НДС, а в учёте НДС есть"
-    if exp and act and (exp > 0) != (act > 0):
-        return "Знак НДС в учёте не совпадает с движением денег"
-    return "Расхождение суммы"
+        return "vat_exempt"
+    if (exp > 0) != (act > 0):
+        return "sign"
+    return "diff"
 
 
-def build(report_date: date, con) -> dict[str, pd.DataFrame]:
+def _explain(r) -> str:
+    f = r["fcode"]
+    money = (f"оплачено {_rub(r['paid'])}" if r["paid"] >= 1 else "") + \
+            (", " if r["paid"] >= 1 and r["got"] >= 1 else "") + \
+            (f"получено {_rub(r['got'])}" if r["got"] >= 1 else "")
+    rate = f"{r['rate']:.0f}%" if pd.notna(r["rate"]) else ""
+    eff = (f"; ставка по факту {r['eff_rate']:.1f}%".replace(".", ",")) if pd.notna(r["eff_rate"]) else ""
+    if f == "no_vat":
+        return (f"По Cash Flow {money}, режим «{r['mode']}» {rate}: НДС должен быть "
+                f"≈ {_rub(r['exp'])}, в учёте — нет.")
+    if f == "vat_exempt":
+        return (f"В условиях «{r['mode']}», а в учёте НДС {_rub(r['actual'])} "
+                f"(проводки {_rub(r['gl'])}, УПД {_rub(r['upd'])}){eff}. По Cash Flow {money}.")
+    if f in ("diff", "sign"):
+        more = "больше" if abs(r["actual"]) > abs(r["exp"]) else "меньше"
+        return (f"По Cash Flow {money}, режим «{r['mode']}» {rate}: ожидаемый НДС "
+                f"{_rub(r['exp'])}, в учёте {_rub(r['actual'])} — {more} на "
+                f"{_rub(r['diff'])}{eff}.")
+    if f == "goods_no_upd":
+        return (f"Оплачено за товар {_rub(r['paid'])}, УПД с НДС нет. При ставке "
+                f"{'22' if r['ymax'] >= 2026 else '20'}% вычет был бы ≈ {_rub(r['potential'])}.")
+    if f == "goods_double":
+        return f"НДС по УПД {_rub(r['upd'])} и ещё в проводках {_rub(r['gl'])}."
+    if f in ("mode_unknown", "no_cond", "no_contract"):
+        return (f"По Cash Flow {money}, правила НДС нет. При стандартной ставке НДС был бы "
+                f"≈ {_rub(r['potential'])}.")
+    if f == "vat_no_mode":
+        return f"В учёте НДС {_rub(r['actual'])}, а режим НДС в условиях не задан."
+    return ""
+
+
+def build(report_date: date, con) -> dict:
     cf = con.execute(CF_SQL, [report_date]).df()
     cond = con.execute(COND_SQL).df()
     ctr = con.execute(CONTRACT_SQL).df()
@@ -153,9 +245,16 @@ def build(report_date: date, con) -> dict[str, pd.DataFrame]:
         cond[c] = pd.to_datetime(cond[c])
     cond["cid"] = cond["cid"].astype("Int64")
     cf["cid"] = cf["cid"].astype("Int64")
-    cf = _expected(cf, cond)
+    cf["code"] = cf["item"].str.split().str[0].fillna("")
+    cf["skip"] = cf["code"].map(_skip)
+
+    skipped = (cf[cf["skip"].notna()]
+               .assign(paid=lambda x: x["amount"].where(x["amount"] < 0, 0).abs(),
+                       got=lambda x: x["amount"].where(x["amount"] > 0, 0))
+               .groupby(["skip", "item"], as_index=False)[["paid", "got"]].sum()
+               .sort_values(["skip", "item"]))
+    cf = _expected(cf[cf["skip"].isna()], cond)
     cf["y"] = [d.year for d in cf["d"]]
-    # без договора — по контрагенту
     cf["key"] = cf["cid"].astype(str).where(cf["cid"].notna(), "cp:" + cf["cp_name"])
 
     def agg(df, keys):
@@ -163,21 +262,23 @@ def build(report_date: date, con) -> dict[str, pd.DataFrame]:
         out = g.agg(paid=("amount", lambda s: abs(s[s < 0].sum())),
                     got=("amount", lambda s: s[s > 0].sum()),
                     net=("amount", "sum"), exp=("exp", "sum"), potential=("potential", "sum"),
-                    cid=("cid", "first"), cp_cf=("cp_name", "first"),
-                    contract_cf=("contract_name", "first"),
-                    vat_mode=("vat_mode", "last"), rate=("rate", "last"),
-                    method=("method", "last")).reset_index()
-        top = (df.assign(a=df["amount"].abs()).groupby(keys + ["item"], dropna=False)["a"].sum()
-               .reset_index().sort_values("a").drop_duplicates(keys, keep="last")
-               .set_index(keys)["item"])
-        out["item"] = out.set_index(keys).index.map(top)
-        return out
+                    cp_cf=("cp_name", "first"), vat_mode=("vat_mode", "last"),
+                    rate=("rate", "last"), method=("method", "last"),
+                    ymax=("y", "max")).reset_index()
+        w = df.assign(a=df["amount"].abs())
+        top = (w.groupby(keys + ["item"], dropna=False)["a"].sum().reset_index()
+               .sort_values("a").drop_duplicates(keys, keep="last"))
+        goods = (w[w["code"].str.startswith(GOODS_CODE)].groupby(keys, dropna=False)["a"].sum()
+                 .rename("goods_turn").reset_index())
+        out = out.merge(top[keys + ["item"]], on=keys, how="left")
+        return out.merge(goods, on=keys, how="left")
 
     acc = pd.concat([gl.rename(columns={"vat_gl": "v"}).assign(src="gl"),
                      upd.rename(columns={"vat_upd": "v"}).assign(src="upd")])
     acc["cid"] = acc["cid"].astype("Int64")
     acc["key"] = acc["cid"].astype(str).where(acc["cid"].notna(), "cp:Без договора (учёт)")
-    acc_y = acc.pivot_table(index=["key", "y"], columns="src", values="v", aggfunc="sum").reset_index()
+    acc_y = acc.pivot_table(index=["key", "y"], columns="src", values="v",
+                            aggfunc="sum").reset_index()
     acc_t = acc.pivot_table(index="key", columns="src", values="v", aggfunc="sum").reset_index()
     for t in (acc_y, acc_t):
         for c in ("gl", "upd"):
@@ -188,8 +289,9 @@ def build(report_date: date, con) -> dict[str, pd.DataFrame]:
 
     def finish(df, accd, keys):
         df = df.merge(accd, on=keys, how="outer")
-        for c in ("paid", "got", "net", "exp", "potential", "gl", "upd"):
+        for c in ("paid", "got", "net", "exp", "potential", "gl", "upd", "goods_turn"):
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+        df["ymax"] = pd.to_numeric(df["ymax"], errors="coerce").fillna(report_date.year)
         df["vat_mode"] = df["vat_mode"].fillna("none")
         idx = df["key"]
         df["cid"] = pd.to_numeric(idx.where(~idx.str.startswith("cp:")),
@@ -198,79 +300,98 @@ def build(report_date: date, con) -> dict[str, pd.DataFrame]:
         df["cp"] = df["cp"].fillna(idx.where(idx.str.startswith("cp:"))
                                    .str.replace("cp:", "", regex=False)).fillna(
             "Договора нет в справочнике")
-        df["contract"] = idx.map(info["contract"]).fillna(df["contract_cf"]).fillna("")
-        df.loc[df["key"].str.startswith("cp:"), "contract"] = "без договора"
+        df["contract"] = idx.map(info["contract"]).fillna("")
+        df.loc[idx.str.startswith("cp:"), "contract"] = "без договора"
         df["actual"] = df["gl"] + df["upd"]
-        df["diff"] = df["actual"] - df["exp"]
+        df["goods"] = (df["upd"].abs() >= TOL_RUB) | (
+            df["goods_turn"] >= 0.5 * (df["paid"] + df["got"]).where(lambda s: s > 0))
+        df["goods"] = df["goods"].fillna(False).astype(bool)
         base = df["net"].abs() - df["actual"].abs()
         df["eff_rate"] = (df["actual"].abs() / base.where(base > 0) * 100).where(
             df["actual"].abs() >= 1)
-        up = df["cp"].astype(str).str.upper()
-        df["wb"] = up.apply(lambda s: any(n in s for n in WB_NAMES))
-        df["flag"] = df.apply(_flag, axis=1)
-        df.loc[df["wb"], "potential"] = 0.0
+        df["wb"] = df["cp"].astype(str).str.upper().apply(lambda s: any(n in s for n in WB_NAMES))
+        df["fcode"] = df.apply(_classify, axis=1)
+        # для товара сверка по УПД, ожидаемый по оплатам не показываем
+        df.loc[df["goods"] | df["wb"], ["exp"]] = float("nan")
+        df["diff"] = (df["actual"] - df["exp"]).where(df["exp"].notna())
+        df.loc[df["fcode"].isin(["wb", "goods_ok", "goods_double"]), "potential"] = 0.0
+        df.loc[df["fcode"].eq("goods_no_upd"), "potential"] = (
+            df["paid"] * df["ymax"].map(_std) / (100 + df["ymax"].map(_std)))
+        df["flag"] = df["fcode"].map(lambda f: FLAGS[f][0])
+        df["todo"] = df["fcode"].map(lambda f: FLAGS[f][1])
         df["mode"] = df["vat_mode"].map(MODE_NAME).fillna(df["vat_mode"])
-        df["weight"] = pd.concat([df["diff"].abs(), df["potential"].abs()], axis=1).max(axis=1)
-        df.loc[df["wb"], "weight"] = 0
+        df["weight"] = pd.concat([df["diff"].abs().fillna(0), df["potential"].abs(),
+                                  df["gl"].abs().where(df["fcode"].eq("goods_double"), 0)],
+                                 axis=1).max(axis=1)
+        df.loc[df["fcode"].isin(["ok", "wb", "goods_ok"]), "weight"] = 0.0
+        df["why"] = df.apply(_explain, axis=1)
         return df
 
     tot = finish(agg(cf, ["key"]), acc_t, ["key"])
-    tot = tot.sort_values(["weight"], ascending=False)
+    tot = tot.sort_values(["weight", "cp"], ascending=[False, True])
     yr = finish(agg(cf, ["key", "y"]), acc_y, ["key", "y"])
     yr = yr.sort_values(["cp", "contract", "y"])
-    bad = set(tot.loc[~tot["flag"].eq("OK") & ~tot["wb"], "key"])
-    ops = cf[cf["key"].isin(bad)].copy()
+    issues = tot[tot["weight"] > 0].copy()
+    issues.insert(0, "n", range(1, len(issues) + 1))
+    ops = cf[cf["key"].isin(set(issues["key"]))].copy()
     ops["cp"] = ops["key"].map(tot.set_index("key")["cp"])
     ops["contract"] = ops["key"].map(tot.set_index("key")["contract"])
     ops["mode"] = ops["vat_mode"].map(MODE_NAME)
-    ops = ops.sort_values(["cp", "contract", "d"])
-    return {"tot": tot, "yr": yr, "ops": ops}
+    ops["n"] = ops["key"].map(issues.set_index("key")["n"])
+    ops = ops.sort_values(["n", "d"])
+    return {"tot": tot, "yr": yr, "issues": issues, "ops": ops, "skipped": skipped}
 
 
 # ---------------------------------------------------------------- Excel
-TOT_COLS = [
-    ("flag", "Флаг", "wrap", 34), ("cp", "Контрагент", "text", 30),
-    ("contract", "Договор", "wrap", 32), ("cid", "ID договора", "id", 9),
-    ("method", "Метод учёта", "text", 16), ("mode", "Режим НДС", "text", 13),
-    ("rate", "Ставка по договору, %", "dec", 9), ("item", "Основная статья CF", "text", 26),
-    ("paid", "Оплачено, ₽", "money", 14), ("got", "Получено, ₽", "money", 14),
-    ("exp", "НДС ожидаемый по CF и режиму, ₽", "money", 15),
-    ("gl", "НДС в проводках, ₽", "money", 14), ("upd", "НДС по УПД, ₽", "money", 13),
-    ("actual", "НДС у нас итого, ₽", "money", 14),
-    ("diff", "Разница: у нас − ожидаемый, ₽", "money", 15),
-    ("eff_rate", "Ставка по факту, %", "dec", 9),
-    ("potential", "НДС при стандартной ставке (режим не задан), ₽", "money", 16),
+ISSUE_COLS = [
+    ("n", "№", "id", 5), ("flag", "Что не так", "wrap", 26), ("cp", "Контрагент", "wrap", 26),
+    ("contract", "Договор", "wrap", 28), ("cid", "ID", "id", 7),
+    ("weight", "Сумма вопроса, ₽", "money", 14), ("why", "Пояснение", "wrap", 60),
+    ("todo", "Что сделать", "wrap", 44),
 ]
-YR_COLS = [("cp", "Контрагент", "text", 30), ("contract", "Договор", "wrap", 32),
-           ("cid", "ID договора", "id", 9), ("y", "Год", "id", 7), ("mode", "Режим НДС", "text", 13),
+ALL_COLS = [
+    ("cp", "Контрагент", "wrap", 28), ("contract", "Договор", "wrap", 30), ("cid", "ID", "id", 7),
+    ("flag", "Статус", "wrap", 26), ("method", "Метод учёта", "text", 13),
+    ("mode", "Режим НДС", "text", 12), ("rate", "Ставка, %", "dec", 8),
+    ("item", "Основная статья CF", "wrap", 26),
+    ("paid", "Оплачено, ₽", "money", 14), ("got", "Получено, ₽", "money", 14),
+    ("exp", "НДС ожидаемый по оплатам, ₽", "money", 14),
+    ("gl", "НДС в проводках, ₽", "money", 14), ("upd", "НДС по УПД, ₽", "money", 13),
+    ("actual", "НДС в учёте итого, ₽", "money", 14),
+    ("diff", "Разница: учёт − ожидаемый, ₽", "money", 14),
+    ("eff_rate", "Ставка по факту, %", "dec", 8),
+]
+YR_COLS = [("cp", "Контрагент", "wrap", 28), ("contract", "Договор", "wrap", 30),
+           ("cid", "ID", "id", 7), ("y", "Год", "id", 6), ("mode", "Режим НДС", "text", 12),
            ("paid", "Оплачено, ₽", "money", 14), ("got", "Получено, ₽", "money", 14),
-           ("exp", "НДС ожидаемый, ₽", "money", 14), ("actual", "НДС у нас, ₽", "money", 14),
-           ("diff", "Разница, ₽", "money", 14), ("flag", "Флаг", "wrap", 34)]
-OPS_COLS = [("cp", "Контрагент", "text", 30), ("contract", "Договор", "wrap", 32),
-            ("d", "Дата", "date", 11), ("item", "Статья CF", "text", 26),
-            ("subitem", "Подстатья CF", "text", 26), ("amount", "Сумма CF, ₽", "money", 14),
-            ("mode", "Режим НДС", "text", 13), ("rate", "Ставка, %", "dec", 8),
-            ("exp", "НДС ожидаемый, ₽", "money", 14)]
+           ("exp", "НДС ожидаемый, ₽", "money", 14), ("gl", "НДС в проводках, ₽", "money", 14),
+           ("upd", "НДС по УПД, ₽", "money", 13), ("diff", "Разница, ₽", "money", 14)]
+OPS_COLS = [("n", "№ замечания", "id", 8), ("cp", "Контрагент", "wrap", 26),
+            ("contract", "Договор", "wrap", 28), ("d", "Дата", "date", 11),
+            ("item", "Статья CF", "wrap", 26), ("subitem", "Подстатья CF", "wrap", 26),
+            ("amount", "Сумма CF, ₽", "money", 14), ("mode", "Режим НДС", "text", 12),
+            ("rate", "Ставка, %", "dec", 8), ("exp", "НДС ожидаемый, ₽", "money", 14)]
+SKIP_COLS = [("skip", "Почему не проверяется", "wrap", 34), ("item", "Статья CF", "wrap", 40),
+             ("paid", "Оплачено, ₽", "money", 16), ("got", "Получено, ₽", "money", 16)]
 NOTES = [
-    ("Что это", "По каждому договору: сколько денег прошло по Cash Flow, какой НДС должен "
-                "быть при режиме и ставке из условий договора, и какой НДС есть у нас — "
-                "проводки НДС (начисления) и УПД поставщиков товаров."),
-    ("Знаки", "Как на листе «НДС по операциям»: к вычету — плюс, начисленный — минус. "
-              "Оплата поставщику даёт ожидаемый вычет, поступление — начисленный НДС."),
-    ("Ожидаемый НДС", "«НДС включён» и «НДС сверху» — сумма платежа × ставка / (100 + "
-                      "ставка): в платеже уже есть НДС. «Только НДС» — вся сумма. «Без НДС» и "
-                      "«Не задан» — ноль. Ставка — из условий договора на дату платежа."),
-    ("Флаги", "«НДС по договору должен быть, в учёте нет» — платим с НДС, а вычета нет. "
-              "«По договору без НДС, а в учёте НДС есть» — режим договора не совпадает с учётом. "
-              "«Режим НДС не задан» / «Нет условий» / «Нет договора» — оборот есть, а правила НДС "
-              "нет; сколько мог бы быть НДС — в колонке «при стандартной ставке». "
-              "Расхождение меньше 1 000 ₽ или 3% не считается."),
-    ("Порядок", "Сверху — договоры с наибольшей разницей (для договоров без режима — с "
-                "наибольшим возможным НДС). Обычно первые 10–20 строк объясняют основную часть."),
-    ("Ограничения", "Деньги и начисления расходятся по времени: аванс оплачен, а акт ещё нет, "
-                    "или наоборот. Поэтому сверка — за весь период до отчётной даты; по годам "
-                    "разница может быть из-за переходящих сумм. УПД — только в рублях. "
-                    "НДС с продаж и услуг WB считается по отчёту WB, здесь не сверяется."),
+    ("С чего начать", "Лист «Что проверить»: замечания по убыванию суммы. По каждому — что не "
+                      "так, цифры и что сделать. Операции по замечанию — на листе «Операции» "
+                      "(фильтр по №)."),
+    ("Ожидаемый НДС", "Оплаты по Cash Flow × ставка / (100 + ставка) по режиму и ставке из "
+                      "условий договора на дату платежа. «Только НДС» — вся сумма. «Без НДС» и "
+                      "«Не задан» — ноль."),
+    ("НДС в учёте", "Проводки НДС (начисления по договору) плюс НДС по УПД поставщиков товаров."),
+    ("Товарные договоры", "Договоры с УПД или где больше половины оборота — оплата товаров "
+                          "(статья 121…): НДС по ним — только по УПД, с оплатами не сравнивается "
+                          "(поставки и оплаты идут в разное время)."),
+    ("Не проверяется", "Финансирование (займы, взносы, проценты — статьи 3…) и налоги (125…): "
+                       "НДС в них нет. Суммы — на листе «Не проверялось». WB сверяется на листе "
+                       "НДС манпака."),
+    ("Знаки", "К вычету — плюс, начисленный — минус, как на листе «НДС по операциям»."),
+    ("Порог", "Расхождение меньше 1 000 ₽ или 3% ожидаемого — не замечание."),
+    ("Ограничения", "Оплаты и начисления расходятся по времени: аванс оплачен, а акт ещё нет, "
+                    "или наоборот — часть разницы может объясняться долгом или авансом. "
+                    "УПД — только в рублях."),
 ]
 
 
@@ -280,49 +401,51 @@ def to_excel(res: dict, report_date: date) -> bytes:
 
     buf = io.BytesIO()
     wb = xlsxwriter.Workbook(buf, {"nan_inf_to_errors": True})
-    base = {"font_name": mp.FONT, "font_size": 9, "font_color": "#" + mp.TEXT, "valign": "vcenter"}
+    base = {"font_name": mp.FONT, "font_size": 9, "font_color": "#" + mp.TEXT, "valign": "top"}
     line = {"bottom": 1, "bottom_color": "#" + mp.LINE}
     F = lambda **k: wb.add_format({**base, **k})
     fmt = {
         "title": F(font_size=14, bold=True), "sub": F(font_color="#" + mp.TEXT_2),
         "hdr": F(bold=True, font_color="#FFFFFF", bg_color="#" + mp.NAVY, text_wrap=True,
-                 align="center", border=1, border_color="#" + mp.NAVY_2),
+                 align="center", valign="vcenter", border=1, border_color="#" + mp.NAVY_2),
         "text": F(**line), "wrap": F(**line, text_wrap=True),
         "id": F(**line, num_format="0", align="center"),
         "date": F(**line, num_format="dd.mm.yyyy", align="center"),
         "money": F(**line, num_format=mp.FMT_MONEY), "dec": F(**line, num_format="0.0"),
-        "lbl": F(bold=True, font_color="#" + mp.NAVY_3, valign="top", **line),
-        "flag_bad": F(**line, text_wrap=True, bg_color="#F8D7D3"),
-        "flag_warn": F(**line, text_wrap=True, bg_color="#FCEBCF"),
-        "flag_ok": F(**line, text_wrap=True, font_color="#" + mp.MUTED),
+        "lbl": F(bold=True, font_color="#" + mp.NAVY_3, **line),
+        "bad": F(**line, text_wrap=True, bg_color="#F8D7D3"),
+        "warn": F(**line, text_wrap=True, bg_color="#FCEBCF"),
+        "ok": F(**line, text_wrap=True, font_color="#" + mp.MUTED),
+        "kpi_l": F(bold=True, font_color="#" + mp.NAVY_3, **line),
+        "kpi_v": F(bold=True, font_size=11, **line, num_format=mp.FMT_MONEY),
         "tot": F(bold=True, top=1, bottom=1, num_format=mp.FMT_MONEY),
         "tot_l": F(bold=True, top=1, bottom=1),
     }
-    sub = (f"Отчётная дата {report_date:%d.%m.%Y} · весь период до неё · знак: к вычету +, "
+    sub = (f"Отчётная дата {report_date:%d.%m.%Y} · весь период до неё · к вычету +, "
            "начисленный − · сформировано " + pd.Timestamp.now().strftime("%d.%m.%Y %H:%M"))
+    WARN = {FLAGS[k][0] for k in ("mode_unknown", "vat_no_mode", "no_cond", "no_contract")}
+    OKS = {FLAGS[k][0] for k in ("ok", "wb", "goods_ok")}
 
     def flag_fmt(v):
-        v = str(v)
-        if v == "OK" or v.startswith("Маркетплейс"):
-            return fmt["flag_ok"]
-        if v.startswith(("Режим", "Нет")):
-            return fmt["flag_warn"]
-        return fmt["flag_bad"]
+        return fmt["ok"] if v in OKS else fmt["warn"] if v in WARN else fmt["bad"]
 
-    def sheet(name, title, cols, df, total=False):
+    def head(ws, title, r=0):
+        ws.write(r, 0, title, fmt["title"])
+        ws.write(r + 1, 0, sub, fmt["sub"])
+
+    def table(name, title, cols, df, total=False, freeze=2):
         ws = wb.add_worksheet(name)
-        ws.write(0, 0, title, fmt["title"])
-        ws.write(1, 0, sub, fmt["sub"])
+        head(ws, title)
         r0 = 3
         for j, (_k, h, _t, w) in enumerate(cols):
             ws.write(r0, j, h, fmt["hdr"])
             ws.set_column(j, j, w)
-        ws.set_row(r0, 42)
+        ws.set_row(r0, 40)
         for i, row in enumerate(df[[c[0] for c in cols]].itertuples(index=False), start=r0 + 1):
             for j, ((k, _h, t, _w), v) in enumerate(zip(cols, row)):
                 if v is None or (not isinstance(v, str) and pd.isna(v)):
                     ws.write_blank(i, j, None, fmt["text"])
-                elif k == "flag":
+                elif k in ("flag",):
                     ws.write(i, j, v, flag_fmt(v))
                 elif t in ("money", "dec", "id"):
                     ws.write_number(i, j, float(v), fmt[t])
@@ -337,44 +460,53 @@ def to_excel(res: dict, report_date: date) -> bytes:
                 if t == "money":
                     ws.write_number(last + 1, j, float(df[k].sum()), fmt["tot"])
         ws.autofilter(r0, 0, max(last, r0), len(cols) - 1)
-        ws.freeze_panes(r0 + 1, 3 if name != "Операции CF" else 2)
+        ws.freeze_panes(r0 + 1, freeze)
         return ws
 
-    tot = res["tot"]
+    # Итог
+    tot, issues = res["tot"], res["issues"]
     ws = wb.add_worksheet("Итог")
-    ws.set_column(0, 0, 54)
-    ws.set_column(1, 3, 18)
-    ws.write(0, 0, "Сверка НДС по договорам", fmt["title"])
-    ws.write(1, 0, sub, fmt["sub"])
-    for j, h in enumerate(("ФЛАГ", "ДОГОВОРОВ", "РАЗНИЦА, ₽", "ВОЗМОЖНЫЙ НДС, ₽")):
-        ws.write(3, j, h, fmt["hdr"])
-    g = (tot.groupby("flag").agg(n=("key", "size"), diff=("diff", "sum"),
-                                 pot=("potential", "sum"), w=("weight", "sum"))
-         .sort_values("w", ascending=False))
-    r = 4
-    for flag, row in g.iterrows():
-        ws.write(r, 0, flag, flag_fmt(flag))
-        ws.write_number(r, 1, int(row["n"]), fmt["id"])
-        ws.write_number(r, 2, float(row["diff"]), fmt["money"])
-        ws.write_number(r, 3, float(row["pot"]), fmt["money"])
+    ws.set_column(0, 0, 50)
+    ws.set_column(1, 2, 16)
+    head(ws, "Сверка НДС по договорам")
+    ws.write(3, 0, "Договоров проверено", fmt["kpi_l"])
+    ws.write_number(3, 1, int(len(tot)), fmt["kpi_v"])
+    ws.write(4, 0, "Замечаний (лист «Что проверить»)", fmt["kpi_l"])
+    ws.write_number(4, 1, int(len(issues)), fmt["kpi_v"])
+    ws.write(5, 0, "Сумма вопросов, ₽", fmt["kpi_l"])
+    ws.write_number(5, 1, float(issues["weight"].sum()), fmt["kpi_v"])
+    r = 7
+    for j, h in enumerate(("ЗАМЕЧАНИЕ", "ДОГОВОРОВ", "СУММА ВОПРОСА, ₽")):
+        ws.write(r, j, h, fmt["hdr"])
+    r += 1
+    order = {v[0]: v[2] for v in FLAGS.values()}
+    g = tot.groupby("flag").agg(n=("key", "size"), w=("weight", "sum")).reset_index()
+    g = g.sort_values("flag", key=lambda s: s.map(order))
+    for row in g.itertuples(index=False):
+        ws.write(r, 0, row.flag, flag_fmt(row.flag))
+        ws.write_number(r, 1, int(row.n), fmt["id"])
+        ws.write_number(r, 2, float(row.w), fmt["money"])
         r += 1
     r += 1
-    ws.write(r, 0, "Разница — НДС у нас минус ожидаемый по Cash Flow. Возможный НДС — "
-                   "сколько НДС было бы при стандартной ставке там, где режим НДС не задан.",
+    ws.write(r, 0, "Сумма вопроса — расхождение НДС; где режима НДС нет — сколько НДС было бы "
+                   "при стандартной ставке. Это ориентир, где искать, а не сумма ошибки.",
              fmt["sub"])
 
-    sheet("По договорам", "НДС по договорам", TOT_COLS, tot, total=True)
-    sheet("По годам", "НДС по договорам и годам", YR_COLS, res["yr"])
-    sheet("Операции CF", "Операции Cash Flow по договорам с флагом", OPS_COLS, res["ops"])
+    table("Что проверить", "Что проверить — по убыванию суммы", ISSUE_COLS, issues, freeze=2)
+    table("Все договоры", "Все договоры", ALL_COLS, tot, total=True, freeze=2)
+    table("По годам", "Договоры по годам", YR_COLS, res["yr"], freeze=2)
+    table("Операции", "Операции Cash Flow по замечаниям", OPS_COLS, res["ops"], freeze=1)
+    table("Не проверялось", "Не проверялось: в этих операциях НДС нет", SKIP_COLS,
+          res["skipped"], total=True, freeze=0)
 
     ws = wb.add_worksheet("Как читать")
-    ws.set_column(0, 0, 18)
+    ws.set_column(0, 0, 20)
     ws.set_column(1, 1, 110)
     ws.write(0, 0, "Как читать", fmt["title"])
     for i, (a, b) in enumerate(NOTES, start=2):
         ws.write(i, 0, a, fmt["lbl"])
         ws.write(i, 1, b, fmt["wrap"])
-        ws.set_row(i, 44)
+        ws.set_row(i, 36)
     wb.close()
     return buf.getvalue()
 

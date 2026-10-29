@@ -277,6 +277,8 @@ JAZZMIN_SETTINGS = {
          "permissions": ["gear.export_stocks"]},
         {"name": "Контроль выручки", "url": "export_budget_analysis", "new_window": False,
          "permissions": ["gear.export_budget_analysis"]},
+        {"name": "Проверки", "url": "export_vat_contracts", "new_window": False,
+         "permissions": ["gear.export_checks"]},
     
     ],
     

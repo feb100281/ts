@@ -69,6 +69,7 @@ class Exports(models.Model):
              "Выгрузка: управленческий пакет (P&L + CF) и csv к нему"),
             ("export_stocks", "Выгрузка: остатки на складах"),
             ("export_budget_analysis", "Выгрузка: контроль выручки"),
+            ("export_checks", "Проверки: сверка НДС и договоров"),
         ]
 
 

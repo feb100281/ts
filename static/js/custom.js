@@ -246,11 +246,13 @@ document.addEventListener("click", function (event) {
     const stocksLink = links.find((a) => getLinkLabel(a) === "Скачать остатки");
     const budgetAnalysisLink = links.find((a) => getLinkLabel(a) === "Контроль выручки");
     const budgetAnalysisLi = budgetAnalysisLink ? budgetAnalysisLink.closest(".nav-item") : null;
+    const checksLink = links.find((a) => getLinkLabel(a) === "Проверки");
+    const checksLi = checksLink ? checksLink.closest(".nav-item") : null;
   
 
 
 
-    if (!glLink && !arapLink && !contractsCheckLink && !manpackLink && !mp2Link && !stocksLink && !budgetAnalysisLink) return;
+    if (!glLink && !arapLink && !contractsCheckLink && !manpackLink && !mp2Link && !stocksLink && !budgetAnalysisLink && !checksLink) return;
 
     injectExportMenuStylesOnce();
 
@@ -262,9 +264,9 @@ document.addEventListener("click", function (event) {
     const stocksLi = stocksLink ? stocksLink.closest(".nav-item") : null;
 
 
-    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || mp2Li || stocksLi || budgetAnalysisLi;
+    const insertBeforeNode = glLi || arapLi || contractsCheckLi || manpackLi || mp2Li || stocksLi || budgetAnalysisLi || checksLi;
 
-    [glLi, arapLi, contractsCheckLi, manpackLi, mp2Li, stocksLi, budgetAnalysisLi ].forEach((li) => {
+    [glLi, arapLi, contractsCheckLi, manpackLi, mp2Li, stocksLi, budgetAnalysisLi, checksLi].forEach((li) => {
       if (li) li.remove();
     });
 
@@ -342,6 +344,13 @@ document.addEventListener("click", function (event) {
         label: "Контроль выручки",
         icon: "fa-solid fa-chart-pie",
         className: "jm-budget-analysis-trigger",
+    } : null,
+
+      checksLink ? {
+        href: checksLink.getAttribute("href") || "#",
+        label: "Проверки (НДС, договоры)",
+        icon: "fa-solid fa-magnifying-glass-chart",
+        className: "jm-checks-trigger",
     } : null,
 
    
@@ -2205,7 +2214,6 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
   const CF_CSV_URL = "/admin/export/management-pack/cf-csv/";
   const PL_CSV_URL = "/admin/export/management-pack/pl-csv/";
   const PIVOTS_URL = "/admin/export/management-pack/pivots/";
-  const VAT_CONTRACTS_URL = "/admin/export/management-pack/vat-contracts/";
 
   function toYmd(dateObj) {
     const y = dateObj.getFullYear();
@@ -2257,13 +2265,6 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
         <div class="jm-manpack-quick">
           <button type="button" class="jm-manpack-quick-btn" id="jmMp2Pivots">
             Cash Flow и P&amp;L, xlsx
-          </button>
-        </div>
-
-        <label class="jm-manpack-label" for="jmMp2Date">Проверки</label>
-        <div class="jm-manpack-quick">
-          <button type="button" class="jm-manpack-quick-btn" id="jmMp2VatContracts">
-            Сверка НДС по договорам, xlsx
           </button>
         </div>
 
@@ -2349,10 +2350,6 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
       download(PIVOTS_URL);
     });
 
-    backdrop.querySelector("#jmMp2VatContracts").addEventListener("click", function () {
-      download(VAT_CONTRACTS_URL);
-    });
-
     backdrop.querySelector("#jmMp2CsvCf").addEventListener("click", function () {
       download(CF_CSV_URL);
     });
@@ -2383,6 +2380,98 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
   function boot() {
     ensureModal();
     bindTriggers();
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("pjax:end", boot);
+})();
+
+
+// -------------------------------------------------------------------
+// Проверки: сверка НДС по договорам. Отдельное право gear.export_checks.
+// Окно — на стилях окна ManPack (.jm-manpack-*).
+// -------------------------------------------------------------------
+(function () {
+  const VAT_URL = "/admin/export/checks/vat-contracts/";
+
+  function ymd(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function ensureModal() {
+    const existing = document.getElementById("jmChkBackdrop");
+    if (existing) return existing;
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "jmChkBackdrop";
+    backdrop.className = "jm-manpack-backdrop";
+    backdrop.innerHTML = `
+      <div class="jm-manpack-modal" role="dialog" aria-modal="true" aria-labelledby="jmChkTitle">
+        <h3 class="jm-manpack-title" id="jmChkTitle">Проверки</h3>
+        <div class="jm-manpack-subtitle">
+          Сверка данных учёта. Проверка идёт за весь период до выбранной даты.
+        </div>
+        <label class="jm-manpack-label" for="jmChkDate">Дата</label>
+        <input type="date" id="jmChkDate" class="jm-manpack-input" />
+        <label class="jm-manpack-label">Выгрузки, xlsx</label>
+        <div class="jm-manpack-quick">
+          <button type="button" class="jm-manpack-quick-btn" id="jmChkVat">
+            Сверка НДС по договорам
+          </button>
+        </div>
+        <div class="jm-manpack-error" id="jmChkError">Укажите дату.</div>
+        <div class="jm-manpack-actions">
+          <button type="button" class="jm-manpack-btn" id="jmChkCancel">Закрыть</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+
+    const dateInput = backdrop.querySelector("#jmChkDate");
+    const errorBox = backdrop.querySelector("#jmChkError");
+
+    function open() {
+      errorBox.classList.remove("is-visible");
+      if (!dateInput.value) dateInput.value = ymd(new Date());
+      backdrop.classList.add("is-open");
+    }
+    function close() {
+      backdrop.classList.remove("is-open");
+    }
+    function download(url) {
+      if (!dateInput.value) {
+        errorBox.classList.add("is-visible");
+        return;
+      }
+      close();
+      window.location.href = `${url}?report_date=${encodeURIComponent(dateInput.value)}`;
+    }
+
+    backdrop.querySelector("#jmChkVat").addEventListener("click", () => download(VAT_URL));
+    backdrop.querySelector("#jmChkCancel").addEventListener("click", close);
+    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && backdrop.classList.contains("is-open")) close();
+    });
+
+    backdrop._open = open;
+    return backdrop;
+  }
+
+  function bindTriggers() {
+    document.querySelectorAll(".jm-checks-trigger").forEach((el) => {
+      if (el.dataset.chkBound === "1") return;
+      el.dataset.chkBound = "1";
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        ensureModal()._open();
+      });
+    });
+  }
+
+  function boot() {
+    // меню «Экспорт» собирается своим скриптом — ждём его
+    setTimeout(bindTriggers, 0);
   }
 
   document.addEventListener("DOMContentLoaded", boot);
