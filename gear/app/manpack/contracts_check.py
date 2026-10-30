@@ -120,6 +120,9 @@ FLAGS = {
     "no_target": ("Не указан ни счёт P&L, ни счёт BS",
                   "Указать в условиях или в договоре, куда списывать: счёт P&L (расход сразу) "
                   "или счёт BS (на баланс).", 3),
+    "deposit": ("Депозит: вернули больше, чем разместили",
+                "Найти размещение этого депозита в Cash Flow: скорее всего, оно привязано к "
+                "другому договору депозита. Перепривязать платёж к этому договору.", 3),
     "both": ("Списание и в P&L, и на баланс",
              "Проверить, нет ли двойного списания: обычно указывают что-то одно — P&L или BS.", 4),
     "goods_pl": ("Закупка товара списывается в P&L",
@@ -339,6 +342,11 @@ def build(report_date: date, con) -> dict:
 
     def outcome(r):
         bal, fut = r["bal"], r["future"]
+        if "deposit" in str(r["fn"] or "").lower():
+            if r["bs"] >= TOL_RUB:
+                return f"Депозит открыт: на балансе {_rub(r['bs'])}"
+            if r["bs"] <= -TOL_RUB:
+                return f"Возврат депозита без размещения: {_rub(r['bs'])}"
         end = f" к {_d(r['ad_last'])}" if pd.notna(r["ad_last"]) else ""
         if abs(bal) < TOL_RUB:
             if abs(fut) >= TOL_RUB:
@@ -389,7 +397,12 @@ def build(report_date: date, con) -> dict:
             return "no_target"
         if money >= TOL_RUB and r["wo_turn"] < TOL_RUB:
             return "nowhere"
-        if abs(r["pl"]) >= TOL_RUB and abs(r["bs"]) >= TOL_RUB:
+        fn = str(r["fn"] or "").lower()
+        if "deposit" in fn and r["bs"] <= -TOL_RUB:
+            return "deposit"
+        # депозиты и займы: тело на балансе, проценты в P&L — это норма
+        two_ok = any(x in fn for x in ("deposit", "borrow", "loan", "займ"))
+        if abs(r["pl"]) >= TOL_RUB and abs(r["bs"]) >= TOL_RUB and not two_ok:
             return "both"
         if r["goods"] >= 0.5 * r["turn"] > 0 and abs(r["pl"]) >= TOL_RUB and abs(r["bs"]) < TOL_RUB:
             return "goods_pl"
@@ -408,6 +421,8 @@ def build(report_date: date, con) -> dict:
             return max(r["paid"], r["got"], r["turn"])
         if f == "both":
             return min(abs(r["pl"]), abs(r["bs"]))
+        if f == "deposit":
+            return abs(r["bs"])
         if f == "goods_pl":
             return abs(r["pl"])
         if f == "outside":
@@ -438,6 +453,9 @@ def build(report_date: date, con) -> dict:
             return f"Деньги: {money}. Функция «{r['fn']}», но нет ни счёта P&L, ни BS."
         if f == "both":
             return f"Деньги: {money}. Списано {wo}. Счета: P&L {r['pl_name']}; BS {r['bs_name']}."
+        if f == "deposit":
+            return (f"Деньги: {money}. Тело депозита на балансе: {_rub(r['bs'])} — возврат без "
+                    f"размещения. Проценты в P&L: {_rub(r['pl'])}.")
         if f == "goods_pl":
             return (f"Платежи по подстатье «Закупка товара» (1211…) — {_rub(r['goods'])} из "
                     f"{_rub(r['turn'])}, а списываются в P&L ({r['pl_name']}) — "
