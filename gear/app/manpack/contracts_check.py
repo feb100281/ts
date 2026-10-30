@@ -41,10 +41,10 @@ GOODS_SUB, GOODS_BS = "1211", "130"     # подстатья «Закупка т
 
 FACT_SQL = """
 SELECT f.contract_id AS cid, LAST_DAY(f.date_from)::DATE AS me, f.acc_id,
-       SUM(f.dt) / 100.0 AS dt, SUM(f.cr) / 100.0 AS cr
+       f.subconto_id AS sub, SUM(f.dt) / 100.0 AS dt, SUM(f.cr) / 100.0 AS cr
 FROM pg.gl.fact f
 WHERE f.date_from <= ? AND f.contract_id IS NOT NULL
-GROUP BY 1, 2, 3
+GROUP BY 1, 2, 3, 4
 """
 COA_SQL = """
 SELECT id, CAST(code AS VARCHAR) AS code, name, parent_id FROM pg.public.corporate_coa
@@ -259,6 +259,11 @@ def build(report_date: date, con) -> dict:
 
     fact["k"] = [kind(c, a) for c, a in zip(fact["cid"], fact["acc_id"])]
     fact["v"] = fact["dt"] - fact["cr"]
+    # статья P&L (субконто) по фактическим списаниям — крупнейшая по сумме
+    plr = fact[fact["k"] == "pl"].assign(a=lambda x: x["v"].abs())
+    pl_sub = (plr.groupby(["cid", "sub"])["a"].sum().reset_index()
+              .sort_values("a").drop_duplicates("cid", keep="last"))
+    pl_sub = dict(zip(pl_sub["cid"], pl_sub["sub"].map(item_name)))
     m = fact.pivot_table(index=["cid", "me"], columns="k", values="v", aggfunc="sum",
                          fill_value=0.0).reset_index()
     cash_io = (fact[fact["k"] == "cash"].groupby("cid")
@@ -317,6 +322,7 @@ def build(report_date: date, con) -> dict:
         out_sum=("a", lambda s: s[cf.loc[s.index, "outside"]].sum()),
         out_n=("outside", "sum"),
         item=("item", lambda s: s.value_counts().index[0] if len(s) else ""),
+        subitem=("subitem", lambda s: s.value_counts().index[0] if len(s) else ""),
     ).reset_index()
 
     df = (ctr.merge(t, on="cid", how="left").merge(cinfo, on="cid", how="left")
@@ -481,6 +487,8 @@ def build(report_date: date, con) -> dict:
     df["todo"] = df["fcode"].map(lambda f: FLAGS[f][1])
     df["why"] = df.apply(explain, axis=1)
     df["item_name"] = df["item"].fillna("")
+    df["subitem_name"] = df["subitem"].fillna("") if "subitem" in df else ""
+    df["pl_sub_name"] = df["cid"].map(pl_sub).fillna("")
     if len(noc):
         noc["a"] = noc["amount"].abs()
         nc = noc.groupby("cp_name").agg(
@@ -555,7 +563,9 @@ ALL_COLS = [
     ("vat_modes", "Режим НДС", "wrap", 12, 1), ("start", "Условия с", "date", 10, 1),
     ("finish", "Условия по", "date", 10, 1), ("ad_last", "График до", "date", 10, 1),
     ("item_name", "Основная статья CF", "wrap", 24, 1),
+    ("subitem_name", "Основная подстатья CF", "wrap", 24, 1),
     ("st_name", "Счёт расчётов (ST)", "wrap", 20, 1), ("pl_name", "Счёт P&L", "wrap", 20, 1),
+    ("pl_sub_name", "Статья P&L (по проводкам)", "wrap", 24, 1),
     ("bs_name", "Счёт BS", "wrap", 20, 1), ("other", "Прочие счета, ₽", "money", 12, 1),
     ("plan_how", "Проверка по условиям", "wrap", 16, 1),
     ("plan_total", "По условиям за весь срок, ₽", "money", 14, 1),

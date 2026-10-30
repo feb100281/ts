@@ -336,6 +336,30 @@ def export_vat_contracts(request):
     return run_export(build)
 
 
+def export_balance_check(request):
+    """Баланс (проверка): активы и пассивы по остаткам счетов на дату."""
+    date_str = request.GET.get("report_date")
+    if not date_str:
+        return HttpResponseBadRequest("Не передана дата report_date")
+    try:
+        report_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return HttpResponseBadRequest("Некорректный формат даты. Ожидается YYYY-MM-DD")
+
+    from gear.app.manpack.balance_check import build_balance_workbook
+
+    def build():
+        data, name = build_balance_workbook(report_date)
+        resp = HttpResponse(
+            data,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        from urllib.parse import quote
+        resp["Content-Disposition"] = "attachment; filename*=UTF-8''%s" % quote(name)
+        return resp
+
+    return run_export(build)
+
+
 def export_contracts_writeoff(request):
     """Проверка списания договоров: P&L / баланс / НДС, условия начисления."""
     date_str = request.GET.get("report_date")

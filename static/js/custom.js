@@ -2394,6 +2394,7 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
 (function () {
   const VAT_URL = "/admin/export/checks/vat-contracts/";
   const WRITEOFF_URL = "/admin/export/checks/contracts-writeoff/";
+  const BALANCE_URL = "/admin/export/checks/balance/";
 
   function ymd(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -2421,6 +2422,9 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
           </button>
           <button type="button" class="jm-manpack-quick-btn" id="jmChkWriteoff">
             Списание договоров: P&amp;L / баланс
+          </button>
+          <button type="button" class="jm-manpack-quick-btn" id="jmChkBalance">
+            Баланс: активы и пассивы
           </button>
         </div>
         <div class="jm-manpack-error" id="jmChkError">Укажите дату.</div>
@@ -2453,6 +2457,7 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
 
     backdrop.querySelector("#jmChkVat").addEventListener("click", () => download(VAT_URL));
     backdrop.querySelector("#jmChkWriteoff").addEventListener("click", () => download(WRITEOFF_URL));
+    backdrop.querySelector("#jmChkBalance").addEventListener("click", () => download(BALANCE_URL));
     backdrop.querySelector("#jmChkCancel").addEventListener("click", close);
     backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
     document.addEventListener("keydown", (e) => {
