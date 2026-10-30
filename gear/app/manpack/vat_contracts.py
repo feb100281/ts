@@ -18,6 +18,16 @@ import pandas as pd
 TOL_RUB = 1000.0          # меньше — не замечание
 TOL_SHARE = 0.03          # и меньше 3% ожидаемого
 WB_NAMES = ("ВАЙЛДБЕРРИЗ", "WILDBERRIES", "РВБ")
+
+def is_marketplace(name) -> bool:
+    """Площадка WB (ВАЙЛДБЕРРИЗ ООО, РВБ ООО), но не Вайлдберриз Банк и не МКК ВБ Финанс."""
+    import re
+    s = str(name or "").upper()
+    if any(x in s for x in ("БАНК", "BANK", "ФИНАНС", "МКК")):
+        return False
+    words = set(re.findall(r"[A-ZА-ЯЁ0-9]+", s))
+    return bool(words & {"ВАЙЛДБЕРРИЗ", "WILDBERRIES", "РВБ"})
+
 GOODS_CODE = "121"        # статьи CF «Оплаты товаров для перепродажи»
 SKIP_CODES = (("3", "Финансирование: займы, взносы, проценты"),
               ("125", "Налоги и сборы"))
@@ -356,7 +366,7 @@ def build(report_date: date, con) -> dict:
         base = df["net"].abs() - df["actual"].abs()
         df["eff_rate"] = (df["actual"].abs() / base.where(base > 0) * 100).where(
             df["actual"].abs() >= 1)
-        df["wb"] = df["cp"].astype(str).str.upper().apply(lambda s: any(n in s for n in WB_NAMES))
+        df["wb"] = df["cp"].apply(is_marketplace)
         df["fcode"] = df.apply(_classify, axis=1)
         # для товара сверка по УПД, ожидаемый по оплатам не показываем
         df.loc[df["goods"] | df["wb"] | df["vat_mode"].eq("by_payment"), ["exp"]] = float("nan")

@@ -25,6 +25,16 @@ import pandas as pd
 
 TOL_RUB = 1000.0
 WB_NAMES = ("ВАЙЛДБЕРРИЗ", "WILDBERRIES", "РВБ")
+
+def is_marketplace(name) -> bool:
+    """Площадка WB (ВАЙЛДБЕРРИЗ ООО, РВБ ООО), но не Вайлдберриз Банк и не МКК ВБ Финанс."""
+    import re
+    s = str(name or "").upper()
+    if any(x in s for x in ("БАНК", "BANK", "ФИНАНС", "МКК")):
+        return False
+    words = set(re.findall(r"[A-ZА-ЯЁ0-9]+", s))
+    return bool(words & {"ВАЙЛДБЕРРИЗ", "WILDBERRIES", "РВБ"})
+
 SKIP_ITEMS = (("4", "Переводы между счетами и конвертация"), ("125", "Налоги и сборы"))
 CASH_PARENT, VAT_PARENT = 3, 31
 GOODS_SUB, GOODS_BS = "1211", "130"     # подстатья «Закупка товара», счёт BS товара
@@ -347,7 +357,7 @@ def build(report_date: date, con) -> dict:
     df["outcome"] = df.apply(outcome, axis=1)
 
     def skip_reason(r):
-        if any(n in str(r["cp"]).upper() for n in WB_NAMES):
+        if is_marketplace(r["cp"]):
             return "Маркетплейс WB — по отчёту WB"
         code = str(r["item"] or "").split(" ")[0]
         for pfx, name in SKIP_ITEMS:
