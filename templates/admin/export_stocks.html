@@ -1,0 +1,264 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+<style>
+    .export-stocks-container {
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 30px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    .export-stocks-title {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+        font-weight: 600;
+        color: #1e293b;
+    }
+    
+    .export-stocks-subtitle {
+        margin: 0 0 24px 0;
+        color: #64748b;
+        font-size: 14px;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 16px;
+    }
+    
+    .export-stocks-form {
+        margin-top: 20px;
+    }
+    
+    .form-group {
+        margin-bottom: 24px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #0f172a;
+        font-size: 14px;
+    }
+    
+    .form-group input[type="date"] {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+    
+    .form-group input[type="date"]:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+    
+    .quick-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    
+    .quick-btn {
+        padding: 6px 16px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #475569;
+        transition: all 0.2s;
+    }
+    
+    .quick-btn:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #0f172a;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 32px;
+        padding-top: 16px;
+        border-top: 1px solid #e2e8f0;
+    }
+    
+    .btn-primary {
+        background: #0f172a;
+        color: #fff;
+        padding: 10px 24px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: background 0.2s;
+    }
+    
+    .btn-primary:hover {
+        background: #1e293b;
+    }
+    
+    .btn-secondary {
+        background: #fff;
+        color: #475569;
+        padding: 10px 24px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    
+    .btn-secondary:hover {
+        background: #f8fafc;
+        border-color: #94a3b8;
+    }
+    
+    .info-box {
+        margin-top: 24px;
+        padding: 16px;
+        background: #f8fafc;
+        border-radius: 8px;
+        border-left: 4px solid #3b82f6;
+    }
+    
+    .info-box strong {
+        display: block;
+        margin-bottom: 12px;
+        color: #0f172a;
+        font-size: 13px;
+    }
+    
+    .info-box ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #475569;
+        font-size: 13px;
+    }
+    
+    .info-box li {
+        margin: 6px 0;
+    }
+    
+    .error-message {
+        margin-top: 16px;
+        padding: 12px;
+        background: #fef2f2;
+        border-left: 4px solid #ef4444;
+        border-radius: 6px;
+        color: #dc2626;
+        font-size: 13px;
+        display: none;
+    }
+    
+    .error-message.is-visible {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="export-stocks-container">
+    <h1 class="export-stocks-title">Скачать остатки на складах</h1>
+    <div class="export-stocks-subtitle">
+        Выгрузка данных из таблицы stocks_by_product
+    </div>
+    
+    <form id="exportForm" class="export-stocks-form">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="reportDate">Дата отчетности</label>
+            <input type="date" id="reportDate" name="report_date" required>
+            <div class="quick-buttons">
+                <button type="button" class="quick-btn" onclick="setToday()">📅 Сегодня</button>
+                <button type="button" class="quick-btn" onclick="setPrevMonthEnd()">📆 Конец прошлого месяца</button>
+                <button type="button" class="quick-btn" onclick="setCustom()">🔄 Очистить</button>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">📥 Скачать CSV</button>
+            <button type="button" class="btn-secondary" onclick="window.history.back()">Отмена</button>
+        </div>
+        
+        <div class="error-message" id="errorMessage"></div>
+        
+        <div class="info-box">
+            <strong>ℹ️ Информация о выгрузке</strong>
+            <ul>
+                <li>Данные берутся из представления <code>reports_stocks.stocks_by_product</code></li>
+                <li>Выгружаются остатки на выбранную дату (date_from = выбранная дата)</li>
+                <li>Формат файла: CSV с разделителями (совместим с Excel)</li>
+                <li>Кодировка: UTF-8 с BOM (русский текст отображается корректно)</li>
+            </ul>
+        </div>
+    </form>
+</div>
+
+<script>
+    function setToday() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('reportDate').value = today;
+        document.getElementById('errorMessage').classList.remove('is-visible');
+    }
+    
+    function setPrevMonthEnd() {
+        const date = new Date();
+        date.setDate(1);
+        date.setDate(0);
+        const prevMonthEnd = date.toISOString().split('T')[0];
+        document.getElementById('reportDate').value = prevMonthEnd;
+        document.getElementById('errorMessage').classList.remove('is-visible');
+    }
+    
+    function setCustom() {
+        document.getElementById('reportDate').value = '';
+        document.getElementById('errorMessage').classList.remove('is-visible');
+    }
+    
+    document.getElementById('exportForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const dateInput = document.getElementById('reportDate');
+        const errorDiv = document.getElementById('errorMessage');
+        
+        if (!dateInput.value) {
+            errorDiv.textContent = '❌ Пожалуйста, выберите дату для выгрузки остатков';
+            errorDiv.classList.add('is-visible');
+            return;
+        }
+        
+        errorDiv.classList.remove('is-visible');
+        
+        // Добавляем индикатор загрузки
+        const submitBtn = this.querySelector('.btn-primary');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '⏳ Загрузка...';
+        submitBtn.disabled = true;
+        
+        // Скачиваем файл
+        const downloadUrl = `/admin/inventories/delivery/download-stocks/?report_date=${dateInput.value}`;
+        window.location.href = downloadUrl;
+        
+        // Возвращаем кнопку в исходное состояние через 2 секунды
+        setTimeout(() => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }, 2000);
+    });
+    
+    // Установка сегодняшней даты по умолчанию
+    setToday();
+</script>
+{% endblock %}

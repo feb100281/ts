@@ -1,0 +1,197 @@
+CREATE OR REPLACE TEMP TABLE base AS
+
+WITH last_val AS (
+    SELECT
+        usk,
+        adjust_wo[-1] AS last_cr,
+        adjust_man_wo[-1] AS last_man_cr
+    FROM inventories.pre_wo
+),
+
+-- =========================================================
+-- Списания, для которых подставляем последнюю себестоимость
+-- =========================================================
+
+add_last AS (
+    SELECT
+        t.*,
+        l.last_cr,
+        l.last_man_cr
+
+    FROM inventories.inv_gl_final t
+
+    LEFT JOIN last_val l
+        ON l.usk = t.usk
+
+    WHERE t.cr = 0
+      AND t.oper = 'Списание'
+),
+
+-- =========================================================
+-- Розничная стоимость WB
+-- ВАЖНО: одна строка на rrd_id
+-- =========================================================
+
+wb_price AS (
+    SELECT
+        rrd_id,
+
+        -- цена покупателя после СПП, со знаком: продажа (+), возврат (-)
+        COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0)
+        -
+        COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS retail_amount
+
+    FROM sales.sales_long
+
+    WHERE field = 'retail_amount'
+
+    GROUP BY
+        rrd_id
+),
+
+-- =========================================================
+-- Комиссия WB
+--
+-- comission = retail_price - ppvz_for_pay (брутто, с НДС),
+-- dt - cr, обычно отрицательная.
+--
+-- НДС с комиссии берём ФАКТИЧЕСКИЙ из отчёта WB (ppvz_vw_nds = vwNds),
+-- а не comission * 22/122: внутри comission сидят СПП, ПВЗ и эквайринг,
+-- на которые WB НДС не предъявляет. При большой СПП ppvz_vw_nds
+-- отрицательный -> комиссия без НДС больше брутто.
+--
+-- net_comission = comission_gross - vat_in_wb
+-- прибыль: revenue_vatless - cogs + net_comission
+-- =========================================================
+
+commissions AS (
+    SELECT
+        rrd_id,
+        max(vat_rate) as vat_rate,
+
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
+        -
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
+            AS comission_gross,
+
+        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'dt'), 0)
+        -
+        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'cr'), 0)
+            AS vat_in_wb
+
+    FROM sales.sales_long
+
+    WHERE field IN ('comission', 'ppvz_vw_nds')
+
+    GROUP BY
+        rrd_id
+)
+
+SELECT
+
+    YEARWEEK(
+        t.date_from::DATE
+    ) AS yw,
+
+    t.*,
+
+    -- =====================================================
+    -- WB
+    -- =====================================================
+
+    COALESCE(
+        wb.retail_amount,
+        0
+    ) AS retail_amount,
+
+    COALESCE(c.comission_gross, 0)
+    - COALESCE(c.vat_in_wb, 0)
+        AS net_comission,
+
+    COALESCE(c.vat_in_wb, 0) AS vat_in_wb,
+
+    -- =====================================================
+    -- Себестоимость
+    -- =====================================================
+
+    a.last_cr,
+
+    a.last_man_cr,
+
+    COALESCE(
+        a.last_cr,
+
+        CASE
+            WHEN t.cr = 0
+                THEN 95000
+
+            ELSE t.cr
+        END
+
+    ) AS adjusted_cogs,
+
+    COALESCE(
+        a.last_man_cr,
+
+        CASE
+            WHEN t.cr_man = 0
+                THEN 62000
+
+            ELSE t.cr_man
+        END
+
+    ) AS adjusted_cogs_man,
+
+    -- =====================================================
+    -- Карточка товара
+    -- =====================================================
+
+    UPPER(
+        w.brand
+    ) AS brand,
+
+    w.subject_id,
+
+    w.subject_name,
+
+    w.title,
+
+    COALESCE(
+        w.gender,
+        'Не указан'
+    ) AS gender,
+
+    -- =====================================================
+    -- Контроль себестоимости
+    -- =====================================================
+
+    CASE
+
+        WHEN t.cr = 0
+         AND a.last_cr <> 0
+         AND t.oper = 'Списание'
+            THEN 'Нет на складе'
+
+        WHEN t.cr = 0
+         AND a.last_cr IS NULL
+         AND t.oper = 'Списание'
+            THEN 'Нет приходов'
+
+        ELSE NULL
+
+    END AS storage_flag
+
+FROM inventories.inv_gl_final t
+
+LEFT JOIN add_last a
+    ON a.rrd_id = t.rrd_id
+
+LEFT JOIN inventories.wb_product w
+    ON w.card_id = t.usk
+
+LEFT JOIN wb_price wb
+    ON wb.rrd_id = t.rrd_id
+
+LEFT JOIN commissions c
+    ON c.rrd_id = t.rrd_id
+;

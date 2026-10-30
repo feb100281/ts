@@ -1,0 +1,30 @@
+<div id="section-summary"></div>
+<div class="section-title section-title-roman">
+    {% if sales_block %}II.{% else %}I.{% endif %} Сводные итоги исполнения бюджета
+</div>
+
+{% include "budget/partials/_summary_cards.html" %}
+
+<div class="section-title">Итоги по месяцам</div>
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:16%;">Месяц</th>
+            <th style="width:28%;">План</th>
+            <th style="width:28%;">Факт</th>
+            <th style="width:14%;">Δ</th>
+            <th style="width:14%;">% вып.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in monthly_rows %}
+        <tr>
+            <td class="left">{{ row.month }}</td>
+            <td class="right">{{ row.plan }}</td>
+            <td class="right">{{ row.fact }}</td>
+            <td class="right {{ row.delta_class }}">{{ row.delta }}</td>
+            <td class="center">{{ row.execution }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
