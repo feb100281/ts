@@ -4689,7 +4689,8 @@ def vat_layout(rows, shown=None, paid=None):
             m = promo if code == "promo" else sel
             m[me] = m.get(me, 0.0) + v
         elif kind == "gl":
-            if v >= 0:
+            # минус по расходным счетам (возврат, сторно) — уменьшение вычета, не начисленный
+            if v >= 0 or code in {c for c, _, _ in VAT_GL_SECTIONS}:
                 gl_in[(code, grp, item, cp)][me] += v
             else:
                 gl_out[(code, grp, item, cp)][me] += -v
