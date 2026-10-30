@@ -256,6 +256,11 @@ def build(report_date: date, con) -> dict:
             if c not in df:
                 df[c] = 0.0
     t = t.merge(cash_io, on="cid", how="left")
+    # оборот списаний (dt + cr): у депозита размещение и возврат на балансе дают ноль в сумме,
+    # но списание было
+    wo = fact[fact["k"].isin(["pl", "bs", "vat"])]
+    t = t.merge((wo["dt"] + wo["cr"]).groupby(wo["cid"]).sum().rename("wo_turn").reset_index(),
+                on="cid", how="left")
 
     # условия по договору
     cg = cond.groupby("cid")
@@ -305,7 +310,7 @@ def build(report_date: date, con) -> dict:
           .merge(cfa, on="cid", how="left").merge(cplan, on="cid", how="left")
           .merge(ad, on="cid", how="left"))
     num = ["cash", "st", "pl", "bs", "vat", "other", "got", "paid", "turn", "goods", "out_sum",
-           "out_n", "n_cond", "n_fn", "future"]
+           "out_n", "n_cond", "n_fn", "future", "wo_turn"]
     df[num] = df[num].apply(pd.to_numeric, errors="coerce").fillna(0.0)
     moved = (df["got"] + df["paid"] + df["turn"] + df["pl"].abs() + df["bs"].abs()
              + df["st"].abs()) > 0
@@ -372,7 +377,7 @@ def build(report_date: date, con) -> dict:
             return "no_fn"
         if not r["pl_name"] and not r["bs_name"]:
             return "no_target"
-        if money >= TOL_RUB and abs(r["pl"]) + abs(r["bs"]) + abs(r["vat"]) < TOL_RUB:
+        if money >= TOL_RUB and r["wo_turn"] < TOL_RUB:
             return "nowhere"
         if abs(r["pl"]) >= TOL_RUB and abs(r["bs"]) >= TOL_RUB:
             return "both"
