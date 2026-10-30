@@ -1,14 +1,14 @@
 # gear/app/manpack/balance_check.py
-"""Баланс (проверка): активы и пассивы по остаткам счетов gl.fact на дату.
+"""Баланс (проверка): активы и пассивы на дату по остаткам gl.fact, собранные по участкам.
 
-Счета по первой цифре кода:
-  1 — активы; 2 — обязательства; 3 — капитал;
-  4, 5, 6 — P&L: накопленный финансовый результат (в капитал);
-  7 — расчёты: остаток по каждому договору — дебетовый в активы
-      (авансы выданные, дебиторка), кредитовый в пассивы (долги, авансы полученные);
-  8 — забалансовые, не берутся.
-Остаток = Σ(dt − cr): актив — плюс; обязательства и капитал показываются плюсом (cr − dt).
-Контроль: активы − пассивы. Не ноль — проводки без пары; где они — лист «Контроль».
+gl.fact — не полная двойная запись, поэтому перед сборкой:
+  • ST_WB (780012) не берётся: дублирует баланс WB (114001, CF_WB);
+  • себестоимость (PL_write_off) уменьшает запасы 130001 — списание с запасов в учёте нет;
+  • по каждому договору недостающая пара денег (оплата без проводки по расчётам)
+    достраивается на счёт расчётов договора: остаток расчётов = расчёты 7… − Σ всех
+    проводок договора. Так работает для Cash Based, начислений по графику, депозитов, займов.
+Проводки без договора не достраиваются — их сумма и есть небаланс (лист «Контроль»).
+Скрипт только читает базу.
 """
 from __future__ import annotations
 
@@ -18,6 +18,9 @@ from datetime import date
 import pandas as pd
 
 TOL = 1.0
+DROP_CHAPTERS = ("ST_WB",)          # дубль CF_WB
+COGS_CHAPTER = "PL_write_off"       # себестоимость: пара — запасы
+INV_CODE = "130001"
 
 FACT_SQL = """
 SELECT f.acc_id, f.contract_id AS cid, COALESCE(f.chapter, '') AS chapter,
@@ -34,11 +37,19 @@ SELECT k.id AS cid,
        COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(k.number, 'б/н') || ' от '
            || COALESCE(strftime(k.date, '%d.%m.%Y'), 'б/д') || ' · id ' || CAST(k.id AS VARCHAR)
            AS contract,
-       COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp
+       COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp,
+       k.bs_id AS st_acc
 FROM pg.public.contracts_contracts k
 LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = k.title_id
 LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = k.cp_id
 """
+
+# участки баланса: (префикс кода, раздел, строка)
+CASH_LINES = (("111", "Банковские счета"), ("112", "Касса"), ("113", "Депозиты"),
+              ("114", "Баланс маркетплейса (WB)"), ("115", "Деньги в пути"))
+ST_GROUPS = {"72": "поставщики и подрядчики", "74": "сотрудники", "75": "налоги и сборы",
+             "76": "учредители", "77": "кредиты, займы, депозиты", "78": "маркетплейс WB",
+             "79": "внутригрупповые и переводы", "71": "покупатели"}
 
 
 def build(report_date: date, con) -> dict:
@@ -48,111 +59,166 @@ def build(report_date: date, con) -> dict:
     ctr = con.execute(CTR_SQL).df()
 
     fact[["b0", "b1"]] = fact[["b0", "b1"]].fillna(0.0)
-    code = coa.set_index("id")["code"].fillna("").astype(str)
+    code_of = coa.set_index("id")["code"].fillna("").astype(str)
     name_by_code = dict(zip(coa["code"].astype(str), coa["name"]))
-    fact["code"] = fact["acc_id"].map(code).fillna("")
-    fact["kind"] = fact["code"].str[:1]
-    fact["grp"] = fact["code"].str[:2] + "0000"
-    fact = fact[fact["kind"] != "8"]
-
     acc_name = lambda c: f"{c} {name_by_code.get(c, '')}".strip()
-    grp_name = lambda g: f"{g} {name_by_code.get(g, '')}".strip()
+    fact["code"] = fact["acc_id"].map(code_of).fillna("")
+    fact = fact[~fact["code"].str.startswith("8")]
+    dropped = fact[fact["chapter"].isin(DROP_CHAPTERS)][["b0", "b1"]].sum()
+    fact = fact[~fact["chapter"].isin(DROP_CHAPTERS)].copy()
+    fact["src"] = "учёт"
 
-    # счета 1, 2, 3 — по счёту
-    plain = (fact[fact["kind"].isin(["1", "2", "3"])]
-             .groupby(["kind", "grp", "code"], as_index=False)[["b0", "b1"]].sum())
+    # себестоимость снимается с запасов
+    cogs = fact[fact["chapter"] == COGS_CHAPTER]
+    inv = cogs.assign(code=INV_CODE, chapter="запасы − себестоимость",
+                      b0=-cogs["b0"], b1=-cogs["b1"], src="списание себестоимости")
 
-    # расчёты 7 — по договору, сторона по знаку остатка
-    st = (fact[fact["kind"] == "7"].groupby(["grp", "code", "cid"], dropna=False,
-                                             as_index=False)[["b0", "b1"]].sum())
-    st = st.merge(ctr, on="cid", how="left")
-    st["cp"] = st["cp"].fillna("Без договора")
-    st["contract"] = st["contract"].fillna("без договора")
-    for b in ("b0", "b1"):
-        st[f"a_{b}"] = st[b].clip(lower=0)            # дебет — актив
-        st[f"l_{b}"] = (-st[b]).clip(lower=0)         # кредит — пассив
+    # недостающая пара по договорам — на счёт расчётов договора
+    ctr["st_code"] = ctr["st_acc"].map(code_of)
+    st_code = ctr.set_index("cid")["st_code"]
+    allr = pd.concat([fact, inv], ignore_index=True)
+    withc = allr[allr["cid"].notna()]
+    imb = withc.groupby("cid", as_index=False)[["b0", "b1"]].sum()
+    imb["code"] = imb["cid"].map(st_code)
+    # нет счёта расчётов в договоре — самый частый счёт 7… в его проводках
+    t7 = (withc[withc["code"].str.startswith("7") & ~withc["code"].str.startswith("73")]
+          .assign(a=lambda x: x["b1"].abs()).sort_values("a")
+          .drop_duplicates("cid", keep="last").set_index("cid")["code"])
+    imb["code"] = imb["code"].fillna(imb["cid"].map(t7)).fillna("7")
+    pair = imb.assign(b0=-imb["b0"], b1=-imb["b1"], chapter="пара к деньгам",
+                      src="достроено: оплаты по договору")
+    allr = pd.concat([allr, pair], ignore_index=True)
 
-    # P&L 4–6 — накопленный результат (прибыль — плюс)
-    pl = fact[fact["kind"].isin(["4", "5", "6"])][["b0", "b1"]].sum()
-    res_prev, res_all = -pl["b0"], -pl["b1"]
+    c = allr["code"].astype(str)
+    allr["sec"] = None
+    for pfx, nm in CASH_LINES:
+        allr.loc[c.str.startswith(pfx), "sec"] = "cash:" + nm
+    allr.loc[allr["sec"].isna() & c.str.startswith("11"), "sec"] = "cash:Прочие денежные средства"
+    allr.loc[c.str.startswith("12"), "sec"] = "recv"
+    allr.loc[c.str.startswith("13"), "sec"] = "inv"
+    allr.loc[c.str.startswith("14"), "sec"] = "fixed"
+    allr.loc[c.str.startswith("2"), "sec"] = "liab"
+    allr.loc[c.str.startswith("3"), "sec"] = "cap"
+    allr.loc[c.str[:1].isin(["4", "5", "6"]), "sec"] = "pl"
+    allr.loc[c.str.startswith("73"), "sec"] = "vat"
+    allr.loc[c.str.startswith("7") & ~c.str.startswith("73"), "sec"] = "st"
+    allr.loc[allr["sec"].isna(), "sec"] = "other"
 
-    rows = []                                       # (уровень, код, название, b0, b1, вид)
+    S = lambda m, col: float(allr.loc[m, col].sum())
+
+    # расчёты: остаток по договору (и без договора — по счёту), сторона по знаку
+    st = allr[allr["sec"] == "st"].copy()
+    st["grp"] = st["code"].str[:2]
+    st["key"] = st["cid"].astype("Int64").astype(str).where(st["cid"].notna(), "acc:" + st["code"])
+    stc = st.groupby(["key", "grp"], as_index=False).agg(
+        cid=("cid", "first"), code=("code", "first"), b0=("b0", "sum"), b1=("b1", "sum"))
+    stc = stc.merge(ctr[["cid", "cp", "contract"]], on="cid", how="left")
+    stc["cp"] = stc["cp"].fillna("Без договора")
+    stc["contract"] = stc["contract"].fillna(stc["code"].map(acc_name))
+    stc["grp_name"] = stc["grp"].map(lambda g: ST_GROUPS.get(g, g))
+
+    rows = []
 
     def add(level, cd, nm, v0, v1, kind="row"):
         rows.append((level, cd, nm, float(v0), float(v1), kind))
 
+    def side(df, sign):
+        return (df["b0"] * sign).clip(lower=0).sum(), (df["b1"] * sign).clip(lower=0).sum()
+
     # ---- АКТИВЫ
-    a_rows = []
-    for g, gdf in plain[plain["kind"] == "1"].groupby("grp"):
-        a_rows.append((g, gdf))
-    st_a = st[(st["a_b0"] > TOL) | (st["a_b1"] > TOL)]
-    ast0 = sum(gdf["b0"].sum() for _, gdf in a_rows) + st["a_b0"].sum()
-    ast1 = sum(gdf["b1"].sum() for _, gdf in a_rows) + st["a_b1"].sum()
-    add(0, "", "АКТИВЫ", ast0, ast1, "band")
-    for g, gdf in a_rows:
-        add(1, g, grp_name(g), gdf["b0"].sum(), gdf["b1"].sum(), "grp")
-        for r in gdf.itertuples(index=False):
-            if abs(r.b0) >= TOL or abs(r.b1) >= TOL:
-                add(2, r.code, acc_name(r.code), r.b0, r.b1)
-    add(1, "7…", "Расчёты — дебетовые остатки: авансы выданные, нам должны",
-        st["a_b0"].sum(), st["a_b1"].sum(), "grp")
-    for g, gdf in st_a.groupby("grp"):
-        add(2, g, grp_name(g), gdf["a_b0"].sum(), gdf["a_b1"].sum())
+    cash_secs = [s for s in allr["sec"].unique() if str(s).startswith("cash:")]
+    cash0, cash1 = S(allr["sec"].isin(cash_secs), "b0"), S(allr["sec"].isin(cash_secs), "b1")
+    recv0, recv1 = S(allr["sec"] == "recv", "b0"), S(allr["sec"] == "recv", "b1")
+    sta0, sta1 = side(stc, 1)
+    vat0, vat1 = S(allr["sec"] == "vat", "b0"), S(allr["sec"] == "vat", "b1")
+    inv0, inv1 = S(allr["sec"] == "inv", "b0"), S(allr["sec"] == "inv", "b1")
+    fx0, fx1 = S(allr["sec"] == "fixed", "b0"), S(allr["sec"] == "fixed", "b1")
+    oth0, oth1 = S(allr["sec"] == "other", "b0"), S(allr["sec"] == "other", "b1")
+    A0 = cash0 + recv0 + sta0 + max(vat0, 0) + inv0 + fx0 + oth0
+    A1 = cash1 + recv1 + sta1 + max(vat1, 0) + inv1 + fx1 + oth1
+    add(0, "", "АКТИВЫ", A0, A1, "band")
+    add(1, "", "Денежные средства", cash0, cash1, "grp")
+    for nm in [n for _, n in CASH_LINES] + ["Прочие денежные средства"]:
+        m = allr["sec"] == "cash:" + nm
+        if not m.any():
+            continue
+        add(2, "", nm, S(m, "b0"), S(m, "b1"), "sub")
+        for cd, g in allr[m].groupby("code"):
+            if abs(g["b0"].sum()) >= TOL or abs(g["b1"].sum()) >= TOL:
+                add(3, cd, acc_name(cd), g["b0"].sum(), g["b1"].sum())
+    add(1, "", "Дебиторская задолженность и авансы выданные", recv0 + sta0, recv1 + sta1, "grp")
+    for cd, g in allr[allr["sec"] == "recv"].groupby("code"):
+        add(2, cd, acc_name(cd), g["b0"].sum(), g["b1"].sum())
+    for gcode, g in stc.groupby("grp"):
+        v0, v1 = side(g, 1)
+        if v0 >= TOL or v1 >= TOL:
+            add(2, gcode + "…", "Расчёты: " + ST_GROUPS.get(gcode, gcode), v0, v1)
+    if vat0 > 0 or vat1 > 0:
+        add(1, "73…", "НДС к возмещению (расчёты по НДС, дебет)", max(vat0, 0), max(vat1, 0), "grp")
+    add(1, "", "Запасы", inv0, inv1, "grp")
+    m = (allr["sec"] == "inv") & (allr["src"] == "учёт")
+    add(2, "", "закуплено и прочее (счета 13…)", S(m, "b0"), S(m, "b1"))
+    m = (allr["sec"] == "inv") & (allr["src"] == "списание себестоимости")
+    add(2, "", "минус списано в себестоимость (510000)", S(m, "b0"), S(m, "b1"))
+    add(1, "", "Внеоборотные активы", fx0, fx1, "grp")
+    for cd, g in allr[allr["sec"] == "fixed"].groupby("code"):
+        add(2, cd, acc_name(cd), g["b0"].sum(), g["b1"].sum())
+    if abs(oth0) >= TOL or abs(oth1) >= TOL:
+        add(1, "", "Прочие счета", oth0, oth1, "grp")
 
     # ---- ПАССИВЫ
-    lia = plain[plain["kind"] == "2"]
-    cap = plain[plain["kind"] == "3"]
-    st_l = st[(st["l_b0"] > TOL) | (st["l_b1"] > TOL)]
-    l0 = -lia["b0"].sum() + st["l_b0"].sum()
-    l1 = -lia["b1"].sum() + st["l_b1"].sum()
-    c0 = -cap["b0"].sum() + res_prev
-    c1 = -cap["b1"].sum() + res_all
-    add(0, "", "ПАССИВЫ", l0 + c0, l1 + c1, "band")
-    add(1, "", "Обязательства", l0, l1, "grp")
-    for r in lia.itertuples(index=False):
-        if abs(r.b0) >= TOL or abs(r.b1) >= TOL:
-            add(2, r.code, acc_name(r.code), -r.b0, -r.b1)
-    add(2, "7…", "Расчёты — кредитовые остатки: долги, авансы полученные",
-        st["l_b0"].sum(), st["l_b1"].sum(), "sub")
-    for g, gdf in st_l.groupby("grp"):
-        add(3, g, grp_name(g), gdf["l_b0"].sum(), gdf["l_b1"].sum())
-    add(1, "", "Капитал", c0, c1, "grp")
-    for r in cap.itertuples(index=False):
-        if abs(r.b0) >= TOL or abs(r.b1) >= TOL:
-            add(2, r.code, acc_name(r.code), -r.b0, -r.b1)
-    add(2, "", f"Финансовый результат прошлых лет (P&L до {d0:%d.%m.%Y})",
-        res_prev, res_prev)
-    add(2, "", f"Финансовый результат {report_date.year} года", 0.0, res_all - res_prev)
-
-    # ---- контроль
-    add(0, "", "КОНТРОЛЬ: активы − пассивы (должно быть 0)",
-        ast0 - (l0 + c0), ast1 - (l1 + c1), "check")
+    stl0, stl1 = side(stc, -1)
+    loans = stc[stc["grp"] == "77"]
+    ln0, ln1 = side(loans, -1)
+    lia0, lia1 = -S(allr["sec"] == "liab", "b0"), -S(allr["sec"] == "liab", "b1")
+    vl0, vl1 = max(-vat0, 0), max(-vat1, 0)
+    L0, L1 = stl0 + lia0 + vl0, stl1 + lia1 + vl1
+    cap0, cap1 = -S(allr["sec"] == "cap", "b0"), -S(allr["sec"] == "cap", "b1")
+    pl0, pl1 = -S(allr["sec"] == "pl", "b0"), -S(allr["sec"] == "pl", "b1")
+    E0, E1 = cap0 + pl0, cap1 + pl1
+    add(0, "", "ПАССИВЫ", L0 + E0, L1 + E1, "band")
+    add(1, "", "Обязательства", L0, L1, "grp")
+    add(2, "77…", "Кредиты и займы полученные (тело и проценты)", ln0, ln1, "sub")
+    oth_l = stc[stc["grp"] != "77"]
+    o0, o1 = side(oth_l, -1)
+    add(2, "", "Кредиторская задолженность и авансы полученные", o0, o1, "sub")
+    for gcode, g in oth_l.groupby("grp"):
+        v0, v1 = side(g, -1)
+        if v0 >= TOL or v1 >= TOL:
+            add(3, gcode + "…", "Расчёты: " + ST_GROUPS.get(gcode, gcode), v0, v1)
+    if vl0 or vl1:
+        add(2, "73…", "НДС к уплате (расчёты по НДС, кредит)", vl0, vl1, "sub")
+    if abs(lia0) >= TOL or abs(lia1) >= TOL:
+        add(2, "2…", "Прочие обязательства (счета 2…)", lia0, lia1, "sub")
+    add(1, "", "Капитал", E0, E1, "grp")
+    for cd, g in allr[allr["sec"] == "cap"].groupby("code"):
+        add(2, cd, acc_name(cd), -g["b0"].sum(), -g["b1"].sum())
+    add(2, "", f"Финансовый результат прошлых лет (до {d0:%d.%m.%Y})", pl0, pl0)
+    add(2, "", f"Финансовый результат {report_date.year} года", 0.0, pl1 - pl0)
+    add(0, "", "КОНТРОЛЬ: активы − пассивы (должно быть 0)", A0 - L0 - E0, A1 - L1 - E1, "check")
 
     bal = pd.DataFrame(rows, columns=["level", "code", "name", "b0", "b1", "kind"])
     bal["chg"] = bal["b1"] - bal["b0"]
 
-    # где небаланс: сумма dt − cr по разделам учёта (без забалансовых)
-    ctl = fact.groupby("chapter", as_index=False)[["b0", "b1"]].sum()
+    # контроль: проводки без договора (у них пара не достраивается)
+    noc = allr[allr["cid"].isna()]
+    ctl = noc.groupby(["chapter", "code"], as_index=False)[["b0", "b1"]].sum()
     ctl = ctl[(ctl["b0"].abs() >= TOL) | (ctl["b1"].abs() >= TOL)]
-    ctl = ctl.sort_values("b1", key=lambda s: -s.abs())
-    ctl_acc = (fact.groupby(["chapter", "code"], as_index=False)[["b0", "b1"]].sum())
-    ctl_acc = ctl_acc[ctl_acc["chapter"].isin(ctl["chapter"])
-                      & ((ctl_acc["b1"].abs() >= TOL) | (ctl_acc["b0"].abs() >= TOL))]
-    ctl_acc["acc"] = ctl_acc["code"].map(acc_name)
-    ctl_acc = ctl_acc.sort_values(["chapter", "code"])
+    ctl["acc"] = ctl["code"].map(acc_name)
+    ctl = ctl.sort_values(["chapter", "code"])
 
-    # расчёты по договорам
-    st["acc"] = st["code"].map(acc_name)
-    st["side"] = st["b1"].map(lambda v: "дебет: нам должны / аванс выдан" if v > TOL
-                              else "кредит: мы должны / аванс получен" if v < -TOL else "—")
-    stl = st[(st["b0"].abs() >= TOL) | (st["b1"].abs() >= TOL)].sort_values(
-        ["acc", "cp", "contract"], key=lambda x: x.astype(str).str.upper())
+    stc["side"] = stc["b1"].map(lambda v: "актив: нам должны / аванс выдан" if v > TOL
+                                else "пассив: мы должны / аванс получен" if v < -TOL else "—")
+    stc["acc"] = stc["code"].map(acc_name)
+    stl = stc[(stc["b0"].abs() >= TOL) | (stc["b1"].abs() >= TOL)].sort_values(
+        ["grp_name", "cp", "contract"], key=lambda x: x.astype(str).str.upper())
 
-    accs = (fact.groupby("code", as_index=False)[["b0", "b1"]].sum())
+    accs = allr.groupby(["code", "src"], as_index=False)[["b0", "b1"]].sum()
     accs = accs[(accs["b0"].abs() >= TOL) | (accs["b1"].abs() >= TOL)]
     accs["acc"] = accs["code"].map(acc_name)
-    accs = accs.sort_values("code")
-    return {"bal": bal, "ctl": ctl, "ctl_acc": ctl_acc, "st": stl, "accs": accs, "d0": d0}
+    accs = accs.sort_values(["code", "src"])
+    return {"bal": bal, "ctl": ctl, "st": stl, "accs": accs, "d0": d0,
+            "dropped": dropped}
 
 
 # ---------------------------------------------------------------- Excel
@@ -178,37 +244,34 @@ def to_excel(res: dict, report_date: date) -> bytes:
                     num_format=mp.FMT_MONEY),
         "grp": F(bold=True, bg_color="#E8F0EC", **line),
         "grp_m": F(bold=True, bg_color="#E8F0EC", **line, num_format=mp.FMT_MONEY),
+        "sub_t": F(bold=True, **line), "sub_m": F(bold=True, **line, num_format=mp.FMT_MONEY),
         "check": F(bold=True, bg_color="#FFF3C4", top=1, bottom=1),
         "check_m": F(bold=True, bg_color="#FFF3C4", top=1, bottom=1, num_format=mp.FMT_MONEY),
         "lbl": F(bold=True, font_color="#" + mp.NAVY_3, **line),
     }
-    sub = (f"Остатки по счетам учёта (gl.fact) · сформировано "
+    sub = ("По остаткам учёта (gl.fact), собрано по участкам · сформировано "
            + pd.Timestamp.now().strftime("%d.%m.%Y %H:%M"))
+    m = lambda v: 0.0 if abs(float(v or 0)) < 0.5 else float(v)
 
-    def m(v):
-        v = float(v or 0)
-        return 0.0 if abs(v) < 0.5 else v
-
-    # Баланс
     ws = wb.add_worksheet("Баланс")
-    ws.set_column(0, 0, 10)
-    ws.set_column(1, 1, 60)
-    ws.set_column(2, 4, 16)
+    ws.set_column(0, 0, 9)
+    ws.set_column(1, 1, 62)
+    ws.set_column(2, 4, 17)
     ws.write(0, 0, "Баланс (проверка)", fmt["title"])
     ws.write(1, 0, sub, fmt["sub"])
     for j, h in enumerate(("КОД", "СТАТЬЯ", h0.upper(), h1.upper(), "ИЗМЕНЕНИЕ, ₽")):
         ws.write(3, j, h, fmt["hdr"])
     ws.set_row(3, 30)
+    style = {"band": ("band", "band_m"), "grp": ("grp", "grp_m"), "sub": ("sub_t", "sub_m"),
+             "check": ("check", "check_m")}
     for i, r in enumerate(res["bal"].itertuples(index=False), start=4):
-        k = r.kind
-        tf, mf = {"band": ("band", "band_m"), "grp": ("grp", "grp_m"),
-                  "check": ("check", "check_m")}.get(k, ("text", "money"))
-        ws.write(i, 0, r.code, fmt[tf] if k != "row" else fmt["code"])
+        tf, mf = style.get(r.kind, ("text", "money"))
+        ws.write(i, 0, r.code, fmt["code"] if r.kind == "row" else fmt[tf])
         ws.write(i, 1, ("    " * max(r.level - 1, 0)) + r.name, fmt[tf])
         for j, v in ((2, r.b0), (3, r.b1), (4, r.chg)):
             ws.write_number(i, j, m(v), fmt[mf])
-        if k == "row" and r.level >= 2:
-            ws.set_row(i, None, None, {"level": 1})
+        if r.kind == "row" and r.level >= 3:
+            ws.set_row(i, None, None, {"level": 1, "hidden": True})
     ws.freeze_panes(4, 2)
 
     def table(name, title, cols, df):
@@ -230,40 +293,41 @@ def to_excel(res: dict, report_date: date) -> bytes:
         ws.autofilter(3, 0, max(3 + len(df), 3), len(cols) - 1)
         ws.freeze_panes(4, 0)
 
-    table("Расчёты по договорам", "Расчёты (счета 7…) по договорам",
-          [("acc", "Счёт", "wrap", 30), ("cp", "Контрагент", "wrap", 28),
-           ("contract", "Договор", "wrap", 32), ("cid", "ID", "text", 7),
-           ("b0", h0, "money", 15), ("b1", h1, "money", 15),
+    table("Расчёты по договорам", "Расчёты по договорам (с учётом оплат)",
+          [("grp_name", "Участок", "wrap", 22), ("cp", "Контрагент", "wrap", 28),
+           ("contract", "Договор", "wrap", 34), ("cid", "ID", "text", 7),
+           ("b0", h0 + " (+ нам должны, − мы должны)", "money", 16), ("b1", h1, "money", 16),
            ("side", "Сторона на отчётную дату", "wrap", 26)], res["st"])
-    table("Счета", "Остатки по всем счетам (дебет +, кредит −)",
-          [("acc", "Счёт", "wrap", 44), ("b0", h0, "money", 16), ("b1", h1, "money", 16)],
-          res["accs"])
-    table("Контроль", "Где небаланс: сумма дебет − кредит по разделам учёта",
-          [("chapter", "Раздел учёта (chapter)", "wrap", 30), ("b0", h0, "money", 16),
-           ("b1", h1, "money", 16)], res["ctl"])
-    table("Контроль по счетам", "Разделы с небалансом — по счетам",
-          [("chapter", "Раздел учёта", "wrap", 26), ("acc", "Счёт", "wrap", 40),
-           ("b0", h0, "money", 16), ("b1", h1, "money", 16)], res["ctl_acc"])
+    table("Контроль", "Проводки без договора — пара к ним не достраивается; их сумма = небаланс",
+          [("chapter", "Раздел учёта", "wrap", 24), ("acc", "Счёт", "wrap", 40),
+           ("b0", h0, "money", 16), ("b1", h1, "money", 16)], res["ctl"])
+    table("Счета", "Остатки по счетам после сборки (дебет +, кредит −)",
+          [("acc", "Счёт", "wrap", 44), ("src", "Источник", "wrap", 28),
+           ("b0", h0, "money", 16), ("b1", h1, "money", 16)], res["accs"])
 
     ws = wb.add_worksheet("Как читать")
-    ws.set_column(0, 0, 20)
+    ws.set_column(0, 0, 22)
     ws.set_column(1, 1, 110)
     ws.write(0, 0, "Как читать", fmt["title"])
+    dr = res["dropped"]
     notes = [
-        ("Что это", "Баланс по остаткам счетов учёта на дату: на конец прошлого года и на "
-                    "отчётную дату. Это проверочная версия — сначала выверка, потом лист в манпак."),
-        ("Счета 1…", "Активы: деньги, депозиты, баланс WB, запасы, внеоборотные."),
-        ("Счета 7…", "Расчёты: остаток считается по каждому договору. Дебетовый (нам должны, "
-                     "аванс выдан) — в активы, кредитовый (мы должны, аванс получен) — в пассивы. "
-                     "Подробно — лист «Расчёты по договорам»."),
-        ("Счета 2…, 3…", "Обязательства и капитал."),
-        ("Счета 4–6", "Доходы и расходы: их накопленный итог — финансовый результат в капитале "
-                      "(прошлых лет и текущего года)."),
-        ("Контроль", "Активы минус пассивы. При полной двойной записи — 0. Не ноль — есть "
-                     "проводки без пары (например, движение денег без начисления). Лист "
-                     "«Контроль» показывает, в каких разделах учёта сумма дебет − кредит не "
-                     "ноль, «Контроль по счетам» — на каких счетах."),
-        ("Забалансовые", "Счета 8… не берутся."),
+        ("Что это", "Баланс на конец прошлого года и на отчётную дату по остаткам учёта. "
+                    "Проверочная версия: сначала выверка, потом лист в манпак."),
+        ("Деньги", "Банковские счета 111…, касса, депозиты 113…, баланс WB 114001, деньги в пути."),
+        ("Расчёты", "По каждому договору: проводки по счёту расчётов плюс оплаты по договору — "
+                    "как в «Списании договоров». Положительный остаток — в активы (нам должны, "
+                    "аванс выдан), отрицательный — в пассивы (мы должны, аванс получен). "
+                    "Кредиты и займы — отдельной строкой. Подробно — «Расчёты по договорам»."),
+        ("Баланс WB", "Берётся 114001. Расчёты с WB 780012 (раздел ST_WB) не берутся — они "
+                      f"повторяют баланс WB ({m(dr['b1']):,.0f} ₽ на отчётную дату)."
+                      .replace(",", " ")),
+        ("Запасы", "Закупки на 130… минус списанная себестоимость (510000): в учёте списание "
+                   "себестоимости с запасов не проводится. Сверить с остатками на складах."),
+        ("НДС", "Расчёты 73…: дебет — к возмещению (актив), кредит — к уплате (пассив)."),
+        ("Капитал", "Взносы (3…) плюс накопленный результат P&L (счета 4–6): прошлых лет и "
+                    "текущего года."),
+        ("Контроль", "Активы − пассивы. Не ноль — проводки без договора: у них нет пары. "
+                     "Где именно — лист «Контроль»."),
     ]
     for i, (a, b) in enumerate(notes, start=2):
         ws.write(i, 0, a, fmt["lbl"])
