@@ -752,6 +752,10 @@ class ContractsAdmin(admin.ModelAdmin):
     )
 
     def get_queryset(self, request):
+        # автодополнение в других формах: без аннотаций и prefetch — иначе поиск медленный
+        if request.path.endswith("/autocomplete/"):
+            return self.model._default_manager.select_related("title", "cp")
+
         qs = super().get_queryset(request)
 
         qs = (

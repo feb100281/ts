@@ -535,6 +535,9 @@ class AccountAdmin(DraggableMPTTAdmin):
         return initial
 
     def get_queryset(self, request):
+        # автодополнение в других формах: без дерева и аннотаций
+        if request.path.endswith("/autocomplete/"):
+            return self.model._default_manager.order_by("code")
         qs = super().get_queryset(request)
         return qs.annotate(_children_count=Count("children"))
 
@@ -744,6 +747,9 @@ class CashFlowItemAdmin(DraggableMPTTAdmin):
         return initial
 
     def get_queryset(self, request):
+        # автодополнение в других формах: без дерева и аннотаций
+        if request.path.endswith("/autocomplete/"):
+            return self.model._default_manager.order_by("code")
         qs = super().get_queryset(request)
         return qs.annotate(_children_count=Count("children"))
 

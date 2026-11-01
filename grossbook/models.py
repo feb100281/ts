@@ -304,18 +304,32 @@ class GlAdjustment(models.Model):
     def __str__(self):
         return f"{self.date:%d.%m.%Y} · Дт {self.dt_acc.code} Кт {self.cr_acc.code} · {self.amount:,.2f}"
 
+    @classmethod
+    def is_pl(cls, acc) -> bool:
+        return bool(acc) and acc.parent_id in cls.PL_PARENTS
+
     def clean(self):
         errors = {}
         if self.amount is not None and self.amount <= 0:
             errors["amount"] = "Сумма должна быть больше нуля."
+        for side in ("dt", "cr"):
+            acc = getattr(self, f"{side}_acc") if getattr(self, f"{side}_acc_id") else None
+            ctr = getattr(self, f"{side}_contract") if getattr(self, f"{side}_contract_id") else None
+            pl = self.is_pl(acc)
+            # статья не указана — берём из карточки договора (P&L или BS)
+            if acc and ctr and not getattr(self, f"{side}_subconto_id"):
+                setattr(self, f"{side}_subconto_id",
+                        ctr.subconto_pl_id if pl else ctr.subconto_bs_id)
+            sub = getattr(self, f"{side}_subconto") if getattr(self, f"{side}_subconto_id") else None
+            if pl and not sub:
+                errors[f"{side}_subconto"] = ("Для счёта P&L укажите статью P&L (5…), "
+                                              "в договоре она не задана.")
+            elif pl and not str(sub.code).startswith("5"):
+                errors[f"{side}_subconto"] = (f"«{sub}» — статья Cash Flow. Для счёта P&L нужна "
+                                              "статья P&L (5…), например 540301.")
         if (self.dt_acc_id and self.dt_acc_id == self.cr_acc_id
                 and self.dt_contract_id == self.cr_contract_id
                 and self.dt_subconto_id == self.cr_subconto_id):
             errors["cr_acc"] = "Дт и Кт совпадают — проводка ничего не меняет."
-        # счёт P&L без статьи не попадёт в строку отчёта
-        for side in ("dt", "cr"):
-            acc = getattr(self, f"{side}_acc", None) if getattr(self, f"{side}_acc_id") else None
-            if acc and acc.parent_id in self.PL_PARENTS and not getattr(self, f"{side}_subconto_id"):
-                errors[f"{side}_subconto"] = "Для счёта P&L укажите статью."
         if errors:
             raise ValidationError(errors)

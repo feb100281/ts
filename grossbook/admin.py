@@ -894,29 +894,62 @@ class VatAdjustmentAdmin(admin.ModelAdmin):
 
 @admin.register(GlAdjustment)
 class GlAdjustmentAdmin(admin.ModelAdmin):
-    """Корректировки GL: сразу после сохранения/удаления перезаписывается глава ADJ_GL."""
+    """Корректировки GL: после сохранения/удаления сразу перезаписывается глава ADJ_GL."""
 
-    list_display = ("id", "date", "amount", "dt_col", "cr_col", "comment")
-    list_display_links = ("id", "date")
+    list_display = ("date_col", "amount_col", "dt_col", "cr_col", "comment_col")
+    list_display_links = ("date_col",)
+    list_select_related = ("dt_acc", "cr_acc", "dt_subconto", "cr_subconto",
+                           "dt_contract__cp", "cr_contract__cp", "dt_contract__title",
+                           "cr_contract__title")
     date_hierarchy = "date"
-    search_fields = ("comment", "dt_acc__code", "cr_acc__code",
-                     "dt_contract__number", "cr_contract__number")
-    list_filter = ("owner",)
+    ordering = ("-date", "-id")
+    list_per_page = 50
+    search_fields = ("comment", "dt_acc__code", "cr_acc__code", "dt_contract__cp__name",
+                     "cr_contract__cp__name", "dt_contract__number", "cr_contract__number")
+    search_help_text = "Поиск: описание, код счёта, контрагент, номер договора"
     autocomplete_fields = ("owner", "dt_acc", "dt_contract", "dt_subconto",
                            "cr_acc", "cr_contract", "cr_subconto")
     fieldsets = (
-        (None, {"fields": ("date", "owner", "amount", "comment")}),
+        (None, {
+            "fields": (("date", "amount"), "owner", "comment"),
+            "description": "Одна запись — одна проводка: Дт и Кт на одну сумму. "
+                           "Статью можно не указывать — возьмётся из договора "
+                           "(для счёта P&L — статья P&L, для баланса — статья BS).",
+        }),
         ("Дебет", {"fields": ("dt_acc", "dt_contract", "dt_subconto")}),
         ("Кредит", {"fields": ("cr_acc", "cr_contract", "cr_subconto")}),
     )
 
+    @staticmethod
+    def _side(acc, ctr, sub):
+        cp = getattr(getattr(ctr, "cp", None), "name", "") if ctr else ""
+        return format_html(
+            '<div style="font-weight:600;color:#111827;">{}</div>'
+            '<div style="font-size:12px;color:#475569;">{}</div>'
+            '<div style="font-size:12px;color:#94a3b8;">{}</div>',
+            acc or "—", sub or "", f"{cp} · id {ctr.id}" if ctr else "без договора")
+
+    @admin.display(description="Дата", ordering="date")
+    def date_col(self, obj):
+        return obj.date.strftime("%d.%m.%Y")
+
+    @admin.display(description="Сумма, ₽", ordering="amount")
+    def amount_col(self, obj):
+        return format_html('<div style="text-align:right;font-weight:700;white-space:nowrap;">'
+                           '{}</div>', f"{obj.amount:,.2f}".replace(",", " "))
+
     @admin.display(description="Дт")
     def dt_col(self, obj):
-        return " · ".join(str(x) for x in (obj.dt_acc, obj.dt_contract, obj.dt_subconto) if x)
+        return self._side(obj.dt_acc, obj.dt_contract, obj.dt_subconto)
 
     @admin.display(description="Кт")
     def cr_col(self, obj):
-        return " · ".join(str(x) for x in (obj.cr_acc, obj.cr_contract, obj.cr_subconto) if x)
+        return self._side(obj.cr_acc, obj.cr_contract, obj.cr_subconto)
+
+    @admin.display(description="Описание")
+    def comment_col(self, obj):
+        return format_html('<div style="max-width:280px;font-size:12px;color:#475569;">{}</div>',
+                           obj.comment)
 
     def _sync(self, request):
         from django.db import connection, transaction
