@@ -54,7 +54,7 @@
     <tbody>
     {% for r in gla.rows %}
       <tr class="op first">
-        <td rowspan="2"><a class="no" href="{{ r.url }}">#{{ r.id }}</a></td>
+        <td rowspan="2"><a class="no" href="{{ r.url }}">#{{ r.id }}</a><div><a href="{{ r.copy }}" style="font-size:11px;">копировать</a></div></td>
         <td rowspan="2" style="white-space:nowrap;">{{ r.date }}</td>
         <td class="acc">{{ r.dt_acc }}</td>
         <td class="sub">{{ r.dt_sub|default:"—" }}</td>

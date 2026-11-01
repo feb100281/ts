@@ -898,6 +898,22 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
 
     change_list_template = "admin/grossbook/gladjustment/change_list.html"
     actions = None
+    save_as = True                               # «Сохранить как новый» в карточке
+    COPY_FIELDS = ("date", "owner", "comment", "dt_acc", "dt_contract", "dt_subconto",
+                   "cr_acc", "cr_contract", "cr_subconto", "cf", "cf_from", "cf_to", "cf_acc")
+
+    def copy_url(self, o) -> str:
+        """Ссылка на новую запись, заполненную как o (без суммы)."""
+        params = {}
+        for f in self.COPY_FIELDS:
+            v = getattr(o, f + "_id", None) if f not in ("date", "comment", "cf") else getattr(o, f)
+            if f == "date":
+                v = o.date.strftime("%d.%m.%Y")
+            if f == "cf":
+                v = "1" if o.cf else ""
+            if v not in (None, ""):
+                params[f] = v
+        return reverse("admin:grossbook_gladjustment_add") + "?" + urlencode(params)
     list_display = ("id",)
     list_per_page = 100
     ordering = ("-date", "-id")
@@ -944,6 +960,7 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
                 "dt_acc": o.dt_acc, "dt_sub": o.dt_subconto or "", "dt_ctr": ctr(o.dt_contract),
                 "cr_acc": o.cr_acc, "cr_sub": o.cr_subconto or "", "cr_ctr": ctr(o.cr_contract),
                 "cf": (f"Cash Flow: {o.cf_from} → {o.cf_to}" if o.cf else ""),
+                "copy": self.copy_url(o),
                 "comment": o.comment,
             })
         dates = [o.date for o in cl.result_list]
