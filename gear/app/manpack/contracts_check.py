@@ -38,6 +38,8 @@ def is_marketplace(name) -> bool:
 SKIP_ITEMS = (("4", "Переводы между счетами и конвертация"), ("125", "Налоги и сборы"))
 CASH_PARENT, VAT_PARENT = 3, 31
 MANUAL_PREFIX = "MANUAL"                 # глава ручных проводок в gl.fact
+ADJ_CHAPTER = "ADJ_GL"                   # корректировки GL (grossbook.GlAdjustment)
+PL_PARENTS = (25, 26, 27)                # группы счетов P&L, как в pl_for_csv
 GOODS_SUB, GOODS_BS = "1211", "130"     # подстатья «Закупка товара», счёт BS товара
 
 FACT_SQL = """
@@ -261,6 +263,16 @@ def build(report_date: date, con) -> dict:
 
     fact["k"] = [kind(c, a) for c, a in zip(fact["cid"], fact["acc_id"])]
     fact["v"] = fact["dt"] - fact["cr"]
+    # корректировки GL: счёт может быть не из карточки договора — относим по типу счёта
+    adj = fact["chapter"] == ADJ_CHAPTER
+    other = adj & (fact["k"] == "other")
+    is_pl = fact["acc_id"].map(coa["parent_id"]).isin(PL_PARENTS)
+    fact.loc[other & is_pl, "k"] = "pl"
+    fact.loc[other & ~is_pl, "k"] = "bs"
+    # корректировка прямо на счёте расчётов (ST) — закрывает расчёты, как зачёт
+    adj_st = fact[adj & (fact["k"] == "st")]
+    fact = pd.concat([fact, adj_st.assign(k="man", v=-adj_st["v"], dt=adj_st["cr"],
+                                          cr=adj_st["dt"])], ignore_index=True)
     # ручная проводка (зачёт) закрывает расчёты как оплата без денег: добавляем зеркальную строку
     man = fact[fact["chapter"].str.startswith(MANUAL_PREFIX) & (fact["k"] != "cash")]
     fact = pd.concat([fact, man.assign(k="man", v=-man["v"], dt=man["cr"], cr=man["dt"])],

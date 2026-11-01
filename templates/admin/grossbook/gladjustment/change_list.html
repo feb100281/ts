@@ -1,0 +1,83 @@
+{% extends "admin/change_list.html" %}
+{% load admin_urls %}
+
+{% block title %}Корректировки GL{% endblock %}
+{% block content_title %}Корректировки GL{% endblock %}
+{% block date_hierarchy %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .gla-kpi { display:flex; gap:12px; flex-wrap:wrap; margin:0 0 16px; }
+  .gla-kpi > div { background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:10px 16px; min-width:160px; }
+  .gla-kpi .l { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; }
+  .gla-kpi .v { font-size:20px; font-weight:700; color:#111827; font-variant-numeric:tabular-nums; }
+  .gla-months { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px; }
+  .gla-months a { font-size:12px; padding:4px 10px; border:1px solid #d1d5db; border-radius:14px; color:#374151; background:#fff; }
+  .gla-months a.on { background:#1f2937; color:#fff; border-color:#1f2937; }
+  table.gla { width:100%; border-collapse:collapse; background:#fff; font-size:13px; }
+  table.gla th { background:#f3f4f6; color:#374151; font-weight:600; text-align:left; padding:8px 10px; border-bottom:1px solid #d1d5db; white-space:nowrap; }
+  table.gla td { padding:6px 10px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
+  table.gla td.num, table.gla th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  table.gla tr.first td { border-top:2px solid #e5e7eb; }
+  table.gla tr.op:hover td { background:#f8fafc; }
+  table.gla .acc { font-weight:600; color:#111827; }
+  table.gla .sub { color:#475569; }
+  table.gla .cp { color:#64748b; font-size:12px; }
+  table.gla .muted { color:#9ca3af; }
+  table.gla tfoot td { font-weight:700; background:#f9fafb; border-top:2px solid #d1d5db; }
+  table.gla a.no { font-weight:700; }
+</style>
+{% endblock %}
+
+{% block result_list %}
+  <div class="gla-kpi">
+    <div><div class="l">Проводок</div><div class="v">{{ gla.count }}</div></div>
+    <div><div class="l">Сумма</div><div class="v">{{ gla.total }} ₽</div></div>
+    <div><div class="l">Период</div><div class="v" style="font-size:16px;">{{ gla.period }}</div></div>
+  </div>
+
+  {% if gla.months %}
+  <div class="gla-months">
+    <a href="?" class="{% if not gla.month %}on{% endif %}">Все</a>
+    {% for m in gla.months %}<a href="?month={{ m.key }}" class="{% if m.key == gla.month %}on{% endif %}">{{ m.label }}</a>{% endfor %}
+  </div>
+  {% endif %}
+
+  <table class="gla">
+    <thead>
+      <tr>
+        <th>№</th><th>Дата</th><th>Счёт</th><th>Статья</th><th>Договор</th>
+        <th class="num">Дебет, ₽</th><th class="num">Кредит, ₽</th><th>Описание</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in gla.rows %}
+      <tr class="op first">
+        <td rowspan="2"><a class="no" href="{{ r.url }}">#{{ r.id }}</a></td>
+        <td rowspan="2" style="white-space:nowrap;">{{ r.date }}</td>
+        <td class="acc">{{ r.dt_acc }}</td>
+        <td class="sub">{{ r.dt_sub|default:"—" }}</td>
+        <td class="cp">{{ r.dt_ctr|default:"без договора" }}</td>
+        <td class="num">{{ r.amount }}</td>
+        <td class="num muted"></td>
+        <td rowspan="2" class="sub">{{ r.comment }}</td>
+      </tr>
+      <tr class="op">
+        <td class="acc" style="padding-left:28px;">{{ r.cr_acc }}</td>
+        <td class="sub">{{ r.cr_sub|default:"—" }}</td>
+        <td class="cp">{{ r.cr_ctr|default:"без договора" }}</td>
+        <td class="num muted"></td>
+        <td class="num">{{ r.amount }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="muted" style="padding:24px;text-align:center;">Корректировок нет</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if gla.rows %}
+    <tfoot>
+      <tr><td colspan="5">Итого</td><td class="num">{{ gla.total }}</td><td class="num">{{ gla.total }}</td><td></td></tr>
+    </tfoot>
+    {% endif %}
+  </table>
+{% endblock %}

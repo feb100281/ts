@@ -478,7 +478,7 @@ JAZZMIN_SETTINGS = {
         "services",        # Служебные — всегда в конце
     ],
 
-    "changeform_format_overrides": {"auth.user": "vertical_tabs",},
+    "changeform_format_overrides": {"auth.user": "vertical_tabs", "grossbook.gladjustment": "single"},
 
 }
 

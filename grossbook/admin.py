@@ -896,60 +896,72 @@ class VatAdjustmentAdmin(admin.ModelAdmin):
 class GlAdjustmentAdmin(admin.ModelAdmin):
     """Корректировки GL: после сохранения/удаления сразу перезаписывается глава ADJ_GL."""
 
-    list_display = ("date_col", "amount_col", "dt_col", "cr_col", "comment_col")
-    list_display_links = ("date_col",)
-    list_select_related = ("dt_acc", "cr_acc", "dt_subconto", "cr_subconto",
-                           "dt_contract__cp", "cr_contract__cp", "dt_contract__title",
-                           "cr_contract__title")
-    date_hierarchy = "date"
+    change_list_template = "admin/grossbook/gladjustment/change_list.html"
+    change_form_template = "admin/grossbook/gladjustment/change_form.html"
+    actions = None
+    list_display = ("id",)
+    list_per_page = 100
     ordering = ("-date", "-id")
-    list_per_page = 50
     search_fields = ("comment", "dt_acc__code", "cr_acc__code", "dt_contract__cp__name",
                      "cr_contract__cp__name", "dt_contract__number", "cr_contract__number")
     search_help_text = "Поиск: описание, код счёта, контрагент, номер договора"
     autocomplete_fields = ("owner", "dt_acc", "dt_contract", "dt_subconto",
                            "cr_acc", "cr_contract", "cr_subconto")
-    fieldsets = (
-        (None, {
-            "fields": (("date", "amount"), "owner", "comment"),
-            "description": "Одна запись — одна проводка: Дт и Кт на одну сумму. "
-                           "Статью можно не указывать — возьмётся из договора "
-                           "(для счёта P&L — статья P&L, для баланса — статья BS).",
-        }),
-        ("Дебет", {"fields": ("dt_acc", "dt_contract", "dt_subconto")}),
-        ("Кредит", {"fields": ("cr_acc", "cr_contract", "cr_subconto")}),
-    )
+    fields = ("date", "amount", "owner", "comment", "dt_acc", "dt_contract", "dt_subconto",
+              "cr_acc", "cr_contract", "cr_subconto")
 
-    @staticmethod
-    def _side(acc, ctr, sub):
-        cp = getattr(getattr(ctr, "cp", None), "name", "") if ctr else ""
-        return format_html(
-            '<div style="font-weight:600;color:#111827;">{}</div>'
-            '<div style="font-size:12px;color:#475569;">{}</div>'
-            '<div style="font-size:12px;color:#94a3b8;">{}</div>',
-            acc or "—", sub or "", f"{cp} · id {ctr.id}" if ctr else "без договора")
+    MONTHS = ("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
-    @admin.display(description="Дата", ordering="date")
-    def date_col(self, obj):
-        return obj.date.strftime("%d.%m.%Y")
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "dt_acc", "cr_acc", "dt_subconto", "cr_subconto",
+            "dt_contract__cp", "cr_contract__cp", "dt_contract__title", "cr_contract__title")
 
-    @admin.display(description="Сумма, ₽", ordering="amount")
-    def amount_col(self, obj):
-        return format_html('<div style="text-align:right;font-weight:700;white-space:nowrap;">'
-                           '{}</div>', f"{obj.amount:,.2f}".replace(",", " "))
+    def changelist_view(self, request, extra_context=None):
+        # фильтр по месяцу (?month=YYYY-MM) — свой, не через list_filter
+        month = request.GET.get("month", "")
+        if month:
+            request.GET = request.GET.copy()
+            request.GET.pop("month")
+        request._gla_month = month
+        response = super().changelist_view(request, extra_context)
+        cl = getattr(response, "context_data", {}).get("cl") if hasattr(response, "context_data") else None
+        if cl is None:
+            return response
 
-    @admin.display(description="Дт")
-    def dt_col(self, obj):
-        return self._side(obj.dt_acc, obj.dt_contract, obj.dt_subconto)
+        rub = lambda v: f"{v:,.2f}".replace(",", " ")
+        ctr = lambda c: f"{c.cp.name if c.cp_id else ''} · {c.title} № {c.number or 'б/н'} · id {c.id}" if c else ""
+        rows, total = [], Decimal("0")
+        for o in cl.result_list:
+            total += o.amount
+            rows.append({
+                "id": o.id, "url": reverse("admin:grossbook_gladjustment_change", args=[o.id]),
+                "date": o.date.strftime("%d.%m.%Y"), "amount": rub(o.amount),
+                "dt_acc": o.dt_acc, "dt_sub": o.dt_subconto or "", "dt_ctr": ctr(o.dt_contract),
+                "cr_acc": o.cr_acc, "cr_sub": o.cr_subconto or "", "cr_ctr": ctr(o.cr_contract),
+                "comment": o.comment,
+            })
+        dates = [o.date for o in cl.result_list]
+        allm = sorted({(d.year, d.month) for d in GlAdjustment.objects.values_list("date", flat=True)},
+                      reverse=True)
+        response.context_data["gla"] = {
+            "rows": rows, "count": len(rows), "total": rub(total), "month": month,
+            "period": (f"{min(dates):%d.%m.%Y} — {max(dates):%d.%m.%Y}" if dates else "—"),
+            "months": [{"key": f"{y}-{m:02d}", "label": f"{self.MONTHS[m - 1]} {y}"} for y, m in allm],
+        }
+        return response
 
-    @admin.display(description="Кт")
-    def cr_col(self, obj):
-        return self._side(obj.cr_acc, obj.cr_contract, obj.cr_subconto)
-
-    @admin.display(description="Описание")
-    def comment_col(self, obj):
-        return format_html('<div style="max-width:280px;font-size:12px;color:#475569;">{}</div>',
-                           obj.comment)
+    def get_changelist_instance(self, request):
+        cl = super().get_changelist_instance(request)
+        month = getattr(request, "_gla_month", "")
+        if month:
+            try:
+                y, m = (int(x) for x in month.split("-"))
+                cl.queryset = cl.queryset.filter(date__year=y, date__month=m)
+                cl.get_results(request)
+            except ValueError:
+                pass
+        return cl
 
     def _sync(self, request):
         from django.db import connection, transaction
