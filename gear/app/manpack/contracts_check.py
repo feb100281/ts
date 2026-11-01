@@ -54,6 +54,12 @@ GROUP BY 1, 2, 3, 4, 5
 COA_SQL = """
 SELECT id, CAST(code AS VARCHAR) AS code, name, parent_id FROM pg.public.corporate_coa
 """
+ADJ_SQL = """
+SELECT date::DATE AS d, CAST(amount AS DOUBLE) AS amount,
+       CAST(dt_contract_id AS BIGINT) AS dt_cid, CAST(cr_contract_id AS BIGINT) AS cr_cid
+FROM pg.public.grossbook_gladjustment
+WHERE date <= ? AND amount <> 0
+"""
 CTR_SQL = """
 SELECT k.id AS cid,
        COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(k.number, 'б/н') || ' от '
@@ -271,10 +277,24 @@ def build(report_date: date, con) -> dict:
     is_pl = fact["acc_id"].map(coa["parent_id"]).isin(PL_PARENTS)
     fact.loc[other & is_pl, "k"] = "pl"
     fact.loc[other & ~is_pl, "k"] = "bs"
-    # корректировка прямо на счёте расчётов (ST) — закрывает расчёты, как зачёт
-    adj_st = fact[adj & (fact["k"] == "st")]
-    fact = pd.concat([fact, adj_st.assign(k="man", v=-adj_st["v"], dt=adj_st["cr"],
-                                          cr=adj_st["dt"])], ignore_index=True)
+    # корректировка, у которой вторая сторона — другой договор или без договора, закрывает
+    # расчёты по договору, как оплата без денег (удержание WB, зачёт между договорами).
+    # Обе стороны на одном договоре — перенос внутри договора, расчёты не меняет.
+    try:
+        ga = con.execute(ADJ_SQL, [report_date]).df()
+    except Exception:
+        ga = pd.DataFrame(columns=["d", "amount", "dt_cid", "cr_cid"])
+    ga = ga[ga["dt_cid"].fillna(-1) != ga["cr_cid"].fillna(-1)]
+    ga["me"] = pd.to_datetime(ga["d"]) + pd.offsets.MonthEnd(0)
+    mirror = []
+    for side, sign in (("dt_cid", -1.0), ("cr_cid", 1.0)):
+        g = ga[ga[side].notna()]
+        mirror.append(pd.DataFrame({
+            "cid": g[side].astype("int64"), "me": g["me"], "acc_id": None, "sub": None,
+            "chapter": ADJ_CHAPTER, "k": "man", "v": sign * g["amount"],
+            "dt": g["amount"].where(sign > 0, 0.0), "cr": g["amount"].where(sign < 0, 0.0)}))
+    fact = pd.concat([fact] + [x for x in mirror if len(x)], ignore_index=True)
+    fact["me"] = pd.to_datetime(fact["me"])
     # ручная проводка (зачёт) закрывает расчёты как оплата без денег: добавляем зеркальную строку
     man = fact[fact["chapter"].str.startswith(MANUAL_PREFIX) & (fact["k"] != "cash")]
     fact = pd.concat([fact, man.assign(k="man", v=-man["v"], dt=man["cr"], cr=man["dt"])],
