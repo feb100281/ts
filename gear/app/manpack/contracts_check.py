@@ -411,7 +411,9 @@ def build(report_date: date, con) -> dict:
         fn = str(r["fn"] or "").lower()
         # займ/кредит: тело остаётся на расчётах, при нулевой ставке списаний нет — это норма
         loan = "deposit" not in fn and any(x in fn for x in ("borrow", "loan", "займ"))
-        if money >= TOL_RUB and r["wo_turn"] < TOL_RUB and not loan:
+        # списаний ещё нет, но график покрывает остаток (аванс на будущие периоды) — норма
+        covered = abs(r["final"]) < max(TOL_RUB, 0.01 * money)
+        if money >= TOL_RUB and r["wo_turn"] < TOL_RUB and not loan and not covered:
             return "nowhere"
         if "deposit" in fn and r["bs"] <= -TOL_RUB:
             return "deposit"
