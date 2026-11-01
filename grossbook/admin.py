@@ -897,7 +897,6 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
     """Корректировки GL: после сохранения/удаления сразу перезаписывается глава ADJ_GL."""
 
     change_list_template = "admin/grossbook/gladjustment/change_list.html"
-    change_form_template = "admin/grossbook/gladjustment/change_form.html"
     actions = None
     list_display = ("id",)
     list_per_page = 100
@@ -907,8 +906,11 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
     search_help_text = "Поиск: описание, код счёта, контрагент, номер договора"
     autocomplete_fields = ("owner", "dt_acc", "dt_contract", "dt_subconto",
                            "cr_acc", "cr_contract", "cr_subconto")
-    fields = ("date", "amount", "owner", "comment", "dt_acc", "dt_contract", "dt_subconto",
-              "cr_acc", "cr_contract", "cr_subconto")
+    fieldsets = (
+        ("Операция", {"fields": ("date", "amount", "owner", "comment")}),
+        ("Дебет", {"fields": ("dt_acc", "dt_contract", "dt_subconto")}),
+        ("Кредит", {"fields": ("cr_acc", "cr_contract", "cr_subconto")}),
+    )
 
     MONTHS = ("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
