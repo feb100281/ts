@@ -424,7 +424,8 @@ def build(report_date: date, con) -> dict:
         if (pd.notna(r["plan_diff"]) and r["plan_how"] == "по графику условий"
                 and abs(r["plan_diff"]) >= max(TOL_RUB, 0.02 * abs(r["plan_date"]))):
             return "plan"
-        if r["out_sum"] >= TOL_RUB:
+        # платежи вне дат условий — замечание, только если с учётом графика остаётся несписанное
+        if r["out_sum"] >= TOL_RUB and abs(r["final"]) >= max(TOL_RUB, 0.01 * money):
             return "outside"
         if abs(r["bal"]) >= max(TOL_RUB, 0.01 * money):
             return "unwritten" if r["cash_based"] else "balance"
