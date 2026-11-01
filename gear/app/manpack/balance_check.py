@@ -172,7 +172,10 @@ def build(report_date: date, con) -> dict:
     st_c = st_c.merge(main_code, on=["grp", "cid"], how="left")
     st_c["code"] = st_c["cid"].map(info["st_code"]).where(
         lambda x: x.astype(str).str[:2] == st_c["grp"].str[:2]).fillna(st_c["code"])
-    st_c["side"] = st_c["b1"].map(lambda v: "a" if v > TOL else ("l" if v < -TOL else "z"))
+    # сторона — на каждую дату отдельно: плюс — актив, минус — пассив
+    pos = lambda df: df.assign(b0=df["b0"].clip(lower=0), b1=df["b1"].clip(lower=0))
+    neg = lambda df: df.assign(b0=(-df["b0"]).clip(lower=0), b1=(-df["b1"]).clip(lower=0))
+    nz = lambda df: df[(df["b0"].abs() >= TOL) | (df["b1"].abs() >= TOL)]
 
     # ---------------------------------------------------------------- запасы
     i0 = float(inv_gl["i0"].iloc[0] or 0) if len(inv_gl) else 0.0
@@ -185,7 +188,7 @@ def build(report_date: date, con) -> dict:
     upd[["b0", "b1"]] = upd[["b0", "b1"]].fillna(0.0).astype(float)
     pre = (paid_c.set_index("cid")[["b0", "b1"]]
            .sub(upd.set_index("cid")[["b0", "b1"]], fill_value=0).reset_index())
-    pre_a, pre_l = pre[pre["b1"] > TOL], pre[pre["b1"] < -TOL]
+    pre_a, pre_l = nz(pos(pre)), nz(neg(pre))
     u0, u1 = float(upd["b0"].sum()), float(upd["b1"].sum())
     adj0, adj1 = u0 - i0, u1 - i1                  # УПД вне товарного учёта
     other_inv = allr[(allr["sec"] == "inv") & ~allr["code"].str.startswith("130001")]
@@ -198,8 +201,8 @@ def build(report_date: date, con) -> dict:
     fixed = allr[allr["sec"] == "fixed"]
     other = allr[allr["sec"] == "other"]
     v0, v1 = tot(vat)
-    sta = st_c[st_c["side"] == "a"]
-    stl = st_c[st_c["side"] == "l"]
+    sta = nz(pos(st_c))
+    stl = nz(neg(st_c))
     sum_side = lambda df: (float(df["b0"].sum()), float(df["b1"].sum()))
     pa0, pa1 = sum_side(pre_a)
     pl0_, pl1_ = sum_side(pre_l)
@@ -207,15 +210,27 @@ def build(report_date: date, con) -> dict:
     inv0 = stock0 + pa0 + adj0 + oi0
     inv1 = stock1 + pa1 + adj1 + oi1
 
-    A = [tot(cash), tot(recv), sum_side(sta), (max(v0, 0), max(v1, 0)), (inv0, inv1),
+    # баланс WB — как в манпаке (личный кабинет); разница с учётом — отдельной строкой
+    wb_led = tot(cash[cash["sec"] == "cash:Баланс маркетплейса (WB)"])
+    lk = [float(wb_lk[k]["v"].iloc[0]) if len(wb_lk[k]) and pd.notna(wb_lk[k]["v"].iloc[0])
+          else None for k in ("b0", "b1")]
+    wb_d = tuple((lk[i] - wb_led[i]) if lk[i] is not None else 0.0 for i in (0, 1))
+    A = [tot(cash), wb_d, tot(recv), sum_side(sta), (max(v0, 0), max(v1, 0)), (inv0, inv1),
          tot(fixed), tot(other)]
     A0, A1 = sum(a[0] for a in A), sum(a[1] for a in A)
     add(0, "", "АКТИВЫ", A0, A1, "band")
 
-    add(1, "110000", "Денежные средства", *tot(cash), "sec")
+    add(1, "110000", "Денежные средства", tot(cash)[0] + wb_d[0], tot(cash)[1] + wb_d[1], "sec")
     for pfx, nm in list(CASH_LINES) + [("11", "Прочие денежные средства")]:
         part = cash[cash["sec"] == "cash:" + nm]
         if part.empty:
+            continue
+        if pfx == "114":
+            add(2, "114000", nm + " — по личному кабинету WB, как в манпаке",
+                wb_led[0] + wb_d[0], wb_led[1] + wb_d[1], "line")
+            add(3, "114001", "по учёту (114001): начислено к перечислению − выведено",
+                *wb_led, "acc")
+            add(3, "", "разница: ЛК WB − учёт (в контроле ниже)", *wb_d, "acc")
             continue
         add(2, pfx.ljust(6, "0"), nm, *tot(part), "line")
         for cd, g in part.groupby("code"):
@@ -224,11 +239,6 @@ def build(report_date: date, con) -> dict:
             add(3, cd, acc_name(cd), *tot(g), "acc")
             if pfx == "113":
                 by_contract(g, 4)
-        if pfx == "114":
-            lk = [float(wb_lk[k]["v"].iloc[0]) if len(wb_lk[k]) else float("nan")
-                  for k in ("b0", "b1")]
-            add(3, "", "справочно: баланс в личном кабинете WB на дату (как в манпаке)",
-                lk[0], lk[1], "info")
 
     add(1, "120000", "Дебиторская задолженность и авансы выданные",
         tot(recv)[0] + sum_side(sta)[0], tot(recv)[1] + sum_side(sta)[1], "sec")
@@ -273,11 +283,11 @@ def build(report_date: date, con) -> dict:
     liab = allr[allr["sec"] == "liab"]
     cap = allr[allr["sec"] == "cap"]
     plr = allr[allr["sec"] == "pl"]
-    sl = stl.assign(b0=-stl["b0"], b1=-stl["b1"])
+    sl = stl
     ln = sl[sl["grp"] == "770000"]
     ot = sl[sl["grp"] != "770000"]
     vl0, vl1 = max(-v0, 0), max(-v1, 0)
-    gl0, gl1 = -pl0_, -pl1_                          # долг поставщикам товара
+    gl0, gl1 = pl0_, pl1_                            # долг поставщикам товара
     L0 = sum_side(sl)[0] + gl0 + vl0 - tot(liab)[0]
     L1 = sum_side(sl)[1] + gl1 + vl1 - tot(liab)[1]
     p0, p1 = tot(plr, -1)
@@ -295,7 +305,7 @@ def build(report_date: date, con) -> dict:
         add(2, "130001", "Поставщики товара: УПД получен, не оплачен", gl0, gl1, "line")
         for r in pre_l.itertuples(index=False):
             add(3, r.cid if pd.notna(r.cid) else "",
-                label(r.cid) if pd.notna(r.cid) else "без договора", -r.b0, -r.b1, "det")
+                label(r.cid) if pd.notna(r.cid) else "без договора", r.b0, r.b1, "det")
     for grp, g in ot.groupby("grp"):
         add(2, grp, acc_name(grp), *sum_side(g), "line")
         if grp == "750000":
@@ -318,7 +328,10 @@ def build(report_date: date, con) -> dict:
         add(2, cd, acc_name(cd), *tot(g, -1), "line")
     add(2, "", f"Финансовый результат прошлых лет (до {d0:%d.%m.%Y})", p0, p0, "line")
     add(2, "", f"Финансовый результат {report_date.year} года", 0.0, p1 - p0, "line")
-    add(0, "", "КОНТРОЛЬ: активы − пассивы (должно быть 0)", A0 - L0 - E0, A1 - L1 - E1, "check")
+    add(0, "", "КОНТРОЛЬ: активы − пассивы", A0 - L0 - E0, A1 - L1 - E1, "check")
+    add(1, "", "в т.ч. разница баланса WB: ЛК − учёт", *wb_d, "info")
+    add(1, "", "в т.ч. проводки без договора (лист «Контроль»)",
+        A0 - L0 - E0 - wb_d[0], A1 - L1 - E1 - wb_d[1], "info")
 
     bal = pd.DataFrame(rows, columns=["level", "code", "name", "b0", "b1", "kind"])
     bal["chg"] = bal["b1"] - bal["b0"]

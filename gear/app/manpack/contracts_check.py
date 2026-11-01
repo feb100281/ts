@@ -353,6 +353,13 @@ def build(report_date: date, con) -> dict:
                 return f"Депозит открыт: на балансе {_rub(r['bs'])}"
             if r["bs"] <= -TOL_RUB:
                 return f"Возврат депозита без размещения: {_rub(r['bs'])}"
+        fn = str(r["fn"] or "").lower()
+        if "deposit" not in fn and any(x in fn for x in ("borrow", "loan", "займ")):
+            if bal >= TOL_RUB:
+                return f"Займ/кредит получен: долг {_rub(bal)}"
+            if bal <= -TOL_RUB:
+                return f"Займ выдан: должны нам {_rub(-bal)}"
+            return "Займ закрыт: остатка нет"
         end = f" к {_d(r['ad_last'])}" if pd.notna(r["ad_last"]) else ""
         if abs(bal) < TOL_RUB:
             if abs(fut) >= TOL_RUB:
@@ -401,9 +408,11 @@ def build(report_date: date, con) -> dict:
             return "no_fn"
         if not r["pl_name"] and not r["bs_name"]:
             return "no_target"
-        if money >= TOL_RUB and r["wo_turn"] < TOL_RUB:
-            return "nowhere"
         fn = str(r["fn"] or "").lower()
+        # займ/кредит: тело остаётся на расчётах, при нулевой ставке списаний нет — это норма
+        loan = "deposit" not in fn and any(x in fn for x in ("borrow", "loan", "займ"))
+        if money >= TOL_RUB and r["wo_turn"] < TOL_RUB and not loan:
+            return "nowhere"
         if "deposit" in fn and r["bs"] <= -TOL_RUB:
             return "deposit"
         # депозиты и займы: тело на балансе, проценты в P&L — это норма
