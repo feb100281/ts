@@ -292,7 +292,7 @@ def build(report_date: date, con) -> dict:
         mirror.append(pd.DataFrame({
             "cid": g[side].astype("int64"), "me": g["me"], "acc_id": None, "sub": None,
             "chapter": ADJ_CHAPTER, "k": "man", "v": sign * g["amount"],
-            "dt": g["amount"].where(sign > 0, 0.0), "cr": g["amount"].where(sign < 0, 0.0)}))
+            "dt": g["amount"] if sign > 0 else 0.0, "cr": g["amount"] if sign < 0 else 0.0}))
     fact = pd.concat([fact] + [x for x in mirror if len(x)], ignore_index=True)
     fact["me"] = pd.to_datetime(fact["me"])
     # ручная проводка (зачёт) закрывает расчёты как оплата без денег: добавляем зеркальную строку
