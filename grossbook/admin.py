@@ -938,12 +938,11 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
             "cf_from", "cf_to")
 
     def changelist_view(self, request, extra_context=None):
-        # фильтр по месяцу (?month=YYYY-MM) — свой, не через list_filter
-        month = request.GET.get("month", "")
-        if month:
-            request.GET = request.GET.copy()
-            request.GET.pop("month")
-        request._gla_month = month
+        # свои фильтры (не list_filter): month=YYYY-MM, cp=id, cf=1/0, sort=asc/desc
+        q = request.GET.copy()
+        f = {k: q.pop(k)[0] for k in ("month", "cp", "cf", "sort") if k in q}
+        request.GET = q
+        request._gla = f
         response = super().changelist_view(request, extra_context)
         cl = getattr(response, "context_data", {}).get("cl") if hasattr(response, "context_data") else None
         if cl is None:
@@ -959,7 +958,7 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
                 "date": o.date.strftime("%d.%m.%Y"), "amount": rub(o.amount),
                 "dt_acc": o.dt_acc, "dt_sub": o.dt_subconto or "", "dt_ctr": ctr(o.dt_contract),
                 "cr_acc": o.cr_acc, "cr_sub": o.cr_subconto or "", "cr_ctr": ctr(o.cr_contract),
-                "cf": (f"Cash Flow: {o.cf_from} → {o.cf_to}" if o.cf else ""),
+                "cf": (f"Cash Flow: {o.cf_from} → {o.cf_to}" if o.cf else ""), "has_cf": o.cf,
                 "copy": self.copy_url(o),
                 "comment": o.comment,
             })
@@ -970,19 +969,51 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
             "rows": rows, "count": len(rows), "total": rub(total), "month": month,
             "period": (f"{min(dates):%d.%m.%Y} — {max(dates):%d.%m.%Y}" if dates else "—"),
             "months": [{"key": f"{y}-{m:02d}", "label": f"{self.MONTHS[m - 1]} {y}"} for y, m in allm],
+            "f": f, "cps": self._cps(),
         }
+        # ссылки фильтров сохраняют остальные параметры
+        base = {**f, **({"q": request.GET["q"]} if request.GET.get("q") else {})}
+        link = lambda **kw: "?" + urlencode({k: v for k, v in {**base, **kw}.items() if v})
+        response.context_data["gla"].update({
+            "month": f.get("month", ""),
+            "month_links": [{"label": "Все", "url": link(month=""), "on": not f.get("month")}]
+                + [{"label": m["label"], "url": link(month=m["key"]),
+                    "on": f.get("month") == m["key"]} for m in response.context_data["gla"]["months"]],
+            "sort_url": link(sort="asc" if f.get("sort") != "asc" else "desc"),
+            "sort_label": "Дата ↑ (сначала старые)" if f.get("sort") == "asc" else "Дата ↓ (сначала новые)",
+            "cf_links": [{"label": l, "url": link(cf=v), "on": f.get("cf", "") == v}
+                         for l, v in (("Все", ""), ("С переносом в CF", "1"), ("Без CF", "0"))],
+            "hidden": {k: v for k, v in base.items() if k != "cp"},
+        })
         return response
+
+    def _cps(self):
+        """Контрагенты, по которым есть корректировки (для фильтра)."""
+        from counterparties.models import Counterparty
+        ids = set()
+        for a, b in GlAdjustment.objects.values_list("dt_contract__cp_id", "cr_contract__cp_id"):
+            ids.update(x for x in (a, b) if x)
+        return list(Counterparty.objects.filter(id__in=ids).order_by("name").values("id", "name"))
 
     def get_changelist_instance(self, request):
         cl = super().get_changelist_instance(request)
-        month = getattr(request, "_gla_month", "")
-        if month:
-            try:
-                y, m = (int(x) for x in month.split("-"))
-                cl.queryset = cl.queryset.filter(date__year=y, date__month=m)
-                cl.get_results(request)
-            except ValueError:
-                pass
+        f = getattr(request, "_gla", {})
+        qs = cl.queryset
+        try:
+            if f.get("month"):
+                y, m = (int(x) for x in f["month"].split("-"))
+                qs = qs.filter(date__year=y, date__month=m)
+            if f.get("cp"):
+                cp = int(f["cp"])
+                qs = qs.filter(Q(dt_contract__cp_id=cp) | Q(cr_contract__cp_id=cp))
+        except ValueError:
+            pass
+        if f.get("cf") in ("0", "1"):
+            qs = qs.filter(cf=f["cf"] == "1")
+        qs = qs.order_by(*(("date", "id") if f.get("sort") == "asc" else ("-date", "-id")))
+        if qs is not cl.queryset:
+            cl.queryset = qs
+            cl.get_results(request)
         return cl
 
     def _sync(self, request):
