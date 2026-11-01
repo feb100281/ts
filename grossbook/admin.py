@@ -966,7 +966,7 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
         allm = sorted({(d.year, d.month) for d in GlAdjustment.objects.values_list("date", flat=True)},
                       reverse=True)
         response.context_data["gla"] = {
-            "rows": rows, "count": len(rows), "total": rub(total), "month": month,
+            "rows": rows, "count": len(rows), "total": rub(total), "month": f.get("month", ""),
             "period": (f"{min(dates):%d.%m.%Y} — {max(dates):%d.%m.%Y}" if dates else "—"),
             "months": [{"key": f"{y}-{m:02d}", "label": f"{self.MONTHS[m - 1]} {y}"} for y, m in allm],
             "f": f, "cps": self._cps(),
