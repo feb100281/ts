@@ -117,7 +117,7 @@ def build(report_date: date, con) -> dict:
     # ручные проводки — уже двусторонние (зачёт между договорами): пару к деньгам не строим
     ch = allr["chapter"].astype(str)
     manual = ((ch.str.startswith("MANUAL") & ~allr["code"].astype(str).str.startswith("11"))
-              | (ch == "ADJ_GL"))
+              | ch.isin(["ADJ_GL", "ADJ_CF"]))
     withc = allr[allr["cid"].notna() & ~manual]
     imb = withc.groupby("cid", as_index=False)[["b0", "b1"]].sum()
     t7 = (withc[withc["code"].str.startswith("7") & ~withc["code"].str.startswith("73")]

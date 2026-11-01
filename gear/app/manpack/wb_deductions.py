@@ -26,6 +26,13 @@ WHERE field = 'deduction' AND date_from::DATE <= ?
 GROUP BY 1, 2
 HAVING SUM(value) <> 0
 """
+# корректировки GL, которыми разнесены удержания: Кт статья 540101 (куда их кладёт WB ETL)
+ADJ_SQL = """
+SELECT g.id, g.date::DATE AS d, CAST(g.amount AS DOUBLE) AS amount
+FROM pg.public.grossbook_gladjustment g
+JOIN pg.public.corporate_cfitems s ON s.id = g.cr_subconto_id
+WHERE CAST(s.code AS VARCHAR) = '540101' AND g.date <= ?
+"""
 CTR_SQL = """
 SELECT k.id AS cid, k.number,
        COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') || ' · '
@@ -67,6 +74,44 @@ def build(report_date: date, con) -> dict:
     fin["what"] = fin["btn"].map(kind)
     fin["num"] = fin["btn"].map(doc_number)
     fin["contract"] = fin["num"].map(lambda n: by_num.get(n, "") if n else "")
+    # разнесено корректировками GL: по дате отчёта, иначе — по месяцу целиком
+    try:
+        adj = con.execute(ADJ_SQL, [report_date]).df()
+    except Exception:                            # журнала ещё нет — отчёт без колонки
+        adj = pd.DataFrame(columns=["id", "d", "amount"])
+    adj["d"] = pd.to_datetime(adj["d"])
+    adj["m"] = adj["d"].dt.to_period("M")
+    fin["m"] = fin["d"].dt.to_period("M")
+    a_m = adj.groupby("m")["amount"].sum()
+    ids_m = adj.groupby("m")["id"].agg(lambda s: ", ".join(f"#{i}" for i in sorted(s)))
+    f_m = fin.groupby("m")["amount"].sum()
+    fin["posted"], fin["adj_ids"] = "нет", ""
+    for d, g in fin.groupby("d"):
+        free = adj[adj["d"] == d].copy()
+        rest = []
+        # 1) точное совпадение суммы за дату
+        for idx, r in g.iterrows():
+            hit = free[(free["amount"] - r["amount"]).abs() < 0.01]
+            if len(hit):
+                k = hit.index[0]
+                fin.loc[idx, ["posted", "adj_ids"]] = ["разнесено", f"#{free.at[k, 'id']}"]
+                free = free.drop(k)
+            else:
+                rest.append(idx)
+        if not rest:
+            continue
+        # 2) оставшиеся строки за дату закрыты остальными корректировками за дату в сумме
+        left = fin.loc[rest, "amount"].sum()
+        ids = ", ".join(f"#{x}" for x in sorted(free["id"]))
+        if len(free) and abs(free["amount"].sum() - left) < 0.5:
+            fin.loc[rest, ["posted", "adj_ids"]] = ["разнесено", ids]
+        elif len(free):
+            fin.loc[rest, ["posted", "adj_ids"]] = ["частично", ids]
+    # 3) не сошлось по дате, но месяц закрыт целиком (корректировка одной суммой за месяц)
+    for idx in fin.index[fin["posted"] != "разнесено"]:
+        m = fin.at[idx, "m"]
+        if a_m.get(m, 0.0) >= f_m[m] - 0.5:
+            fin.loc[idx, ["posted", "adj_ids"]] = ["разнесено за месяц", ids_m.get(m, "")]
     fin = fin.sort_values(["d", "btn"], ascending=[False, True])
 
     new_from = pd.Timestamp(report_date - timedelta(days=NEW_DAYS))
@@ -80,6 +125,9 @@ def build(report_date: date, con) -> dict:
     month = (fin.assign(m=fin["d"].dt.to_period("M").dt.to_timestamp())
              .pivot_table(index="m", columns="what", values="amount", aggfunc="sum", fill_value=0)
              .sort_index(ascending=False))
+    month["Итого, ₽"] = month.sum(axis=1)
+    month["Разнесено корр. GL, ₽"] = [a_m.get(pd.Period(m, "M"), 0.0) for m in month.index]
+    month["Осталось, ₽"] = month["Итого, ₽"] - month["Разнесено корр. GL, ₽"]
     return {"fin": fin, "sum": s, "month": month, "total": ded["amount"].sum(),
             "fin_total": fin["amount"].sum(), "new_from": new_from}
 
@@ -101,6 +149,7 @@ def to_excel(res: dict, report_date: date) -> bytes:
         "date": F(**line, num_format="dd.mm.yyyy"), "month": F(**line, num_format="mmm yyyy"),
         "money": F(**line, num_format=mp.FMT_MONEY_DEC),
         "flag": F(**line, bold=True, font_color="#9C2A00"),
+        "ok": F(**line, font_color="#" + mp.NAVY_3),
         "tot": F(bold=True, top=1, num_format=mp.FMT_MONEY_DEC),
         "totl": F(bold=True, top=1), "lbl": F(bold=True, font_color="#" + mp.NAVY_3, **line),
     }
@@ -122,31 +171,33 @@ def to_excel(res: dict, report_date: date) -> bytes:
     ws = wb.add_worksheet("Финансовые")
     head(ws, "Финансовые удержания WB: займы, кредиты, проценты", (
         ("Дата отчёта WB", 12), ("Обоснование WB", 70), ("Вид", 20), ("№ в обосновании", 18),
-        ("Договор у нас", 60), ("Сумма, ₽", 16)))
+        ("Договор у нас", 60), ("Сумма, ₽", 16), ("Разнесено", 18), ("Корректировки GL", 22)))
     f = res["fin"]
     for i, r in enumerate(f.itertuples(index=False), start=4):
         ws.write_datetime(i, 0, r.d.to_pydatetime(), fmt["date"])
         ws.write(i, 1, r.btn, fmt["wrap"])
         ws.write(i, 2, r.what, fmt["text"])
-        ws.write(i, 3, r.num, fmt["text"])
+        ws.write_string(i, 3, str(r.num), fmt["text"])
         ws.write(i, 4, r.contract or ("не найден" if r.num else "номер не указан"),
                  fmt["text"] if r.contract else fmt["flag"])
         ws.write_number(i, 5, num(r.amount), fmt["money"])
+        ok = r.posted.startswith("разнесено")
+        ws.write(i, 6, r.posted, fmt["ok"] if ok else fmt["flag"])
+        ws.write(i, 7, r.adj_ids, fmt["text"])
     end = 4 + len(f)
     ws.write(end, 0, "Итого", fmt["totl"])
     ws.write_number(end, 5, num(f["amount"].sum()), fmt["tot"])
-    ws.autofilter(3, 0, max(end - 1, 3), 5)
+    ws.autofilter(3, 0, max(end - 1, 3), 7)
 
     # 2. По месяцам — финансовые по видам
     ws = wb.add_worksheet("По месяцам")
     mo = res["month"]
-    cols = [("Месяц", 12)] + [(c, 18) for c in mo.columns] + [("Итого, ₽", 18)]
+    cols = [("Месяц", 12)] + [(c, 18) for c in mo.columns]
     head(ws, "Финансовые удержания по месяцам", cols)
     for i, (m, r) in enumerate(mo.iterrows(), start=4):
         ws.write_datetime(i, 0, m.to_pydatetime(), fmt["month"])
         for j, c in enumerate(mo.columns, start=1):
             ws.write_number(i, j, num(r[c]), fmt["money"])
-        ws.write_number(i, len(mo.columns) + 1, num(r.sum()), fmt["money"])
 
     # 3. Сводка — все виды удержаний
     ws = wb.add_worksheet("Все удержания")
@@ -183,7 +234,12 @@ def to_excel(res: dict, report_date: date) -> bytes:
         ("Новое", f"Вид удержания впервые появился за последние {NEW_DAYS} дней — проверить, что "
                   "это и куда относится."),
         ("Что делать", "По финансовому удержанию — корректировка GL (Главная книга → "
-                       "Корректировки GL) на договор займа / кредита и нужную статью."),
+                       "Корректировки GL): Дт счёт займа или 630000 с договором, Кт 610000 / "
+                       "540101. Галочка «Отразить в Cash Flow» переносит сумму из 122501 в "
+                       "статью финансовой деятельности."),
+        ("Разнесено", "Сверка с корректировками GL, у которых Кт статья 540101: сумма за дату "
+                      "отчёта WB, иначе за месяц целиком. «Частично» — корректировок меньше, "
+                      "чем удержаний. Номера корректировок — в соседней колонке."),
     ]
     for i, (a, b) in enumerate(notes, start=2):
         ws.write(i, 0, a, fmt["lbl"])

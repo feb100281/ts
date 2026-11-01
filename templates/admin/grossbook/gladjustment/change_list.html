@@ -61,7 +61,7 @@
         <td class="cp">{{ r.dt_ctr|default:"без договора" }}</td>
         <td class="num">{{ r.amount }}</td>
         <td class="num muted"></td>
-        <td rowspan="2" class="sub">{{ r.comment }}</td>
+        <td rowspan="2" class="sub">{{ r.comment }}{% if r.cf %}<div class="cp" style="margin-top:4px;">{{ r.cf }}</div>{% endif %}</td>
       </tr>
       <tr class="op">
         <td class="acc" style="padding-left:28px;">{{ r.cr_acc }}</td>

@@ -905,11 +905,12 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
                      "cr_contract__cp__name", "dt_contract__number", "cr_contract__number")
     search_help_text = "Поиск: описание, код счёта, контрагент, номер договора"
     autocomplete_fields = ("owner", "dt_acc", "dt_contract", "dt_subconto",
-                           "cr_acc", "cr_contract", "cr_subconto")
+                           "cr_acc", "cr_contract", "cr_subconto", "cf_from", "cf_to", "cf_acc")
     fieldsets = (
         ("Операция", {"fields": ("date", "amount", "owner", "comment")}),
         ("Дебет", {"fields": ("dt_acc", "dt_contract", "dt_subconto")}),
         ("Кредит", {"fields": ("cr_acc", "cr_contract", "cr_subconto")}),
+        ("Cash Flow", {"fields": ("cf", "cf_to", "cf_from", "cf_acc")}),
     )
 
     MONTHS = ("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
@@ -917,7 +918,8 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
             "dt_acc", "cr_acc", "dt_subconto", "cr_subconto",
-            "dt_contract__cp", "cr_contract__cp", "dt_contract__title", "cr_contract__title")
+            "dt_contract__cp", "cr_contract__cp", "dt_contract__title", "cr_contract__title",
+            "cf_from", "cf_to")
 
     def changelist_view(self, request, extra_context=None):
         # фильтр по месяцу (?month=YYYY-MM) — свой, не через list_filter
@@ -941,6 +943,7 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
                 "date": o.date.strftime("%d.%m.%Y"), "amount": rub(o.amount),
                 "dt_acc": o.dt_acc, "dt_sub": o.dt_subconto or "", "dt_ctr": ctr(o.dt_contract),
                 "cr_acc": o.cr_acc, "cr_sub": o.cr_subconto or "", "cr_ctr": ctr(o.cr_contract),
+                "cf": (f"Cash Flow: {o.cf_from} → {o.cf_to}" if o.cf else ""),
                 "comment": o.comment,
             })
         dates = [o.date for o in cl.result_list]

@@ -294,6 +294,20 @@ class GlAdjustment(models.Model):
                                     related_name="+", verbose_name="Кт: статья")
 
     comment = models.TextField(verbose_name="Описание операции")
+
+    # перенос суммы между статьями Cash Flow (глава ADJ_CF), баланс счёта не меняется
+    CF_ACC_DEFAULT, CF_FROM_DEFAULT = "114001", "122501"
+    cf = models.BooleanField(default=False, verbose_name="Отразить в Cash Flow",
+                             help_text="Перенести сумму из одной статьи Cash Flow в другую")
+    cf_from = models.ForeignKey(CfItems, on_delete=models.PROTECT, null=True, blank=True,
+                                related_name="+", verbose_name="Статья CF: откуда",
+                                help_text="Пусто — 122501 Удержания с продаж")
+    cf_to = models.ForeignKey(CfItems, on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="+", verbose_name="Статья CF: куда")
+    cf_acc = models.ForeignKey(COA, on_delete=models.PROTECT, null=True, blank=True,
+                               related_name="+", verbose_name="Счёт денег для CF",
+                               help_text="Пусто — 114001 Баланс WB")
+
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
 
     class Meta:
@@ -327,6 +341,15 @@ class GlAdjustment(models.Model):
             elif pl and not str(sub.code).startswith("5"):
                 errors[f"{side}_subconto"] = (f"«{sub}» — статья Cash Flow. Для счёта P&L нужна "
                                               "статья P&L (5…), например 540301.")
+        if self.cf:
+            if not self.cf_to_id:
+                errors["cf_to"] = "Укажите статью Cash Flow, куда перенести сумму."
+            if not self.cf_from_id:
+                self.cf_from = CfItems.objects.filter(code=self.CF_FROM_DEFAULT).first()
+            if not self.cf_acc_id:
+                self.cf_acc = COA.objects.filter(code=self.CF_ACC_DEFAULT).first()
+            if self.cf_from_id and self.cf_from_id == self.cf_to_id:
+                errors["cf_to"] = "Статьи «откуда» и «куда» совпадают."
         if (self.dt_acc_id and self.dt_acc_id == self.cr_acc_id
                 and self.dt_contract_id == self.cr_contract_id
                 and self.dt_subconto_id == self.cr_subconto_id):

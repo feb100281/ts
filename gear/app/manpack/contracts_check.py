@@ -48,6 +48,7 @@ SELECT f.contract_id AS cid, LAST_DAY(f.date_from)::DATE AS me, f.acc_id,
        SUM(f.dt) / 100.0 AS dt, SUM(f.cr) / 100.0 AS cr
 FROM pg.gl.fact f
 WHERE f.date_from <= ? AND f.contract_id IS NOT NULL
+  AND COALESCE(f.chapter, '') <> 'ADJ_CF'      -- перенос между статьями CF: расчёты не меняет
 GROUP BY 1, 2, 3, 4, 5
 """
 COA_SQL = """
@@ -101,6 +102,7 @@ SELECT date_from::DATE AS d, CAST(amount AS DOUBLE) AS amount, COALESCE(item, ''
        COALESCE(NULLIF(TRIM(cp_name), ''), 'Без контрагента') AS cp_name
 FROM pg.cf_to_csv
 WHERE date_from::DATE <= ? AND COALESCE(amount, 0) <> 0
+  AND COALESCE(description, '') NOT LIKE 'Корректировка GL #%'   -- перенос CF (ADJ_CF)
 """
 
 MODE = {"included": "НДС включён", "excluded": "НДС сверху", "exempt": "Без НДС",
