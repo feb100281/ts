@@ -264,3 +264,58 @@ class VatAdjustment(models.Model):
 
     def __str__(self):
         return f"{self.date:%d.%m.%Y} · {self.get_kind_display()} · {self.amount:,.2f}"
+
+
+class GlAdjustment(models.Model):
+    """Корректировка главной книги (P&L и баланс), без движения денег.
+
+    Одна запись — одна двусторонняя проводка: Дт и Кт на одну сумму.
+    Попадает в gl.fact главой ADJ_GL (grossbook/gl_adjust.py).
+    """
+
+    PL_PARENTS = (25, 26, 27)                   # группы счетов P&L, как в pl_for_csv
+
+    date = models.DateField(verbose_name="Дата")
+    owner = models.ForeignKey(Owners, on_delete=models.PROTECT, verbose_name="Компания")
+    amount = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="Сумма, ₽")
+
+    dt_acc = models.ForeignKey(COA, on_delete=models.PROTECT, related_name="+",
+                               verbose_name="Дт: счёт")
+    dt_contract = models.ForeignKey(Contracts, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name="+", verbose_name="Дт: договор")
+    dt_subconto = models.ForeignKey(CfItems, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name="+", verbose_name="Дт: статья")
+
+    cr_acc = models.ForeignKey(COA, on_delete=models.PROTECT, related_name="+",
+                               verbose_name="Кт: счёт")
+    cr_contract = models.ForeignKey(Contracts, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name="+", verbose_name="Кт: договор")
+    cr_subconto = models.ForeignKey(CfItems, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name="+", verbose_name="Кт: статья")
+
+    comment = models.TextField(verbose_name="Описание операции")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
+
+    class Meta:
+        verbose_name = "Корректировка GL"
+        verbose_name_plural = "Корректировки GL"
+        ordering = ("-date", "-id")
+
+    def __str__(self):
+        return f"{self.date:%d.%m.%Y} · Дт {self.dt_acc.code} Кт {self.cr_acc.code} · {self.amount:,.2f}"
+
+    def clean(self):
+        errors = {}
+        if self.amount is not None and self.amount <= 0:
+            errors["amount"] = "Сумма должна быть больше нуля."
+        if (self.dt_acc_id and self.dt_acc_id == self.cr_acc_id
+                and self.dt_contract_id == self.cr_contract_id
+                and self.dt_subconto_id == self.cr_subconto_id):
+            errors["cr_acc"] = "Дт и Кт совпадают — проводка ничего не меняет."
+        # счёт P&L без статьи не попадёт в строку отчёта
+        for side in ("dt", "cr"):
+            acc = getattr(self, f"{side}_acc", None) if getattr(self, f"{side}_acc_id") else None
+            if acc and acc.parent_id in self.PL_PARENTS and not getattr(self, f"{side}_subconto_id"):
+                errors[f"{side}_subconto"] = "Для счёта P&L укажите статью."
+        if errors:
+            raise ValidationError(errors)

@@ -37,14 +37,16 @@ def is_marketplace(name) -> bool:
 
 SKIP_ITEMS = (("4", "Переводы между счетами и конвертация"), ("125", "Налоги и сборы"))
 CASH_PARENT, VAT_PARENT = 3, 31
+MANUAL_PREFIX = "MANUAL"                 # глава ручных проводок в gl.fact
 GOODS_SUB, GOODS_BS = "1211", "130"     # подстатья «Закупка товара», счёт BS товара
 
 FACT_SQL = """
 SELECT f.contract_id AS cid, LAST_DAY(f.date_from)::DATE AS me, f.acc_id,
-       f.subconto_id AS sub, SUM(f.dt) / 100.0 AS dt, SUM(f.cr) / 100.0 AS cr
+       f.subconto_id AS sub, COALESCE(f.chapter, '') AS chapter,
+       SUM(f.dt) / 100.0 AS dt, SUM(f.cr) / 100.0 AS cr
 FROM pg.gl.fact f
 WHERE f.date_from <= ? AND f.contract_id IS NOT NULL
-GROUP BY 1, 2, 3, 4
+GROUP BY 1, 2, 3, 4, 5
 """
 COA_SQL = """
 SELECT id, CAST(code AS VARCHAR) AS code, name, parent_id FROM pg.public.corporate_coa
@@ -259,6 +261,10 @@ def build(report_date: date, con) -> dict:
 
     fact["k"] = [kind(c, a) for c, a in zip(fact["cid"], fact["acc_id"])]
     fact["v"] = fact["dt"] - fact["cr"]
+    # ручная проводка (зачёт) закрывает расчёты как оплата без денег: добавляем зеркальную строку
+    man = fact[fact["chapter"].str.startswith(MANUAL_PREFIX) & (fact["k"] != "cash")]
+    fact = pd.concat([fact, man.assign(k="man", v=-man["v"], dt=man["cr"], cr=man["dt"])],
+                     ignore_index=True)
     # статья P&L (субконто) по фактическим списаниям — крупнейшая по сумме
     plr = fact[fact["k"] == "pl"].assign(a=lambda x: x["v"].abs())
     pl_sub = (plr.groupby(["cid", "sub"])["a"].sum().reset_index()
@@ -269,7 +275,7 @@ def build(report_date: date, con) -> dict:
     cash_io = (fact[fact["k"] == "cash"].groupby("cid")
                .agg(got=("dt", "sum"), paid=("cr", "sum")).reset_index())
     t = m.drop(columns="me").groupby("cid").sum().reset_index()
-    for c in ("cash", "st", "pl", "bs", "vat", "other"):
+    for c in ("cash", "man", "st", "pl", "bs", "vat", "other"):
         for df in (m, t):
             if c not in df:
                 df[c] = 0.0
@@ -277,6 +283,9 @@ def build(report_date: date, con) -> dict:
     # оборот списаний (dt + cr): у депозита размещение и возврат на балансе дают ноль в сумме,
     # но списание было
     wo = fact[fact["k"].isin(["pl", "bs", "vat"])]
+    mt = fact[fact["k"] == "man"]
+    t = t.merge((mt["dt"] + mt["cr"]).groupby(mt["cid"]).sum().rename("man_turn").reset_index(),
+                on="cid", how="left")
     t = t.merge((wo["dt"] + wo["cr"]).groupby(wo["cid"]).sum().rename("wo_turn").reset_index(),
                 on="cid", how="left")
 
@@ -328,11 +337,11 @@ def build(report_date: date, con) -> dict:
     df = (ctr.merge(t, on="cid", how="left").merge(cinfo, on="cid", how="left")
           .merge(cfa, on="cid", how="left").merge(cplan, on="cid", how="left")
           .merge(ad, on="cid", how="left"))
-    num = ["cash", "st", "pl", "bs", "vat", "other", "got", "paid", "turn", "goods", "out_sum",
-           "out_n", "n_cond", "n_fn", "future", "wo_turn"]
+    num = ["cash", "man", "st", "pl", "bs", "vat", "other", "got", "paid", "turn", "goods",
+           "out_sum", "out_n", "n_cond", "n_fn", "future", "wo_turn", "man_turn"]
     df[num] = df[num].apply(pd.to_numeric, errors="coerce").fillna(0.0)
     moved = (df["got"] + df["paid"] + df["turn"] + df["pl"].abs() + df["bs"].abs()
-             + df["st"].abs()) > 0
+             + df["st"].abs() + df["man_turn"]) > 0
     df = df[moved | (df["n_cond"] > 0)].copy()
 
     df["st_name"] = df["st_acc"].map(acc_name)
@@ -342,7 +351,7 @@ def build(report_date: date, con) -> dict:
     df["bs_goods"] = bs_codes.map(lambda cs: any(x.startswith(GOODS_BS) for x in cs))
     df["cash_based"] = df["method"].fillna("").str.contains("cash", case=False)
     df["written"] = df["pl"] + df["bs"] + df["vat"]
-    df["bal"] = df["cash"] + df["written"]      # остаток по расчётам
+    df["bal"] = df["cash"] + df["man"] + df["written"]   # остаток по расчётам (с зачётами)
     # аванс закрывается будущими начислениями; долг — оплатой
     df["final"] = (df["bal"] + df["future"]).where(df["bal"] < 0, df["bal"])
 
@@ -397,7 +406,7 @@ def build(report_date: date, con) -> dict:
     df["plan_left"] = (df["plan_total"].abs() - df["written"].abs()).where(df["plan_total"].notna())
 
     def classify(r):
-        money = max(r["got"] + r["paid"], r["turn"])
+        money = max(r["got"] + r["paid"], r["turn"]) + r["man_turn"]
         if r["skip"]:
             return "skip"
         if money < TOL_RUB and abs(r["bal"]) < TOL_RUB:

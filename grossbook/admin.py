@@ -19,7 +19,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import urlencode
 
-from .models import LoanAdjustment, Manual, VatAdjustment
+from .models import GlAdjustment, LoanAdjustment, Manual, VatAdjustment
 from .reporting.loan_adjustment_pdf import (
     generate_loan_adjustment_pdf,
     generate_loan_adjustments_registry_pdf,
@@ -889,3 +889,52 @@ class VatAdjustmentAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     search_fields = ("comment",)
 
+
+
+
+@admin.register(GlAdjustment)
+class GlAdjustmentAdmin(admin.ModelAdmin):
+    """Корректировки GL: сразу после сохранения/удаления перезаписывается глава ADJ_GL."""
+
+    list_display = ("id", "date", "amount", "dt_col", "cr_col", "comment")
+    list_display_links = ("id", "date")
+    date_hierarchy = "date"
+    search_fields = ("comment", "dt_acc__code", "cr_acc__code",
+                     "dt_contract__number", "cr_contract__number")
+    list_filter = ("owner",)
+    autocomplete_fields = ("owner", "dt_acc", "dt_contract", "dt_subconto",
+                           "cr_acc", "cr_contract", "cr_subconto")
+    fieldsets = (
+        (None, {"fields": ("date", "owner", "amount", "comment")}),
+        ("Дебет", {"fields": ("dt_acc", "dt_contract", "dt_subconto")}),
+        ("Кредит", {"fields": ("cr_acc", "cr_contract", "cr_subconto")}),
+    )
+
+    @admin.display(description="Дт")
+    def dt_col(self, obj):
+        return " · ".join(str(x) for x in (obj.dt_acc, obj.dt_contract, obj.dt_subconto) if x)
+
+    @admin.display(description="Кт")
+    def cr_col(self, obj):
+        return " · ".join(str(x) for x in (obj.cr_acc, obj.cr_contract, obj.cr_subconto) if x)
+
+    def _sync(self, request):
+        from django.db import connection, transaction
+        from .gl_adjust import apply
+        try:
+            with transaction.atomic(), connection.cursor() as cur:
+                apply(cur)
+        except Exception as e:                   # запись сохранена; попадёт в GL при следующем ETL
+            self.message_user(request, f"Не удалось обновить gl.fact: {e}", level=messages.WARNING)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        self._sync(request)
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self._sync(request)
+
+    def delete_queryset(self, request, queryset):
+        super().delete_queryset(request, queryset)
+        self._sync(request)

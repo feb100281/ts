@@ -371,6 +371,7 @@ JAZZMIN_SETTINGS = {
     #     # --- ГЛАВАЯ КНИГА ---
         "grossbook": "fa-solid fa-book",
         "grossbook.Manual": "fa-solid fa-book-bookmark",
+        "grossbook.GlAdjustment": "fa-solid fa-scale-balanced",
 
     #     # --- Телеграмм-бот ---
     #     "botconfig": "fa-brands fa-telegram",

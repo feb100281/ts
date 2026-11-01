@@ -114,7 +114,11 @@ def build(report_date: date, con) -> dict:
 
     # недостающая пара денег по договору
     allr = pd.concat([fact, inv], ignore_index=True)
-    withc = allr[allr["cid"].notna()]
+    # ручные проводки — уже двусторонние (зачёт между договорами): пару к деньгам не строим
+    ch = allr["chapter"].astype(str)
+    manual = ((ch.str.startswith("MANUAL") & ~allr["code"].astype(str).str.startswith("11"))
+              | (ch == "ADJ_GL"))
+    withc = allr[allr["cid"].notna() & ~manual]
     imb = withc.groupby("cid", as_index=False)[["b0", "b1"]].sum()
     t7 = (withc[withc["code"].str.startswith("7") & ~withc["code"].str.startswith("73")]
           .assign(a=lambda x: x["b1"].abs()).sort_values("a")
