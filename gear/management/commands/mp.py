@@ -333,11 +333,12 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
         v("Н.8б", "база: комиссия WB до СПП без фактического НДС", VR_COMM_FACT_BASE, 2)
         add(("ratio", "Н.8", "Ставка НДС с комиссии фактическая к комиссии до СПП, %",
              ("Н.6", "Н.8б", 1), 2, FMT_PCT))
-        v("Н.9б", "база: комиссия WB после СПП без фактического НДС", VR_COMM_SPP_BASE, 2)
-        add(("ratio", "Н.9", "Ставка НДС с комиссии фактическая после СПП, %",
-             ("Н.6", "Н.9б", 1), 2, FMT_PCT))
-        v("Н.10", "НДС к уплате (−) / к возмещению (+), оценка → лист «НДС по операциям»",
+        v("Н.9", "Комиссия WB после СПП без НДС (минус — WB доплачивает: СПП больше комиссии)",
+          VR_COMM_SPP_BASE, 2)
+        v("Н.10", "НДС к уплате (−) / к возмещению (+) за месяц, оценка → «НДС по операциям»",
           VR_PAY)
+        v("Н.11", "Сальдо расчётов с бюджетом по НДС на конец (накопительно, с оплатами; "
+                  "минус — должны, плюс — переплата)", VR_SALDO)
     return L
 
 
@@ -593,11 +594,16 @@ NOTES_PL = [
         "Н.5 — НДС с комиссии WB номинальный: полная ставка (20%, с 2026 г. 22%) со всей "
         "комиссии до СПП. Н.6 — фактический НДС с вознаграждения по отчёту WB. Фактический "
         "меньше: в комиссии до СПП есть СПП, ПВЗ и эквайринг, с которых WB НДС не начисляет.",
-        "Н.7 — номинальная ставка (20% / 22%); Н.8 — фактическая к комиссии до СПП; Н.9 — "
-        "фактическая к комиссии после СПП.",
+        "Н.7 — номинальная ставка (20% / 22%); Н.8 — фактическая к комиссии до СПП. "
+        "Н.9 — комиссия после СПП: в отдельные месяцы СПП, которую WB компенсирует, больше "
+        "комиссии, и комиссия уходит около нуля или в минус (WB доплачивает), поэтому "
+        "ставку к ней не считаем — она теряет смысл.",
         "Н.10 — НДС к уплате (минус) или к возмещению (плюс) за месяц, оценка: стр. 3 листа "
-        "«НДС по операциям». В колонках года и «Итого» — сумма с начала периода. Сальдо "
-        "с бюджетом с учётом оплат — раздел 5 того листа (ссылка в названии строки).",
+        "«НДС по операциям». В колонках года и «Итого» — сумма с начала периода.",
+        "Н.11 — сальдо расчётов с бюджетом по НДС на конец месяца: накопительно с самого "
+        "начала данных, с учётом прошлых периодов, оплат по Cash Flow, списаний и "
+        "корректировок (= стр. 5.6 листа «НДС по операциям»). В колонках года и «Итого» — "
+        "сальдо на последний месяц.",
     ]),
 ]
 
@@ -991,15 +997,19 @@ VR_COMM_NOM_BASE = "Н.7б Комиссия до СПП без номиналь�
 VR_COMM_FACT_BASE = "Н.8б Комиссия до СПП без фактического НДС"
 VR_COMM_SPP_BASE = "Н.9б Комиссия после СПП без фактического НДС"
 VR_PAY = "Н.10 НДС к уплате / к возмещению"
+VR_SALDO = "Н.11 Сальдо с бюджетом по НДС на конец"
+POINT_ITEMS = {VR_SALDO}        # остаток на дату: в колонках года / периода — на последний месяц
 
 
-def vat_reference(pl_data, dash_rows, vat_ops_rows):
+def vat_reference(pl_data, dash_rows, vat_ops_rows, paid=None, adjustments=None):
     """Справочно: НДС для листов P&L — {(me, SEC_VATREF, item): value}.
 
     Номинально — как в дашборде: НДС по ставке карточки с цены до СПП и по полной
     ставке (20%, с 2026 г. 22%) со всей комиссии до СПП. Фактически — НДС из листа
     «НДС по операциям» (с цены покупателя и с вознаграждения по отчёту WB).
     Н.10 — стр. 3 листа «НДС по операциям» (минус — к уплате, плюс — к возмещению).
+    Н.11 — сальдо на конец месяца, как стр. 5.6 того же листа: накопительно с первого
+    месяца данных: оценка к уплате − оплачено + списано + корректировки.
     """
     out = {}
     fact_s, fact_c = defaultdict(float), defaultdict(float)
@@ -1016,10 +1026,26 @@ def vat_reference(pl_data, dash_rows, vat_ops_rows):
         if v:
             out[(me, SEC_VATREF, itm)] = round(v, 2)
 
+    # сальдо с бюджетом — та же логика, что в разделе 5 листа «НДС по операциям»
+    paid_m = defaultdict(float)
+    for vals in (paid or {}).values():
+        for m, v in vals.items():
+            paid_m[m] += v
+    wo_m, adj_m = defaultdict(float), defaultdict(float)
+    for m, kind, amount in adjustments or ():
+        if kind == "writeoff":
+            wo_m[m] -= amount
+        else:
+            adj_m[m] += amount
+    bal, saldo = 0.0, {}
+    for m in sorted(set(pay) | set(paid_m) | set(wo_m) | set(adj_m) | {k[0] for k in pl_data}):
+        bal += pay.get(m, 0.0) - paid_m.get(m, 0.0) + wo_m.get(m, 0.0) + adj_m.get(m, 0.0)
+        saldo[m] = bal
+
     after = pl_after_spp(pl_data)
     for me, amount, retail, rev, cogs, comm, wb in dash_rows:
         rate = 22.0 if me.year >= 2026 else 20.0
-        comm_nom = abs(comm)
+        comm_nom = -comm                         # комиссия в P&L — расход со знаком минус
         put(me, VR_SALES_NOM, amount - rev)
         put(me, VR_SALES_NOM_BASE, rev)
         put(me, VR_COMM_NOM, comm_nom * rate / 100)
@@ -1029,9 +1055,11 @@ def vat_reference(pl_data, dash_rows, vat_ops_rows):
         put(me, VR_SALES_FACT, abs(fact_s.get(me, 0.0)))
         put(me, VR_COMM_FACT, abs(fact_c.get(me, 0.0)))
         put(me, VR_SALES_FACT_BASE, pl_after_spp_rev(pl_data, me))
-        put(me, VR_COMM_FACT_BASE, abs(pl_data.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0))
-        put(me, VR_COMM_SPP_BASE, abs(after.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0))
+        put(me, VR_COMM_FACT_BASE, -(pl_data.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0))
+        put(me, VR_COMM_SPP_BASE, -(after.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0))
         put(me, VR_PAY, pay.get(me, 0.0))
+        if me in saldo:
+            out[(me, SEC_VATREF, VR_SALDO)] = round(saldo[me], 2)
     return out
 
 
@@ -1286,7 +1314,13 @@ def build_pl(ws, pl_data, tax_by_month, months, report_date, as_of=None,
             cell_fmt = fmt or FMT_MONEY
             v = None
 
-            if kind == "item":
+            if kind == "item" and src and src[1] in POINT_ITEMS:
+                sec, itm, sign = src
+                ck, cm, cy = cols[i]
+                last = cm if ck == "month" else max(
+                    (mm for mm in months if ck == "grand" or mm.year == cy), default=None)
+                v = val(sec, itm, last) if last else None
+            elif kind == "item":
                 sec, itm, sign = src
                 v = period_formula(
                     cols, i, r,
@@ -1715,6 +1749,45 @@ def build_notes(ws, title, subtitle, blocks):
     return r
 
 
+# Группы листов пакета: (разделитель, цвет ярлыков, [листы]).
+# Разделитель — пустой лист-заголовок перед группой; у основной группы его нет.
+def sheet_groups():
+    """Группы листов; функция — имена листов объявлены ниже по модулю."""
+    return [
+        (None, NAVY, [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, PL_AFTER_SPP_SHEET_NAME,
+                      "Cash Flow", "Остатки ДС", VAT_OPS_SHEET_NAME]),
+        (">> Анализ", "7FA89A", [PL_CORRECTED_SHEET_NAME, PL_DASHBOARD_SHEET_NAME,
+                                 PL_BRIDGE_SHEET_NAME, "Юнит-экономика", BREAKEVEN_SHEET_NAME]),
+        (">> Расшифровки", "B7C9C2", [NOTES_SHEET_NAME, PAYOUTS_SHEET_NAME,
+                                      VAT_CHECK_SHEET_NAME]),
+        (">> Пояснения", "D9D9D9", ["Пояснения P&L", "Пояснения Юнит-экономика",
+                                    BE_NOTES_SHEET_NAME, "Пояснения Cash Flow"]),
+    ]
+GROUP_TITLES = {None: "ОСНОВНЫЕ ОТЧЁТЫ", ">> Анализ": "АНАЛИЗ",
+                ">> Расшифровки": "РАСШИФРОВКИ И СВЕРКИ", ">> Пояснения": "ПОЯСНЕНИЯ"}
+DIVIDER_TAB = "4A4A4A"
+
+
+def build_divider(ws, title, items):
+    """Лист-разделитель группы: заголовок и ссылки на листы группы."""
+    sheet_setup(ws, landscape=False)
+    ncols = 5
+    title_band(ws, title, "Листы раздела — щёлкните, чтобы перейти", ncols)
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions["B"].width = 36
+    ws.column_dimensions["C"].width = 70
+    f_link = Font(name=FONT, size=10, bold=True, color=NAVY_3)
+    f_sub = Font(name=FONT, size=9, color=TEXT_2)
+    r = 6
+    for name, descr in items:
+        c = write(ws, r, 2, "\u203a  " + name, font=f_link, fillc=SURFACE_4,
+                  border=B_BOTTOM, align="left", indent=1)
+        c.hyperlink = "#'%s'!A1" % name
+        write(ws, r, 3, descr, font=f_sub, border=B_BOTTOM, align="left", wrap=True)
+        ws.row_dimensions[r].height = 28
+        r += 1
+
+
 def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=None):
     as_of = as_of or report_date
     sheet_setup(ws, landscape=False)
@@ -1795,7 +1868,14 @@ def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=Non
     f_link = Font(name=FONT, size=10, bold=True, color=NAVY_3)
 
     first_contents_row = r
+    f_grp = Font(name=FONT, size=9, bold=True, color=MUTED)
     for name, descr in contents:
+        if name is None:                         # заголовок группы листов
+            write(ws, r, 2, descr, font=f_grp, border=B_SECTION, align="left", indent=1)
+            ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=5)
+            ws.row_dimensions[r].height = 22
+            r += 1
+            continue
         c = write(ws, r, 2, "\u203a  " + name, font=f_link,
                 fillc=SURFACE_4, border=B_BOTTOM, align="left", indent=1)
         c.hyperlink = "#'%s'!A1" % name
@@ -5313,7 +5393,13 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     pl_rowmap = {}
     # отдельное подключение дашборда — после закрытия read-only соединения пакета
     dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from)
-    vat_ref = vat_reference(pl_data, dash_rows, vat_ops_rows)
+    taxes_paid = defaultdict(lambda: defaultdict(float))     # подстатья НДС -> месяц
+    for key, v in cf_data.items():
+        sub = str(key[4] or key[3])
+        if (str(key[3]).startswith("125") or sub.startswith("125")) and "НДС" in sub:
+            taxes_paid[sub][key[0]] += v
+    vat_ref = vat_reference(pl_data, dash_rows, vat_ops_rows, paid=taxes_paid,
+                            adjustments=vat_adj)
     build_pl(ws_pl_spp, {**pl_after_spp(pl_data), **vat_ref}, tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors, after_spp=True,
              rowmap_out=pl_rowmap)
@@ -5326,10 +5412,11 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
              note_anchors=note_anchors, corrected=True, rowmap_out=corr_rowmap)
     # строка «к уплате / к возмещению» ведёт на лист «НДС по операциям»
     for ws_, rm in ((ws_pl_spp, pl_rowmap), (ws_pl_corr, corr_rowmap)):
-        if "Н.10" in rm:
-            c = ws_.cell(row=rm["Н.10"], column=COL_LABEL)
-            c.hyperlink = "#'%s'!A1" % VAT_OPS_SHEET_NAME
-            c.font = Font(name=FONT, size=10, color=NAVY_3, underline="single")
+        for code in ("Н.10", "Н.11"):
+            if code in rm:
+                c = ws_.cell(row=rm[code], column=COL_LABEL)
+                c.hyperlink = "#'%s'!A1" % VAT_OPS_SHEET_NAME
+                c.font = Font(name=FONT, size=10, color=NAVY_3, underline="single")
     unit_vat_correction(unit_data, pl_data, dash_rows)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
@@ -5364,11 +5451,6 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                      report_date, as_of=date_from)
 
     build_vat_check(ws_vat, vat_rows, report_date, as_of=date_from)
-    taxes_paid = defaultdict(lambda: defaultdict(float))     # подстатья НДС -> месяц
-    for key, v in cf_data.items():
-        sub = str(key[4] or key[3])
-        if (str(key[3]).startswith("125") or sub.startswith("125")) and "НДС" in sub:
-            taxes_paid[sub][key[0]] += v
     build_vat_ops(ws_vat_ops, vat_ops_rows, months, report_date, as_of=date_from,
                   paid=taxes_paid, adjustments=vat_adj)
 
@@ -5436,7 +5518,18 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
                                "отчётов — для сверки с отчётом о реализации и УПД"),
     ]
-    contents = [c for c in contents if c[0] in wb.sheetnames]
+    descr = {n: d for n, d in contents}
+    grouped = []
+    for div, _color, names in sheet_groups():
+        items = [(n, descr.get(n, "")) for n in names
+                 if n in wb.sheetnames and n != TOC_SHEET_NAME]
+        if not items:
+            continue
+        grouped.append((None, GROUP_TITLES[div]))
+        grouped += items
+        if div:
+            build_divider(wb.create_sheet(div), GROUP_TITLES[div], items)
+    contents = grouped
     build_cover(ws_cover, report_date, months, kpi, path.name,
                 contents=contents, as_of=date_from)
 
@@ -5448,19 +5541,17 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
             view.tabSelected = False
     wb.active = 0
 
-    # порядок листов: отчёты, затем пояснения
-    order = [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, PL_AFTER_SPP_SHEET_NAME,
-             PL_CORRECTED_SHEET_NAME, PL_DASHBOARD_SHEET_NAME, PL_BRIDGE_SHEET_NAME,
-             NOTES_SHEET_NAME, "Юнит-экономика",
-             BREAKEVEN_SHEET_NAME, "Cash Flow", "Остатки ДС", PAYOUTS_SHEET_NAME,
-             VAT_OPS_SHEET_NAME,
-             "Пояснения P&L", "Пояснения Юнит-экономика", BE_NOTES_SHEET_NAME,
-             "Пояснения Cash Flow"]
-    ordered = [wb[n] for n in order if n in wb.sheetnames]
-    ordered += [ws for ws in wb.worksheets
-                if ws not in ordered and ws.title != VAT_CHECK_SHEET_NAME]
-    if VAT_CHECK_SHEET_NAME in wb.sheetnames:        # сверка — в самом конце книги
-        ordered.append(wb[VAT_CHECK_SHEET_NAME])
+    # порядок листов и цвет ярлыков — по группам; разделитель перед группой
+    ordered = []
+    for div, color, names in sheet_groups():
+        if div and div in wb.sheetnames:
+            wb[div].sheet_properties.tabColor = DIVIDER_TAB
+            ordered.append(wb[div])
+        for n in names:
+            if n in wb.sheetnames:
+                wb[n].sheet_properties.tabColor = color
+                ordered.append(wb[n])
+    ordered += [ws for ws in wb.worksheets if ws not in ordered]
     wb._sheets = ordered
     wb.save(path)
 
