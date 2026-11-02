@@ -1243,7 +1243,7 @@ DATE_FORMATTER = {
 def _money_col(
     field,
     header,
-    width=112,
+    width=100,
     cell_style=None,
 ):
     return {
@@ -1259,7 +1259,7 @@ def _money_col(
 def _int_col(
     field,
     header,
-    width=92,
+    width=78,
     cell_style=None,
 ):
     return {
@@ -1275,7 +1275,7 @@ def _int_col(
 def _percent_col(
     field,
     header,
-    width=96,
+    width=80,
     cell_style=None,
 ):
     return {
@@ -1291,7 +1291,7 @@ def _percent_col(
 def _date_col(
     field,
     header,
-    width=108,
+    width=96,
     cell_style=None,
     pinned=False,
 ):
