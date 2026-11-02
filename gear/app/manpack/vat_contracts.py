@@ -40,6 +40,7 @@ SELECT date_from::DATE AS d, CAST(amount AS DOUBLE) AS amount,
        TRY_CAST(contract_id AS BIGINT) AS cid
 FROM pg.cf_to_csv
 WHERE date_from::DATE <= ? AND COALESCE(amount, 0) <> 0
+  AND COALESCE(description, '') NOT LIKE 'Корректировка GL #%'   -- перенос CF (ADJ_CF)
 """
 COND_SQL = """
 SELECT c.contract_id AS cid, c.date_start, c.date_finish,
@@ -66,6 +67,13 @@ FROM pg.gl.fact v
 LEFT JOIN pg.gl.accural_distribution p ON p.id = v.pid
 WHERE v.chapter = 'VAT_ACCURALS' AND v.date_from <= ?
 GROUP BY 1, 2
+"""
+# НДС, который ещё начислится по графику условий (аванс на будущие периоды)
+FUT_SQL = """
+SELECT CAST(contract_id AS VARCHAR) AS key, SUM(dt_vat - cr_vat) / 100.0 AS fut
+FROM pg.gl.accural_distribution
+WHERE acc_vat IS NOT NULL AND contract_id IS NOT NULL AND date_from > ?
+GROUP BY 1
 """
 UPD_SQL = """
 SELECT d.contract_id AS cid, YEAR(d.date) AS y,
@@ -291,6 +299,10 @@ def build(report_date: date, con) -> dict:
     gl = con.execute(GL_SQL, [report_date]).df()
     upd = con.execute(UPD_SQL, [report_date]).df()
     nodoc = _nodoc(con, report_date)
+    try:
+        fut = con.execute(FUT_SQL, [report_date]).df()
+    except Exception:                            # без графика — сверка по факту на дату
+        fut = pd.DataFrame(columns=["key", "fut"])
     bs130_ids = _bs130(con)
 
     cf["d"] = pd.to_datetime(cf["d"])
@@ -343,10 +355,12 @@ def build(report_date: date, con) -> dict:
     def finish(df, accd, keys):
         df = df.merge(accd, on=keys, how="outer")
         if keys == ["key"]:
-            df = df.merge(nodoc, on="key", how="left")
+            df = df.merge(nodoc, on="key", how="left").merge(fut, on="key", how="left")
         else:
             df["nodoc"] = 0.0
-        for c in ("paid", "got", "net", "exp", "potential", "gl", "upd", "goods_turn", "nodoc"):
+            df["fut"] = 0.0
+        for c in ("paid", "got", "net", "exp", "potential", "gl", "upd", "goods_turn", "nodoc",
+                  "fut"):
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
         df["ymax"] = pd.to_numeric(df["ymax"], errors="coerce").fillna(report_date.year)
         df["vat_mode"] = df["vat_mode"].fillna("none")
@@ -359,7 +373,13 @@ def build(report_date: date, con) -> dict:
             "Договора нет в справочнике")
         df["contract"] = idx.map(info["contract"]).fillna("")
         df.loc[idx.str.startswith("cp:"), "contract"] = "без договора"
-        df["actual"] = df["gl"] + df["upd"]
+        # оплачено вперёд: НДС будущих начислений по графику закрывает разницу, но не больше её
+        # (иначе график за неоплаченные месяцы дал бы ложное «в учёте больше»)
+        gap = df["exp"].fillna(0.0) - (df["gl"] + df["upd"])
+        same = (gap * df["fut"]) > 0
+        df["fut"] = (df["fut"].abs().clip(upper=gap.abs()) * gap.apply(lambda x: 1 if x > 0 else -1)
+                     ).where(same, 0.0)
+        df["actual"] = df["gl"] + df["upd"] + df["fut"]
         # товар — есть УПД или договор идёт на баланс 130001
         df["goods"] = (df["upd"].abs() >= TOL_RUB) | df["cid"].isin(bs130_ids)
         df["goods"] = df["goods"].fillna(False).astype(bool)
