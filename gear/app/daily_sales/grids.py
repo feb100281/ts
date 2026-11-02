@@ -1243,7 +1243,7 @@ DATE_FORMATTER = {
 def _money_col(
     field,
     header,
-    width=145,
+    width=112,
     cell_style=None,
 ):
     return {
@@ -1259,7 +1259,7 @@ def _money_col(
 def _int_col(
     field,
     header,
-    width=120,
+    width=92,
     cell_style=None,
 ):
     return {
@@ -1275,7 +1275,7 @@ def _int_col(
 def _percent_col(
     field,
     header,
-    width=135,
+    width=96,
     cell_style=None,
 ):
     return {
@@ -1291,7 +1291,7 @@ def _percent_col(
 def _date_col(
     field,
     header,
-    width=130,
+    width=108,
     cell_style=None,
     pinned=False,
 ):
@@ -1328,6 +1328,9 @@ def _base_grid(
             "resizable": True,
             "editable": False,
             "floatingFilter": False,
+            # длинные названия колонок — в несколько строк, высота шапки по тексту
+            "wrapHeaderText": True,
+            "autoHeaderHeight": True,
             "cellStyle": {
                 "fontSize": "12px",
                 "lineHeight": "1.25",
@@ -1470,7 +1473,7 @@ def _daily_columns(
 
             _money_col(
                 "amount",
-                "Выручка",
+                "Продажи до СПП",
                 145,
                 {
                     "backgroundColor": "#F4F8F6",
@@ -1480,7 +1483,7 @@ def _daily_columns(
 
             _money_col(
                 "retail_amount",
-                "WB реализовал",
+                "WB реализовал (с НДС)",
                 150,
                 {
                     "backgroundColor": "#F4F8F6",
@@ -1506,7 +1509,7 @@ def _daily_columns(
 
             _money_col(
                 "amount_vatless",
-                "Без НДС",
+                "Продажи до СПП без НДС",
                 145,
             ),
 
@@ -1716,7 +1719,7 @@ def _details_columns():
 
         _money_col(
             "amount",
-            "Выручка",
+            "Продажи до СПП",
             145,
             {
                 "backgroundColor": "#F4F8F6",
@@ -1726,7 +1729,7 @@ def _details_columns():
 
         _money_col(
             "retail_amount",
-            "WB реализовал",
+            "WB реализовал (с НДС)",
             150,
             {
                 "backgroundColor": "#F4F8F6",
@@ -1752,7 +1755,7 @@ def _details_columns():
 
         _money_col(
             "amount_vatless",
-            "Без НДС",
+            "Продажи до СПП без НДС",
             145,
         ),
 
