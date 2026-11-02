@@ -210,6 +210,10 @@ def _classify(r) -> str:
             return "goods_ok"
     if r["vat_mode"] == "by_payment":          # ставка из назначения каждого платежа
         return "ok"
+    # оплаты не через банк (ручная проводка, зачёт): сверить НДС с оплатой нечем
+    if (r["vat_mode"] in WITH_VAT and r["paid"] < TOL_RUB and r["got"] < TOL_RUB
+            and abs(r["net"]) < TOL_RUB):
+        return "ok"
     if r["vat_mode"] in ("unknown", "none"):
         if abs(act) >= TOL_RUB:
             return "vat_no_mode"
@@ -351,6 +355,9 @@ def build(report_date: date, con) -> dict:
                 t[c] = 0.0
 
     info = ctr.assign(key=ctr["cid"].astype(str)).set_index("key")
+    last_mode = (cond.dropna(subset=["cid"]).sort_values("date_start", na_position="first")
+                 .groupby("cid")["vat_mode"].last())
+    last_mode.index = last_mode.index.astype(str)
 
     def finish(df, accd, keys):
         df = df.merge(accd, on=keys, how="outer")
@@ -363,7 +370,9 @@ def build(report_date: date, con) -> dict:
                   "fut"):
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
         df["ymax"] = pd.to_numeric(df["ymax"], errors="coerce").fillna(report_date.year)
-        df["vat_mode"] = df["vat_mode"].fillna("none")
+        # платежей по договору в Cash Flow нет (оплата ручной проводкой / зачётом) —
+        # режим берём из последних условий договора
+        df["vat_mode"] = df["vat_mode"].fillna(df["key"].map(last_mode)).fillna("none")
         idx = df["key"]
         df["cid"] = pd.to_numeric(idx.where(~idx.str.startswith("cp:")),
                                   errors="coerce").astype("Int64")
