@@ -1719,7 +1719,12 @@ WITH commissions AS (
                   AND oper = 'cr'
             ),
             0
-        ) AS net_comission
+        ) AS net_comission,
+
+        -- та же комиссия с НДС (для расчёта снятого НДС)
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
+        - COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
+            AS gross_comission
 
     FROM sales.sales_long
     GROUP BY rrd_id
@@ -1765,7 +1770,8 @@ sales_by_day AS (
             WHERE t.storage_flag = 'Нет приходов'
         ) AS no_income,
 
-        SUM(c.net_comission) AS net_comission
+        SUM(c.net_comission) AS net_comission,
+        SUM(c.gross_comission) AS gross_comission
 
     FROM base t
 
@@ -1902,6 +1908,11 @@ SELECT
         s.net_comission / 100.00,
         2
     ) AS net_comission,
+
+    ROUND(
+        s.gross_comission / 100.00,
+        2
+    ) AS gross_comission,
 
     ROUND(
         (

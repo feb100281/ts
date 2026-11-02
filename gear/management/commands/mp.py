@@ -324,16 +324,16 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
         v("Н.4б", "база: продажи после СПП без фактического НДС", VR_SALES_FACT_BASE, 2)
         add(("ratio", "Н.4", "Ставка НДС с продаж фактическая, %",
              ("Н.2", "Н.4б", 1), 2, FMT_PCT))
-        v("Н.5", "НДС с комиссии WB номинальный — по полной ставке со всей комиссии до СПП",
+        v("Н.5", "НДС с комиссии WB номинальный — как в дашборде: со всей комиссии до СПП",
           VR_COMM_NOM)
         v("Н.6", "НДС с комиссии WB фактический — с вознаграждения по отчёту WB", VR_COMM_FACT)
         v("Н.7б", "база: комиссия WB до СПП без номинального НДС", VR_COMM_NOM_BASE, 2)
         add(("ratio", "Н.7", "Ставка НДС с комиссии номинальная, %",
              ("Н.5", "Н.7б", 1), 2, FMT_PCT))
-        v("Н.8б", "база: комиссия WB до СПП без фактического НДС", VR_COMM_FACT_BASE, 2)
+        v("Н.8б", "база: комиссия WB по P&L до СПП без НДС (= −(стр. 1.9 + 1.15) листа «с корректировкой»)", VR_COMM_FACT_BASE, 2)
         add(("ratio", "Н.8", "Ставка НДС с комиссии фактическая к комиссии до СПП, %",
              ("Н.6", "Н.8б", 1), 2, FMT_PCT))
-        v("Н.9", "Комиссия WB после СПП без НДС (минус — WB доплачивает: СПП больше комиссии)",
+        v("Н.9", "Комиссия WB после СПП без НДС = база Н.8б − СПП (минус — WB доплачивает)",
           VR_COMM_SPP_BASE, 2)
         v("Н.10", "НДС к уплате (−) / к возмещению (+) за месяц, оценка → «НДС по операциям»",
           VR_PAY)
@@ -591,8 +591,9 @@ NOTES_PL = [
         "Н.2 — фактический: с цены покупателя (после СПП), как на листе «НДС по операциям».",
         "Н.3, Н.4 — ставки: НДС / продажи без этого НДС (до СПП — номинальная, после СПП — "
         "фактическая). Базы — строки «б».",
-        "Н.5 — НДС с комиссии WB номинальный: полная ставка (20%, с 2026 г. 22%) со всей "
-        "комиссии до СПП. Н.6 — фактический НДС с вознаграждения по отчёту WB. Фактический "
+        "Н.5 — НДС с комиссии WB номинальный: НДС, который дашборд снял со всей комиссии "
+        "до СПП (комиссия с НДС − комиссия без НДС, ставка по строкам отчёта WB). Н.7б + Н.5 = "
+        "комиссия до СПП с НДС. Н.6 — фактический НДС с вознаграждения по отчёту WB. Фактический "
         "меньше: в комиссии до СПП есть СПП, ПВЗ и эквайринг, с которых WB НДС не начисляет.",
         "Н.7 — номинальная ставка (20% / 22%); Н.8 — фактическая к комиссии до СПП. "
         "Н.9 — комиссия после СПП: в отдельные месяцы СПП, которую WB компенсирует, больше "
@@ -923,6 +924,9 @@ DASH_CORR_ITEM = "3.7 Коррекции продаж и возвратов"
 DASH_ADJ_ITEM = "3.8 Разница с расчётом дашборда"
 
 
+DASH_COMM_VAT: dict = {}     # {me: НДС, снятый дашбордом с комиссии}; заполняет fetch_dashboard_rows
+
+
 def fetch_dashboard_rows(start, end):
     """Помесячные суммы дашборда продаж: (me, amount, retail, rev, cogs, comm, wb_costs)."""
     from gear.app.data.base import DashboardData
@@ -936,6 +940,13 @@ def fetch_dashboard_rows(start, end):
     cols = ["amount", "retail_amount", "amount_vatless", "cogs_man",
             "net_comission", "wb_costs"]
     g = df.groupby("me")[cols].sum()
+    # НДС, который дашборд снял с комиссии: без НДС − с НДС (комиссия со знаком минус)
+    global DASH_COMM_VAT
+    DASH_COMM_VAT = {}
+    if "gross_comission" in df.columns:
+        gc = df.groupby("me")[["gross_comission", "net_comission"]].sum()
+        DASH_COMM_VAT = {me: float(r["net_comission"] or 0) - float(r["gross_comission"] or 0)
+                         for me, r in gc.iterrows()}
     return [(me, *[float(v or 0) for v in row]) for me, row in g.iterrows()]
 
 
@@ -1048,7 +1059,9 @@ def vat_reference(pl_data, dash_rows, vat_ops_rows, paid=None, adjustments=None)
         comm_nom = -comm                         # комиссия в P&L — расход со знаком минус
         put(me, VR_SALES_NOM, amount - rev)
         put(me, VR_SALES_NOM_BASE, rev)
-        put(me, VR_COMM_NOM, comm_nom * rate / 100)
+        # НДС ровно тот, что снял дашборд; если колонки нет — по полной ставке
+        put(me, VR_COMM_NOM, DASH_COMM_VAT[me] if me in DASH_COMM_VAT
+            else comm_nom * rate / 100)
         put(me, VR_COMM_NOM_BASE, comm_nom)
     months = {k[0] for k in pl_data} | set(fact_s) | set(fact_c) | set(pay)
     for me in months:
