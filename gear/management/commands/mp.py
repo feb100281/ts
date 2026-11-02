@@ -167,6 +167,7 @@ SEC_OTHER = "5. ПРОЧИЕ ДОХОДЫ И РАСХОДЫ"
 SEC_OVERHEAD = "6. НАКЛАДНЫЕ РАСХОДЫ"
 SEC_CORP = "7. КОРПОРАТИВНЫЕ РАСХОДЫ"
 SEC_FIN = "8. ФИНАНСОВЫЕ РАСХОДЫ"
+SEC_VATREF = "Н. СПРАВОЧНО: НДС"     # только листы «P&L после СПП» и «с корректировкой»
 
 TAX_SUBITEM = "125200 Налог на прибыль"
 
@@ -308,6 +309,35 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("div", "2.4", "Средняя цена продажи (до СПП)", ("1.1", "2.1"), 2, FMT_PRICE))
     add(("div", "2.5", "Средняя цена после скидки", ("1.3", "2.1"), 2, FMT_PRICE))
     add(("div", "2.6", "Средняя себестоимость единицы", ("1.6n", "2.1"), 2, FMT_PRICE))
+
+    # ------------------------------------------------ Справочно: НДС
+    if after_spp or corrected:
+        v = lambda code, label, itm, lvl=1: add(
+            ("item", code, label, (SEC_VATREF, itm, 1), lvl, FMT_MONEY))
+        add(("blank", None, None, None, 1, None))
+        add(("band", "Н", "СПРАВОЧНО: НДС", None, 0, None))
+        v("Н.1", "НДС с продаж номинальный — по ставке карточки с цены до СПП", VR_SALES_NOM)
+        v("Н.2", "НДС с продаж фактический — с цены покупателя (после СПП)", VR_SALES_FACT)
+        v("Н.3б", "база: продажи до СПП без номинального НДС", VR_SALES_NOM_BASE, 2)
+        add(("ratio", "Н.3", "Ставка НДС с продаж номинальная, %",
+             ("Н.1", "Н.3б", 1), 2, FMT_PCT))
+        v("Н.4б", "база: продажи после СПП без фактического НДС", VR_SALES_FACT_BASE, 2)
+        add(("ratio", "Н.4", "Ставка НДС с продаж фактическая, %",
+             ("Н.2", "Н.4б", 1), 2, FMT_PCT))
+        v("Н.5", "НДС с комиссии WB номинальный — по полной ставке со всей комиссии до СПП",
+          VR_COMM_NOM)
+        v("Н.6", "НДС с комиссии WB фактический — с вознаграждения по отчёту WB", VR_COMM_FACT)
+        v("Н.7б", "база: комиссия WB до СПП без номинального НДС", VR_COMM_NOM_BASE, 2)
+        add(("ratio", "Н.7", "Ставка НДС с комиссии номинальная, %",
+             ("Н.5", "Н.7б", 1), 2, FMT_PCT))
+        v("Н.8б", "база: комиссия WB до СПП без фактического НДС", VR_COMM_FACT_BASE, 2)
+        add(("ratio", "Н.8", "Ставка НДС с комиссии фактическая к комиссии до СПП, %",
+             ("Н.6", "Н.8б", 1), 2, FMT_PCT))
+        v("Н.9б", "база: комиссия WB после СПП без фактического НДС", VR_COMM_SPP_BASE, 2)
+        add(("ratio", "Н.9", "Ставка НДС с комиссии фактическая после СПП, %",
+             ("Н.6", "Н.9б", 1), 2, FMT_PCT))
+        v("Н.10", "НДС к уплате (−) / к возмещению (+), оценка → лист «НДС по операциям»",
+          VR_PAY)
     return L
 
 
@@ -554,6 +584,20 @@ NOTES_PL = [
         "Проценты рентабельности ниже считаются от продаж без НДС после СПП (1.18).",
         "Корректировка меняется от месяца к месяцу (зависит от СПП и комиссии), "
         "поэтому единым процентом её заменить нельзя.",
+    ]),
+    ("Справочно: НДС (листы «P&L после СПП» и «P&L дашборд с корректировкой»)", [
+        "Н.1 — НДС с продаж номинальный: как в дашборде, по ставке карточки с цены до СПП. "
+        "Н.2 — фактический: с цены покупателя (после СПП), как на листе «НДС по операциям».",
+        "Н.3, Н.4 — ставки: НДС / продажи без этого НДС (до СПП — номинальная, после СПП — "
+        "фактическая). Базы — строки «б».",
+        "Н.5 — НДС с комиссии WB номинальный: полная ставка (20%, с 2026 г. 22%) со всей "
+        "комиссии до СПП. Н.6 — фактический НДС с вознаграждения по отчёту WB. Фактический "
+        "меньше: в комиссии до СПП есть СПП, ПВЗ и эквайринг, с которых WB НДС не начисляет.",
+        "Н.7 — номинальная ставка (20% / 22%); Н.8 — фактическая к комиссии до СПП; Н.9 — "
+        "фактическая к комиссии после СПП.",
+        "Н.10 — НДС к уплате (минус) или к возмещению (плюс) за месяц, оценка: стр. 3 листа "
+        "«НДС по операциям». В колонках года и «Итого» — сумма с начала периода. Сальдо "
+        "с бюджетом с учётом оплат — раздел 5 того листа (ссылка в названии строки).",
     ]),
 ]
 
@@ -934,6 +978,60 @@ def pl_after_spp(pl_data):
         if v is None:
             continue
         out[(me, sec, itm)] = round(v - spp if itm.startswith("1.4") else v + spp, 2)
+    return out
+
+
+VR_SALES_NOM = "Н.1 НДС с продаж номинальный"
+VR_SALES_FACT = "Н.2 НДС с продаж фактический"
+VR_SALES_NOM_BASE = "Н.3б Продажи до СПП без номинального НДС"
+VR_SALES_FACT_BASE = "Н.4б Продажи после СПП без фактического НДС"
+VR_COMM_NOM = "Н.5 НДС с комиссии номинальный"
+VR_COMM_FACT = "Н.6 НДС с комиссии фактический"
+VR_COMM_NOM_BASE = "Н.7б Комиссия до СПП без номинального НДС"
+VR_COMM_FACT_BASE = "Н.8б Комиссия до СПП без фактического НДС"
+VR_COMM_SPP_BASE = "Н.9б Комиссия после СПП без фактического НДС"
+VR_PAY = "Н.10 НДС к уплате / к возмещению"
+
+
+def vat_reference(pl_data, dash_rows, vat_ops_rows):
+    """Справочно: НДС для листов P&L — {(me, SEC_VATREF, item): value}.
+
+    Номинально — как в дашборде: НДС по ставке карточки с цены до СПП и по полной
+    ставке (20%, с 2026 г. 22%) со всей комиссии до СПП. Фактически — НДС из листа
+    «НДС по операциям» (с цены покупателя и с вознаграждения по отчёту WB).
+    Н.10 — стр. 3 листа «НДС по операциям» (минус — к уплате, плюс — к возмещению).
+    """
+    out = {}
+    fact_s, fact_c = defaultdict(float), defaultdict(float)
+    for me, kind, *_rest, v in vat_ops_rows:
+        me = me if isinstance(me, date) else date.fromisoformat(str(me)[:10])
+        if kind == "sales":
+            fact_s[me] += float(v or 0)
+        elif kind == "comm":
+            fact_c[me] += float(v or 0)
+    pay = next((vals for kind, code, _l, vals, _lv in vat_layout(vat_ops_rows)
+                if kind == "grand" and code == "3"), {}) or {}
+
+    def put(me, itm, v):
+        if v:
+            out[(me, SEC_VATREF, itm)] = round(v, 2)
+
+    after = pl_after_spp(pl_data)
+    for me, amount, retail, rev, cogs, comm, wb in dash_rows:
+        rate = 22.0 if me.year >= 2026 else 20.0
+        comm_nom = abs(comm)
+        put(me, VR_SALES_NOM, amount - rev)
+        put(me, VR_SALES_NOM_BASE, rev)
+        put(me, VR_COMM_NOM, comm_nom * rate / 100)
+        put(me, VR_COMM_NOM_BASE, comm_nom)
+    months = {k[0] for k in pl_data} | set(fact_s) | set(fact_c) | set(pay)
+    for me in months:
+        put(me, VR_SALES_FACT, abs(fact_s.get(me, 0.0)))
+        put(me, VR_COMM_FACT, abs(fact_c.get(me, 0.0)))
+        put(me, VR_SALES_FACT_BASE, pl_after_spp_rev(pl_data, me))
+        put(me, VR_COMM_FACT_BASE, abs(pl_data.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0))
+        put(me, VR_COMM_SPP_BASE, abs(after.get((me, SEC_REVENUE, "1.9. Комиссия WB")) or 0.0))
+        put(me, VR_PAY, pay.get(me, 0.0))
     return out
 
 
@@ -2151,7 +2249,40 @@ def _f(value):
 
 
 
-def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balance=0.0):
+DEPOSIT_DETAIL_SQL = """
+SELECT COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp,
+       CASE WHEN k.id IS NULL THEN 'Без договора'
+            ELSE COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(k.number, 'б/н')
+                 || ' от ' || COALESCE(strftime(k.date, '%d.%m.%Y'), 'б/д') END AS contract,
+       MIN(f.date_from) FILTER (WHERE f.dt > 0)::DATE AS first_in,
+       SUM(COALESCE(f.dt, 0)) / 100.0 AS placed,
+       SUM(COALESCE(f.cr, 0)) / 100.0 AS returned,
+       SUM(COALESCE(f.dt, 0) - COALESCE(f.cr, 0)) / 100.0 AS balance
+FROM pg.gl.fact f
+LEFT JOIN pg.public.contracts_contracts k ON k.id = f.contract_id
+LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = k.title_id
+LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = k.cp_id
+WHERE f.acc_id = 10 AND f.date_from <= $date_from
+GROUP BY 1, 2
+HAVING ABS(SUM(COALESCE(f.dt, 0) - COALESCE(f.cr, 0))) >= 50
+ORDER BY 6 DESC
+"""
+
+
+def fetch_deposit_rows(con, date_from):
+    """Депозиты с остатком на дату: (контрагент, договор, первое размещение,
+    размещено, возвращено, остаток). Счёт тот же, что в sql/deposits.txt."""
+    try:
+        return con.execute(DEPOSIT_DETAIL_SQL,
+                           parameters={"date_from": date_from}).fetchall()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Расшифровка депозитов: %s", e)
+        return []
+
+
+def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balance=0.0,
+                   deposit_rows=None):
     as_of = as_of or report_date
     """
     bank_rows — строки витрины treasury с block='BANK'
@@ -2253,14 +2384,42 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
         align="left", indent=1)
     write(ws, r, 3, _f(deposit_balance), font=f_income, fmt=FMT_MONEY,
         border=B_BOTTOM, align="right")
-    write(ws, r, 4, "Размещены под проценты; не включаются в итог денежных средств",
+    write(ws, r, 4, "Размещены под проценты; не включаются в итог денежных средств"
+          + (" · «+» слева — по договорам" if deposit_rows else ""),
         font=f_note, border=B_BOTTOM, align="left", indent=1)
     ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
     for cc in range(5, ncols + 1):
         ws.cell(row=r, column=cc).border = B_BOTTOM
     ws.row_dimensions[r].height = 17
+    ws.sheet_properties.outlinePr.summaryBelow = False   # «+» над расшифровкой
+    r += 1
 
-    r += 2
+    def hidden(rr):
+        ws.row_dimensions[rr].outline_level = 1
+        ws.row_dimensions[rr].hidden = True
+
+    if deposit_rows:
+        for col, h in ((2, "Контрагент · договор"), (3, "Остаток"), (4, "Первое размещение"),
+                       (5, "Размещено"), (6, "Возвращено")):
+            write(ws, r, col, h, font=f_note, border=B_BOTTOM,
+                  align="left" if col == 2 else "right", indent=2 if col == 2 else 0)
+        hidden(r)
+        r += 1
+        for cp, contract, first_in, placed, returned, bal in deposit_rows:
+            write(ws, r, 2, "%s · %s" % (cp, contract), font=f_label, border=B_BOTTOM,
+                  align="left", indent=2, wrap=True)
+            write(ws, r, 3, _f(bal), font=f_income, fmt=FMT_MONEY, border=B_BOTTOM,
+                  align="right")
+            write(ws, r, 4, first_in.strftime("%d.%m.%Y") if first_in else "",
+                  font=f_label, border=B_BOTTOM, align="right")
+            write(ws, r, 5, _f(placed), font=f_income, fmt=FMT_MONEY, border=B_BOTTOM,
+                  align="right")
+            write(ws, r, 6, _f(returned), font=f_expense, fmt=FMT_MONEY,
+                  border=B_BOTTOM, align="right")
+            hidden(r)
+            r += 1
+
+    r += 1
 
     # -------------------------------------------- расшифровка по счетам
     r = section(r, "РАСШИФРОВКА ПО БАНКОВСКИМ СЧЕТАМ")
@@ -2276,10 +2435,25 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
     r += 1
 
     first_bank_row = r
+    # закрытые счета без остатка — внизу, свёрнуты под «+»
+    is_closed = lambda row: ("закрыт" in str(row[3] or "").lower()
+                             and abs(_f(row[6])) < 0.5)
+    closed_rows = [row for row in bank_rows if is_closed(row)]
+    bank_rows = [row for row in bank_rows if not is_closed(row)] + closed_rows
     if bank_rows:
-        for row in bank_rows:
+        for idx, row in enumerate(bank_rows):
+            if closed_rows and idx == len(bank_rows) - len(closed_rows):
+                write(ws, r, 2, "Закрытые счета без остатка: %d · «+» слева"
+                      % len(closed_rows), font=f_note, border=B_BOTTOM,
+                      align="left", indent=1)
+                for cc in range(3, ncols + 1):
+                    ws.cell(row=r, column=cc).border = B_BOTTOM
+                r += 1
             write(ws, r, 2, row[1], font=f_label, border=B_BOTTOM,
-                  align="left", indent=1)
+                  align="left", indent=2 if is_closed(row) else 1)
+            if is_closed(row):
+                ws.row_dimensions[r].outline_level = 1
+                ws.row_dimensions[r].hidden = True
             write(ws, r, 3, row[2] or "", font=f_label, border=B_BOTTOM,
                   align="center")
             status = row[3] or ""
@@ -5044,6 +5218,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         conv_rows, vat_rows) = fetch_pack_data(con, date_from)
         vat_ops_rows = fetch_vat_summary(con, date_from)
         vat_adj = fetch_vat_adjustments(con, date_from)
+        deposit_rows = fetch_deposit_rows(con, date_from)
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -5136,17 +5311,25 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     note_anchors = build_pl_notes(ws_notes_pl, note_rows, months, report_date,
                                   as_of=date_from)
     pl_rowmap = {}
-    build_pl(ws_pl_spp, pl_after_spp(pl_data), tax_by_month, months, report_date,
-             as_of=date_from, note_anchors=note_anchors, after_spp=True,
-             rowmap_out=pl_rowmap)
     # отдельное подключение дашборда — после закрытия read-only соединения пакета
     dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from)
+    vat_ref = vat_reference(pl_data, dash_rows, vat_ops_rows)
+    build_pl(ws_pl_spp, {**pl_after_spp(pl_data), **vat_ref}, tax_by_month, months,
+             report_date, as_of=date_from, note_anchors=note_anchors, after_spp=True,
+             rowmap_out=pl_rowmap)
     build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors,
              dashboard=True)
-    build_pl(ws_pl_corr, pl_dashboard_corrected(pl_data, dash_rows), tax_by_month,
-             months, report_date, as_of=date_from, note_anchors=note_anchors,
-             corrected=True)
+    corr_rowmap = {}
+    build_pl(ws_pl_corr, {**pl_dashboard_corrected(pl_data, dash_rows), **vat_ref},
+             tax_by_month, months, report_date, as_of=date_from,
+             note_anchors=note_anchors, corrected=True, rowmap_out=corr_rowmap)
+    # строка «к уплате / к возмещению» ведёт на лист «НДС по операциям»
+    for ws_, rm in ((ws_pl_spp, pl_rowmap), (ws_pl_corr, corr_rowmap)):
+        if "Н.10" in rm:
+            c = ws_.cell(row=rm["Н.10"], column=COL_LABEL)
+            c.hyperlink = "#'%s'!A1" % VAT_OPS_SHEET_NAME
+            c.font = Font(name=FONT, size=10, color=NAVY_3, underline="single")
     unit_vat_correction(unit_data, pl_data, dash_rows)
     build_unit_economics(ws_unit, unit_data, months, report_date, as_of=date_from)
     build_breakeven(ws_be, pl_rowmap, months, report_date, as_of=date_from,
@@ -5165,6 +5348,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     report_date,
     as_of=date_from,
     deposit_balance=deposit_balance,
+    deposit_rows=deposit_rows,
 )
 
     outs, ins = split_payouts(payout_rows)
