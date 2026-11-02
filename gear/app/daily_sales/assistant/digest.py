@@ -331,7 +331,17 @@ def blocks(day: date, loaded: date | None = None, charts: bool = True) -> list[d
         if st_d and st["total"] != st_d["total"]:
             lines.append(f"За вчерашний день общий остаток: <b>{_diff(st['total'] - st_d['total'])} "
                          "шт</b>.")
-        lines.append("<i>Считаем все места вместе: склады WB, товар в пути и наш склад FBS.</i>")
+        # запас в днях: средние продажи за 7 дней (выкупы минус возвраты)
+        per_day = span(day - timedelta(days=6), day, NET_QTY) / 7
+        if per_day > 0:
+            on_hand = st["wb"] + st["fbs"]
+            lines.append(f"При продажах около {_n(per_day)} шт в день (среднее за 7 дней):")
+            lines.append(f"• запаса на складах (WB + FBS, {_n(on_hand)} шт) — примерно на "
+                         f"<b>{_n(on_hand / per_day)} дн.</b>;")
+            lines.append(f"• оборачиваемость всего товара (включая товар в пути) — "
+                         f"<b>{_n(st['total'] / per_day)} дн.</b>")
+        lines.append("<i>Остатки — все места вместе: склады WB, товар в пути и наш склад FBS. "
+                     "Продажи в день — выкупы минус возвраты. Запас — среднее по ассортименту.</i>")
         parts = [(n, st[k], (st[k] - st_w[k]) if st_w else None) for n, k in (
             ("Склад FBS", "fbs"), ("Склады WB", "wb"), ("В пути к клиенту", "to_client"),
             ("В пути от клиента", "from_client"))]
