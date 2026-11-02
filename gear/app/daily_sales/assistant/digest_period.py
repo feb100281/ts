@@ -243,9 +243,15 @@ def blocks(kind: str, end: date, loaded: date | None = None, charts: bool = True
                              f"<b>{_diff(st[k] - st_o[k])} шт</b>.")
         if cur[NET_QTY] > 0 and st["total"]:
             per_day = cur[NET_QTY] / n_cur
-            lines.append(f"При продажах около {_n(per_day)} шт в день остатков хватит примерно на "
+            on_hand = st["wb"] + st["fbs"]               # можно продать: склады WB и наш FBS
+            lines.append(f"При продажах около {_n(per_day)} шт в день:")
+            lines.append(f"• запаса на складах (WB + FBS, {_n(on_hand)} шт) — примерно на "
+                         f"<b>{_n(on_hand / per_day)} дн.</b>;")
+            lines.append(f"• оборачиваемость всего товара (включая товар в пути) — "
                          f"<b>{_n(st['total'] / per_day)} дн.</b>")
-        lines.append("<i>Считаем все места вместе: склады WB, товар в пути и наш склад FBS.</i>")
+        lines.append("<i>Продажи в день — выкупы минус возвраты, среднее за период. "
+                     "Это среднее по всему ассортименту: по отдельным позициям может быть "
+                     "и избыток, и дефицит.</i>")
         parts = [(n, st[k], (st[k] - st_o[k]) if st_o else None) for n, k in (
             ("Склад FBS", "fbs"), ("Склады WB", "wb"), ("В пути к клиенту", "to_client"),
             ("В пути от клиента", "from_client"))]

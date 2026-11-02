@@ -278,7 +278,7 @@ class Command(BaseCommand):
                               f"начислено {acc:,.2f}, НДФЛ {nd:,.2f}, взносы {cc:,.2f}"
                               .replace(",", " "))
 
-        new = self._new_employees(pay, con)
+        new = self._new_employees(pay, con, only)
         warns += self._cash_not_in_zup(pay, con, only)
         if only:
             warns = [w for w in warns if not re.match(r"\d{4}-\d{2}", w) or w.startswith(only)]
@@ -330,14 +330,23 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("Отправлено на сервер."))
 
     @staticmethod
-    def _new_employees(pay, con) -> list[str]:
-        """ФИО из файлов, которых нет среди контрагентов (сравнение без учёта регистра)."""
+    def _new_employees(pay, con, only=None) -> list[str]:
+        """ФИО из файлов, которых нет среди контрагентов (сравнение без учёта регистра).
+
+        Смотрим только проверяемый месяц (или последний в данных): после смены
+        фамилии старое ФИО остаётся в прошлых ведомостях и не должно считаться новым.
+        """
         try:
             from counterparties.models import Counterparty
             known = {norm_name(n) for n in Counterparty.objects.values_list("name", flat=True)}
         except Exception as e:
             return [f"(не удалось проверить по базе контрагентов: {type(e).__name__}: {e})"]
-        names = {x["full_name"] for x in con} | {r["full_name"] for r in pay if r.get("full_name")}
+        periods = [x["period"] for x in con] + [r["period"] for r in pay]
+        if not periods:
+            return []
+        m = date(*map(int, only.split("-")), 1) if only else max(periods)
+        names = ({x["full_name"] for x in con if x["period"] == m}
+                 | {r["full_name"] for r in pay if r.get("full_name") and r["period"] == m})
         return sorted(n for n in names if n and n not in known)
 
     @staticmethod
