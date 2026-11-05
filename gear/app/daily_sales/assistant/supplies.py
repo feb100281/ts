@@ -5,8 +5,9 @@
 команда wb_supplies). Выкупы — отчёт реализации WB (sales.wb_raw): продажи минус
 возвраты, привязка к поставке по gi_id. Остатки — как в stocks_report.
 
-Срок распродажи поставки = дней с приёмки + (принято − выкуплено) / темп,
-темп — выкупы этой поставки в день за последние RATE_DAYS дней.
+Остаток артикула на WB раскладывается по поставкам от новых к старым. Срок
+распродажи = дней с приёмки + остаток этой и более старых поставок / темп,
+темп — выкупы артикула в день за последние RATE_DAYS дней.
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from conns import get_duckdb_conn_with_opt
 
 RATE_DAYS = 14          # окно темпа выкупа
 OK_DAYS, WARN_DAYS = 30, 45
-MIN_DAYS = 7            # моложе — прогноз ненадёжный
+MIN_DAYS = 14           # новинка без выкупов моложе — «рано оценивать»
 BRAND_TOP = 12
 
 ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 нет выкупов"
@@ -76,10 +77,8 @@ PRODUCT_SQL = """
 def _status(days_since, remaining, rate, forecast):
     if remaining <= 0:
         return ST_OK if forecast <= OK_DAYS else ST_WARN if forecast <= WARN_DAYS else ST_BAD
-    if days_since + 1 < MIN_DAYS:
-        return ST_NEW
     if not rate:
-        return ST_STOP
+        return ST_NEW if days_since + 1 < MIN_DAYS else ST_STOP
     return ST_OK if forecast <= OK_DAYS else ST_WARN if forecast <= WARN_DAYS else ST_BAD
 
 
@@ -133,14 +132,13 @@ def build(report_date=None, brand=None) -> dict:
         g = by_key.get((r.nm, r.sid))
         g = g[g["d"] >= r.fact].sort_values("d") if g is not None else None
         days_since = (e - r.fact).days
-        sold = s30 = s45 = win = 0.0
+        sold = s30 = s45 = 0.0
         done_day = None
         if g is not None and not g.empty:
             age = (g["d"] - r.fact).dt.days
             sold = float(g["q"].sum())
             s30 = float(g.loc[age < OK_DAYS, "q"].sum())
             s45 = float(g.loc[age < WARN_DAYS, "q"].sum())
-            win = float(g.loc[g["d"] >= w0, "q"].sum())
             cum = g["q"].cumsum()
             hit = g.loc[cum >= r.acc, "d"]
             if not hit.empty:
@@ -148,21 +146,27 @@ def build(report_date=None, brand=None) -> dict:
         calc = max(r.acc - sold, 0.0)
         remaining = min(calc, max(left.get(r.nm, 0.0), 0.0))
         left[r.nm] = left.get(r.nm, 0.0) - remaining
-        span = max(1, min(RATE_DAYS, days_since + 1))
-        rate = max(win, 0.0) / span
-        if remaining <= 0:
-            forecast, status = done_day, ST_DONE
-        else:
-            forecast = days_since + 1 + remaining / rate if rate > 0 else None
-            if forecast is not None:
-                forecast = min(forecast, MAX_DAYS)
-            status = _status(days_since, remaining, rate, 0 if forecast is None else forecast)
         rows.append({"nm": r.nm, "sid": r.sid, "fact": r.fact.date(), "acc": r.acc,
                      "color": r.color, "sold": sold, "s30": s30, "s45": s45, "calc": calc,
-                     "remaining": remaining, "days": days_since + 1, "rate": rate,
-                     "forecast": forecast, "status": status})
+                     "remaining": remaining, "days": days_since + 1, "done_day": done_day})
     sp = pd.DataFrame(rows, columns=["nm", "sid", "fact", "acc", "color", "sold", "s30", "s45",
-                                     "calc", "remaining", "days", "rate", "forecast", "status"])
+                                     "calc", "remaining", "days", "done_day"])
+    # темп — выкупы артикула в день (по всем поставкам): товар на складе общий
+    rate_nm = (sales[sales["d"] >= w0].groupby("nm")["q"].sum().clip(lower=0) / RATE_DAYS)
+    sp["rate"] = sp["nm"].map(rate_nm).fillna(0.0)
+    # очередь: сначала продаются старые поставки, потом новые
+    sp = sp.sort_values(["nm", "fact", "sid"])
+    sp["queue"] = sp.groupby("nm")["remaining"].cumsum()
+    fc, stt = [], []
+    for r in sp.itertuples(index=False):
+        if r.remaining <= 0:
+            fc.append(r.done_day if pd.notna(r.done_day) else None)
+            stt.append(ST_DONE)
+            continue
+        f = min(r.days + r.queue / r.rate, MAX_DAYS) if r.rate > 0 else None
+        fc.append(f)
+        stt.append(_status(r.days - 1, r.remaining, r.rate, 0 if f is None else f))
+    sp["forecast"], sp["status"] = fc, stt
     sp = sp.merge(art[["nm", "brand", "category", "sa", "title"]], on="nm", how="left")
     active = sp[sp["remaining"] > 0].copy()
 
@@ -217,8 +221,8 @@ def report(report_date=None, brand=None) -> str:
                  f"{_f(len(act))} (остаток по ним {_f(act['remaining'].sum())} шт).")
     lines.append("Статус\tПоставок\tОстаток по поставкам, шт")
     for s, name in ((ST_OK, "✅ распродастся за 30 дней"), (ST_WARN, "⚠️ за 31–45 дней"),
-                    (ST_BAD, "🔴 дольше 45 дней"), (ST_STOP, "🔴 нет выкупов 14 дней"),
-                    (ST_NEW, "⏳ меньше 7 дней с приёмки")):
+                    (ST_BAD, "🔴 дольше 45 дней"), (ST_STOP, "🔴 артикул не выкупался 14 дней"),
+                    (ST_NEW, "⏳ новинка, выкупов ещё нет")):
         n = int(cnt.get(s, 0))
         if n:
             lines.append(f"{name}\t{n}\t{_f(act.loc[act['status'] == s, 'remaining'].sum())}")
@@ -246,8 +250,8 @@ def report(report_date=None, brand=None) -> str:
     if data["no_supply"]:
         lines.append(f"Артикулов без поставки в данных WB: {data['no_supply']} "
                      "(приёмка раньше загрузки или поставка не найдена).")
-    lines.append(f"Прогноз срока = дней с приёмки + (принято − выкуплено) / выкупы этой поставки "
-                 f"в день за {RATE_DAYS} дней. Выкупы = продажи минус возвраты по отчёту WB, "
+    lines.append(f"Прогноз срока = дней с приёмки + (остаток этой и более старых поставок) / "
+                 f"выкупы артикула в день за {RATE_DAYS} дней. Выкупы = продажи минус возвраты по отчёту WB, "
                  "привязка к поставке по номеру. Остаток по поставке — фактический остаток WB "
                  "артикула, разложенный по поставкам от новых к старым. Полная "
                  "таблица по артикулам и поставкам — в Excel (export_excel с supply_turnover).")
@@ -276,7 +280,8 @@ SUP_COLS = [
     ("acc", "Принято, шт"), ("sold", "Выкуплено всего, шт"),
     ("s30", "Выкуплено за 30 дней, шт"), ("s45", "Выкуплено за 45 дней, шт"),
     ("calc", "Принято − выкуплено, шт"), ("remaining", "Остаток по поставке, шт"),
-    ("rate", "Выкупы в день, шт"),
+    ("rate", "Выкупы артикула в день, шт"),
+    ("queue", "Очередь: остаток этой и более старых поставок, шт"),
     ("forecast", "Срок распродажи (прогноз), дней"), ("status", "Статус"),
 ]
 NOTES = [
@@ -284,14 +289,17 @@ NOTES = [
                 "поставка. В отчёт попадают только артикулы с остатком на дату остатков."),
     ("Цель", f"Поставка распродаётся за {OK_DAYS}–{WARN_DAYS} дней."),
     ("Статус", f"✅ до {OK_DAYS} дней · ⚠️ {OK_DAYS + 1}–{WARN_DAYS} · 🔴 больше {WARN_DAYS} · "
-               f"🔴 нет выкупов — по поставке нет выкупов за {RATE_DAYS} дней · "
-               f"⏳ меньше {MIN_DAYS} дней с приёмки, прогноз ненадёжный."),
-    ("Срок распродажи", "Дней с приёмки + (принято − выкуплено) / выкупы в день. Если поставка "
-                        "уже выкуплена целиком — фактический день, когда выкупы достигли принятого."),
+               f"🔴 нет выкупов — артикул не выкупался {RATE_DAYS} дней · "
+               f"⏳ новинка: меньше {MIN_DAYS} дней с приёмки и выкупов ещё нет."),
+    ("Срок распродажи", "Дней с приёмки + очередь / выкупы артикула в день. Очередь — остаток этой "
+                        "поставки и всех более старых поставок артикула: старые продаются первыми."),
     ("Выкупы", "Продажи минус возвраты из отчёта реализации WB (как в дашборде, с НДС). "
                "К поставке привязываются по номеру поставки в отчёте WB."),
-    ("Темп", f"Выкупы поставки за последние {RATE_DAYS} дней / {RATE_DAYS} (для молодых поставок — "
-             "на число дней с приёмки)."),
+    ("Темп", f"Выкупы артикула (по всем поставкам) за последние {RATE_DAYS} дней / {RATE_DAYS}. "
+             "По номеру поставки темп не считаем: товар артикула на складе общий, и WB "
+             "записывает продажи на разные поставки."),
+    ("Выкуплено по поставке", "Продажи минус возвраты с номером этой поставки в отчёте WB — "
+                              "справочно; на прогноз не влияет."),
     ("Остаток по поставке", "Фактический остаток артикула на WB (склады + в пути к клиенту и от "
                             "клиента) разложен по поставкам от новых к старым, но не больше, чем "
                             "«принято − выкуплено» по этой поставке. Остаток 0 — поставка распродана. "
