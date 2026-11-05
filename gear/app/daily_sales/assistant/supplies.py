@@ -192,8 +192,8 @@ def build(report_date=None, brand=None) -> dict:
     a["color"] = sp.sort_values("fact").groupby("nm")["color"].last()
     a["n_act"] = act["n_act"]
     a["rem"] = act["rem"]
-    a.loc[a["last_status"].isna(), "last_status"] = a["nm"].map(
-        lambda n: ST_NOSUP if n not in sup_nms else ST_OFF)
+    miss = a["last_status"].isna()
+    a.loc[miss, "last_status"] = [ST_NOSUP if n not in sup_nms else ST_OFF for n in a.index[miss]]
     a["off"] = (a["wb_qty"] + a["to_client"] + a["from_client"] - a["rem"].fillna(0)).clip(lower=0)
     a["buy14"] = win_all
     a["per_day"] = a["buy14"].fillna(0) / RATE_DAYS
