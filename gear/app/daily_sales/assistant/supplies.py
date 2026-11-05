@@ -19,7 +19,7 @@ from conns import get_duckdb_conn_with_opt
 
 RATE_DAYS = 14          # окно темпа выкупа
 OK_DAYS, WARN_DAYS = 30, 45
-MIN_DAYS = 14           # новинка без выкупов моложе — «рано оценивать»
+YOUNG_DAYS = 21         # моложе — «рано оценивать», если не укладывается в срок
 BRAND_TOP = 12
 
 ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 артикул не выкупался 14 дн"
@@ -78,8 +78,12 @@ def _status(days_since, remaining, rate, forecast):
     if remaining <= 0:
         return ST_OK if forecast <= OK_DAYS else ST_WARN if forecast <= WARN_DAYS else ST_BAD
     if not rate:
-        return ST_NEW if days_since + 1 < MIN_DAYS else ST_STOP
-    return ST_OK if forecast <= OK_DAYS else ST_WARN if forecast <= WARN_DAYS else ST_BAD
+        st = ST_STOP
+    else:
+        st = ST_OK if forecast <= OK_DAYS else ST_WARN if forecast <= WARN_DAYS else ST_BAD
+    if st in (ST_BAD, ST_STOP) and days_since + 1 < YOUNG_DAYS:
+        return ST_NEW                       # свежая поставка: выкупы ещё не набрались
+    return st
 
 
 def build(report_date=None, brand=None) -> dict:
@@ -198,7 +202,11 @@ def build(report_date=None, brand=None) -> dict:
     a["disc"] = price["disc"].reindex(a.index)
     a = a.reset_index()
 
-    return {"asked": asked, "stock_date": sd, "end": end, "brand": brand,
+    wb_all = float((a["wb_qty"] + a["to_client"] + a["from_client"]).sum())
+    stock = {"total": float(a["total"].sum()), "wb": wb_all, "fbs": float(a["fbs_qty"].sum()),
+             "in_sup": float(active["remaining"].sum()),
+             "off": wb_all - float(active["remaining"].sum())}
+    return {"asked": asked, "stock_date": sd, "end": end, "brand": brand, "stock": stock,
             "articles": a, "supplies": sp, "active": active,
             "no_supply": int((~a["nm"].isin(set(sp["nm"]))).sum())}
 
@@ -218,12 +226,15 @@ def report(report_date=None, brand=None) -> str:
              f"выкупы по {data['end']:%d.%m.%Y}"
              + (f", бренд содержит «{brand}»" if brand else "")]
     cnt = act["status"].value_counts()
-    lines.append(f"Артикулов с остатком: {_f(len(a))}; поставок, которые ещё продаются: "
-                 f"{_f(len(act))} (остаток по ним {_f(act['remaining'].sum())} шт).")
+    k = data["stock"]
+    lines.append(f"Артикулов с остатком: {_f(len(a))}. Остаток всего {_f(k['total'])} шт: на WB "
+                 f"(склады + в пути) {_f(k['wb'])}, из них разложено по поставкам {_f(k['in_sup'])}, "
+                 f"вне поставок {_f(k['off'])}; наш склад FBS {_f(k['fbs'])}.")
+    lines.append(f"Поставок, которые ещё продаются: {_f(len(act))}.")
     lines.append("Статус\tПоставок\tОстаток по поставкам, шт")
     for s, name in ((ST_OK, "✅ распродастся за 30 дней"), (ST_WARN, "⚠️ за 31–45 дней"),
                     (ST_BAD, "🔴 дольше 45 дней"), (ST_STOP, "🔴 артикул не выкупался 14 дней"),
-                    (ST_NEW, "⏳ новинка, выкупов ещё нет")):
+                    (ST_NEW, f"⏳ свежая поставка (меньше {YOUNG_DAYS} дней), рано оценивать")):
         n = int(cnt.get(s, 0))
         if n:
             lines.append(f"{name}\t{n}\t{_f(act.loc[act['status'] == s, 'remaining'].sum())}")
@@ -294,7 +305,8 @@ NOTES = [
     ("Статус", f"✅ до {OK_DAYS} дней · ⚠️ {OK_DAYS + 1}–{WARN_DAYS} · 🔴 больше {WARN_DAYS} · "
                f"🔴 артикул не выкупался {RATE_DAYS} дн — у артикула (по всем поставкам) нет выкупов за "
                f"{RATE_DAYS} дней · "
-               f"⏳ новинка: меньше {MIN_DAYS} дней с приёмки и выкупов ещё нет."),
+               f"⏳ свежая поставка: меньше {YOUNG_DAYS} дней с приёмки и по прогнозу не "
+               "укладывается в 45 дней — рано оценивать, выкупы ещё не набрались."),
     ("Срок распродажи", "Дней с приёмки + очередь / выкупы артикула в день. Очередь — остаток этой "
                         "поставки и всех более старых поставок артикула: старые продаются первыми."),
     ("Выкупы", "Продажи минус возвраты из отчёта реализации WB (как в дашборде, с НДС). "
@@ -317,6 +329,12 @@ NOTES = [
     ("Остаток вне поставок", "Остаток WB (склады + в пути), который не удалось разложить по "
                              "загруженным поставкам: товар пришёл поставкой, которой нет в данных "
                              "WB API, или выкупы записаны на другой номер поставки."),
+    ("Распродана", "Поставка распродана, если весь остаток артикула ушёл на более новые поставки. "
+                   "Срок у распроданной — за сколько дней с приёмки выкупы с номером этой поставки "
+                   "достигли принятого количества; если не достигли — пусто."),
+    ("Вне поставок", "В отчёте WB часть продаж идёт без номера поставки или с номером, которого "
+                     "нет в данных WB API, а часть товара приходит не поставками (например, "
+                     "возвраты). Такой остаток показан отдельно."),
     ("Очередь", "Сколько штук нужно продать, чтобы закончилась эта поставка: её остаток + "
                 "остатки более старых поставок артикула (старые продаются первыми). У распроданной "
                 "поставки — пусто."),
@@ -383,7 +401,7 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
     s_cols = [("brand", "Бренд"), ("category", "Категория"), ("arts", "Артикулов с остатком, шт"),
               ("stock", "Остаток всего, шт"), ("n", "Поставок в продаже, шт"),
               ("ok", "✅ до 30 дней, шт"), ("warn", "⚠️ 31–45 дней, шт"),
-              ("bad", "🔴 дольше 45 дней, шт"), ("new", "⏳ новые, шт"),
+              ("bad", "🔴 дольше 45 дней, шт"), ("new", "⏳ свежие, шт"),
               ("rem", "Остаток по поставкам, шт"),
               ("fc", "Медианный срок распродажи, дней"), ("turn", "Оборачиваемость остатка, дней")]
     gs = gs.sort_values("stock", ascending=False)
@@ -393,12 +411,12 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
     ws = wb.create_sheet("По артикулам")
     _write_table(ws, mp, "По артикулам", sub, "Одна строка — артикул WB с остатком",
                  [n for _, n in ART_COLS], _rows(a, ART_COLS), totals=False,
-                 freeze_cols=_idx(ART_COLS, "title") + 1,
+                 freeze_cols=_idx(ART_COLS, "nm") + 1,
                  col_formats={_idx(ART_COLS, "per_day"): FMT_RATE})
     ws = wb.create_sheet("По поставкам")
     _write_table(ws, mp, "По поставкам", sub, "Артикул × поставка",
                  [n for _, n in SUP_COLS], _rows(sp, SUP_COLS), totals=False,
-                 freeze_cols=_idx(SUP_COLS, "title") + 1,
+                 freeze_cols=_idx(SUP_COLS, "nm") + 1,
                  col_formats={_idx(SUP_COLS, "rate"): FMT_RATE})
 
     ws = wb.create_sheet("Как читать")
@@ -429,10 +447,15 @@ def menu_card(day: date) -> dict | None:
     lines = [f"<b>🚚 Оборачиваемость поставок</b>",
              f"<i>остатки на {data['stock_date']:%d.%m.%Y}, выкупы по {data['end']:%d.%m.%Y}</i>", "",
              f"Артикулов с остатком: <b>{_f(len(a))}</b>",
-             f"Поставок в продаже: <b>{_f(len(act))}</b>, остаток по ним "
-             f"<b>{_f(act['remaining'].sum())} шт</b>", ""]
+             f"Остаток всего: <b>{_f(data['stock']['total'])} шт</b>",
+             f"• на WB (склады + в пути): {_f(data['stock']['wb'])}",
+             f"   – разложено по поставкам: {_f(data['stock']['in_sup'])}",
+             f"   – вне поставок: {_f(data['stock']['off'])}",
+             f"• наш склад FBS: {_f(data['stock']['fbs'])}",
+             f"Поставок в продаже: <b>{_f(len(act))}</b>", ""]
     for s, name in ((ST_OK, "✅ до 30 дней"), (ST_WARN, "⚠️ 31–45 дней"), (ST_BAD, "🔴 дольше 45 дней"),
-                    (ST_STOP, "🔴 не выкупается 14 дней"), (ST_NEW, "⏳ новинка")):
+                    (ST_STOP, "🔴 не выкупается 14 дней"),
+                    (ST_NEW, f"⏳ свежие, меньше {YOUNG_DAYS} дней — рано оценивать")):
         n = int(cnt.get(s, 0))
         if n:
             lines.append(f"{name}: <b>{n}</b> поставок · {rem(s)} шт")
