@@ -45,6 +45,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--since", default="2024-01-01")
+        parser.add_argument("--date-type", default="factDate",
+                            choices=["factDate", "createDate", "supplyDate", "updatedDate"],
+                            help="по какой дате отбирать поставки")
         parser.add_argument("--probe", action="store_true",
                             help="показать первую поставку и её состав, без записи")
         parser.add_argument("--refresh-days", type=int, default=60,
@@ -67,9 +70,9 @@ class Command(BaseCommand):
             return r.json()
         raise CommandError(f"{method} {path}: превышен лимит запросов")
 
-    def supplies(self, since: str) -> list[dict]:
+    def supplies(self, since: str, dtype: str = "factDate") -> list[dict]:
         out, offset = [], 0
-        body = {"dates": [{"from": since, "till": date.today().isoformat(), "type": "factDate"}]}
+        body = {"dates": [{"from": since, "till": date.today().isoformat(), "type": dtype}]}
         while True:
             page = self._req("POST", "/api/v1/supplies",
                              params={"limit": PAGE, "offset": offset}, json=body)
@@ -92,8 +95,13 @@ class Command(BaseCommand):
 
     # ---------------------------------------------------------------- run
     def handle(self, *args, **o):
-        rows = self.supplies(o["since"])
-        self.stdout.write(f"Поставок с {o['since']}: {len(rows)}")
+        rows = self.supplies(o["since"], o["date_type"])
+        self.stdout.write(f"Поставок с {o['since']} ({o['date_type']}): {len(rows)}")
+        if o["probe"]:
+            from collections import Counter
+            st = Counter(str(r.get("statusID")) for r in rows)
+            nofact = sum(1 for r in rows if not r.get("factDate"))
+            self.stdout.write(f"statusID: {dict(st)}; без factDate: {nofact}")
         if o["probe"]:
             if not rows:
                 return
