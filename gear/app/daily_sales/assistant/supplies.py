@@ -23,7 +23,7 @@ YOUNG_DAYS = 21         # моложе — «рано оценивать», ес
 BRAND_TOP = 12
 
 ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 артикул не выкупался 14 дн"
-ST_DONE = "распродана"
+ST_DONE = "✔️ распродана"
 MAX_DAYS = 999          # прогноз длиннее показываем как 999
 
 NOT_CORR = "COALESCE(sop_name, '') NOT ILIKE '%оррекц%'"
@@ -296,7 +296,7 @@ SUP_COLS = [
     ("calc", "Принято − выкуплено, шт"), ("remaining", "Остаток по поставке, шт"),
     ("rate", "Выкупы артикула в день, шт"),
     ("queue", "Очередь: остаток этой и более старых поставок, шт"),
-    ("forecast", "Срок распродажи (прогноз), дней"), ("status", "Статус"),
+    ("forecast", "Срок распродажи, дней (прогноз; у распроданной — факт)"), ("status", "Статус"),
 ]
 NOTES = [
     ("Что это", "Оборачиваемость товара по поставкам: за сколько дней распродаётся каждая "
@@ -463,18 +463,24 @@ def menu_card(day: date) -> dict | None:
         g = act.assign(bad=act["status"].isin([ST_BAD, ST_STOP]))
         gb = g.groupby("brand").agg(n=("sid", "count"), bad=("bad", "sum"),
                                     rem=("remaining", "sum")).sort_values("rem", ascending=False)
-        lines += ["", "<b>По брендам</b> (поставок · 🔴 · остаток)"]
+        tab = [f"{'Бренд':<13}{'Поставок':>9}{'Медл.':>7}{'Остаток':>9}"]
         for br, r in gb.head(8).iterrows():
-            lines.append(f"• {escape(str(br))} — {int(r.n)} · {int(r.bad)} · {_f(r.rem)} шт")
+            tab.append(f"{str(br)[:12]:<13}{int(r.n):>9}{int(r.bad):>7}{_f(r.rem):>9}")
+        lines += ["", "<b>По брендам</b>", "<pre>" + escape("\n".join(tab)) + "</pre>",
+                  "<i>Поставок — поставок в продаже; Медл. — из них 🔴 (дольше 45 дней или "
+                  "артикул не выкупается); Остаток — штук по этим поставкам.</i>"]
         worst = act[act["status"].isin([ST_BAD, ST_STOP])].sort_values("remaining",
                                                                          ascending=False).head(5)
         if not worst.empty:
             lines += ["", "<b>Самые медленные поставки</b>"]
             for r in worst.itertuples():
-                fc = ("не выкупается" if pd.isna(r.forecast) else
-                      "больше года" if r.forecast > 365 else f"≈ {_f(r.forecast)} дн")
-                lines.append(f"• {escape(str(r.sa or r.nm))} ({escape(str(r.brand))}), приёмка "
-                             f"{r.fact:%d.%m} — осталось {_f(r.remaining)} из {_f(r.acc)} шт, {fc}")
+                pace = f"при текущем темпе ({str(round(r.rate, 1)).replace('.', ',')} шт в день)"
+                fc = (f"за {RATE_DAYS} дней артикул не выкупался" if pd.isna(r.forecast) else
+                      f"{pace} распродастся больше чем за год с приёмки" if r.forecast > 365 else
+                      f"{pace} распродастся ≈ за {_f(r.forecast)} дн с приёмки")
+                lines.append(f"• Артикул {escape(str(r.sa or r.nm))} ({escape(str(r.brand))}), "
+                             f"поставка №{r.sid} от {r.fact:%d.%m.%Y} ({r.days} дн назад): "
+                             f"осталось {_f(r.remaining)} из {_f(r.acc)} шт — {fc}")
     lines += ["", f"<i>Цель — поставка распродаётся за {OK_DAYS}–{WARN_DAYS} дней. Прогноз: дней с "
                   f"приёмки + остаток этой и более старых поставок / выкупы артикула в день за "
                   f"{RATE_DAYS} дней. Выкупы — продажи минус возвраты. По каждому артикулу и "
