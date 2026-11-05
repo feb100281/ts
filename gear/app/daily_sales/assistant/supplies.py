@@ -22,7 +22,7 @@ OK_DAYS, WARN_DAYS = 30, 45
 MIN_DAYS = 14           # новинка без выкупов моложе — «рано оценивать»
 BRAND_TOP = 12
 
-ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 нет выкупов"
+ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 артикул не выкупался 14 дн"
 ST_DONE = "распродана"
 MAX_DAYS = 999          # прогноз длиннее показываем как 999
 
@@ -156,7 +156,7 @@ def build(report_date=None, brand=None) -> dict:
     sp["rate"] = sp["nm"].map(rate_nm).fillna(0.0)
     # очередь: сначала продаются старые поставки, потом новые
     sp = sp.sort_values(["nm", "fact", "sid"])
-    sp["queue"] = sp.groupby("nm")["remaining"].cumsum()
+    sp["queue"] = sp.groupby("nm")["remaining"].cumsum().where(sp["remaining"] > 0)
     fc, stt = [], []
     for r in sp.itertuples(index=False):
         if r.remaining <= 0:
@@ -171,7 +171,7 @@ def build(report_date=None, brand=None) -> dict:
     active = sp[sp["remaining"] > 0].copy()
 
     # ---- артикулы
-    last = sp.sort_values("fact").groupby("nm").tail(1).set_index("nm")
+    last = active.sort_values(["fact", "sid"]).groupby("nm").tail(1).set_index("nm")
     act = active.groupby("nm").agg(n_act=("sid", "count"), rem=("remaining", "sum"))
     win_all = sales[sales["d"] >= w0].groupby("nm")["q"].sum()
     price = price.set_index("nm") if not price.empty else pd.DataFrame(
@@ -182,9 +182,10 @@ def build(report_date=None, brand=None) -> dict:
     a["last_sold"] = last["sold"]
     a["last_forecast"] = last["forecast"]
     a["last_status"] = last["status"]
-    a["color"] = last["color"]
+    a["color"] = sp.sort_values("fact").groupby("nm")["color"].last()
     a["n_act"] = act["n_act"]
     a["rem"] = act["rem"]
+    a["off"] = (a["wb_qty"] + a["to_client"] + a["from_client"] - a["rem"].fillna(0)).clip(lower=0)
     a["buy14"] = win_all
     a["per_day"] = a["buy14"].fillna(0) / RATE_DAYS
     a["on_hand"] = a["wb_qty"] + a["fbs_qty"]
@@ -199,7 +200,7 @@ def build(report_date=None, brand=None) -> dict:
 
     return {"asked": asked, "stock_date": sd, "end": end, "brand": brand,
             "articles": a, "supplies": sp, "active": active,
-            "no_supply": int(a["last_fact"].isna().sum())}
+            "no_supply": int((~a["nm"].isin(set(sp["nm"]))).sum())}
 
 
 # ---------------------------------------------------------------- текст
@@ -264,20 +265,22 @@ ART_COLS = [
     ("nm", "Артикул WB"), ("title", "Наименование"), ("color", "Цвет"),
     ("wb_qty", "Склады WB, шт"), ("fbs_qty", "FBS, шт"), ("to_client", "В пути к клиенту, шт"),
     ("from_client", "В пути от клиента, шт"), ("total", "Итого остаток, шт"),
-    ("last_fact", "Последняя поставка: дата"), ("last_acc", "Последняя поставка: принято, шт"),
-    ("last_sold", "Последняя поставка: выкуплено, шт"),
-    ("last_forecast", "Последняя поставка: прогноз, дней"), ("last_status", "Статус"),
+    ("last_fact", "Новейшая поставка в продаже: дата"),
+    ("last_acc", "Новейшая поставка в продаже: принято, шт"),
+    ("last_sold", "Новейшая поставка в продаже: выкуплено с её номером, шт"),
+    ("last_forecast", "Срок распродажи остатка (прогноз), дней"), ("last_status", "Статус"),
     ("n_act", "Поставок в продаже, шт"), ("rem", "Остаток по поставкам, шт"),
+    ("off", "Остаток вне поставок, шт"),
     ("buy14", f"Выкупы за {RATE_DAYS} дн, шт"), ("per_day", "Выкупы в день, шт"),
     ("turn", "Оборачиваемость остатка, дней"),
     ("p_before", "Средняя цена до СПП, ₽"), ("p_after", "Средняя цена после СПП, ₽"),
-    ("spp", "СПП, %"), ("disc", "Скидка продавца, %"),
+    ("spp", "СПП, %"),
 ]
 SUP_COLS = [
     ("brand", "Бренд"), ("category", "Категория"), ("sa", "Артикул продавца"),
     ("nm", "Артикул WB"), ("title", "Наименование"), ("color", "Цвет"),
     ("sid", "Код поставки"), ("fact", "Дата приёмки"), ("days", "Дней с приёмки"),
-    ("acc", "Принято, шт"), ("sold", "Выкуплено всего, шт"),
+    ("acc", "Принято, шт"), ("sold", "Выкуплено с номером поставки, шт"),
     ("s30", "Выкуплено за 30 дней, шт"), ("s45", "Выкуплено за 45 дней, шт"),
     ("calc", "Принято − выкуплено, шт"), ("remaining", "Остаток по поставке, шт"),
     ("rate", "Выкупы артикула в день, шт"),
@@ -289,7 +292,8 @@ NOTES = [
                 "поставка. В отчёт попадают только артикулы с остатком на дату остатков."),
     ("Цель", f"Поставка распродаётся за {OK_DAYS}–{WARN_DAYS} дней."),
     ("Статус", f"✅ до {OK_DAYS} дней · ⚠️ {OK_DAYS + 1}–{WARN_DAYS} · 🔴 больше {WARN_DAYS} · "
-               f"🔴 нет выкупов — артикул не выкупался {RATE_DAYS} дней · "
+               f"🔴 артикул не выкупался {RATE_DAYS} дн — у артикула (по всем поставкам) нет выкупов за "
+               f"{RATE_DAYS} дней · "
                f"⏳ новинка: меньше {MIN_DAYS} дней с приёмки и выкупов ещё нет."),
     ("Срок распродажи", "Дней с приёмки + очередь / выкупы артикула в день. Очередь — остаток этой "
                         "поставки и всех более старых поставок артикула: старые продаются первыми."),
@@ -307,12 +311,28 @@ NOTES = [
                             "(возвраты поставщику, списания, утери) или проданный под другим номером "
                             "поставки."),
     ("999 дней", "Прогноз больше 999 дней показан как 999."),
+    ("По артикулам", "Новейшая поставка в продаже — самая свежая поставка, от которой ещё есть "
+                     "остаток; её прогноз — когда распродастся весь остаток артикула на WB по "
+                     "поставкам. Уже распроданные поставки — на листе «По поставкам»."),
+    ("Остаток вне поставок", "Остаток WB (склады + в пути), который не удалось разложить по "
+                             "загруженным поставкам: товар пришёл поставкой, которой нет в данных "
+                             "WB API, или выкупы записаны на другой номер поставки."),
+    ("Очередь", "Сколько штук нужно продать, чтобы закончилась эта поставка: её остаток + "
+                "остатки более старых поставок артикула (старые продаются первыми). У распроданной "
+                "поставки — пусто."),
     ("Оборачиваемость остатка", f"(склады WB + FBS) / выкупы в день за {RATE_DAYS} дней."),
     ("Цены", f"За последние {RATE_DAYS} дней по выкупам: до СПП — наша цена, после СПП — сколько "
-             "заплатил покупатель; СПП = 1 − после / до. Скидка продавца — средняя по продажам."),
+             "заплатил покупатель; СПП = 1 − после / до."),
     ("Источники", "Поставки — WB API «Поставки»; продажи — отчёт реализации WB; остатки — "
                   "склады WB и FBS, как в отчёте об остатках."),
 ]
+
+
+FMT_RATE = '#,##0.0;(#,##0.0);"–"'
+
+
+def _idx(cols, key):
+    return [c for c, _ in cols].index(key)
 
 
 def _rows(df, cols):
@@ -325,7 +345,7 @@ def _rows(df, cols):
             elif hasattr(v, "date") and not isinstance(v, date):
                 row.append(v.date())
             elif isinstance(v, float):
-                row.append(round(v, 1))
+                row.append(round(v, 2))
             else:
                 row.append(v.item() if hasattr(v, "item") else v)
         out.append(row)
@@ -368,14 +388,18 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
               ("fc", "Медианный срок распродажи, дней"), ("turn", "Оборачиваемость остатка, дней")]
     gs = gs.sort_values("stock", ascending=False)
     _write_table(ws, mp, title, sub, "Бренд → категория; поставки, которые ещё продаются",
-                 [n for _, n in s_cols], _rows(gs, s_cols), totals=False)
+                 [n for _, n in s_cols], _rows(gs, s_cols), totals=False, freeze_cols=2)
 
     ws = wb.create_sheet("По артикулам")
     _write_table(ws, mp, "По артикулам", sub, "Одна строка — артикул WB с остатком",
-                 [n for _, n in ART_COLS], _rows(a, ART_COLS), totals=False)
+                 [n for _, n in ART_COLS], _rows(a, ART_COLS), totals=False,
+                 freeze_cols=_idx(ART_COLS, "title") + 1,
+                 col_formats={_idx(ART_COLS, "per_day"): FMT_RATE})
     ws = wb.create_sheet("По поставкам")
     _write_table(ws, mp, "По поставкам", sub, "Артикул × поставка",
-                 [n for _, n in SUP_COLS], _rows(sp, SUP_COLS), totals=False)
+                 [n for _, n in SUP_COLS], _rows(sp, SUP_COLS), totals=False,
+                 freeze_cols=_idx(SUP_COLS, "title") + 1,
+                 col_formats={_idx(SUP_COLS, "rate"): FMT_RATE})
 
     ws = wb.create_sheet("Как читать")
     mp.sheet_setup(ws, landscape=False)
@@ -390,3 +414,55 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
                  align="left", wrap=True, border=mp.B_BOTTOM)
     wb.save(path)
     return len(a)
+
+
+# ---------------------------------------------------------------- кнопка меню
+def menu_card(day: date) -> dict | None:
+    """Карточка для кнопки «🚚 Оборачиваемость поставок» (HTML) + Excel следом."""
+    from html import escape
+    data = build(day)
+    if "error" in data:
+        return {"text": escape(data["error"]), "photo": None}
+    act, a = data["active"], data["articles"]
+    cnt = act["status"].value_counts()
+    rem = lambda s: _f(act.loc[act["status"] == s, "remaining"].sum())
+    lines = [f"<b>🚚 Оборачиваемость поставок</b>",
+             f"<i>остатки на {data['stock_date']:%d.%m.%Y}, выкупы по {data['end']:%d.%m.%Y}</i>", "",
+             f"Артикулов с остатком: <b>{_f(len(a))}</b>",
+             f"Поставок в продаже: <b>{_f(len(act))}</b>, остаток по ним "
+             f"<b>{_f(act['remaining'].sum())} шт</b>", ""]
+    for s, name in ((ST_OK, "✅ до 30 дней"), (ST_WARN, "⚠️ 31–45 дней"), (ST_BAD, "🔴 дольше 45 дней"),
+                    (ST_STOP, "🔴 не выкупается 14 дней"), (ST_NEW, "⏳ новинка")):
+        n = int(cnt.get(s, 0))
+        if n:
+            lines.append(f"{name}: <b>{n}</b> поставок · {rem(s)} шт")
+    if not act.empty:
+        g = act.assign(bad=act["status"].isin([ST_BAD, ST_STOP]))
+        gb = g.groupby("brand").agg(n=("sid", "count"), bad=("bad", "sum"),
+                                    rem=("remaining", "sum")).sort_values("rem", ascending=False)
+        lines += ["", "<b>По брендам</b> (поставок · 🔴 · остаток)"]
+        for br, r in gb.head(8).iterrows():
+            lines.append(f"• {escape(str(br))} — {int(r.n)} · {int(r.bad)} · {_f(r.rem)} шт")
+        worst = act[act["status"].isin([ST_BAD, ST_STOP])].sort_values("remaining",
+                                                                         ascending=False).head(5)
+        if not worst.empty:
+            lines += ["", "<b>Самые медленные поставки</b>"]
+            for r in worst.itertuples():
+                fc = ("не выкупается" if pd.isna(r.forecast) else
+                      "больше года" if r.forecast > 365 else f"≈ {_f(r.forecast)} дн")
+                lines.append(f"• {escape(str(r.sa or r.nm))} ({escape(str(r.brand))}), приёмка "
+                             f"{r.fact:%d.%m} — осталось {_f(r.remaining)} из {_f(r.acc)} шт, {fc}")
+    lines += ["", f"<i>Цель — поставка распродаётся за {OK_DAYS}–{WARN_DAYS} дней. Прогноз: дней с "
+                  f"приёмки + остаток этой и более старых поставок / выкупы артикула в день за "
+                  f"{RATE_DAYS} дней. Выкупы — продажи минус возвраты. По каждому артикулу и "
+                  "поставке — в Excel.</i>"]
+    return {"text": "\n".join(lines), "photo": None, "auto": "x",
+            "files": (("x", "Excel: оборачиваемость"),)}
+
+
+def menu_file(day: date):
+    import io
+    buf = io.BytesIO()
+    excel(buf, "Оборачиваемость поставок", day)
+    return (f"Оборачиваемость поставок {day:%d.%m.%Y}.xlsx", buf.getvalue(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

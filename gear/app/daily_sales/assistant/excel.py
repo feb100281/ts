@@ -85,7 +85,7 @@ def _cell_value(v):
 
 # ------------------------------------------------------------ листы
 def _write_table(ws, mp, title, subtitle, extra, columns, rows,
-                 row_formats=None, totals=True):
+                 row_formats=None, totals=True, freeze_cols=1, col_formats=None):
     """Таблица: шапка листа, тёмно-зелёная строка заголовков, зебра, итог."""
     first_col = mp.COL_CODE
     ncols = first_col + len(columns) - 1
@@ -101,6 +101,8 @@ def _write_table(ws, mp, title, subtitle, extra, columns, rows,
 
     cols_vals = [[r[i] for r in rows] for i in range(len(columns))]
     fmts = [_col_format(str(c), cols_vals[i], mp) for i, c in enumerate(columns)]
+    for i, f in (col_formats or {}).items():
+        fmts[i] = (f, "right")
 
     for i, name in enumerate(columns):
         mp.write(ws, hdr, first_col + i, str(name).upper(), font=f_hdr,
@@ -156,7 +158,7 @@ def _write_table(ws, mp, title, subtitle, extra, columns, rows,
             max(10, min(50, max(sample) + 3))
 
     if rows:
-        ws.freeze_panes = ws.cell(row=hdr + 1, column=first_col + 1)
+        ws.freeze_panes = ws.cell(row=hdr + 1, column=first_col + freeze_cols)
         ws.auto_filter.ref = (f"{get_column_letter(first_col)}{hdr}:"
                               f"{get_column_letter(ncols)}{last}")
 

@@ -38,8 +38,9 @@ REPORTS = {
     "z": "🔎 Почему упали продажи",
     "g": "🚨 Сигналы",
     "p": "🔖 Переоценки",
+    "u": "🚚 Оборачиваемость поставок",
 }
-SINGLE_DAY = {"r", "g"}                 # отчёт на дату, а не за период
+SINGLE_DAY = {"r", "g", "u"}                 # отчёт на дату, а не за период
 BTN_AI = "🤖 Спросить ИИ"
 BTN_HELP = "ℹ️ Как пользоваться"
 BY_TEXT = {v: k for k, v in REPORTS.items()}
@@ -85,6 +86,7 @@ def keyboard() -> dict:
                          [{"text": r["l"]}, {"text": r["d"]}],
                          [{"text": r["z"]}, {"text": r["g"]}],
                          [{"text": r["r"]}, {"text": r["p"]}],
+                         [{"text": r["u"]}],
                          [{"text": BTN_AI}],
                          [{"text": BTN_HELP}]] + app_row(),
             "resize_keyboard": True, "is_persistent": False,   # можно свернуть значком у поля ввода
@@ -1537,6 +1539,12 @@ def build(rep: str, a: date, b: date) -> dict | None:
         return drop.report_signals(a, b)
     if rep == "p":
         return report_reprice(a, b)
+    if rep == "u":
+        from .supplies import menu_card
+        res = menu_card(b)
+        if res and res.get("files"):
+            res["kb"] = _files_kb("u", a, b, res["files"])
+        return res
     return None
 
 
@@ -1567,6 +1575,9 @@ def file(rep: str, code: str, a: date, b: date):
         return file_margin(code, a, b, only_loss=True)
     if rep == "p":
         return file_reprice(a, b)
+    if rep == "u":
+        from .supplies import menu_file
+        return menu_file(b)
     return None
 
 
@@ -1585,6 +1596,8 @@ HELP = ("<b>Как пользоваться</b>\n"
         "• «📑 Коммерческий обзор» — PDF коммерческого обзора 2.0 на выбранную дату.\n"
         "• «💰 Маржинальность» и «🔻 Продаём в убыток» — по управленческому учёту, как в "
         "дашборде: себестоимость FIFO, продажи скорректированы на возвраты.\n"
+        "• «🚚 Оборачиваемость поставок» — за сколько дней распродаётся каждая поставка "
+        "(цель 30–45 дней), по выкупам; Excel по артикулам и поставкам.\n"
         "• «🔖 Переоценки» — выберите дни, когда снижали цены: что стало с продажами, "
         "остатком и фин. результатом, сколько отдали скидкой; по каждому артикулу — в Excel.\n"
         "• Нужного отчёта нет на кнопках — просто напишите вопрос своими словами, ответит ИИ.\n\n"
