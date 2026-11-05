@@ -45,7 +45,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--since", default="2024-01-01")
-        parser.add_argument("--date-type", default="factDate",
+        parser.add_argument("--date-type", default="createDate",
                             choices=["factDate", "createDate", "supplyDate", "updatedDate"],
                             help="по какой дате отбирать поставки")
         parser.add_argument("--probe", action="store_true",
@@ -137,7 +137,7 @@ class Command(BaseCommand):
                         loaded_at = now()""",
                     (sid, s.get("preorderID") or s.get("preorderId"),
                      json.dumps(s, ensure_ascii=False, default=str)))
-            fact = str(s.get("factDate") or "")[:10]
+            fact = str(s.get("factDate") or s.get("supplyDate") or s.get("createDate") or "")[:10]
             if sid in have and fact and fact < fresh_from:
                 continue                            # старая принятая поставка — состав не меняется
             g = self.goods(sid)

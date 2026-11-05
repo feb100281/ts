@@ -53,13 +53,13 @@ PRICE_SQL = f"""
 SUPPLY_SQL = """
     WITH s AS (
         SELECT supply_id AS sid,
-               TRY_CAST(LEFT(json_extract_string(row_json::VARCHAR, '$.factDate'), 10) AS DATE) AS fact
+               TRY_CAST(LEFT(COALESCE(NULLIF(json_extract_string(row_json::VARCHAR, '$.factDate'), ''),
+                                      json_extract_string(row_json::VARCHAR, '$.supplyDate')), 10) AS DATE) AS fact
         FROM pg.wb_raw.wb_supplies),
     g AS (
         SELECT supply_id AS sid,
                TRY_CAST(json_extract_string(row_json::VARCHAR, '$.nmID') AS BIGINT) AS nm,
-               COALESCE(TRY_CAST(json_extract_string(row_json::VARCHAR, '$.acceptedQuantity') AS DOUBLE),
-                        TRY_CAST(json_extract_string(row_json::VARCHAR, '$.quantity') AS DOUBLE), 0) AS acc,
+               COALESCE(TRY_CAST(json_extract_string(row_json::VARCHAR, '$.acceptedQuantity') AS DOUBLE), 0) AS acc,
                json_extract_string(row_json::VARCHAR, '$.color') AS color
         FROM pg.wb_raw.wb_supply_goods)
     SELECT g.sid, s.fact, g.nm, SUM(g.acc) AS acc, ANY_VALUE(g.color) AS color
@@ -308,6 +308,8 @@ SUP_COLS = [
 NOTES = [
     ("Что это", "Оборачиваемость товара по поставкам: за сколько дней распродаётся каждая "
                 "поставка. В отчёт попадают только артикулы с остатком на дату остатков."),
+    ("Дата приёмки", "Фактическая дата приёмки из WB API; если WB её не заполнил — плановая дата "
+                     "поставки. Учитываются только принятые штуки (acceptedQuantity)."),
     ("Цель", f"Поставка распродаётся за {OK_DAYS}–{WARN_DAYS} дней."),
     ("Статус", f"✅ до {OK_DAYS} дней · ⚠️ {OK_DAYS + 1}–{WARN_DAYS} · 🔴 больше {WARN_DAYS} · "
                f"🔴 артикул не выкупался {RATE_DAYS} дн — у артикула (по всем поставкам) нет выкупов за "
