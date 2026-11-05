@@ -24,6 +24,8 @@ BRAND_TOP = 12
 
 ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 артикул не выкупался 14 дн"
 ST_DONE = "✔️ распродана"
+ST_NOSUP = "нет поставки в данных WB"
+ST_OFF = "все поставки распроданы, остаток вне поставок"
 MAX_DAYS = 999          # прогноз длиннее показываем как 999
 
 NOT_CORR = "COALESCE(sop_name, '') NOT ILIKE '%оррекц%'"
@@ -186,9 +188,12 @@ def build(report_date=None, brand=None) -> dict:
     a["last_sold"] = last["sold"]
     a["last_forecast"] = last["forecast"]
     a["last_status"] = last["status"]
+    sup_nms = set(sp["nm"])
     a["color"] = sp.sort_values("fact").groupby("nm")["color"].last()
     a["n_act"] = act["n_act"]
     a["rem"] = act["rem"]
+    a.loc[a["last_status"].isna(), "last_status"] = a["nm"].map(
+        lambda n: ST_NOSUP if n not in sup_nms else ST_OFF)
     a["off"] = (a["wb_qty"] + a["to_client"] + a["from_client"] - a["rem"].fillna(0)).clip(lower=0)
     a["buy14"] = win_all
     a["per_day"] = a["buy14"].fillna(0) / RATE_DAYS
@@ -335,6 +340,10 @@ NOTES = [
     ("Вне поставок", "В отчёте WB часть продаж идёт без номера поставки или с номером, которого "
                      "нет в данных WB API, а часть товара приходит не поставками (например, "
                      "возвраты). Такой остаток показан отдельно."),
+    ("Статус по артикулу", "Статус новейшей поставки в продаже. «Нет поставки в данных WB» — у "
+                           "артикула нет ни одной поставки в данных WB API (например, приходил "
+                           "давно или не поставкой). «Все поставки распроданы» — весь остаток "
+                           "артикула вне поставок."),
     ("Очередь", "Сколько штук нужно продать, чтобы закончилась эта поставка: её остаток + "
                 "остатки более старых поставок артикула (старые продаются первыми). У распроданной "
                 "поставки — пусто."),
