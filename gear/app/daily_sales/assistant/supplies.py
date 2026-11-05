@@ -22,6 +22,8 @@ MIN_DAYS = 7            # моложе — прогноз ненадёжный
 BRAND_TOP = 12
 
 ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 нет выкупов"
+ST_DONE = "распродана"
+MAX_DAYS = 999          # прогноз длиннее показываем как 999
 
 NOT_CORR = "COALESCE(sop_name, '') NOT ILIKE '%оррекц%'"
 
@@ -123,9 +125,11 @@ def build(report_date=None, brand=None) -> dict:
     sup = sup[sup["nm"].isin(nms)].copy()
     sup["fact"] = pd.to_datetime(sup["fact"])
     by_key = {k: g for k, g in sales.dropna(subset=["gi"]).groupby(["nm", "gi"])}
+    # фактический остаток WB (склады + в пути) — раскладываем по поставкам от новых к старым
+    left = (art["wb_qty"] + art["to_client"] + art["from_client"]).groupby(art["nm"]).sum().to_dict()
     rows = []
     e = pd.Timestamp(end)
-    for r in sup.itertuples(index=False):
+    for r in sup.sort_values(["nm", "fact", "sid"], ascending=[True, False, False]).itertuples(index=False):
         g = by_key.get((r.nm, r.sid))
         g = g[g["d"] >= r.fact].sort_values("d") if g is not None else None
         days_since = (e - r.fact).days
@@ -141,23 +145,24 @@ def build(report_date=None, brand=None) -> dict:
             hit = g.loc[cum >= r.acc, "d"]
             if not hit.empty:
                 done_day = (hit.iloc[0] - r.fact).days + 1
-        remaining = max(r.acc - sold, 0.0)
+        calc = max(r.acc - sold, 0.0)
+        remaining = min(calc, max(left.get(r.nm, 0.0), 0.0))
+        left[r.nm] = left.get(r.nm, 0.0) - remaining
         span = max(1, min(RATE_DAYS, days_since + 1))
         rate = max(win, 0.0) / span
         if remaining <= 0:
-            forecast = done_day or days_since + 1
-        elif rate > 0:
-            forecast = days_since + 1 + remaining / rate
+            forecast, status = done_day, ST_DONE
         else:
-            forecast = None
+            forecast = days_since + 1 + remaining / rate if rate > 0 else None
+            if forecast is not None:
+                forecast = min(forecast, MAX_DAYS)
+            status = _status(days_since, remaining, rate, 0 if forecast is None else forecast)
         rows.append({"nm": r.nm, "sid": r.sid, "fact": r.fact.date(), "acc": r.acc,
-                     "color": r.color, "sold": sold, "s30": s30, "s45": s45,
+                     "color": r.color, "sold": sold, "s30": s30, "s45": s45, "calc": calc,
                      "remaining": remaining, "days": days_since + 1, "rate": rate,
-                     "forecast": forecast,
-                     "status": _status(days_since, remaining, rate,
-                                       0 if forecast is None else forecast)})
+                     "forecast": forecast, "status": status})
     sp = pd.DataFrame(rows, columns=["nm", "sid", "fact", "acc", "color", "sold", "s30", "s45",
-                                     "remaining", "days", "rate", "forecast", "status"])
+                                     "calc", "remaining", "days", "rate", "forecast", "status"])
     sp = sp.merge(art[["nm", "brand", "category", "sa", "title"]], on="nm", how="left")
     active = sp[sp["remaining"] > 0].copy()
 
@@ -234,7 +239,8 @@ def report(report_date=None, brand=None) -> str:
             lines.append("\nСамые медленные поставки (по остатку)")
             lines.append("Артикул\tБренд\tДата приёмки\tПринято, шт\tОстаток, шт\tПрогноз, дней")
             for r in worst.itertuples():
-                fc = _f(r.forecast) if pd.notna(r.forecast) else "нет выкупов"
+                fc = ("нет выкупов" if pd.isna(r.forecast) else
+                      "больше 365" if r.forecast > 365 else _f(r.forecast))
                 lines.append(f"{r.sa or r.nm}\t{r.brand}\t{r.fact:%d.%m.%Y}\t{_f(r.acc)}\t"
                              f"{_f(r.remaining)}\t{fc}")
     if data["no_supply"]:
@@ -242,7 +248,8 @@ def report(report_date=None, brand=None) -> str:
                      "(приёмка раньше загрузки или поставка не найдена).")
     lines.append(f"Прогноз срока = дней с приёмки + (принято − выкуплено) / выкупы этой поставки "
                  f"в день за {RATE_DAYS} дней. Выкупы = продажи минус возвраты по отчёту WB, "
-                 "привязка к поставке по номеру. Остаток по поставке — расчётный. Полная "
+                 "привязка к поставке по номеру. Остаток по поставке — фактический остаток WB "
+                 "артикула, разложенный по поставкам от новых к старым. Полная "
                  "таблица по артикулам и поставкам — в Excel (export_excel с supply_turnover).")
     return "\n".join(lines)
 
@@ -256,7 +263,7 @@ ART_COLS = [
     ("last_fact", "Последняя поставка: дата"), ("last_acc", "Последняя поставка: принято, шт"),
     ("last_sold", "Последняя поставка: выкуплено, шт"),
     ("last_forecast", "Последняя поставка: прогноз, дней"), ("last_status", "Статус"),
-    ("n_act", "Поставок в продаже, шт"), ("rem", "Остаток по поставкам (расчёт), шт"),
+    ("n_act", "Поставок в продаже, шт"), ("rem", "Остаток по поставкам, шт"),
     ("buy14", f"Выкупы за {RATE_DAYS} дн, шт"), ("per_day", "Выкупы в день, шт"),
     ("turn", "Оборачиваемость остатка, дней"),
     ("p_before", "Средняя цена до СПП, ₽"), ("p_after", "Средняя цена после СПП, ₽"),
@@ -268,7 +275,8 @@ SUP_COLS = [
     ("sid", "Код поставки"), ("fact", "Дата приёмки"), ("days", "Дней с приёмки"),
     ("acc", "Принято, шт"), ("sold", "Выкуплено всего, шт"),
     ("s30", "Выкуплено за 30 дней, шт"), ("s45", "Выкуплено за 45 дней, шт"),
-    ("remaining", "Остаток по поставке (расчёт), шт"), ("rate", "Выкупы в день, шт"),
+    ("calc", "Принято − выкуплено, шт"), ("remaining", "Остаток по поставке, шт"),
+    ("rate", "Выкупы в день, шт"),
     ("forecast", "Срок распродажи (прогноз), дней"), ("status", "Статус"),
 ]
 NOTES = [
@@ -284,8 +292,13 @@ NOTES = [
                "К поставке привязываются по номеру поставки в отчёте WB."),
     ("Темп", f"Выкупы поставки за последние {RATE_DAYS} дней / {RATE_DAYS} (для молодых поставок — "
              "на число дней с приёмки)."),
-    ("Остаток по поставке", "Расчётный: принято − выкуплено. Фактический остаток WB ведётся по "
-                            "артикулу, не по поставке — он в колонках остатков."),
+    ("Остаток по поставке", "Фактический остаток артикула на WB (склады + в пути к клиенту и от "
+                            "клиента) разложен по поставкам от новых к старым, но не больше, чем "
+                            "«принято − выкуплено» по этой поставке. Остаток 0 — поставка распродана. "
+                            "Разница «принято − выкуплено» и остатка — товар, ушедший без продажи "
+                            "(возвраты поставщику, списания, утери) или проданный под другим номером "
+                            "поставки."),
+    ("999 дней", "Прогноз больше 999 дней показан как 999."),
     ("Оборачиваемость остатка", f"(склады WB + FBS) / выкупы в день за {RATE_DAYS} дней."),
     ("Цены", f"За последние {RATE_DAYS} дней по выкупам: до СПП — наша цена, после СПП — сколько "
              "заплатил покупатель; СПП = 1 − после / до. Скидка продавца — средняя по продажам."),
@@ -343,7 +356,7 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
               ("stock", "Остаток всего, шт"), ("n", "Поставок в продаже, шт"),
               ("ok", "✅ до 30 дней, шт"), ("warn", "⚠️ 31–45 дней, шт"),
               ("bad", "🔴 дольше 45 дней, шт"), ("new", "⏳ новые, шт"),
-              ("rem", "Остаток по поставкам (расчёт), шт"),
+              ("rem", "Остаток по поставкам, шт"),
               ("fc", "Медианный срок распродажи, дней"), ("turn", "Оборачиваемость остатка, дней")]
     gs = gs.sort_values("stock", ascending=False)
     _write_table(ws, mp, title, sub, "Бренд → категория; поставки, которые ещё продаются",
