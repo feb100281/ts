@@ -185,7 +185,8 @@ TOOLS.append({
                    "(те же параметры, что у margin_report), либо wb_sales — продажи как на "
                    "сайте WB (те же параметры, что у инструмента wb_sales), либо report — любой "
                    "другой готовый отчёт целиком: {tool: имя инструмента, args: его "
-                   "параметры} (остатки, происшествия, FBS, займы, деньги, ДДС и т. д.). "
+                   "параметры} (остатки, происшествия, FBS, займы, деньги, ДДС и т. д.), либо "
+                   "supply_turnover — оборачиваемость по поставкам ({report_date, brand}). "
                    "Вызывай, когда просят "
                    "файл / Excel / выгрузку или таблица больше ~30 строк.",
     "input_schema": {
@@ -202,6 +203,8 @@ TOOLS.append({
                 "brands": {"type": "array", "items": {"type": "string"}}}},
             "cards_check": {"type": "object", "properties": {
                 "report_date": {"type": "string"}}},
+            "supply_turnover": {"type": "object", "properties": {
+                "report_date": {"type": "string"}, "brand": {"type": "string"}}},
             "margin": {"type": "object", "properties": {
                 "date_from": {"type": "string"}, "date_to": {"type": "string"},
                 "group_by": {"type": "string"}, "search": {"type": "string"},
@@ -463,6 +466,30 @@ def _stocks(a):
 
 
 TOOLS.append({
+    "name": "supply_turnover",
+    "description": "Оборачиваемость по поставкам: за сколько дней распродаётся каждая поставка "
+                   "(цель 30–45 дней), по выкупам (продажи минус возвраты), только артикулы с "
+                   "остатком. Статусы ✅ до 30 дней, ⚠️ 31–45, 🔴 дольше 45 или нет выкупов, "
+                   "⏳ новая. Сводка по брендам и самые медленные поставки. Полная таблица по "
+                   "артикулам (характеристики, остатки, цены до/после СПП, скидки, "
+                   "оборачиваемость) и по поставкам — export_excel с supply_turnover.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "report_date": {"type": "string",
+                            "description": "Дата остатков YYYY-MM-DD, по умолчанию вчера"},
+            "brand": {"type": "string", "description": "Фильтр по бренду (часть названия)"},
+        },
+    },
+})
+
+
+def _supply(a):
+    from .supplies import report
+    return report(a.get("report_date"), a.get("brand"))
+
+
+TOOLS.append({
     "name": "incidents_report",
     "description": "Происшествия на складах WB (пожары и др.): где, когда и сколько товара "
                    "было на складе на день до события — штуки, карточки, бухгалтерская и "
@@ -525,6 +552,7 @@ def _pl(a):
 _DISPATCH = {
     "cards_check": _cards,
     "stocks_report": _stocks,
+    "supply_turnover": _supply,
     "incidents_report": _incidents,
     "fbs_orders_report": _fbs,
     "wb_payouts_report": _wb_payouts,
@@ -616,7 +644,7 @@ def _fx_tool(fn_name):
 # Группы инструментов — чтобы потом развести помощников:
 # продажи/маркетинг и финансы (управленка, контрагенты, договоры).
 SALES_TOOLS = {"list_tables", "describe_table", "run_sql", "export_excel",
-               "wb_sales", "margin_report", "cards_check", "stocks_report",
+               "wb_sales", "margin_report", "cards_check", "stocks_report", "supply_turnover",
                "incidents_report", "fbs_orders_report"}
 FINANCE_TOOLS = {"pl_report", "counterparty_info", "cf_report", "interest_report",
                  "cash_report", "wb_payouts_report", "loans_report", "fx_report",
@@ -643,7 +671,8 @@ def _sales_view(t: dict) -> dict:
         t = copy.deepcopy(t)
         t["description"] = ("Сформировать Excel-файл и дать пользователю кнопку скачивания. "
                             "Либо wb_sales — продажи как на сайте WB (те же параметры, что у "
-                            "инструмента wb_sales), либо report — готовый отчёт целиком: "
+                            "инструмента wb_sales), либо supply_turnover — оборачиваемость по "
+                            "поставкам ({report_date, brand}), либо report — готовый отчёт целиком: "
                             "{tool: имя инструмента, args: его параметры} (остатки, "
                             "происшествия, FBS), либо sql — запрос на чтение (до 100 000 строк; "
                             "понятные русские названия колонок). Вызывай, когда просят файл / "

@@ -72,6 +72,7 @@ STEPS = {
     "wb_sales": "Смотрю продажи Wildberries",
     "cards_check": "Проверяю карточки товаров",
     "stocks_report": "Смотрю остатки товара",
+    "supply_turnover": "Считаю оборачиваемость поставок",
     "incidents_report": "Смотрю происшествия на складах",
     "fbs_orders_report": "Смотрю заказы FBS",
     "cash_report": "Смотрю остатки на счетах",

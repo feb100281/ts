@@ -315,6 +315,16 @@ def export(args: dict, question: str = "") -> tuple[str, dict]:
         return (f"Файл «{name}» готов (тот же отчёт, что у кнопки проверки карточек). "
                 "Кнопка скачивания появится под ответом автоматически.", info)
 
+    if args.get("supply_turnover") is not None and args.get("supply_turnover") is not False:
+        from .supplies import excel as sup_excel
+        c = args["supply_turnover"] if isinstance(args["supply_turnover"], dict) else {}
+        fid = uuid.uuid4().hex
+        name = f"{_safe_name(title)}_{datetime.now():%Y%m%d_%H%M}.xlsx"
+        n = sup_excel(FILES_DIR / f"{fid}__{name}", title, c.get("report_date"), c.get("brand"))
+        info = {"id": fid, "name": name, "rows": n, "cut": False}
+        return (f"Файл «{name}» готов: листы Сводка, По артикулам ({n} строк), По поставкам, "
+                "Как читать. Кнопка скачивания появится под ответом автоматически.", info)
+
     if args.get("wb_sales"):
         from datetime import date as _d
         from ..wb_sales_export import fetch, to_excel, LEVELS
