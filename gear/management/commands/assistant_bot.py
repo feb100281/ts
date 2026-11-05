@@ -731,6 +731,48 @@ class Bot:
                 pass
             stop.wait(4)
 
+    # ---------------------------------------------------------------- голос
+    VOICE_MAX_SEC = 180
+
+    def from_voice(self, chat_id: int, voice: dict) -> str:
+        """Голосовое сообщение → текст (faster-whisper в отдельном процессе)."""
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        if (voice.get("duration") or 0) > self.VOICE_MAX_SEC:
+            self.say(chat_id, "Голосовое длиннее 3 минут — запишите, пожалуйста, покороче "
+                              "или напишите текстом.", raw=True)
+            return ""
+        stop = threading.Event()
+        threading.Thread(target=self.typing, args=(chat_id, stop), daemon=True).start()
+        try:
+            fp = self.call("getFile", file_id=voice["file_id"])["result"]["file_path"]
+            url = f"https://api.telegram.org/file/bot{self.token}/{fp}"
+            with self.opener.open(url, timeout=60) as r:
+                data = r.read()
+            script = Path(__file__).resolve().parents[3] / "utils" / "stt" / "transcribe.py"
+            with tempfile.NamedTemporaryFile(suffix=Path(fp).suffix or ".ogg") as f:
+                f.write(data)
+                f.flush()
+                res = subprocess.run([sys.executable, str(script), f.name],
+                                     capture_output=True, text=True, timeout=180)
+            text = (res.stdout or "").strip()
+            if res.returncode != 0:
+                print(f"[voice] код {res.returncode}: {(res.stderr or '')[-500:]}", flush=True)
+        except Exception as e:
+            print(f"[voice] {type(e).__name__}: {e}", flush=True)
+            text = ""
+        finally:
+            stop.set()
+        if not text:
+            self.say(chat_id, "Не получилось распознать голосовое. Попробуйте ещё раз "
+                              "или напишите текстом.", raw=True)
+            return ""
+        self.say(chat_id, f"🎤 <i>{html.escape(text)}</i>", raw=True)
+        return text
+
     # ---------------------------------------------------------------- доступ
     def access(self, user: dict):
         from gear.models import TelegramAccess
@@ -764,7 +806,8 @@ class Bot:
             if text.startswith("/"):
                 self.say(chat_id, "Я отвечаю только в личных сообщениях.")
             return
-        if user.get("is_bot") or not text:
+        voice = msg.get("voice") or msg.get("audio") or msg.get("video_note")
+        if user.get("is_bot") or (not text and not voice):
             return
         obj, created = self.access(user)
         if created:
@@ -778,6 +821,10 @@ class Bot:
                 if created or text == "/start" else
                 "Доступ пока не подтверждён. Если ждёте давно — напишите Дарье."), raw=True)
             return
+        if voice and not text:                       # голосовое → текст, дальше как обычно
+            text = self.from_voice(chat_id, voice)
+            if not text:
+                return
         text = {v: "/" + k for k, v in MENU.items()}.get(text, text)
         if self.profile in ("sales", "finance"):
             menu = self.mod()

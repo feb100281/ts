@@ -35,3 +35,7 @@ data/.sales_digest_sent
 data/.sales_digest_off
 
 _to_delete/
+
+# модель распознавания речи и логи сервера
+data/whisper/
+logs/
