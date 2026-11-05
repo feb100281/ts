@@ -154,7 +154,8 @@ def build(report_date=None, brand=None) -> dict:
                      "color": r.color, "sold": sold, "s30": s30, "s45": s45,
                      "remaining": remaining, "days": days_since + 1, "rate": rate,
                      "forecast": forecast,
-                     "status": _status(days_since, remaining, rate, forecast or 0)})
+                     "status": _status(days_since, remaining, rate,
+                                       0 if forecast is None else forecast)})
     sp = pd.DataFrame(rows, columns=["nm", "sid", "fact", "acc", "color", "sold", "s30", "s45",
                                      "remaining", "days", "rate", "forecast", "status"])
     sp = sp.merge(art[["nm", "brand", "category", "sa", "title"]], on="nm", how="left")
@@ -194,7 +195,8 @@ def build(report_date=None, brand=None) -> dict:
 
 # ---------------------------------------------------------------- текст
 def _f(v):
-    return f"{int(round(v or 0)):,}".replace(",", " ")
+    v = 0 if v is None or pd.isna(v) else v
+    return f"{int(round(v)):,}".replace(",", " ")
 
 
 def report(report_date=None, brand=None) -> str:
@@ -232,7 +234,7 @@ def report(report_date=None, brand=None) -> str:
             lines.append("\nСамые медленные поставки (по остатку)")
             lines.append("Артикул\tБренд\tДата приёмки\tПринято, шт\tОстаток, шт\tПрогноз, дней")
             for r in worst.itertuples():
-                fc = _f(r.forecast) if r.forecast else "нет выкупов"
+                fc = _f(r.forecast) if pd.notna(r.forecast) else "нет выкупов"
                 lines.append(f"{r.sa or r.nm}\t{r.brand}\t{r.fact:%d.%m.%Y}\t{_f(r.acc)}\t"
                              f"{_f(r.remaining)}\t{fc}")
     if data["no_supply"]:
