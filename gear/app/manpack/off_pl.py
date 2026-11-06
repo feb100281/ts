@@ -28,36 +28,26 @@ linked AS (
     UNION
     SELECT DISTINCT CAST(a.pid AS VARCHAR) FROM lvl1 a JOIN lvl1 b ON b.pid = a.id
     WHERE b.acc_id IN (SELECT id FROM pl_acc)
-),
-f AS (
-    SELECT CAST(id AS VARCHAR) AS id, date_from::DATE AS d, acc_id,
-           TRY_CAST(contract_id AS BIGINT) AS cid, COALESCE(description, '') AS descr,
-           ROUND((COALESCE(dt, 0) - COALESCE(cr, 0)) / 100.0, 2) AS amount
-    FROM pg.gl.fact
-    WHERE chapter IN ('CF_BA', 'MANUAL_TRS')
-      AND acc_id IN (SELECT acc_id FROM cash_acc)
-      AND COALESCE(dt, 0) - COALESCE(cr, 0) > 0
-      AND date_from::DATE <= $date_from
-),
-fn AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY d, acc_id, cid, descr, amount ORDER BY id) AS rn
-       FROM f WHERE id NOT IN (SELECT cf_id FROM linked)),
-c AS (
-    SELECT date_from::DATE AS d, acc_id, TRY_CAST(contract_id AS BIGINT) AS cid,
-           COALESCE(description, '') AS descr, ROUND(CAST(amount AS DOUBLE), 2) AS amount,
-           item, subitem, cp_name, contract_name,
-           ROW_NUMBER() OVER (PARTITION BY date_from::DATE, acc_id, TRY_CAST(contract_id AS BIGINT),
-                              COALESCE(description, ''), ROUND(CAST(amount AS DOUBLE), 2)
-                              ORDER BY item) AS rn
-    FROM pg.cf_to_csv WHERE amount > 0 AND date_from::DATE <= $date_from
 )
-SELECT fn.d, LAST_DAY(fn.d)::DATE AS me, fn.amount,
-       COALESCE(c.item, '') AS item, COALESCE(c.subitem, '') AS subitem,
-       COALESCE(NULLIF(TRIM(c.cp_name), ''), 'Без контрагента') AS cp,
-       COALESCE(c.contract_name, '') AS contract, fn.cid, fn.descr AS description
-FROM fn
-LEFT JOIN c ON c.d = fn.d AND c.acc_id = fn.acc_id AND c.cid IS NOT DISTINCT FROM fn.cid
-           AND c.descr = fn.descr AND c.amount = fn.amount AND c.rn = fn.rn
-ORDER BY fn.d
+SELECT f.date_from::DATE AS d, LAST_DAY(f.date_from)::DATE AS me,
+       ROUND((COALESCE(f.dt, 0) - COALESCE(f.cr, 0)) / 100.0, 2) AS amount,
+       COALESCE(CAST(i.code AS VARCHAR), '') AS code,
+       COALESCE(CAST(p.code AS VARCHAR) || ' ' || p.name, '') AS item,
+       COALESCE(CAST(i.code AS VARCHAR) || ' ' || i.name, '') AS subitem,
+       COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp,
+       TRY_CAST(f.contract_id AS BIGINT) AS cid,
+       COALESCE(f.description, '') AS description
+FROM pg.gl.fact f
+LEFT JOIN pg.public.corporate_cfitems i ON i.id = f.subconto_id
+LEFT JOIN pg.public.corporate_cfitems p ON p.id = i.parent_id
+LEFT JOIN pg.public.contracts_contracts k ON k.id = f.contract_id
+LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = k.cp_id
+WHERE f.chapter IN ('CF_BA', 'MANUAL_TRS')
+  AND f.acc_id IN (SELECT acc_id FROM cash_acc)
+  AND COALESCE(f.dt, 0) - COALESCE(f.cr, 0) > 0
+  AND f.date_from::DATE <= $date_from
+  AND CAST(f.id AS VARCHAR) NOT IN (SELECT cf_id FROM linked)
+ORDER BY f.date_from
 """
 
 UPD_TOTAL = ("l.upd_amount_vatless + COALESCE(l.upd_vat_amount, "
@@ -82,8 +72,8 @@ def _goods_sql() -> str:
     SELECT cid, me, SUM(paid) AS paid, SUM(upd) AS upd FROM g GROUP BY 1, 2 ORDER BY 1, 2"""
 
 
-def _skip(item: str):
-    code = str(item or "").split(" ")[0]
+def _skip(code: str):
+    code = str(code or "").strip()
     for pfx, name in SKIP_PREFIX:
         if code.startswith(pfx):
             return name
@@ -93,11 +83,13 @@ def _skip(item: str):
 def fetch(con, date_from: date) -> dict:
     """{'inflow': DataFrame строк О.1, 'goods_m': по договору и месяцу, 'contracts': имена}."""
     from .vat_contracts import CONTRACT_SQL
+    ctr = con.execute(CONTRACT_SQL).df()
     inflow = con.execute(IN_SQL, {"date_from": date_from}).df()
     if not inflow.empty:
-        inflow = inflow[inflow["item"].map(_skip).isna()].reset_index(drop=True)
+        inflow = inflow[inflow["code"].map(_skip).isna()].reset_index(drop=True)
+        names = ctr.set_index("cid")["contract"]
+        inflow["contract"] = inflow["cid"].map(names).fillna("")
     goods = con.execute(_goods_sql(), {"date_from": date_from}).df()
-    ctr = con.execute(CONTRACT_SQL).df()
     return {"inflow": inflow, "goods_m": goods, "contracts": ctr}
 
 
