@@ -1,7 +1,7 @@
 # gear/app/manpack/off_pl.py
 """Справочно к P&L: что прошло через деньги, но не попало в P&L.
 
-О.1 Поступления в Cash Flow без проводки в P&L. Операция банка (gl.fact, счета денег)
+О.1 Поступления по доходным статьям CF (11…) без проводки в P&L. Операция банка (gl.fact, счета денег)
     считается отражённой в P&L, если от неё по цепочке pid есть проводка на счёт
     P&L (родитель 25/26/27). Не показываются по природе: выплаты и зачёты WB
     (111…, 122…), финансирование (3…), переводы и валютные операции (41…), налоги
@@ -75,10 +75,14 @@ def _goods_sql() -> str:
 
 
 def _skip(code: str):
+    """Причина не показывать; None — показать. В О.1 только доходные статьи 11…:
+    поступления по статьям расходов (12…) — это возвраты оплат, а не доход."""
     code = str(code or "").strip()
     for pfx, name in SKIP_PREFIX:
         if code.startswith(pfx):
             return name
+    if not code.startswith("11"):
+        return "не доходная статья (возврат оплаты)"
     return None
 
 
@@ -106,6 +110,10 @@ def goods_by_month(goods: pd.DataFrame) -> pd.DataFrame:
     return g
 
 
+def _d(v) -> date:
+    return pd.Timestamp(v).date()
+
+
 def pl_items(data: dict, sec: str, it_in: str, it_paid: str, it_upd: str,
              it_unc: str) -> dict:
     """{(me, sec, item): value} для листов P&L."""
@@ -113,15 +121,14 @@ def pl_items(data: dict, sec: str, it_in: str, it_paid: str, it_upd: str,
     inflow = data["inflow"]
     if not inflow.empty:
         for me, v in inflow.groupby("me")["amount"].sum().items():
-            me = me if isinstance(me, date) else pd.Timestamp(me).date()
-            out[(me, sec, it_in)] = round(float(v), 2)
+            out[(_d(me), sec, it_in)] = round(float(v), 2)
     g = goods_by_month(data["goods_m"])
     if not g.empty:
         m = g.groupby("me").agg(paid=("paid", "sum"), upd=("upd", "sum"),
                                 delta=("delta", "sum")).sort_index()
         m["bal"] = m["delta"].cumsum()
         for me, r in m.iterrows():
-            me = me if isinstance(me, date) else pd.Timestamp(me).date()
+            me = _d(me)
             out[(me, sec, it_paid)] = round(float(r.paid), 2)
             out[(me, sec, it_upd)] = round(float(r.upd), 2)
             out[(me, sec, it_unc)] = round(float(r.bal), 2)
@@ -136,69 +143,67 @@ def build_sheet(ws, data: dict, report_date: date, as_of: date | None = None):
 
     as_of = as_of or report_date
     mp.sheet_setup(ws)
-    ncols = 9
+    c0 = mp.COL_CODE
+    widths = [12, 32, 34, 52, 17, 17, 17, 70]
+    ncols = c0 + len(widths) - 1
     mp.title_band(ws, "Вне P&L: расшифровка",
                   f"Данные на {as_of:%d.%m.%Y} · справочно, P&L не меняет", ncols,
-                  extra="О.1 — поступления без проводки в P&L; О.2 — оплаты товаров на "
-                        "баланс (130…), по которым нет УПД")
+                  extra="О.1 — доходы, поступившие деньгами без проводки в P&L; О.2 — оплаты "
+                        "товаров на баланс (130…), по которым нет УПД")
     ws.column_dimensions["A"].width = 2
-    widths = {2: 12, 3: 30, 4: 34, 5: 40, 6: 18, 7: 18, 8: 18, 9: 50}
-    for c, w in widths.items():
-        ws.column_dimensions[get_column_letter(c)].width = w
+    for i, w in enumerate(widths):
+        ws.column_dimensions[get_column_letter(c0 + i)].width = w
     f_h = Font(name=mp.FONT, size=9, bold=True, color="FFFFFF")
     f_c = Font(name=mp.FONT, size=9, color=mp.TEXT)
     f_b = Font(name=mp.FONT, size=9, bold=True, color=mp.TEXT)
     f_s = Font(name=mp.FONT, size=11, bold=True, color=mp.NAVY_3)
     f_n = Font(name=mp.FONT, size=9, color=mp.TEXT_2)
 
-    def header(r, cols):
-        for i, name in enumerate(cols):
-            mp.write(ws, r, 2 + i, name, font=f_h, fillc=mp.NAVY, align="center", wrap=True)
+    def table(r, title, note, cols, rows, money, empty):
+        """cols: [(название, формат)]; rows: списки значений; money — индексы с итогом."""
+        mp.write(ws, r, c0, title, font=f_s)
+        mp.write(ws, r + 1, c0, note, font=f_n)
+        r += 2
+        for i, (name, _) in enumerate(cols):
+            mp.write(ws, r, c0 + i, name, font=f_h, fillc=mp.NAVY, align="center", wrap=True)
         ws.row_dimensions[r].height = 28
-
-    def cell(r, c, v, fmt=None, bold=False, align=None):
-        return mp.write(ws, r, c, v, font=f_b if bold else f_c, fmt=fmt,
-                        border=mp.B_BOTTOM, align=align or ("right" if fmt else "left"))
-
-    # ---- О.1
-    r = 7
-    mp.write(ws, r, 2, "О.1 Поступления в Cash Flow, не отражённые в P&L", font=f_s)
-    r += 1
-    mp.write(ws, r, 2, "Не показываются: выплаты и зачёты WB (выручка — через продажи), "
-                       "займы, кредиты, депозиты и проценты, переводы между своими счетами, "
-                       "валютные операции и налоги (налог на прибыль — строкой P&L, НДС — в "
-                       "блоке «Справочно: НДС»).", font=f_n)
-    r += 1
-    header(r, ["Дата", "Статья CF", "Контрагент", "Договор", "Сумма, ₽", "", "", "Назначение"])
-    inflow = data["inflow"]
-    first = r + 1
-    for x in inflow.itertuples():
+        first = r + 1
+        if not rows:
+            r += 1
+            mp.write(ws, r, c0, empty, font=f_n)
+        for row in rows:
+            r += 1
+            for i, v in enumerate(row):
+                fmt = cols[i][1]
+                mp.write(ws, r, c0 + i, v, font=f_c, fmt=fmt, border=mp.B_BOTTOM,
+                         align="right" if fmt in (mp.FMT_MONEY,) else
+                         "center" if fmt else "left")
         r += 1
-        cell(r, 2, x.d if isinstance(x.d, date) else pd.Timestamp(x.d).date(),
-             fmt=mp.FMT_DATE, align="center")
-        cell(r, 3, x.subitem or x.item)
-        cell(r, 4, x.cp)
-        cell(r, 5, x.contract or "без договора")
-        cell(r, 6, float(x.amount), fmt=mp.FMT_MONEY)
-        cell(r, 9, str(x.description)[:200])
-    r += 1
-    mp.write(ws, r, 2, "Итого", font=f_b, border=mp.B_TOTAL)
-    mp.write(ws, r, 6, f"=SUM(F{first}:F{r - 1})" if r - 1 >= first else 0,
-             font=f_b, fmt=mp.FMT_MONEY, border=mp.B_TOTAL, align="right")
+        for i in range(len(cols)):
+            v = None
+            if i == 0:
+                v = "Итого"
+            elif i in money and rows:
+                L = get_column_letter(c0 + i)
+                v = f"=SUM({L}{first}:{L}{r - 1})"
+            mp.write(ws, r, c0 + i, v, font=f_b, fmt=mp.FMT_MONEY if i in money else None,
+                     border=mp.B_TOTAL, align="right" if i in money else "left")
+        return r
 
-    # ---- О.2
-    r += 3
-    mp.write(ws, r, 2, f"О.2 Оплаты товаров на баланс без УПД — по договорам на {as_of:%d.%m.%Y}",
-             font=f_s)
-    r += 1
-    mp.write(ws, r, 2, "Договоры со счётом 130… Оплачено — платежи поставщику минус возвраты "
-                       "(выписки и сплиты); по УПД — сумма УПД с НДС, только рубли. Без УПД = "
-                       "оплачено − по УПД, если больше нуля.", font=f_n)
-    r += 1
-    header(r, ["Последняя оплата", "Контрагент", "Договор", "", "Оплачено, ₽",
-               "По УПД, ₽", "Без УПД, ₽", ""])
+    inflow = data["inflow"]
+    rows1 = [[_d(x.d), x.subitem or x.item or "без статьи", x.cp,
+              x.contract or "без договора", float(x.amount), str(x.description)[:250]]
+             for x in inflow.itertuples()]
+    r = table(7, "О.1 Доходы, поступившие деньгами, без проводки в P&L",
+              "Поступления по доходным статьям Cash Flow (11…), от которых нет проводки в P&L. "
+              "Не показываются: выплаты WB (выручка — через продажи), возвраты оплат по статьям "
+              "расходов, финансирование, переводы, валютные операции и налоги.",
+              [("Дата", mp.FMT_DATE), ("Статья CF", None), ("Контрагент", None),
+               ("Договор", None), ("Сумма, ₽", mp.FMT_MONEY), ("Назначение", None)],
+              rows1, {4}, "Нет таких поступлений — все доходы отражены в P&L.")
+
     g = goods_by_month(data["goods_m"])
-    first = r + 1
+    rows2 = []
     if not g.empty:
         tot = g.groupby("cid").agg(paid=("paid", "sum"), upd=("upd", "sum"),
                                    unc=("unc", "last"))
@@ -206,19 +211,18 @@ def build_sheet(ws, data: dict, report_date: date, as_of: date | None = None):
         tot = tot[tot["unc"] > 0.5].sort_values("unc", ascending=False)
         names = data["contracts"].set_index("cid")
         for cid, x in tot.iterrows():
-            r += 1
             lp = last_pay.get(cid)
-            cell(r, 2, pd.Timestamp(lp).strftime("%m.%Y") if lp is not None else "",
-                 align="center")
-            cell(r, 3, names["cp"].get(cid, "") if cid in names.index else "")
-            cell(r, 4, names["contract"].get(cid, f"id {cid}") if cid in names.index
-                 else f"id {cid}")
-            cell(r, 6, float(x.paid), fmt=mp.FMT_MONEY)
-            cell(r, 7, float(x.upd), fmt=mp.FMT_MONEY)
-            cell(r, 8, float(x.unc), fmt=mp.FMT_MONEY, bold=True)
-    r += 1
-    mp.write(ws, r, 2, "Итого", font=f_b, border=mp.B_TOTAL)
-    for c, L in ((6, "F"), (7, "G"), (8, "H")):
-        mp.write(ws, r, c, f"=SUM({L}{first}:{L}{r - 1})" if r - 1 >= first else 0,
-                 font=f_b, fmt=mp.FMT_MONEY, border=mp.B_TOTAL, align="right")
-    ws.freeze_panes = "C6"
+            rows2.append([_d(lp) if lp is not None else None,
+                          names["cp"].get(cid, "") if cid in names.index else "",
+                          names["contract"].get(cid, f"id {cid}") if cid in names.index
+                          else f"id {cid}",
+                          float(x.paid), float(x.upd), float(x.unc)])
+    r = table(r + 3, f"О.2 Оплаты товаров на баланс без УПД — по договорам на {as_of:%d.%m.%Y}",
+              "Договоры со счётом 130… Оплачено — платежи поставщику минус возвраты (выписки и "
+              "сплиты); по УПД — сумма УПД с НДС, только в рублях. Без УПД = оплачено − по УПД, "
+              "если больше нуля. Последняя оплата — месяц.",
+              [("Последняя оплата", "MM.YYYY"), ("Контрагент", None), ("Договор", None),
+               ("Оплачено, ₽", mp.FMT_MONEY), ("По УПД, ₽", mp.FMT_MONEY),
+               ("Без УПД, ₽", mp.FMT_MONEY)],
+              rows2, {3, 4, 5}, "Нет оплат без УПД.")
+    ws.freeze_panes = ws.cell(row=6, column=c0 + 1)

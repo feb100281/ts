@@ -353,8 +353,8 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
         add(("blank", None, None, None, 1, None))
         add(("band", "О", "СПРАВОЧНО: ВНЕ P&L (контроль) → лист «%s»" % OFFPL_SHEET_NAME,
              None, 0, None))
-        o("О.1", "Поступления в Cash Flow без проводки в P&L (без выплат WB, финансирования, "
-                 "переводов и налогов)", OP_IN)
+        o("О.1", "Доходы, поступившие деньгами, без проводки в P&L (статьи CF 11…, кроме "
+                 "выплат WB)", OP_IN)
         o("О.2", "Оплаты товаров на баланс без УПД — остаток на конец", OP_GOODS_UNC)
         o("О.2а", "оплачено поставщикам за месяц (за вычетом возвратов)", OP_GOODS_PAID, 2)
         o("О.2б", "получено товара по УПД за месяц, с НДС", OP_GOODS_UPD, 2)
@@ -5566,7 +5566,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         ("Пояснения Cash Flow", "Структура потоков, остатки и связь с P&L"),
         (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
                                "отчётов — для сверки с отчётом о реализации и УПД"),
-        (OFFPL_SHEET_NAME, "Поступления без проводки в P&L и оплаты товаров на баланс "
+        (OFFPL_SHEET_NAME, "Доходы без проводки в P&L и оплаты товаров на баланс "
                            "без УПД — расшифровка блока «О» листа P&L"),
     ]
     descr = {n: d for n, d in contents}
