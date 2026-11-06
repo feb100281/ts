@@ -10,6 +10,7 @@ from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import urlencode
+from django.utils.safestring import mark_safe
 
 from django.core.mail import EmailMultiAlternatives
 from django.http import HttpResponseRedirect
@@ -265,7 +266,7 @@ class CounterpartyAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (
-            "🧾 Основное",
+             mark_safe("🧾 <b>Основное</b>"),
             {
                 "fields": (
                     "tax_id",
@@ -278,9 +279,11 @@ class CounterpartyAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        ("📍 Адрес", {"fields": ("country", "adress", "region")}),
         (
-            "👤 Контакты",
+          mark_safe("📍 <b>Адрес</b>"),
+            {"fields": ("country", "adress", "region")}),
+        (
+            mark_safe("👤 <b>Контакты</b>"),
             {
                 "fields": (
                     "ceo",
@@ -293,12 +296,15 @@ class CounterpartyAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        # ("🖼️ Логотипы", {"fields": ("logo", "logo_svg")}),
-        ("🖼️ Логотипы", {"fields": ("logo_glyph", "logo_svg")}),
 
-        ("История полей", {"fields": ("was_notes",)}),
         (
-            "📊 ОКВЭД / ОКОПФ",
+        mark_safe("🖼️ <b>Логотипы</b>"),
+         {"fields": ("logo_glyph", "logo_svg")}),
+
+        (mark_safe("🕘 <b>История изменений</b>"),
+         {"fields": ("was_notes",)}),
+        (
+            mark_safe("📊 <b>ОКВЭД / ОКОПФ</b>"),
             {
                 "fields": (
                     "okved_code",
@@ -310,7 +316,7 @@ class CounterpartyAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "⚠️ Факторы риска",
+             mark_safe("⚠️ <b>Факторы риска</b>"),
             {
                 "classes": ("collapse",),
                 "fields": (
@@ -327,6 +333,10 @@ class CounterpartyAdmin(admin.ModelAdmin):
             },
         ),
     )
+    
+    
+
+    
 
     readonly_fields = ("risk_json",)
 

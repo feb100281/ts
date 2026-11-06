@@ -20,4 +20,32 @@ dmcfuncs.highlightExceptions = function (dateObj, options) {
 }
 
 
+dmcfuncs.formatMillions = function(value) {
 
+    if (value === null || value === undefined) {
+
+        return "";
+
+    }
+
+    return (
+
+        (value / 1_000_000)
+
+            .toLocaleString(
+
+                "ru-RU",
+
+                {
+
+                    minimumFractionDigits: 1,
+
+                    maximumFractionDigits: 1,
+
+                }
+
+            ) + " млн"
+
+    );
+
+};

@@ -1,0 +1,53 @@
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+@media screen {
+  body {
+    background: #f3f5f7;
+  }
+}
+
+@media print {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: auto;
+    height: auto;
+    background: white !important;
+  }
+
+  .report-root {
+    background: white !important;
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+
+  .report-slide {
+    margin: 0 !important;
+    box-shadow: none !important;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .report-slide:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .mantine-Paper-root {
+    box-shadow: none !important;
+  }
+}
+
+@page {
+  size: 1280px 720px;
+  margin: 0;
+}
+
+
+
+
+
+ 

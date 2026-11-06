@@ -6,42 +6,13 @@
   margin-bottom:14px;
 }
 
-/* обёртка для позиционирования иконок внутри инпута */
-.admin-search-wrap{
-  position:relative;
-  display:inline-block;
-}
-
-/* поле поиска: место под лупу и крестик */
-#changelist-search input[name="q"]{
-  width:380px;
-  padding-left:30px;  /* под лупу слева */
-  padding-right:30px; /* под крестик справа */
-}
-
 /* скрыть нативный cancel у webkit */
 #changelist-search input[name="q"]::-webkit-search-cancel-button{
   -webkit-appearance:none;
   appearance:none;
 }
 
-/* 🔍 лупа слева */
-.admin-search-icon{
-  position:absolute;
-  left:10px;
-  top:50%;
-  transform:translateY(-50%);
-  pointer-events:none;
-  opacity:.85;
-}
-.admin-search-icon svg{
-  stroke:#888;
-  width:16px;
-  height:16px;
-}
-.admin-search-wrap:focus-within .admin-search-icon svg{
-  stroke:#444; /* темнее при фокусе */
-}
+
 
 /* × крестик справа */
 .admin-clear-btn{
@@ -182,6 +153,31 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 .change-list #result_list .column-bs_acc {
   min-width: 320px;
 }
+
+/* ===== Фон заголовков таблицы ===== */
+/* .change-list #result_list thead th {
+  background: #ecfdf5;  
+  border-bottom: 1px solid #e5e7eb;
+  border-right: 1px solid rgba(16,185,129,.18);
+  font-weight: 700;
+  color: #065f46;
+
+} */
+
+.change-list #result_list thead th {
+  background: #eff6ff;          
+  border-bottom: 1px solid #dbeafe;
+  border-right: 1px solid rgba(59,130,246,.18);
+
+  font-size: 13px;
+  font-weight: 800;
+  color: #1e3a8a;
+}
+
+
+
+
+
 
 
 
@@ -383,6 +379,60 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 
 
 
+/* ===== Django admin: фикс строки поиска и фильтров ===== */
+
+#changelist #toolbar {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;              /* ❗ запрещаем перенос */
+}
+
+#changelist #toolbar > form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;              /* ❗ */
+    width: 100%;
+}
+
+/* Все select и input — фиксированная логика ширины */
+#changelist #toolbar select,
+#changelist #toolbar input[type="text"],
+#changelist #toolbar input[type="search"] {
+    flex: 0 0 auto;
+    min-width: 180px;
+}
+
+/* Поле поиска — растягивается, но не ломает строку */
+#changelist #searchbar {
+    flex: 1 1 auto;                 /* ❗ растягивается */
+    min-width: 220px;
+    max-width: 420px;               /* ❗ ограничение */
+}
+
+/* Кнопка "Найти" — фиксированная */
+#changelist #toolbar input[type="submit"] {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* Убираем внезапные отступы Django */
+#changelist #toolbar br {
+    display: none;
+}
+
+
+
+
+
+
+/* textarea предмета */
+.inline-group textarea {
+  font-size: 13px;
+  padding: 8px 4px;
+  border-radius: 2px;
+}
 
 
 
@@ -395,3 +445,157 @@ th.column-logo_preview, td.field-logo_preview{ text-align:center; width:72px; }
 
 
 
+
+/* StackedInline: поле file — скрываем "Currently:" и "Очистить" */
+.inline-related .field-file p.file-upload {
+  font-size: 0;
+  margin: 0;
+}
+
+.inline-related .field-file p.file-upload a,
+.inline-related .field-file p.file-upload .clear {
+  display: none !important;
+}
+
+/* оставляем нормальный размер для input */
+.inline-related .field-file input[type="file"] {
+  font-size: 13px;
+}
+
+
+.inline-related h3 {
+    font-weight: 900;
+    color: #0f766e;
+    font-size: 15px;
+    padding: 6px 10px;
+    background: linear-gradient(90deg,#ecfeff,#f8fafc);
+    border-radius: 2px;
+}
+
+
+
+/* ===== Conditions accordion (stable version) ===== */
+
+/* контейнер inline как карточка */
+.valuation-inline{
+  border: 1px solid rgba(148,163,184,.35);
+  border-radius: 2px;
+  background: #fff;
+  margin: 0 0 14px 0;
+  overflow: hidden;
+}
+
+/* header */
+.valuation-inline__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 14px 16px;
+  cursor:pointer;
+  user-select:none;
+}
+
+.valuation-inline__left{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.valuation-inline__chev{
+  font-size: 12px;
+  opacity: .65;
+  transition: transform .15s ease;
+}
+
+.valuation-inline__title{
+  font-weight: 900;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.valuation-inline__meta{
+  color: #ef4444; /* если хочешь подсветку изменения/дельты — можно менять динамически */
+  font-weight: 900;
+  margin-left: 6px;
+}
+
+.valuation-inline__right{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+}
+
+/* delete справа “Удалить” как в примере */
+.valuation-inline .inline-deletelink{
+  font-weight: 900;
+  color: #ef4444;
+}
+
+/* body */
+.valuation-inline__body{
+  padding: 12px 16px 16px 16px;
+  border-top: 1px solid rgba(148,163,184,.25);
+}
+
+.valuation-inline.is-open .valuation-inline__chev{
+  transform: rotate(90deg);
+}
+
+
+
+
+.cond-dates{
+  margin-left: 6px;
+  font-weight: 700;
+  color: #334155; /* slate-700 */
+}
+
+.cond-from,
+.cond-to{
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: rgba(148,163,184,.15);
+  font-variant-numeric: tabular-nums;
+}
+
+.cond-infinity{
+  font-weight: 900;
+  color:#475569;
+}
+
+
+
+
+
+.file-pill{
+  display:inline-flex;
+  align-items:center;
+  padding:2px 8px;
+  border-radius:2px;
+  font-size:14px;
+  font-weight:800;
+  margin-left:8px;
+  background: rgba(148,163,184,.14);
+  color:#0f172a;
+}
+
+
+
+.file-name{
+  margin-left:8px;
+  color:#64748b;
+  font-weight:700;
+}
+
+
+
+.file-amount{
+  font-weight: 800;
+  margin-left: 8px;
+  color: #0f172a;
+  background: rgba(16,185,129,.10);
+  border: 1px solid rgba(16,185,129,.18);
+  padding: 2px 8px;
+  border-radius: 2px;
+}

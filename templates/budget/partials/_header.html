@@ -1,0 +1,11 @@
+<div class="header">
+    <div class="title">{{ title }}</div>
+
+    {% if subtitle %}
+        <div class="subtitle">{{ subtitle }}</div>
+    {% endif %}
+
+    {% if generated_at %}
+        <div class="generated">Дата формирования: {{ generated_at }}</div>
+    {% endif %}
+</div>

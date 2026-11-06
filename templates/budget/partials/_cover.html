@@ -1,0 +1,107 @@
+<section class="cover-page">
+    <div class="cover-grid"></div>
+    <div class="cover-bg-soft cover-bg-soft-1"></div>
+    <div class="cover-bg-soft cover-bg-soft-2"></div>
+
+    <div class="cover-top-line"></div>
+
+    <div class="cover-top">
+        <div class="cover-top-inner">
+            {% if company %}
+                <div class="cover-company">{{ company }}</div>
+            {% endif %}
+
+            {% if cover_system %}
+                <div class="cover-system">{{ cover_system }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="cover-center">
+        <div class="cover-title-wrap">
+
+            {% if cover_type %}
+                <div class="cover-type">{{ cover_type }}</div>
+            {% endif %} 
+
+            <h1 class="cover-title">
+                {{ cover_title|default:title }}
+            </h1>
+
+            {% if cover_subtitle %}
+                <div class="cover-subtitle">{{ cover_subtitle }}</div>
+            {% elif subtitle %}
+                <div class="cover-subtitle">{{ subtitle }}</div>
+            {% endif %}
+
+            {% if version_name or period_range or scenario_name %}
+            <div class="cover-summary-grid">
+                {% if version_name %}
+                <div class="cover-summary-item">
+                    <div class="cover-summary-label">Версия</div>
+                    <div class="cover-summary-value">{{ version_name }}</div>
+                </div>
+                {% endif %}
+
+                {% if period_range %}
+                <div class="cover-summary-item">
+                    <div class="cover-summary-label">Период</div>
+                    <div class="cover-summary-value">{{ period_range }}</div>
+                </div>
+                {% endif %}
+
+                {% if scenario_name %}
+                <div class="cover-summary-item">
+                    <div class="cover-summary-label">Сценарий</div>
+                    <div class="cover-summary-value">{{ scenario_name }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% comment %} {% if period_label %}
+                <div class="cover-period-chip">{{ period_label }}</div>
+            {% elif detail_month %}
+                <div class="cover-period-chip">{{ detail_month }}</div>
+            {% endif %} {% endcomment %}
+
+        </div>
+    </div>
+
+    <div class="cover-bottom">
+        <div class="cover-meta-panel">
+            <div class="cover-meta-grid">
+                {% if generated_at %}
+                <div class="meta-block">
+                    <div class="meta-label">Дата формирования</div>
+                    <div class="meta-value">{{ generated_at }}</div>
+                </div>
+                {% endif %}
+
+                {% if author %}
+                <div class="meta-block">
+                    <div class="meta-label">Исполнитель</div>
+                    <div class="meta-value">{{ author }}</div>
+                </div>
+                {% endif %}
+
+                {% if report_type %}
+                <div class="meta-block">
+                    <div class="meta-label">Тип отчёта</div>
+                    <div class="meta-value">{{ report_type }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="cover-footer">
+            <div class="cover-copyright">
+                © {{ company|default:"Компания" }}
+            </div>
+
+            {% if confidential %}
+            <div class="cover-conf">Конфиденциально</div>
+            {% endif %}
+        </div>
+    </div>
+</section>
