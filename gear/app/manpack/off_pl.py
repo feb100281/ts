@@ -56,6 +56,15 @@ UPD_TOTAL = ("l.upd_amount_vatless + COALESCE(l.upd_vat_amount, "
              "l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100)")
 
 
+UPD_ALL_SQL = f"""
+SELECT LAST_DAY(d.date)::DATE AS me, SUM({UPD_TOTAL}) AS upd
+FROM pg.public.upd_income_lines l
+JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+GROUP BY 1 ORDER BY 1
+"""
+
+
 def _goods_sql() -> str:
     from gear.management.commands.sql.read_query import read_sql
     frag = read_sql("vat_bs130.txt")
@@ -96,7 +105,8 @@ def fetch(con, date_from: date) -> dict:
         names = ctr.set_index("cid")["contract"]
         inflow["contract"] = inflow["cid"].map(names).fillna("")
     goods = con.execute(_goods_sql(), {"date_from": date_from}).df()
-    return {"inflow": inflow, "goods_m": goods, "contracts": ctr}
+    upd_all = con.execute(UPD_ALL_SQL, {"date_from": date_from}).df()
+    return {"inflow": inflow, "goods_m": goods, "contracts": ctr, "upd_all": upd_all}
 
 
 def goods_by_month(goods: pd.DataFrame) -> pd.DataFrame:
@@ -128,10 +138,9 @@ def pl_items(data: dict, sec: str, it_in: str, it_paid: str, it_upd: str,
                                 delta=("delta", "sum")).sort_index()
         m["bal"] = m["delta"].cumsum()
         for me, r in m.iterrows():
-            me = _d(me)
-            out[(me, sec, it_paid)] = round(float(r.paid), 2)
-            out[(me, sec, it_upd)] = round(float(r.upd), 2)
-            out[(me, sec, it_unc)] = round(float(r.bal), 2)
+            out[(_d(me), sec, it_unc)] = round(float(r.bal), 2)
+    for x in data.get("upd_all", pd.DataFrame()).itertuples():
+        out[(_d(x.me), sec, it_upd)] = round(float(x.upd or 0), 2)
     return out
 
 
