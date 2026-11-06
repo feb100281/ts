@@ -23,31 +23,41 @@ WITH cash_acc AS (SELECT DISTINCT acc_id FROM pg.cf_to_csv),
 pl_acc AS (SELECT id FROM pg.public.corporate_coa WHERE parent_id IN (25, 26, 27)),
 lvl1 AS (SELECT id, pid, acc_id FROM pg.gl.fact WHERE pid IS NOT NULL),
 linked AS (
-    SELECT DISTINCT a.pid AS cf_id FROM lvl1 a WHERE a.acc_id IN (SELECT id FROM pl_acc)
+    SELECT DISTINCT CAST(a.pid AS VARCHAR) AS cf_id FROM lvl1 a
+    WHERE a.acc_id IN (SELECT id FROM pl_acc)
     UNION
-    SELECT DISTINCT a.pid FROM lvl1 a JOIN lvl1 b ON b.pid = a.id
+    SELECT DISTINCT CAST(a.pid AS VARCHAR) FROM lvl1 a JOIN lvl1 b ON b.pid = a.id
     WHERE b.acc_id IN (SELECT id FROM pl_acc)
 ),
-item AS (SELECT subconto_id, ANY_VALUE(item) AS item, ANY_VALUE(subitem) AS subitem
-         FROM pg.cf_to_csv GROUP BY 1),
-ctr AS (SELECT TRY_CAST(contract_id AS BIGINT) AS cid, ANY_VALUE(contract_name) AS contract,
-               ANY_VALUE(cp_name) AS cp
-        FROM pg.cf_to_csv WHERE contract_id IS NOT NULL GROUP BY 1)
-SELECT f.date_from::DATE AS d, LAST_DAY(f.date_from)::DATE AS me,
-       (COALESCE(f.dt, 0) - COALESCE(f.cr, 0)) / 100.0 AS amount,
-       COALESCE(i.item, '') AS item, COALESCE(i.subitem, '') AS subitem,
-       COALESCE(NULLIF(TRIM(c.cp), ''), 'Без контрагента') AS cp,
-       COALESCE(c.contract, '') AS contract, f.contract_id AS cid,
-       COALESCE(f.description, '') AS description
-FROM pg.gl.fact f
-LEFT JOIN item i ON i.subconto_id = f.subconto_id
-LEFT JOIN ctr c ON c.cid = f.contract_id
-WHERE f.chapter IN ('CF_BA', 'MANUAL_TRS')
-  AND f.acc_id IN (SELECT acc_id FROM cash_acc)
-  AND COALESCE(f.dt, 0) - COALESCE(f.cr, 0) > 0
-  AND f.date_from::DATE <= $date_from
-  AND CAST(f.id AS VARCHAR) NOT IN (SELECT CAST(cf_id AS VARCHAR) FROM linked)
-ORDER BY f.date_from
+f AS (
+    SELECT CAST(id AS VARCHAR) AS id, date_from::DATE AS d, acc_id,
+           TRY_CAST(contract_id AS BIGINT) AS cid, COALESCE(description, '') AS descr,
+           ROUND((COALESCE(dt, 0) - COALESCE(cr, 0)) / 100.0, 2) AS amount
+    FROM pg.gl.fact
+    WHERE chapter IN ('CF_BA', 'MANUAL_TRS')
+      AND acc_id IN (SELECT acc_id FROM cash_acc)
+      AND COALESCE(dt, 0) - COALESCE(cr, 0) > 0
+      AND date_from::DATE <= $date_from
+),
+fn AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY d, acc_id, cid, descr, amount ORDER BY id) AS rn
+       FROM f WHERE id NOT IN (SELECT cf_id FROM linked)),
+c AS (
+    SELECT date_from::DATE AS d, acc_id, TRY_CAST(contract_id AS BIGINT) AS cid,
+           COALESCE(description, '') AS descr, ROUND(CAST(amount AS DOUBLE), 2) AS amount,
+           item, subitem, cp_name, contract_name,
+           ROW_NUMBER() OVER (PARTITION BY date_from::DATE, acc_id, TRY_CAST(contract_id AS BIGINT),
+                              COALESCE(description, ''), ROUND(CAST(amount AS DOUBLE), 2)
+                              ORDER BY item) AS rn
+    FROM pg.cf_to_csv WHERE amount > 0 AND date_from::DATE <= $date_from
+)
+SELECT fn.d, LAST_DAY(fn.d)::DATE AS me, fn.amount,
+       COALESCE(c.item, '') AS item, COALESCE(c.subitem, '') AS subitem,
+       COALESCE(NULLIF(TRIM(c.cp_name), ''), 'Без контрагента') AS cp,
+       COALESCE(c.contract_name, '') AS contract, fn.cid, fn.descr AS description
+FROM fn
+LEFT JOIN c ON c.d = fn.d AND c.acc_id = fn.acc_id AND c.cid IS NOT DISTINCT FROM fn.cid
+           AND c.descr = fn.descr AND c.amount = fn.amount AND c.rn = fn.rn
+ORDER BY fn.d
 """
 
 UPD_TOTAL = ("l.upd_amount_vatless + COALESCE(l.upd_vat_amount, "
