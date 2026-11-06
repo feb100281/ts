@@ -168,6 +168,12 @@ SEC_OVERHEAD = "6. НАКЛАДНЫЕ РАСХОДЫ"
 SEC_CORP = "7. КОРПОРАТИВНЫЕ РАСХОДЫ"
 SEC_FIN = "8. ФИНАНСОВЫЕ РАСХОДЫ"
 SEC_VATREF = "Н. СПРАВОЧНО: НДС"     # только листы «P&L после СПП» и «с корректировкой»
+SEC_OFFPL = "О. СПРАВОЧНО: ВНЕ P&L"  # те же листы
+OP_IN = "О.1 Поступления в CF без P&L"
+OP_GOODS_PAID = "О.2а Оплачено поставщикам товаров на баланс"
+OP_GOODS_UPD = "О.2б Получено по УПД"
+OP_GOODS_UNC = "О.2 Оплачено без УПД, остаток"
+OFFPL_SHEET_NAME = "Вне P&L"
 
 TAX_SUBITEM = "125200 Налог на прибыль"
 
@@ -339,6 +345,19 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
           VR_PAY)
         v("Н.11", "Сальдо расчётов с бюджетом по НДС на конец (накопительно, с оплатами; "
                   "минус — должны, плюс — переплата)", VR_SALDO)
+
+    # ------------------------------------------------ Справочно: вне P&L
+    if after_spp or corrected:
+        o = lambda code, label, itm, lvl=1: add(
+            ("item", code, label, (SEC_OFFPL, itm, 1), lvl, FMT_MONEY))
+        add(("blank", None, None, None, 1, None))
+        add(("band", "О", "СПРАВОЧНО: ВНЕ P&L (контроль) → лист «%s»" % OFFPL_SHEET_NAME,
+             None, 0, None))
+        o("О.1", "Поступления в Cash Flow без проводки в P&L (без выплат WB, финансирования "
+                 "и переводов)", OP_IN)
+        o("О.2", "Оплаты товаров на баланс без УПД — остаток на конец", OP_GOODS_UNC)
+        o("О.2а", "оплачено поставщикам за месяц (за вычетом возвратов)", OP_GOODS_PAID, 2)
+        o("О.2б", "получено товара по УПД за месяц, с НДС", OP_GOODS_UPD, 2)
     return L
 
 
@@ -1009,7 +1028,7 @@ VR_COMM_FACT_BASE = "Н.8б Комиссия до СПП без фактичес
 VR_COMM_SPP_BASE = "Н.9б Комиссия после СПП без фактического НДС"
 VR_PAY = "Н.10 НДС к уплате / к возмещению"
 VR_SALDO = "Н.11 Сальдо с бюджетом по НДС на конец"
-POINT_ITEMS = {VR_SALDO}        # остаток на дату: в колонках года / периода — на последний месяц
+POINT_ITEMS = {VR_SALDO, OP_GOODS_UNC}        # остаток на дату: в колонках года / периода — на последний месяц
 
 
 def vat_reference(pl_data, dash_rows, vat_ops_rows, paid=None, adjustments=None):
@@ -1772,7 +1791,7 @@ def sheet_groups():
         (">> Анализ", "7FA89A", [PL_CORRECTED_SHEET_NAME, PL_DASHBOARD_SHEET_NAME,
                                  PL_BRIDGE_SHEET_NAME, "Юнит-экономика", BREAKEVEN_SHEET_NAME]),
         (">> Расшифровки", "B7C9C2", [NOTES_SHEET_NAME, PAYOUTS_SHEET_NAME,
-                                      VAT_CHECK_SHEET_NAME]),
+                                      VAT_CHECK_SHEET_NAME, OFFPL_SHEET_NAME]),
         (">> Пояснения", "D9D9D9", ["Пояснения P&L", "Пояснения Юнит-экономика",
                                     BE_NOTES_SHEET_NAME, "Пояснения Cash Flow"]),
     ]
@@ -5312,6 +5331,12 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         vat_ops_rows = fetch_vat_summary(con, date_from)
         vat_adj = fetch_vat_adjustments(con, date_from)
         deposit_rows = fetch_deposit_rows(con, date_from)
+        from gear.app.manpack import off_pl
+        try:
+            offpl_data = off_pl.fetch(con, date_from)
+        except Exception as e:                    # пакет собирается и без блока
+            print(f"[mp] вне P&L: {type(e).__name__}: {e}", flush=True)
+            offpl_data = None
 
     if not pl_rows:
         raise ValueError("Запросы P&L не вернули данных.")
@@ -5396,6 +5421,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ws_payouts = wb.create_sheet(PAYOUTS_SHEET_NAME)
     ws_vat = wb.create_sheet(VAT_CHECK_SHEET_NAME)
     ws_vat_ops = wb.create_sheet(VAT_OPS_SHEET_NAME)
+    ws_offpl = wb.create_sheet(OFFPL_SHEET_NAME) if offpl_data is not None else None
     ws_npl = wb.create_sheet("Пояснения P&L")
     ws_nunit = wb.create_sheet("Пояснения Юнит-экономика")
     ws_nbe = wb.create_sheet(BE_NOTES_SHEET_NAME)
@@ -5413,6 +5439,9 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
             taxes_paid[sub][key[0]] += v
     vat_ref = vat_reference(pl_data, dash_rows, vat_ops_rows, paid=taxes_paid,
                             adjustments=vat_adj)
+    if offpl_data is not None:
+        vat_ref.update(off_pl.pl_items(offpl_data, SEC_OFFPL, OP_IN, OP_GOODS_PAID,
+                                       OP_GOODS_UPD, OP_GOODS_UNC))
     build_pl(ws_pl_spp, {**pl_after_spp(pl_data), **vat_ref}, tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors, after_spp=True,
              rowmap_out=pl_rowmap)
@@ -5423,8 +5452,15 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     build_pl(ws_pl_corr, {**pl_dashboard_corrected(pl_data, dash_rows), **vat_ref},
              tax_by_month, months, report_date, as_of=date_from,
              note_anchors=note_anchors, corrected=True, rowmap_out=corr_rowmap)
+    if ws_offpl is not None:
+        off_pl.build_sheet(ws_offpl, offpl_data, report_date, as_of=date_from)
     # строка «к уплате / к возмещению» ведёт на лист «НДС по операциям»
     for ws_, rm in ((ws_pl_spp, pl_rowmap), (ws_pl_corr, corr_rowmap)):
+        for code in ("О.1", "О.2"):
+            if code in rm and ws_offpl is not None:
+                c = ws_.cell(row=rm[code], column=COL_LABEL)
+                c.hyperlink = "#'%s'!A1" % OFFPL_SHEET_NAME
+                c.font = Font(name=FONT, size=10, color=NAVY_3, underline="single")
         for code in ("Н.10", "Н.11"):
             if code in rm:
                 c = ws_.cell(row=rm[code], column=COL_LABEL)
@@ -5530,6 +5566,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         ("Пояснения Cash Flow", "Структура потоков, остатки и связь с P&L"),
         (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
                                "отчётов — для сверки с отчётом о реализации и УПД"),
+        (OFFPL_SHEET_NAME, "Поступления без проводки в P&L и оплаты товаров на баланс "
+                           "без УПД — расшифровка блока «О» листа P&L"),
     ]
     descr = {n: d for n, d in contents}
     grouped = []
