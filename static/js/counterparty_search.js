@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!input || input.dataset.enhanced) return;
 
     input.dataset.enhanced = "true";
-    input.setAttribute('placeholder', 'Введите название, адрес или ИНН');
+    input.setAttribute('placeholder', '');
     input.setAttribute('type', 'search');
 
     // обёртка для позиционирования крестика
@@ -18,15 +18,9 @@ document.addEventListener('DOMContentLoaded', function () {
     input.parentElement.insertBefore(wrap, input);
     wrap.appendChild(input);
 
-    // лупа слева
     const searchIcon = document.createElement('span');
     searchIcon.className = 'admin-search-icon';
-    searchIcon.innerHTML = `
-<svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none">
-  <circle cx="10" cy="10" r="7"></circle>
-  <line x1="15" y1="15" x2="22" y2="22"></line>
-</svg>
-`;
+    
     wrap.appendChild(searchIcon);
 
     // крестик

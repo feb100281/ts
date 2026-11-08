@@ -1,0 +1,45 @@
+{# Страница перехода в дашборд: app_title, app_lead, app_url, p1..p3 #}
+<style>
+  /* шапка страницы: без дубля заголовка, крошки одной строкой */
+  .content.border-bottom { border-bottom: 0 !important; margin-bottom: 0 !important; }
+  .content.border-bottom h1 { display: none !important; }
+  .content.border-bottom .breadcrumb { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 10px 0 0 !important; margin: 0 !important; font-size: 12px !important; letter-spacing: .04em; text-transform: none !important; }
+  .content.border-bottom .breadcrumb-item, .content.border-bottom .breadcrumb-item.active { color: #8A8A8A !important; background: transparent !important; padding-top: 0; padding-bottom: 0; font-weight: 400 !important; border-radius: 0; }
+  .content.border-bottom .breadcrumb-item a { color: #1F5E4E !important; text-decoration: none; }
+  .content.border-bottom .breadcrumb-item a:hover { text-decoration: underline; }
+  .content.border-bottom .breadcrumb-item + .breadcrumb-item::before { content: "›"; color: #C2C8C5; }
+  .app-launch { max-width: 760px; margin: 14px 0 0; background: #fff; border: 1px solid #E3E8E6; border-top: 3px solid #2F6656; padding: 28px 32px 26px; font-family: Inter, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1F1F1F; }
+  .app-launch-kicker { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
+  .app-launch-title { font-size: 28px; font-weight: 800; letter-spacing: -.01em; line-height: 1.15; margin: 6px 0 8px; }
+  .app-launch-lead { font-size: 14px; line-height: 1.55; color: #4A4A4A; margin: 0 0 18px; }
+  .app-launch-points { list-style: none; margin: 0 0 22px; padding: 0; border-top: 1px solid #EEF1F0; }
+  .app-launch-points li { position: relative; padding: 9px 0 9px 20px; font-size: 13.5px; color: #3A3F44; border-bottom: 1px solid #EEF1F0; }
+  .app-launch-points li::before { content: ""; position: absolute; left: 2px; top: 16px; width: 7px; height: 7px; background: #2F6656; }
+  .app-launch-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  a.app-launch-btn { display: inline-flex; align-items: center; gap: 10px; height: 42px; padding: 0 22px; background: #2F6656; color: #fff !important; font-size: 14px; font-weight: 700; text-decoration: none; border: 0; transition: background .12s; }
+  a.app-launch-btn:hover { background: #1F5E4E; }
+  .app-launch-btn svg { width: 16px; height: 16px; }
+  .app-launch-note { font-size: 12.5px; color: #8A8A8A; }
+</style>
+<div class="app-launch">
+  <div class="app-launch-kicker">Дашборд</div>
+  <div class="app-launch-title">{{ app_title }}</div>
+  <p class="app-launch-lead">{{ app_lead }}</p>
+  <ul class="app-launch-points">
+    {% if p1 %}<li>{{ p1 }}</li>{% endif %}
+    {% if p2 %}<li>{{ p2 }}</li>{% endif %}
+    {% if p3 %}<li>{{ p3 }}</li>{% endif %}
+  </ul>
+  <div class="app-launch-actions">
+    <a class="app-launch-btn" href="{{ app_url }}" target="_blank" rel="noopener noreferrer">
+      Открыть дашборд
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+    </a>
+    <span class="app-launch-note">Откроется в новой вкладке. Если вкладка не открылась сама — нажмите кнопку.</span>
+  </div>
+</div>
+<script>
+  window.addEventListener("load", function () {
+    window.open("{{ app_url }}", "_blank", "noopener,noreferrer");
+  });
+</script>

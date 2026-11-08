@@ -1,0 +1,373 @@
+{% comment %} <!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} – {{ company }}</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/upd_issues/report.css">
+</head>
+<body>
+
+<div class="header">
+    <div class="title">{{ title }}</div>
+    <div class="subtitle">{{ company }}</div>
+    <div class="date">Сформировано: {{ report_date }} в {{ report_time }}</div>
+</div>
+
+<div class="greeting">
+    <strong>Уважаемые коллеги!</strong>
+</div>
+
+<div class="letter-content">
+    <p>
+        В ходе проверки УПД были выявлены позиции, у которых отсутствуют обязательные 
+        поля для корректного учета в системе Wildberries.
+    </p>
+</div>
+
+<!-- Блок с информацией о проверенных документах -->
+{% if upd_list %}
+<div class="summary-box">
+    <div class="summary-title">Проверенные документы</div>
+    <div class="letter-content" style="margin-bottom: 0;">
+        <p class="small-note" style="margin-bottom: 8px;">Отбор произведен по следующим УПД:</p>
+        <ul style="margin: 0; padding-left: 20px;">
+            {% for upd in upd_list %}
+            <li><strong>{{ upd.number }}</strong> от {{ upd.date }} — {{ upd.counterparty }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
+<!-- Сводная статистика -->
+<div class="summary-box">
+    <div class="summary-title">Сводная статистика по проверенным документам</div>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="label">Всего УПД</div>
+            <div class="value">{{ total_upd_count }}</div>
+            <div class="small-note">документов в выборке</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Всего позиций</div>
+            <div class="value">{{ total_lines|floatformat:0 }}</div>
+            <div class="small-note">строк в УПД</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Общая сумма</div>
+            <div class="value">{{ total_amount_vatadd|floatformat:2 }} ₽</div>
+            <div class="small-note">с НДС по всем позициям</div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Блок: Нет NM_ID -->
+<div class="supplier-section">
+    <div class="supplier-header">
+        <div class="supplier-badge">НЕТ NM_ID</div>
+        <div class="supplier-name">Товары без привязки к карточке Wildberries</div>
+        <div class="small-note" style="margin-left: auto;">
+            {{ missing_nm_count }} позиций | {{ missing_nm_qty|floatformat:0 }} шт. | {{ missing_nm_amount|floatformat:2 }} ₽
+        </div>
+    </div>
+    
+    <div class="summary-box" style="margin-top: 8px; background: #FFF5F5;">
+        <div class="progress-container" style="margin: 0;">
+            <div class="progress-label">Доля от общей суммы: {{ missing_nm_percent }}%</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{ missing_nm_percent }}%; background: #C62828;"></div>
+            </div>
+        </div>
+    </div>
+    
+    {% if missing_nm_count > 0 %}
+    <div class="letter-content" style="margin-top: 12px;">
+        <p class="small-note">
+            Детальный список товаров без NM_ID выгружен в отдельный Excel-файл: 
+            <strong>«Отчет_Товары_без_NM_ID.xlsx»</strong>
+        </p>
+        {% if missing_nm_by_upd %}
+        <details class="small-note" style="margin-top: 8px;">
+            <summary style="cursor: pointer; color: #2F6656;">Распределение по документам</summary>
+            <ul style="margin-top: 8px; padding-left: 20px;">
+                {% for upd in missing_nm_by_upd %}
+                <li>{{ upd.number }} от {{ upd.date }} — {{ upd.count }} позиций на сумму {{ upd.amount|floatformat:2 }} ₽</li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="summary-box" style="background: #E8F5E9; border-left-color: #2E7D32;">
+        <div class="summary-title" style="color: #2E7D32;">Проблем не обнаружено</div>
+        <div class="small-note">Все товары имеют корректный NM_ID</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Блок: Нет CHRT_ID -->
+<div class="supplier-section">
+    <div class="supplier-header">
+        <div class="supplier-badge">НЕТ CHRT_ID (РАЗМЕРА)</div>
+        <div class="supplier-name">Товары без указания размера</div>
+        <div class="small-note" style="margin-left: auto;">
+            {{ missing_chrt_count }} позиций | {{ missing_chrt_qty|floatformat:0 }} шт. | {{ missing_chrt_amount|floatformat:2 }} ₽
+        </div>
+    </div>
+    
+    <div class="summary-box" style="margin-top: 8px; background: #FFF8E1;">
+        <div class="progress-container" style="margin: 0;">
+            <div class="progress-label">Доля от общей суммы: {{ missing_chrt_percent }}%</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{ missing_chrt_percent }}%; background: #ED8936;"></div>
+            </div>
+        </div>
+    </div>
+    
+    {% if missing_chrt_count > 0 %}
+    <div class="letter-content" style="margin-top: 12px;">
+        <p class="small-note">
+            Детальный список товаров без CHRT_ID выгружен в отдельный Excel-файл: 
+            <strong>«Отчет_Товары_без_CHRT_ID.xlsx»</strong>
+        </p>
+        {% if missing_chrt_by_upd %}
+        <details class="small-note" style="margin-top: 8px;">
+            <summary style="cursor: pointer; color: #2F6656;">Распределение по документам</summary>
+            <ul style="margin-top: 8px; padding-left: 20px;">
+                {% for upd in missing_chrt_by_upd %}
+                <li>{{ upd.number }} от {{ upd.date }} — {{ upd.count }} позиций на сумму {{ upd.amount|floatformat:2 }} ₽</li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="summary-box" style="background: #E8F5E9; border-left-color: #2E7D32;">
+        <div class="summary-title" style="color: #2E7D32;">Проблем не обнаружено</div>
+        <div class="small-note">Все товары имеют корректный размер (chrt_id)</div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="letter-content">
+    <p><strong>Состав отчета:</strong></p>
+    <ul>
+        <li><strong>Отчет_Товары_без_NM_ID.xlsx</strong> — детальный список товаров без привязки к карточке WB</li>
+        <li><strong>Отчет_Товары_без_CHRT_ID.xlsx</strong> — детальный список товаров без указания размера</li>
+        <li><strong>Сопроводительное письмо.pdf</strong> — текущий документ со сводной статистикой</li>
+    </ul>
+    
+    <p><strong>Рекомендации по исправлению:</strong></p>
+    <ul>
+        <li><strong>Для проблем с NM_ID:</strong> необходимо найти правильную карточку товара на WB и указать nm_id в УПД</li>
+        <li><strong>Для проблем с CHRT_ID:</strong> необходимо указать корректный размер товара, который соответствует карточке WB</li>
+    </ul>
+    
+    <p>
+        <strong>Просьба:</strong> исправить выявленные несоответствия и 
+        прислать корректные версии файлов ответным сообщением.
+    </p>
+</div>
+
+<div class="signature">
+    <div>С уважением,</div>
+    <div class="signature-name">Дарья</div>
+    <div class="signature-date">{{ report_date }}</div>
+</div>
+
+<div class="footer">
+    Автоматически сгенерированный отчет • Система контроля качества данных
+</div>
+
+</body>
+</html> {% endcomment %}
+
+
+
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} – {{ company }}</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/upd_issues/report.css">
+</head>
+<body>
+
+<div class="header">
+    <div class="title">{{ title }}</div>
+    <div class="subtitle">{{ company }}</div>
+    <div class="date">Сформировано: {{ report_date }} в {{ report_time }}</div>
+</div>
+
+<div class="greeting">
+    <strong>Уважаемые коллеги!</strong>
+</div>
+
+<div class="letter-content">
+    <p>
+        В ходе проверки УПД были выявлены позиции, у которых отсутствуют обязательные 
+        поля для корректного учета в системе Wildberries, либо присутствуют несоответствия.
+    </p>
+</div>
+
+<!-- Сводная статистика -->
+<div class="summary-box">
+    <div class="summary-title">Сводная статистика по проверенным документам</div>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="label">Всего УПД</div>
+            <div class="value">{{ total_upd_count }}</div>
+            <div class="small-note">документов в выборке</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Всего позиций</div>
+            <div class="value">{{ total_lines|floatformat:0 }}</div>
+            <div class="small-note">строк в УПД</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Общая сумма</div>
+            <div class="value">{{ total_amount_vatadd|floatformat:2 }} ₽</div>
+            <div class="small-note">с НДС по всем позициям</div>
+        </div>
+    </div>
+</div>
+
+<!-- Блок: Нет NM_ID -->
+<div class="supplier-section">
+    <div class="supplier-header">
+        <div class="supplier-badge">НЕТ NM_ID</div>
+        <div class="supplier-name">Товары без привязки к карточке Wildberries</div>
+        <div class="small-note" style="margin-left: auto;">
+            {{ missing_nm_count }} позиций | {{ missing_nm_qty|floatformat:0 }} шт. | {{ missing_nm_amount|floatformat:2 }} ₽
+        </div>
+    </div>
+    
+    <div class="summary-box" style="margin-top: 8px; background: #FFF5F5;">
+        <div class="progress-container" style="margin: 0;">
+            <div class="progress-label">Доля от общей суммы: {{ missing_nm_percent }}%</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{ missing_nm_percent }}%; background: #C62828;"></div>
+            </div>
+        </div>
+    </div>
+    
+    {% if missing_nm_count > 0 %}
+    <div class="letter-content" style="margin-top: 12px;">
+        <p class="small-note">
+            Детальный список товаров без NM_ID выгружен в отдельный Excel-файл: 
+            <strong>«Отчет_товары_без_NM_ID.xlsx»</strong>
+        </p>
+    </div>
+    {% else %}
+    <div class="summary-box" style="background: #E8F5E9; border-left-color: #2E7D32;">
+        <div class="summary-title" style="color: #2E7D32;">Проблем не обнаружено</div>
+        <div class="small-note">Все товары имеют корректный NM_ID</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Блок: Нет CHRT_ID -->
+<div class="supplier-section">
+    <div class="supplier-header">
+        <div class="supplier-badge">НЕТ CHRT_ID (РАЗМЕРА)</div>
+        <div class="supplier-name">Товары без указания размера</div>
+        <div class="small-note" style="margin-left: auto;">
+            {{ missing_chrt_count }} позиций | {{ missing_chrt_qty|floatformat:0 }} шт. | {{ missing_chrt_amount|floatformat:2 }} ₽
+        </div>
+    </div>
+    
+    <div class="summary-box" style="margin-top: 8px; background: #FFF8E1;">
+        <div class="progress-container" style="margin: 0;">
+            <div class="progress-label">Доля от общей суммы: {{ missing_chrt_percent }}%</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{ missing_chrt_percent }}%; background: #ED8936;"></div>
+            </div>
+        </div>
+    </div>
+    
+    {% if missing_chrt_count > 0 %}
+    <div class="letter-content" style="margin-top: 12px;">
+        <p class="small-note">
+            Детальный список товаров без CHRT_ID выгружен в отдельный Excel-файл: 
+            <strong>«Отчет_товары_без_CHRT_ID.xlsx»</strong>
+        </p>
+    </div>
+    {% else %}
+    <div class="summary-box" style="background: #E8F5E9; border-left-color: #2E7D32;">
+        <div class="summary-title" style="color: #2E7D32;">Проблем не обнаружено</div>
+        <div class="small-note">Все товары имеют корректный размер (chrt_id)</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Блок: Несовпадение НДС -->
+<div class="supplier-section">
+    <div class="supplier-header">
+        <div class="supplier-badge">НЕСОВПАДЕНИЕ НДС</div>
+        <div class="supplier-name">Товары с несовпадающей ставкой НДС</div>
+        <div class="small-note" style="margin-left: auto;">
+            {{ vat_mismatch_count }} позиций | {{ vat_mismatch_qty|floatformat:0 }} шт. | {{ vat_mismatch_amount|floatformat:2 }} ₽
+        </div>
+    </div>
+    
+    <div class="summary-box" style="margin-top: 8px; background: #F3E5F5;">
+        <div class="progress-container" style="margin: 0;">
+            <div class="progress-label">Доля от общей суммы: {{ vat_mismatch_percent }}%</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width: {{ vat_mismatch_percent }}%; background: #7B1FA2;"></div>
+            </div>
+        </div>
+    </div>
+    
+    {% if vat_mismatch_count > 0 %}
+    <div class="letter-content" style="margin-top: 12px;">
+        <p class="small-note">
+            Детальный список товаров с несовпадением ставок НДС выгружен в отдельный Excel-файл: 
+            <strong>«Отчет_несовпадение_НДС.xlsx»</strong>
+        </p>
+    </div>
+    {% else %}
+    <div class="summary-box" style="background: #E8F5E9; border-left-color: #2E7D32;">
+        <div class="summary-title" style="color: #2E7D32;">Проблем не обнаружено</div>
+        <div class="small-note">Ставки НДС во всех позициях совпадают с карточками Wildberries</div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="letter-content">
+    <p><strong>Состав отчета:</strong></p>
+    <ul>
+        <li><strong>Отчет_товары_без_NM_ID.xlsx</strong> — детальный список товаров без привязки к карточке WB</li>
+        <li><strong>Отчет_товары_без_CHRT_ID.xlsx</strong> — детальный список товаров без указания размера</li>
+        <li><strong>Отчет_несовпадение_НДС.xlsx</strong> — детальный список товаров с несовпадающей ставкой НДС</li>
+        <li><strong>Сопроводительное письмо.pdf</strong> — текущий документ со сводной статистикой</li>
+    </ul>
+    
+    <p><strong>Рекомендации по исправлению:</strong></p>
+    <ul>
+        <li><strong>Для проблем с NM_ID:</strong> необходимо найти правильную карточку товара на WB и указать nm_id в УПД</li>
+        <li><strong>Для проблем с CHRT_ID:</strong> необходимо указать корректный размер товара, который соответствует карточке WB</li>
+        <li><strong>Для проблем с НДС:</strong> необходимо сверить ставку НДС в УПД и в карточке товара на WB, привести к соответствию</li>
+    </ul>
+    
+    <p>
+        <strong>Просьба:</strong> исправить выявленные несоответствия и 
+        прислать корректные версии файлов ответным сообщением.
+    </p>
+</div>
+
+<div class="signature">
+    <div>С уважением,</div>
+    <div class="signature-name">Дарья</div>
+    <div class="signature-date">{{ report_date }}</div>
+</div>
+
+<div class="footer">
+    Автоматически сгенерированный отчет • Система контроля качества данных
+</div>
+
+</body>
+</html>

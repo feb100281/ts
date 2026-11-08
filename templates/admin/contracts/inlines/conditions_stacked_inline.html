@@ -1,0 +1,89 @@
+{% load i18n admin_urls static %}
+
+<div class="js-inline-admin-formset inline-group jm-inline-group"
+     id="{{ inline_admin_formset.formset.prefix }}-group"
+     data-inline-type="stacked"
+     data-inline-formset="{{ inline_admin_formset.inline_formset_data }}">
+
+  <fieldset class="module {{ inline_admin_formset.classes }}">
+    {{ inline_admin_formset.formset.management_form }}
+    {{ inline_admin_formset.formset.non_form_errors }}
+
+    {% for inline_admin_form in inline_admin_formset %}
+      {# ✅ ВАЖНО: последняя форма в цикле = empty-form #}
+      <div class="inline-related{% if inline_admin_form.original or inline_admin_form.show_url %} has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form last-related{% endif %}"
+           id="{{ inline_admin_formset.formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
+
+        {% with inst=inline_admin_form.form.instance %}
+        <details class="valuation-inline__details"
+                 {% if not inline_admin_form.original or inline_admin_form.form.errors %}open{% endif %}>
+          <summary class="valuation-inline__summary">
+
+            <span class="valuation-inline__title">
+              {% if inline_admin_form.original %}
+                Условие №{{ forloop.counter }}
+                <span class="cond-dates">
+                  {% if inst.date_start %}
+                    <span class="cond-from">{{ inst.date_start|date:"d.m.Y" }}</span>
+                  {% endif %}
+                  →
+                  {% if inst.date_finish %}
+                    <span class="cond-to">{{ inst.date_finish|date:"d.m.Y" }}</span>
+                  {% else %}
+                    <span class="cond-infinity">∞</span>
+                  {% endif %}
+                </span>
+              {% else %}
+                Новое условие
+              {% endif %}
+            </span>
+
+            {# ✅ КНОПКА "Показать начисления" — только для сохранённых условий #}
+{% if inline_admin_form.original %}
+  <a class="button"
+     href="{% url 'contracts:condition_accruals_preview' condition_id=inst.id %}"
+     target="_blank"
+     onclick="event.stopPropagation();"
+     style="margin-left:auto; padding:4px 12px;">
+    📊 Показать начисления
+  </a>
+{% endif %}
+
+            {% if inline_admin_form.form.errors %}
+              <span class="valuation-inline__badge valuation-inline__badge--error">
+                {% trans "Есть ошибки" %}
+              </span>
+            {% endif %}
+
+            {# ✅ DELETE: показываем только для сохранённых #}
+            {% if inline_admin_formset.formset.can_delete and inline_admin_form.original %}
+              <span class="valuation-inline__delete" onclick="event.stopPropagation();">
+                {{ inline_admin_form.deletion_field.field }}
+                {{ inline_admin_form.deletion_field.label_tag }}
+              </span>
+            {% endif %}
+          </summary>
+
+          <div class="valuation-inline__body">
+            {% if inline_admin_form.form.non_field_errors %}
+              <div class="errornote">
+                {{ inline_admin_form.form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            {% for fieldset in inline_admin_form %}
+              {% include "admin/includes/fieldset.html" %}
+            {% endfor %}
+
+            {% if inline_admin_form.has_auto_field or inline_admin_form.needs_explicit_pk_field %}
+              {{ inline_admin_form.pk_field.field }}
+            {% endif %}
+            {{ inline_admin_form.fk_field.field }}
+          </div>
+        </details>
+        {% endwith %}
+      </div>
+    {% endfor %}
+  </fieldset>
+</div>
+

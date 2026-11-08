@@ -1,0 +1,213 @@
+/* =========================
+   WB Documents – Print Styles
+   ========================= */
+
+:root{
+  --bg: #ffffff;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --muted2: #94a3b8;
+  --line: rgba(15,23,42,.10);
+  --soft: rgba(15,23,42,.04);
+  --soft2: rgba(15,23,42,.06);
+  --chip: rgba(248,250,252,.92);
+  --accent: #0ea5e9;     /* небесный */
+  --accent2:#6366f1;     /* индиго */
+  --ok: #10b981;
+  --bad:#ef4444;
+
+  --r12: 12px;
+  --r14: 14px;
+  --r16: 16px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body{
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.wrap{
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 26px 22px 40px;
+}
+
+/* -------- Header -------- */
+.dochead{
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.kicker{
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.title{
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.02;
+  letter-spacing: -.02em;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.meta{
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  background: var(--chip);
+  border: 1px solid rgba(148,163,184,.30);
+  color: var(--ink);
+  font-weight: 500;
+}
+.pill .dot{
+  width: 8px; height: 8px;
+  border-radius: 99px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(14,165,233,.10);
+}
+
+/* -------- Print bar -------- */
+.printbar{
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0 14px;
+}
+
+.printbar button{
+  cursor: pointer;
+  border: 1px solid rgba(148,163,184,.35);
+  background: rgba(248,250,252,.96);
+  color: var(--ink);
+  padding: 8px 12px;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  box-shadow: 0 10px 22px rgba(15,23,42,.06);
+}
+.printbar button:hover{
+  background: #fff;
+}
+
+/* -------- Table -------- */
+.rev-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148,163,184,.30);
+  border-radius: 16px;
+  box-shadow: 0 14px 30px rgba(15,23,42,.06);
+}
+
+.rev-table thead th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(248,250,252,.96);
+  backdrop-filter: blur(6px);
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-weight: 900;
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(148,163,184,.35);
+}
+
+.rev-table tbody td{
+  padding: 12px 12px;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(148,163,184,.22);
+  vertical-align: top;
+}
+
+.rev-table tbody tr:nth-child(even) td{
+  background: rgba(15,23,42,.02);
+}
+
+.rev-table tbody tr:hover td{
+  background: rgba(14,165,233,.06);
+}
+
+/* "липкая" первая колонка (если захочешь) */
+.rev-table .sticky-col{
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+.rev-table tbody tr:nth-child(even) .sticky-col{ background: rgba(15,23,42,.02); }
+.rev-table tbody tr:hover .sticky-col{ background: rgba(14,165,233,.06); }
+
+/* Название */
+.mname{
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.submuted{
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+
+
+
+/* pagebreak helper */
+.pagebreak{
+  height: 1px;
+  margin: 24px 0;
+  background: transparent;
+  page-break-after: always;
+}
+
+/* -------- Print rules -------- */
+@media print{
+  .wrap{ max-width: none; padding: 0; }
+  .printbar{ display: none !important; }
+
+  /* чтобы браузер печатал фон/цвета */
+  *{
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .rev-table{
+    box-shadow: none;
+    border-radius: 0;
+  }
+  .rev-table thead th{
+    position: static; /* sticky в печати иногда глючит */
+  }
+}

@@ -1,0 +1,155 @@
+-- Источник сводной по НДС (лист raw_vat файла сводных).
+-- Те же правила, что на листе «НДС по операциям» пакета, но построчно по дням:
+--   закупка товаров — НДС из УПД поставщиков (upd_income_lines);
+--   НДС с продаж WB — с цены покупателя (pl_sales.vat_amount);
+--   комиссия WB — НДС с вознаграждения по отчёту WB (sales.wb_raw.ppvz_vw_nds);
+--   расходы и продвижение WB — расчётно по ставке строки (wb_costs);
+--   учёт — проводки НДС (gl.fact, VAT_ACCURALS) со статьёй, контрагентом и
+--   договором парной проводки P&L.
+-- «НДС, ₽» — сумма в своём направлении; последняя колонка — знак как в деньгах:
+-- начисленный (к уплате) — минус, к вычету — плюс.
+WITH
+-- @include vat_bs130.txt
+src AS (
+    SELECT date_from::DATE AS d, '1. Начисленный' AS direction,
+           '1.1 НДС с продаж WB' AS line, 'Продажи WB' AS grp, 'Продажи WB' AS item,
+           'ВАЙЛДБЕРРИЗ' AS cp, 'без договора' AS contract, NULL::BIGINT AS contract_id,
+           'расчёт по ставке карточки' AS source,
+           vat_amount AS vat
+    FROM pl_sales
+    WHERE date_from::DATE <= $date_from
+
+    UNION ALL
+    SELECT d.date::DATE, '2. К вычету', '2.0 Закупка товаров',
+           CASE WHEN COALESCE(l.upd_vat_rate, 0) = 0 THEN 'НДС 0% (импорт / без НДС)'
+                ELSE 'НДС ' || CAST(CAST(l.upd_vat_rate AS INTEGER) AS VARCHAR) || '%' END,
+           'Товары по УПД',
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
+           'УПД № ' || d.number || ' от ' || strftime(d.date, '%d.%m.%Y')
+               || ' · id ' || CAST(d.id AS VARCHAR),
+           d.contract_id, 'УПД поставщика',
+           COALESCE(l.upd_vat_amount, l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100)
+    FROM pg.public.upd_income_lines l
+    JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = d.counterparty_id
+    WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+
+    UNION ALL
+    SELECT g.me, '2. К вычету', '2.0а Закупки на баланс 130: НДС по оплатам без УПД',
+           'Закупки на баланс без УПД', COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
+           COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(c.number, 'б/н') || ' · id '
+               || CAST(c.id AS VARCHAR),
+           c.id, 'назначение платежа минус УПД', g.vat
+    FROM bs130_vat g
+    JOIN pg.public.contracts_contracts c ON c.id = g.cid
+    LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = c.title_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
+    WHERE ABS(g.vat) >= 0.01
+
+    UNION ALL
+    SELECT rr_dt::DATE, '2. К вычету',
+           '2.1 Комиссия WB', 'Вознаграждение WB',
+           CASE WHEN COALESCE(sop_name, '') IN ('Продажа', 'Возврат') THEN sop_name
+                ELSE 'Технические строки' END,
+           'ВАЙЛДБЕРРИЗ', 'без договора', NULL, 'отчёт WB',
+           CASE WHEN COALESCE(sop_name, '') = 'Возврат' THEN -ppvz_vw_nds ELSE ppvz_vw_nds END
+    FROM sales.wb_raw
+    WHERE rr_dt::DATE <= $date_from AND COALESCE(ppvz_vw_nds, 0) <> 0
+
+    UNION ALL
+    SELECT date_from::DATE, '2. К вычету',
+           CASE WHEN account = 'WB Deduction' THEN '2.3 Продвижение WB' ELSE '2.2 Расходы WB' END,
+           account, cost_item, 'ВАЙЛДБЕРРИЗ', 'без договора', NULL, 'расчёт по ставке строки',
+           -(dt - cr) * COALESCE(vat_rate, 20) / (100 + COALESCE(vat_rate, 20)) / 100
+    FROM wb_costs
+    WHERE date_from::DATE <= $date_from AND account != 'Other income / loss'
+
+    UNION ALL
+    SELECT date_from::DATE, '1. Начисленный', '1.2 НДС с выплат WB по программе сотрудничества',
+           'Выплаты WB', cost_item, 'ВАЙЛДБЕРРИЗ', 'без договора', NULL, 'расчёт 22/122 от суммы',
+           (dt - cr) * COALESCE(vat_rate, 22) / (100 + COALESCE(vat_rate, 22)) / 100
+    FROM wb_costs
+    WHERE date_from::DATE <= $date_from AND cost_item = '5.4. Выплаты WB по программе сотрудничества'
+
+    UNION ALL
+    -- минус по расходным счетам (возврат, сторно) — уменьшение вычета в своей строке,
+    -- а не начисленный НДС; начисленный — минус по остальным счетам (доходы)
+    SELECT v.date_from::DATE,
+           CASE WHEN (v.dt - v.cr < 0 AND COALESCE(LEFT(CAST(a.code AS VARCHAR), 3), '') NOT IN ('610', '620', '420', '630')) THEN '1. Начисленный' ELSE '2. К вычету' END,
+           CASE WHEN (v.dt - v.cr < 0 AND COALESCE(LEFT(CAST(a.code AS VARCHAR), 3), '') NOT IN ('610', '620', '420', '630')) THEN '1.3 НДС с прочих доходов'
+                WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '610' THEN '2.4 Накладные расходы'
+                WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '620' THEN '2.5 Корпоративные расходы'
+                WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '420' THEN '2.6 Прочие расходы'
+                WHEN LEFT(CAST(a.code AS VARCHAR), 3) = '630' THEN '2.7 Финансовые расходы'
+                ELSE '2.8 Другие счета' END,
+           COALESCE(NULLIF(TRIM(concat_ws(' ', sp.code, sp.name)), ''), 'Без группы'),
+           COALESCE(NULLIF(TRIM(concat_ws(' ', s.code, s.name)), ''), 'Без статьи'),
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента'),
+           COALESCE(ct.title || ' № ' || COALESCE(c.number, 'б/н') || ' от '
+                    || COALESCE(strftime(c.date, '%d.%m.%Y'), 'б/д')
+                    || ' · id ' || CAST(c.id AS VARCHAR), 'без договора'),
+           c.id,
+           'учёт: ' || COALESCE(p.vat_mode, '') || ' ' || COALESCE(CAST(p.vat_rate AS VARCHAR), '') || '%',
+           CASE WHEN (v.dt - v.cr < 0 AND COALESCE(LEFT(CAST(a.code AS VARCHAR), 3), '') NOT IN ('610', '620', '420', '630')) THEN ABS(v.dt - v.cr) ELSE v.dt - v.cr END / 100.0
+    FROM pg.gl.fact v
+    -- статья и договор — из строки начисления (accural_distribution): при режиме
+    -- vat_only проводки в P&L нет, а счёт P&L в начислении есть
+    LEFT JOIN pg.gl.accural_distribution p ON p.id = v.pid
+    LEFT JOIN pg.gl.fact pf ON pf.pid = v.pid AND pf.chapter = 'PL_ACCURALS'
+    -- без счёта P&L (закупки на баланс: упаковка, материалы) — счёт BS
+    LEFT JOIN pg.public.corporate_coa a ON a.id = COALESCE(p.acc_pl, pf.acc_id, p.acc_bs)
+    LEFT JOIN pg.public.corporate_cfitems s ON s.id = COALESCE(p.subconto_pl, pf.subconto_id, p.subconto_bs)
+    LEFT JOIN pg.public.corporate_cfitems sp ON sp.id = s.parent_id
+    LEFT JOIN pg.public.contracts_contracts c ON c.id = COALESCE(p.contract_id, v.contract_id)
+    LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = c.title_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
+    WHERE v.chapter = 'VAT_ACCURALS' AND v.date_from <= $date_from AND v.dt - v.cr <> 0
+      AND COALESCE(p.contract_id, v.contract_id) NOT IN (SELECT cid FROM bs130)
+
+    -- корректировки сальдо из «Корректировок НДС»: списание (не принят к вычету) —
+    -- минус, корректировка сальдо — со знаком, как введена
+    UNION ALL
+    SELECT date::DATE, '3. Корректировки сальдо',
+           CASE WHEN kind = 'writeoff' THEN '5.4 НДС списан в расходы'
+                ELSE '5.5 Корректировка сальдо НДС' END,
+           CASE WHEN kind = 'writeoff' THEN 'Не принят к вычету' ELSE 'Корректировка' END,
+           COALESCE(NULLIF(TRIM(comment), ''), 'Без комментария'),
+           'ИФНС', 'без договора', NULL, 'корректировка',
+           CASE WHEN kind = 'writeoff' THEN -amount ELSE amount END
+    FROM pg.public.grossbook_vatadjustment
+    WHERE date <= $date_from
+
+    -- НДС, уплаченный по Cash Flow (подстатьи налогов с «НДС» в названии,
+    -- в т. ч. ввозной). Оплата уменьшает долг перед бюджетом — знак плюс,
+    -- поэтому итог сводной = сальдо расчётов по НДС (как раздел 5 листа)
+    UNION ALL
+    SELECT date_from::DATE, '4. Оплачено в бюджет', '4.1 НДС оплачено (Cash Flow)',
+           COALESCE(NULLIF(TRIM(subitem), ''), 'Без подстатьи'),
+           COALESCE(NULLIF(TRIM(item), ''), 'Без статьи'),
+           COALESCE(NULLIF(TRIM(cp_name), ''), 'Без контрагента'),
+           COALESCE(NULLIF(TRIM(contract_name), ''), 'без договора')
+               || COALESCE(' · id ' || CAST(TRY_CAST(contract_id AS BIGINT) AS VARCHAR), ''),
+           TRY_CAST(contract_id AS BIGINT), 'Cash Flow',
+           -amount
+    FROM cf
+    WHERE STARTS_WITH(COALESCE(subitem, ''), '125') AND subitem LIKE '%НДС%'
+)
+SELECT d AS "Дата",
+       YEAR(d) AS "Год",
+       strftime(d, '%Y-%m') AS "Месяц",
+       direction AS "Направление",
+       line AS "Строка",
+       grp AS "Группа статей",
+       item AS "Статья",
+       cp AS "Контрагент",
+       contract AS "Договор",
+       contract_id AS "ID договора",
+       source AS "Источник",
+       ROUND(SUM(vat), 2) AS "НДС, ₽",
+       ROUND(SUM(CASE WHEN direction = '1. Начисленный' THEN -vat ELSE vat END), 2)
+           AS "НДС: к уплате −, к вычету +, ₽"
+FROM src
+GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+HAVING ROUND(SUM(vat), 2) <> 0
+ORDER BY 1, 5, 6, 7

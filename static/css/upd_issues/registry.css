@@ -1,0 +1,102 @@
+/* static/css/upd_issues/registry.css */
+
+@page {
+    size: A4 landscape;
+    margin: 2cm;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #1F4E78;
+    padding-bottom: 15px;
+}
+
+.header .title {
+    font-size: 18pt;
+    font-weight: bold;
+    color: #1F4E78;
+}
+
+.header .subtitle {
+    font-size: 12pt;
+    color: #666;
+    margin-top: 5px;
+}
+
+.header .date {
+    font-size: 9pt;
+    color: #999;
+    margin-top: 5px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+}
+
+table th {
+    background-color: #1F4E78;
+    color: white;
+    padding: 8px 5px;
+    text-align: center;
+    font-weight: bold;
+    border: 1px solid #1F4E78;
+}
+
+table td {
+    padding: 6px 5px;
+    border: 1px solid #ddd;
+    text-align: center;
+}
+
+table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+table tr:hover {
+    background-color: #f0f0f0;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.footer-row {
+    background-color: #e8f0fe !important;
+    font-weight: bold;
+}
+
+.footer-row td {
+    border-top: 2px solid #1F4E78;
+}
+
+.footer {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 8pt;
+    color: #999;
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+}
