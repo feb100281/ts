@@ -171,8 +171,9 @@ SEC_VATREF = "Н. СПРАВОЧНО: НДС"     # только листы «P&
 SEC_OFFPL = "О. СПРАВОЧНО: ВНЕ P&L"  # те же листы
 OP_IN = "О.1 Поступления в CF без P&L"
 OP_GOODS_PAID = "О.2а Оплачено поставщикам товаров на баланс"
-OP_GOODS_UPD = "О.3 Получено по УПД, все"
-OP_GOODS_UNC = "О.2 Оплачено без УПД, остаток"
+OP_GOODS_UPD = "О.4 Получено по УПД, все"
+OP_GOODS_UNC = "О.3 Оплачено без УПД, остаток"
+OP_COSTS = "О.2 Сопутствующие закупке без P&L"
 OFFPL_SHEET_NAME = "Вне P&L"
 
 TAX_SUBITEM = "125200 Налог на прибыль"
@@ -355,8 +356,10 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
              None, 0, None))
         o("О.1", "Доходы, поступившие деньгами, без проводки в P&L (статьи CF 11…, кроме "
                  "выплат WB)", OP_IN)
-        o("О.2", "Оплаты товаров на баланс без УПД — остаток на конец", OP_GOODS_UNC)
-        o("О.3", "Получено по УПД за месяц — все УПД, полная сумма (с НДС, если он есть; "
+        o("О.2", "Расходы, сопутствующие закупке товара (сертификация, декларирование и т. п.: "
+                 "статьи 121…, кроме 121100 «Закупка товара»), без проводки в P&L", OP_COSTS)
+        o("О.3", "Оплаты товаров на баланс без УПД — остаток на конец", OP_GOODS_UNC)
+        o("О.4", "Получено по УПД за месяц — все УПД, полная сумма (с НДС, если он есть; "
                  "только рублёвые)", OP_GOODS_UPD)
     return L
 
@@ -5441,7 +5444,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                             adjustments=vat_adj)
     if offpl_data is not None:
         vat_ref.update(off_pl.pl_items(offpl_data, SEC_OFFPL, OP_IN, OP_GOODS_PAID,
-                                       OP_GOODS_UPD, OP_GOODS_UNC))
+                                       OP_GOODS_UPD, OP_GOODS_UNC, OP_COSTS))
     build_pl(ws_pl_spp, {**pl_after_spp(pl_data), **vat_ref}, tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors, after_spp=True,
              rowmap_out=pl_rowmap)
@@ -5456,7 +5459,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         off_pl.build_sheet(ws_offpl, offpl_data, report_date, as_of=date_from)
     # строка «к уплате / к возмещению» ведёт на лист «НДС по операциям»
     for ws_, rm in ((ws_pl_spp, pl_rowmap), (ws_pl_corr, corr_rowmap)):
-        for code in ("О.1", "О.2"):
+        for code in ("О.1", "О.2", "О.3"):
             if code in rm and ws_offpl is not None:
                 c = ws_.cell(row=rm[code], column=COL_LABEL)
                 c.hyperlink = "#'%s'!A1" % OFFPL_SHEET_NAME
@@ -5566,7 +5569,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         ("Пояснения Cash Flow", "Структура потоков, остатки и связь с P&L"),
         (VAT_CHECK_SHEET_NAME, "НДС с вознаграждения WB по неделям и сериям "
                                "отчётов — для сверки с отчётом о реализации и УПД"),
-        (OFFPL_SHEET_NAME, "Доходы без проводки в P&L и оплаты товаров на баланс "
+        (OFFPL_SHEET_NAME, "Доходы и расходы, сопутствующие закупке, без проводки в P&L; оплаты товаров на баланс "
                            "без УПД — расшифровка блока «О» листа P&L"),
     ]
     descr = {n: d for n, d in contents}

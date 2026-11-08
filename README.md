@@ -40,6 +40,47 @@ python manage.py assistant_bot --profile sales --digest-test
 
 python manage.py assistant_bot --profile sales --digest-test --digest-kind week
 python manage.py assistant_bot --profile sales --digest-test --digest-kind month
+
+
+
+🚀 ЕСЛИ НАДО ПРИНУДИТЕЛЬНО ОТПРАВИТЬ РАСЫЛКУ ЗА ВЧЕРАШНИЙ ДЕНЬ Ё
+
+1. ЭТО ДЛЯ НАЧАЛА СЕБЕ ДЛЯ ПРОВЕРКИ
+cd ~/ts && .venv/bin/python manage.py shell -c "
+import os
+from datetime import date, timedelta
+from gear.app.daily_sales.assistant import digest, digest_period
+from gear.management.commands.assistant_bot import Bot
+today = date.today(); day = today - timedelta(days=1)
+loaded = digest.loaded_date(); print('продажи в базе по', loaded)
+parts = digest_period.morning(today, day, loaded)
+assert parts, 'за вчера данных нет'
+parts[0]['text'] = parts[0]['text'].replace('Доброе утро! ☀️', 'Привет!')
+Bot(os.getenv('TELEGRAM_BOT_TOKEN_SALES'), 'sales').send_blocks(int(os.getenv('TELEGRAM_ADMIN_ID')), parts)
+print('отправлено тебе')"
+
+
+2. ЭТО ВЕСМ У КОГО ЕСТЬ ДОСТУП 
+cd ~/ts && .venv/bin/python manage.py shell -c "
+import os, time
+from datetime import date, timedelta
+from gear.app.daily_sales.assistant import digest, digest_period
+from gear.management.commands.assistant_bot import Bot
+from gear.models import TelegramAccess
+today = date.today(); day = today - timedelta(days=1)
+parts = digest_period.morning(today, day, digest.loaded_date())
+assert parts, 'за вчера данных нет'
+parts[0]['text'] = parts[0]['text'].replace('Доброе утро! ☀️', 'Привет!')
+bot = Bot(os.getenv('TELEGRAM_BOT_TOKEN_SALES'), 'sales'); n = 0
+for a in TelegramAccess.objects.filter(bot='sales', is_allowed=True):
+    try:
+        bot.send_blocks(a.tg_id, parts); n += 1
+    except Exception as e:
+        print(a.tg_id, e)
+    time.sleep(0.1)
+Bot._digest_mark().write_text(today.isoformat())
+print('отправлено:', n)"
+
 _________
 
 
@@ -76,7 +117,7 @@ python manage.py duck_etl
 📥 СКАЧИВАЕМ НОВЫЕ ПРОДАЖИ
 ────────────────────────
 (с перезаписью файлов)
-1) python manage.py fin_report_range 2026-11-03 2026-11-05 --overwrite
+1) python manage.py fin_report_range 2026-11-05 2026-11-07 --overwrite
 2) python manage.py duck_etl
 3) python manage.py duck_etl --update (если на сервере)
 
