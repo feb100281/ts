@@ -128,8 +128,8 @@ def build_mix_slices(report_date: date, days=MIX_WINDOW_DAYS) -> dict:
     }
 
 
-#: Категории расходов WB и поля sales_long, из которых они
-#: собираются. Категоризация и НДС-логика зеркалят
+#: Справочно (старый расчёт). Сейчас слайд берёт витрину wb_costs мэн пака —
+#: см. _wb_expenses_sql. Категоризация и НДС-логика зеркалят
 #: management/commands/sql/wb_costs.sql и opex.sql (счита
 #: без НДС, дефолт ставки 20%, если она не указана) —
 #: те файлы не трогаем, здесь тот же подход, но по неделям
@@ -153,55 +153,35 @@ WB_EXPENSE_CATEGORIES = (
 )
 
 
+# Счета витрины wb_costs мэн пака → статьи слайда (разделы 3 и 4 P&L)
+WB_EXPENSE_ACCOUNTS = {
+    "3.1 Логистика": "Логистика",
+    "3.2. Хранение": "Хранение",
+    "3.3. Приемка": "Приёмка",
+    "3.4. Штрафы": "Штрафы",
+    "3.6. Программа лояльности": "Программа лояльности",
+    "WB Deduction": "Продвижение и услуги WB",
+}
+
+
 def _wb_expenses_sql() -> str:
-    branches = []
-    for category, condition in WB_EXPENSE_CATEGORIES:
-        branches.append(
-            f"""
-            SELECT
-                date_from,
-                rrd_id,
-                '{category}' AS category,
-
-                COALESCE(SUM(val) FILTER (WHERE oper = 'dt'), 0) AS dt,
-                COALESCE(SUM(val) FILTER (WHERE oper = 'cr'), 0) AS cr,
-                MAX(vat_rate) AS vat_rate
-
-            FROM sales.sales_long
-
-            WHERE {condition}
-              AND date_from::DATE BETWEEN $start_date AND $end_date
-
-            GROUP BY
-                date_from,
-                rrd_id
-            """
-        )
-
-    union = "\n\nUNION ALL\n".join(branches)
-
-    return f"""
-        WITH costs AS ({union})
-
+    """Тот же источник и формула, что разделы 3–4 P&L мэн пака (wb_costs.txt + opex.txt):
+    суммы совпадают с листами P&L и с расходами WB в финрезе дашборда."""
+    from gear.management.commands.sql.read_query import read_sql
+    src = read_sql("wb_costs.txt").replace(
+        "CREATE OR REPLACE TEMP TABLE wb_costs AS",
+        "CREATE OR REPLACE TEMP TABLE wb_costs_pl AS", 1)
+    cases = "\n".join(f"WHEN '{k}' THEN '{v}'" for k, v in WB_EXPENSE_ACCOUNTS.items())
+    return src, f"""
         SELECT
             date_from::DATE AS day,
-            category,
-
-            SUM(
-                (dt - cr)
-                / (100 + COALESCE(vat_rate, 20))
-                * 100
-            ) / 100 AS amount
-
-        FROM costs
-
-        GROUP BY
-            day,
-            category
-
-        ORDER BY
-            day,
-            category
+            CASE account {cases} END AS category,
+            SUM((dt - cr) / (100 + COALESCE(vat_rate, 20)) * 100) / 100 AS amount
+        FROM wb_costs_pl
+        WHERE account IN ({", ".join(f"'{k}'" for k in WB_EXPENSE_ACCOUNTS)})
+          AND date_from::DATE BETWEEN $start_date AND $end_date
+        GROUP BY 1, 2
+        ORDER BY 1, 2
     """
 
 
@@ -240,9 +220,11 @@ def build_wb_expenses_slice(report_date: date, weeks: int = None) -> dict:
     try:
         from conns import get_duckdb_conn_with_opt
 
+        src, sql = _wb_expenses_sql()
         with get_duckdb_conn_with_opt() as con:
+            con.execute(src)
             df = con.execute(
-                _wb_expenses_sql(),
+                sql,
                 {
                     "start_date": start.isoformat(),
                     "end_date": end.isoformat(),

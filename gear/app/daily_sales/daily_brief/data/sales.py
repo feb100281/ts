@@ -2311,7 +2311,7 @@ def get_sales_data(
                     ROUND(
                         SUM(
                             COALESCE(
-                                c.net_comission,
+                                t.net_comission,
                                 0
                             )
                         )
@@ -2335,7 +2335,7 @@ def get_sales_data(
                             +
                             SUM(
                                 COALESCE(
-                                    c.net_comission,
+                                    t.net_comission,
                                     0
                                 )
                             )

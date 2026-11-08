@@ -266,8 +266,15 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("sum", "4", "Итого продвижение WB", SEC_PROMO, 0, FMT_MONEY))
     add(("calc", "GP2", "ВАЛОВАЯ ПРИБЫЛЬ ПОСЛЕ ПРОДВИЖЕНИЯ WB",
          [("GP1", 1), ("4", 1)], 0, FMT_MONEY))
-    add(("ratio", "GP2%", "Рентабельность после продвижения, % к выручке",
-         ("GP2", rev, 1), 2, FMT_PCT))
+    if after_spp or corrected:
+        add(("ratio", "GP2%", "Рентабельность после продвижения, % к продажам после СПП без НДС",
+             ("GP2", rev, 1), 2, FMT_PCT))
+        add(("ratio", "GP2d%", "Рентабельность после продвижения, % к продажам до СПП без НДС "
+                               "(как «Маржа по финрезу» в дашборде)",
+             ("GP2", "Н.3б", 1), 2, FMT_PCT))
+    else:
+        add(("ratio", "GP2%", "Рентабельность после продвижения, % к выручке",
+             ("GP2", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
 
     # ------------------------------------------------ 5. Прочие доходы/расходы
@@ -1799,7 +1806,7 @@ def sheet_groups():
     return [
         (None, NAVY, [TOC_SHEET_NAME, SUMMARY_SHEET_NAME, PL_AFTER_SPP_SHEET_NAME,
                       "Cash Flow", "Остатки ДС", VAT_OPS_SHEET_NAME]),
-        (">> Анализ", "7FA89A", [PL_CORRECTED_SHEET_NAME, PL_DASHBOARD_SHEET_NAME,
+        (">> Анализ", "7FA89A", [PL_CORRECTED_SHEET_NAME,
                                  PL_BRIDGE_SHEET_NAME, "Юнит-экономика", BREAKEVEN_SHEET_NAME]),
         (">> Расшифровки", "B7C9C2", [NOTES_SHEET_NAME, PAYOUTS_SHEET_NAME,
                                       VAT_CHECK_SHEET_NAME, OFFPL_SHEET_NAME]),
@@ -5615,6 +5622,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                 ordered.append(wb[n])
     ordered += [ws for ws in wb.worksheets if ws not in ordered]
     wb._sheets = ordered
+    if PL_DASHBOARD_SHEET_NAME in wb.sheetnames:          # служебный лист: скрыт, в оглавлении нет
+        wb[PL_DASHBOARD_SHEET_NAME].sheet_state = "hidden"
     wb.save(path)
 
     stats = {

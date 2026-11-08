@@ -2121,6 +2121,8 @@ from datetime import date
 import pandas as pd
 
 from conns import get_duckdb_conn_with_opt
+from gear.app.data.queries import COMM_TECH_SQL, DAY_COST_RATE_SQL
+from gear.management.commands.sql.read_query import read_sql
 
 
 # =====================================================================
@@ -2276,7 +2278,18 @@ commissions AS (
             0
         )
 
-        AS net_comission
+        AS net_comission,
+
+        -- для корректировки НДС как в дашборде и P&L
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
+        - COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
+            AS gross_comission,
+        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'dt'), 0)
+        - COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'cr'), 0)
+            AS vat_in_wb,
+        COALESCE(SUM(val) FILTER (WHERE field = 'retail_amount' AND oper = 'dt'), 0)
+        - COALESCE(SUM(val) FILTER (WHERE field = 'retail_amount' AND oper = 'cr'), 0)
+            AS retail_signed
 
     FROM sales.sales_long
 
@@ -2304,10 +2317,13 @@ SELECT
     ) AS retail_amount,
 
 
-    COALESCE(
-        c.net_comission,
-        0
-    ) AS net_comission,
+    -- комиссия WB с корректировкой НДС (1.16 мэн пака), как в дашборде продаж
+    CASE
+        WHEN t.cr_rev <> 0 THEN
+            COALESCE(c.gross_comission, 0) - COALESCE(c.vat_in_wb, 0)
+            + (t.cr_rev - COALESCE(c.retail_signed, 0)) * t.vat_rate / (100 + t.vat_rate)
+        ELSE COALESCE(c.net_comission, 0)
+    END AS net_comission,
 
 
     COALESCE(
@@ -3007,6 +3023,15 @@ def get_stats_data(
         con.execute(
             BASE_QUERY
         )
+        con.execute(COMM_TECH_SQL)          # НДС WB служебных строк — по дням
+
+
+        # расходы WB по методике P&L — для финреза, как в дашборде продаж
+        con.execute(
+            read_sql("wb_costs.txt").replace(
+                "CREATE OR REPLACE TEMP TABLE wb_costs AS",
+                "CREATE OR REPLACE TEMP TABLE wb_costs_pl AS", 1)
+        )
 
 
         # -------------------------------------------------------------
@@ -3023,8 +3048,8 @@ def get_stats_data(
         # -------------------------------------------------------------
 
         df = con.execute(
-            f"""
-            WITH sales_daily AS (
+            "WITH " + DAY_COST_RATE_SQL + f""",
+            sales_daily AS (
 
                 SELECT
 
@@ -3148,10 +3173,21 @@ def get_stats_data(
 
                         / 100.0
 
-                    ) AS net_comission
+                    ) AS net_comission,
+
+
+                    -- расходы WB и продвижение как в дашборде: по неделе внутри
+                    -- месяца на проданную штуку (разделы 3–4 P&L, без НДС)
+                    SUM(
+                        (CASE WHEN t.cr_rev > 0 THEN 1 WHEN t.cr_rev < 0 THEN -1 ELSE 0 END)
+                        * COALESCE(dr.r, 0)
+                    ) / 100.0 AS wb_costs_rate
 
 
                 FROM base t
+
+                LEFT JOIN day_rate dr
+                    ON dr.d = t.date_from::DATE
 
 
                 WHERE
@@ -3780,7 +3816,7 @@ def get_stats_data(
                 -- =====================================================
 
                 COALESCE(
-                    c.wb_costs,
+                    s.wb_costs_rate,
                     0
                 ) AS wb_costs,
 
@@ -3992,7 +4028,7 @@ def get_stats_data(
                     -
 
                     COALESCE(
-                        c.wb_costs,
+                        s.wb_costs_rate,
                         0
                     )
 

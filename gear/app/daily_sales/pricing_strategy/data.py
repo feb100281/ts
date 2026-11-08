@@ -1105,7 +1105,7 @@ def get_pricing_source(
 
                         SUM(
                             COALESCE(
-                                c.net_comission,
+                                t.net_comission,
                                 0
                             )
                         ) AS net_comission

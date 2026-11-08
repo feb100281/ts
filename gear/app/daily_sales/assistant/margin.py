@@ -5,10 +5,8 @@
   выручка — продажи до СПП без НДС, управленческая себестоимость FIFO, комиссия WB с
   корректировкой НДС, как в дашборде продаж (строка 1.16 мэн пака)
   → МД1 «маржа после комиссии» (строка 1.11 P&L).
-Расходы WB раздела 3 (логистика, хранение, приёмка, штрафы, лояльность) без НДС:
-  с артикулом — прямо на артикул, без артикула — пропорционально проданным штукам.
-Продвижение (раздел 4, удержания WB) без НДС — по доле рекламных расходов
-  артикула в кабинете рекламы; нет данных рекламы — по доле выручки.
+Расходы WB и продвижение (разделы 3–4 P&L, без НДС) — как в дашборде продаж:
+  по неделе внутри месяца на проданную штуку.
   → МД2 «маржа после расходов WB». МД2 < 0 — продажи в убыток.
 """
 from __future__ import annotations
@@ -74,6 +72,18 @@ COSTS_SQL = f"""
     GROUP BY 1, 2
 """
 
+# расходы WB и продвижение (разделы 3–4 P&L, без НДС) — как в дашборде продаж:
+# по неделе внутри месяца на проданную штуку (DAY_COST_RATE_SQL)
+WB_RATE_SQL = ("WITH " + DAY_COST_RATE_SQL.replace("wb_costs_pl", "wb_costs") + """
+    SELECT b.usk AS nm_id,
+           SUM((CASE WHEN b.cr_rev > 0 THEN 1 WHEN b.cr_rev < 0 THEN -1 ELSE 0 END)
+               * COALESCE(dr.r, 0)) / 100 AS wb
+    FROM base b
+    LEFT JOIN day_rate dr ON dr.d = b.date_from::DATE
+    WHERE b.cr_rev <> 0 AND b.date_from::DATE BETWEEN ? AND ?
+    GROUP BY 1
+""")
+
 ADS_SQL = """
     SELECT nm_id, SUM(spend_rub) AS spend
     FROM ads.unpacked_ad_campaigns_stats_by_nm
@@ -98,40 +108,20 @@ def _load(start: date, end: date) -> pd.DataFrame:
     with get_duckdb_conn_with_opt(ro=True) as con:
         con.execute(mp.read_sql("base.txt"))
         _fix_comm(con)
+        con.execute(mp.read_sql("wb_costs.txt"))
         s = con.execute(SALES_SQL, [start, end]).df()
-        c = con.execute(COSTS_SQL, [start, end]).df()
-        try:
-            a = con.execute(ADS_SQL, [start, end]).df()
-        except Exception:
-            a = pd.DataFrame(columns=["nm_id", "spend"])
+        w = con.execute(WB_RATE_SQL, [start, end]).df()
 
     if s.empty:
         return s
     s["nm_id"] = pd.to_numeric(s["nm_id"], errors="coerce")
-    known = set(s["nm_id"].dropna())
-
-    # расходы WB раздела 3: прямые + нераспределённые по штукам
-    wb = c[c["kind"] == "wb"].copy()
-    wb["nm_id"] = pd.to_numeric(wb["nm_id"], errors="coerce")
-    direct = wb[wb["nm_id"].isin(known)].groupby("nm_id")["v"].sum()
-    rest = wb[~wb["nm_id"].isin(known)]["v"].sum()
-    s["wb_direct"] = s["nm_id"].map(direct).fillna(0.0)
-    pos_qty = s["qty"].clip(lower=0)
-    s["wb_alloc"] = rest * pos_qty / pos_qty.sum() if pos_qty.sum() else 0.0
-
-    # продвижение: по доле рекламных расходов, иначе по выручке
-    promo_total = c.loc[c["kind"] == "promo", "v"].sum()
-    a["nm_id"] = pd.to_numeric(a.get("nm_id"), errors="coerce")
-    spend = s["nm_id"].map(a.groupby("nm_id")["spend"].sum() if not a.empty else {}).fillna(0.0)
-    if spend.sum() > 0:
-        s["promo"] = promo_total * spend / spend.sum()
-        s.attrs["promo_basis"] = "по доле рекламных расходов артикула"
-    else:
-        rev_pos = s["rev"].clip(lower=0)
-        s["promo"] = promo_total * rev_pos / rev_pos.sum() if rev_pos.sum() else 0.0
-        s.attrs["promo_basis"] = "по доле выручки (нет данных рекламы)"
-    s.attrs["wb_unallocated"] = rest
-    s.attrs["promo_total"] = promo_total
+    w["nm_id"] = pd.to_numeric(w["nm_id"], errors="coerce")
+    # расходы со знаком минус, как в P&L
+    s["wb_direct"] = -s["nm_id"].map(w.groupby("nm_id")["wb"].sum()).fillna(0.0)
+    s["wb_alloc"] = 0.0
+    s["promo"] = 0.0
+    s.attrs["promo_basis"] = "вместе с расходами WB — по неделе внутри месяца на штуку"
+    s.attrs["wb_unallocated"] = 0.0
     return s
 
 
@@ -186,8 +176,7 @@ def margin_table(date_from=None, date_to=None, group_by="brand", search=None,
     out["Комиссия WB, ₽"] = g["comm"]
     out["МД1 после комиссии, ₽"] = g["md1"]
     out["МД1, %"] = g["md1"] / rv * 100
-    out["Расходы WB (логистика, хранение, штрафы), ₽"] = g["wb"]
-    out["Продвижение WB, ₽"] = g["promo"]
+    out["Расходы WB и продвижение, ₽"] = g["wb"] + g["promo"]
     out["МД2 после расходов WB, ₽"] = g["md2"]
     out["МД2, %"] = g["md2"] / rv * 100
     out["Доля выручки, %"] = g["rev"] / g["rev"].sum() * 100 if g["rev"].sum() else None
@@ -237,9 +226,9 @@ def margin_report(date_from=None, date_to=None, group_by="brand", search=None,
             f"Итого выручка без НДС {f(tot_rev)} ₽, МД2 {f(tot_md2)} ₽ "
             f"({f(tot_md2 / tot_rev * 100 if tot_rev else None, True)}). "
             f"Из убыточных с оценочной себестоимостью: {n_doubt}. "
-            f"Сортировка: от худшей МД2. Продвижение распределено "
-            f"{meta.get('promo_basis', '')}; расходы WB без артикула "
-            f"({f(meta.get('wb_unallocated'))} ₽) — по проданным штукам. "
+            "Сортировка: от худшей МД2. Методика как в дашборде продаж: комиссия WB с "
+            "корректировкой НДС, расходы WB и продвижение (разделы 3–4 P&L, без НДС) — по "
+            "неделе внутри месяца на проданную штуку. "
             "Расходы со знаком минус. Постоянные затраты (накладные, корпоративные, "
             "финансовые) в МД2 не входят.")
     return "\n".join(lines) + note
