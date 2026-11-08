@@ -658,7 +658,7 @@ for _n in ("loans_report", "fx_report", "upd_report", "month_conclusions", "scen
 
 
 # Маржинальность отключена, пока методика не утверждена (см. prompt.MARGIN_HOLD).
-MARGIN_OFF = True
+MARGIN_OFF = False      # методика утверждена; True — снова скрыть маржу
 MARGIN_TOOLS = {"margin_report"}
 MARGIN_HOLD_MSG = ("Методика расчёта маржинальности пока не утверждена — ждём решения "
                    "Ильи. Цифры маржи не показываем.")
@@ -677,8 +677,7 @@ def _sales_view(t: dict) -> dict:
                             "происшествия, FBS), либо sql — запрос на чтение (до 100 000 строк; "
                             "понятные русские названия колонок). Вызывай, когда просят файл / "
                             "Excel / выгрузку или таблица больше ~30 строк.")
-        for k in ("pl", "margin"):
-            t["input_schema"]["properties"].pop(k, None)
+        t["input_schema"]["properties"].pop("pl", None)
     elif t["name"] == "incidents_report":
         t = copy.deepcopy(t)
         t["description"] = t["description"].replace(

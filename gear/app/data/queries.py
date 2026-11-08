@@ -1322,6 +1322,41 @@
 # """
 
 # gear/app/data/queries.py
+# НДС с вознаграждения WB по служебным строкам отчёта без товара (возмещение издержек,
+# ПВЗ и т. п.) — как vat_wb_tech в мэн паке (sql/dayly_sales_agg.txt). Раскладывается
+# внутри дня пропорционально комиссии строк продаж: итоги по дням, брендам и
+# артикулам сходятся с P&L. Работает с временной таблицей base.
+COMM_TECH_SQL = """
+ALTER TABLE base RENAME TO base_raw;
+
+CREATE OR REPLACE TEMP TABLE base AS
+WITH tech AS (
+    SELECT r.rr_dt::DATE AS d, SUM(r.ppvz_vw_nds) * 100 AS v
+    FROM sales.wb_raw r
+    WHERE COALESCE(r.ppvz_vw_nds, 0) <> 0
+      AND COALESCE(r.sop_name, '') NOT IN ('Продажа', 'Возврат')
+      AND r.rrd_id NOT IN (SELECT rrd_id FROM inventories.inv_gl_final WHERE rrd_id IS NOT NULL)
+    GROUP BY 1
+),
+b AS (
+    SELECT *,
+           SUM(CASE WHEN cr_rev <> 0 THEN net_comission END)
+               OVER (PARTITION BY date_from::DATE) AS _day_comm
+    FROM base_raw
+)
+SELECT * EXCLUDE (_day_comm) FROM (
+    SELECT b.* REPLACE (
+        b.net_comission
+        + CASE WHEN b.cr_rev <> 0 AND COALESCE(b._day_comm, 0) <> 0
+               THEN COALESCE(t.v, 0) * b.net_comission / b._day_comm ELSE 0 END
+            AS net_comission)
+    FROM b LEFT JOIN tech t ON t.d = b.date_from::DATE
+);
+
+DROP TABLE base_raw;
+"""
+
+
 BASE_QUERY = """
 CREATE OR REPLACE TEMP TABLE base AS
 
@@ -1415,7 +1450,19 @@ commissions AS (
                   AND oper = 'cr'
             ),
             0
-        ) AS net_comission
+        ) AS net_comission,
+
+        -- для корректировки как в P&L: валовая комиссия и фактический НДС WB
+        COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
+        - COALESCE(SUM(val) FILTER (WHERE field = 'comission' AND oper = 'cr'), 0)
+            AS gross_comission,
+        COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'dt'), 0)
+        - COALESCE(SUM(val) FILTER (WHERE field = 'ppvz_vw_nds' AND oper = 'cr'), 0)
+            AS vat_in_wb,
+        -- цена покупателя со знаком: продажа +, возврат −
+        COALESCE(SUM(val) FILTER (WHERE field = 'retail_amount' AND oper = 'dt'), 0)
+        - COALESCE(SUM(val) FILTER (WHERE field = 'retail_amount' AND oper = 'cr'), 0)
+            AS retail_signed
 
     FROM sales.sales_long
 
@@ -1440,10 +1487,21 @@ SELECT
         0
     ) AS retail_amount,
 
+    -- Комиссия WB с корректировкой НДС (строка 1.16 мэн пака):
+    --   номинальная (НДС ставкой со всей комиссии) → валовая − фактический НДС WB (1.15)
+    --   + НДС с суммы СПП (1.14): (продажи до СПП − после СПП) × ставка / (100 + ставка).
+    -- НДС WB по служебным строкам без товара добавляется ниже (COMM_TECH_SQL), по дням.
+    CASE
+        WHEN t.cr_rev <> 0 THEN
+            COALESCE(c.gross_comission, 0) - COALESCE(c.vat_in_wb, 0)
+            + (t.cr_rev - COALESCE(c.retail_signed, 0)) * t.vat_rate / (100 + t.vat_rate)
+        ELSE COALESCE(c.net_comission, 0)
+    END AS net_comission,
+
     COALESCE(
         c.net_comission,
         0
-    ) AS net_comission,
+    ) AS net_comission_nom,
 
     -- =====================================================
     -- Себестоимость
@@ -1530,7 +1588,7 @@ LEFT JOIN wb_price wb
 LEFT JOIN commissions c
     ON c.rrd_id = t.rrd_id
 ;
-"""
+""" + "\n" + COMM_TECH_SQL
 
 
 # BASE_STOCKS = """
@@ -1770,7 +1828,8 @@ sales_by_day AS (
             WHERE t.storage_flag = 'Нет приходов'
         ) AS no_income,
 
-        SUM(c.net_comission) AS net_comission,
+        SUM(t.net_comission) AS net_comission,
+        SUM(t.net_comission_nom) AS net_comission_nom,
         SUM(c.gross_comission) AS gross_comission
 
     FROM base t
@@ -1914,6 +1973,12 @@ SELECT
         2
     ) AS gross_comission,
 
+    -- комиссия без корректировки НДС (лист мэн пака «с корректировкой»)
+    ROUND(
+        s.net_comission_nom / 100.00,
+        2
+    ) AS net_comission_nom,
+
     ROUND(
         (
             s.amount_vatless
@@ -1996,6 +2061,20 @@ SELECT
         ) / 100.00,
         2
     ) AS wb_result,
+
+    -- маржа по финрезу: финансовый результат / продажи до СПП без НДС
+    ROUND(
+        CASE
+            WHEN s.amount_vatless = 0 THEN NULL
+            ELSE (
+                s.amount_vatless
+                - s.cogs_man
+                + s.net_comission
+                - s.total_net_sales * cp.cost_per_sold
+            ) / s.amount_vatless * 100
+        END,
+        2
+    ) AS wb_result_percent,
 
     st.stock_date AS ending_stock_date,
     st.ending_stock,
@@ -2103,7 +2182,7 @@ sales_agg AS (
             WHERE t.storage_flag = 'Нет приходов'
         ) AS no_income,
 
-        SUM(c.net_comission) AS net_comission
+        SUM(t.net_comission) AS net_comission
 
     FROM base t
 
@@ -2454,7 +2533,7 @@ sales_agg AS (
             WHERE t.storage_flag = 'Нет приходов'
         ) AS no_income,
 
-        SUM(c.net_comission) AS net_comission
+        SUM(t.net_comission) AS net_comission
 
     FROM base t
 

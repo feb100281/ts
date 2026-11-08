@@ -219,7 +219,7 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("item", "1.9",
          "Комиссия WB без НДС (НДС по ставке со всей комиссии до СПП)" if calc_vat
          else "Комиссия WB без СПП, без НДС" if after_spp
-         else "Комиссия WB (как в дашборде)" if dashboard
+         else "Комиссия WB (как в дашборде, с корректировкой НДС 1.16)" if dashboard
          else "Комиссия WB",
          (SEC_REVENUE, "1.9. Комиссия WB", 1), 1, FMT_MONEY))
     add(("ratio", "1.10", "Комиссия WB, % к выручке",
@@ -949,6 +949,9 @@ DASH_ADJ_ITEM = "3.8 Разница с расчётом дашборда"
 DASH_COMM_VAT: dict = {}     # {me: НДС, снятый дашбордом с комиссии}; заполняет fetch_dashboard_rows
 
 
+DASH_COMM_CORR: dict = {}      # комиссия дашборда с корректировкой НДС, по месяцам
+
+
 def fetch_dashboard_rows(start, end):
     """Помесячные суммы дашборда продаж: (me, amount, retail, rev, cogs, comm, wb_costs)."""
     from gear.app.data.base import DashboardData
@@ -959,11 +962,16 @@ def fetch_dashboard_rows(start, end):
         return []
     df["me"] = df["date_from"].map(
         lambda x: last_day(x if isinstance(x, date) else x.date()))
+    # В дашборде комиссия уже с корректировкой НДС (1.16); лестнице листа
+    # «с корректировкой» нужна номинальная — net_comission_nom.
+    global DASH_COMM_VAT, DASH_COMM_CORR
+    nom = "net_comission_nom" if "net_comission_nom" in df.columns else "net_comission"
+    DASH_COMM_CORR = {me: float(v or 0) for me, v in df.groupby("me")["net_comission"].sum().items()}
+    df = df.assign(net_comission=df[nom])
     cols = ["amount", "retail_amount", "amount_vatless", "cogs_man",
             "net_comission", "wb_costs"]
     g = df.groupby("me")[cols].sum()
     # НДС, который дашборд снял с комиссии: без НДС − с НДС (комиссия со знаком минус)
-    global DASH_COMM_VAT
     DASH_COMM_VAT = {}
     if "gross_comission" in df.columns:
         gc = df.groupby("me")[["gross_comission", "net_comission"]].sum()
@@ -993,7 +1001,7 @@ def pl_dashboard(pl_data, dash_rows):
         out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
         out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
         out[(me, SEC_REVENUE, "1.6. Себестоимость")] = round(cogs, 2)
-        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(comm, 2)
+        out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(DASH_COMM_CORR.get(me, comm), 2)
         actual = sum(v or 0 for (m, sec, _i), v in out.items()
                      if m == me and sec in (SEC_SELLING, SEC_PROMO))
         out[(me, SEC_SELLING, DASH_ADJ_ITEM)] = round(-wb - actual, 2)

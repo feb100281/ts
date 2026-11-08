@@ -2,7 +2,8 @@
 """Маржинальность продаж по брендам / категориям / артикулам.
 
 Методика мэн пака (витрина base из gear/management/commands/sql/base.txt):
-  выручка без НДС, управленческая себестоимость FIFO, комиссия без НДС
+  выручка — продажи до СПП без НДС, управленческая себестоимость FIFO, комиссия WB с
+  корректировкой НДС, как в дашборде продаж (строка 1.16 мэн пака)
   → МД1 «маржа после комиссии» (строка 1.11 P&L).
 Расходы WB раздела 3 (логистика, хранение, приёмка, штрафы, лояльность) без НДС:
   с артикулом — прямо на артикул, без артикула — пропорционально проданным штукам.
@@ -80,11 +81,22 @@ ADS_SQL = """
 """
 
 
+def _fix_comm(con) -> None:
+    """Комиссия как в дашборде продаж: + НДС с суммы СПП (1.14) и НДС WB служебных
+    строк по дням. В base.txt комиссия уже за вычетом фактического НДС WB (1.15)."""
+    from gear.app.data.queries import COMM_TECH_SQL
+    con.execute("UPDATE base SET net_comission = net_comission "
+                "+ (cr_rev - COALESCE(retail_amount, 0)) * vat_rate / (100 + vat_rate) "
+                "WHERE cr_rev <> 0")
+    con.execute(COMM_TECH_SQL)
+
+
 def _load(start: date, end: date) -> pd.DataFrame:
     from gear.management.commands import mp
 
     with get_duckdb_conn_with_opt(ro=True) as con:
         con.execute(mp.read_sql("base.txt"))
+        _fix_comm(con)
         s = con.execute(SALES_SQL, [start, end]).df()
         c = con.execute(COSTS_SQL, [start, end]).df()
         try:
@@ -279,6 +291,7 @@ def dashboard_margin(start: date, end: date, group_by: str = "brand") -> pd.Data
             return hit[1].copy()
     with get_duckdb_conn_with_opt(ro=True) as con:
         con.execute(mp.read_sql("base.txt"))
+        _fix_comm(con)
         con.execute(mp.read_sql("wb_costs.txt"))
         d = con.execute(DASH_SQL.format(dim=dim), [start, end]).df()
     if not d.empty:

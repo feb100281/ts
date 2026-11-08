@@ -1654,6 +1654,16 @@ def _daily_columns(
                 },
             ),
 
+            _percent_col(
+                "wb_result_percent",
+                "Маржа по финрезу, %",
+                130,
+                {
+                    "backgroundColor": "#EEF5F1",
+                    "fontWeight": "700",
+                },
+            ),
+
             *_stock_columns(),
 
             _money_col(

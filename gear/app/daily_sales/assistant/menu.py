@@ -1076,15 +1076,7 @@ MANAGEMENT_NOTE = ("<i>Управленческий учёт, как в дашб
                    "продажу по её себестоимости), комиссия WB без НДС; расходы WB (логистика, "
                    "хранение, штрафы, продвижение) распределены на проданные штуки по неделям.</i>")
 MARGIN_SQL = """
-WITH commissions AS (
-    SELECT rrd_id,
-           COALESCE(SUM(val / (100 + vat_rate) * 100)
-                    FILTER (WHERE field = 'comission' AND oper = 'dt'), 0)
-           - COALESCE(SUM(val / (100 + vat_rate) * 100)
-                      FILTER (WHERE field = 'comission' AND oper = 'cr'), 0) AS net_comission
-    FROM sales.sales_long GROUP BY rrd_id
-),
-wk AS (
+WITH wk AS (
     SELECT YEARWEEK(date_from::DATE) AS yw,
            SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS n
     FROM base WHERE cr_rev <> 0 GROUP BY 1
@@ -1101,11 +1093,10 @@ SELECT {dims},
        SUM(CASE WHEN t.cr_rev > 0 THEN 1 WHEN t.cr_rev < 0 THEN -1 ELSE 0 END) AS qty,
        SUM(t.cr_rev / (100 + t.vat_rate) * 100) / 100 AS rev,
        SUM(t.adjusted_cogs_man) / 100 AS cogs,
-       SUM(c.net_comission) / 100 AS comm,
+       SUM(t.net_comission) / 100 AS comm,                -- с корректировкой НДС (BASE_QUERY)
        SUM((CASE WHEN t.cr_rev > 0 THEN 1 WHEN t.cr_rev < 0 THEN -1 ELSE 0 END)
            * COALESCE(cps.r, 0)) / 100 AS wb
 FROM base t
-LEFT JOIN commissions c ON c.rrd_id = t.rrd_id
 LEFT JOIN cps ON cps.yw = YEARWEEK(t.date_from::DATE)
 WHERE t.cr_rev <> 0 AND t.date_from::DATE BETWEEN ? AND ?
 GROUP BY ALL
