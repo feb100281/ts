@@ -95,7 +95,8 @@ ADS_SQL = """
 def _fix_comm(con) -> None:
     """Комиссия как в дашборде продаж: + НДС с суммы СПП (1.14) и НДС WB служебных
     строк по дням. В base.txt комиссия уже за вычетом фактического НДС WB (1.15)."""
-    from gear.app.data.queries import COMM_TECH_SQL
+    from gear.app.data.queries import COMM_TECH_SQL, ensure_wb_aux
+    ensure_wb_aux(con)
     con.execute("UPDATE base SET net_comission = net_comission "
                 "+ (cr_rev - COALESCE(retail_amount, 0)) * vat_rate / (100 + vat_rate) "
                 "WHERE cr_rev <> 0")

@@ -1330,14 +1330,7 @@ COMM_TECH_SQL = """
 ALTER TABLE base RENAME TO base_raw;
 
 CREATE OR REPLACE TEMP TABLE base AS
-WITH tech AS (
-    SELECT r.rr_dt::DATE AS d, SUM(r.ppvz_vw_nds) * 100 AS v
-    FROM sales.wb_raw r
-    WHERE COALESCE(r.ppvz_vw_nds, 0) <> 0
-      AND COALESCE(r.sop_name, '') NOT IN ('Продажа', 'Возврат')
-      AND r.rrd_id NOT IN (SELECT rrd_id FROM inventories.inv_gl_final WHERE rrd_id IS NOT NULL)
-    GROUP BY 1
-),
+WITH tech AS (SELECT d, v FROM wb_tech_vat),
 b AS (
     SELECT *,
            SUM(CASE WHEN cr_rev <> 0 THEN net_comission END)
@@ -1370,13 +1363,7 @@ day_units AS (
            SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS n
     FROM base WHERE cr_rev <> 0 GROUP BY 1
 ),
-day_costs AS (
-    SELECT date_from::DATE AS d,
-           -SUM((dt - cr) / (100 + COALESCE(vat_rate, 20)) * 100) AS costs
-    FROM wb_costs_pl
-    WHERE account <> 'Other income / loss'
-    GROUP BY 1
-),
+day_costs AS (SELECT d, costs FROM wb_day_costs),
 k AS (
     SELECT x.d, DATE_TRUNC('month', x.d)::DATE AS mo, LAST_DAY(x.d) AS me,
            (x.d - (ISODOW(x.d) - 1) * INTERVAL 1 DAY)::DATE AS ws
@@ -2965,3 +2952,56 @@ s.vat_rate
 from wb_costs t
 left join sales.sales_long s on s.rrd_id = t.rrd_id;
 """
+
+
+# ---------------------------------------------------------------------------
+# Вспомогательные дневные таблицы для комиссии и финреза. Маленькие (строка на
+# день) и меняются только с загрузкой продаж, поэтому считаются один раз и
+# кешируются в памяти процесса; в соединение кладутся временными таблицами:
+#   wb_day_costs (d, costs) — расходы WB разделов 3–4 P&L без НДС, копейки;
+#   wb_tech_vat  (d, v)     — НДС WB служебных строк отчёта без товара, копейки.
+# ---------------------------------------------------------------------------
+import threading as _threading
+import time as _time
+
+_AUX_TTL = 30 * 60
+_aux_lock = _threading.Lock()
+_aux_cache: dict = {}
+
+TECH_VAT_SQL = """
+SELECT r.rr_dt::DATE AS d, SUM(r.ppvz_vw_nds) * 100 AS v
+FROM sales.wb_raw r
+WHERE COALESCE(r.ppvz_vw_nds, 0) <> 0
+  AND COALESCE(r.sop_name, '') NOT IN ('Продажа', 'Возврат')
+  AND r.rrd_id NOT IN (SELECT rrd_id FROM inventories.inv_gl_final WHERE rrd_id IS NOT NULL)
+GROUP BY 1
+"""
+
+DAY_COSTS_SQL = """
+SELECT date_from::DATE AS d,
+       -SUM((dt - cr) / (100 + COALESCE(vat_rate, 20)) * 100) AS costs
+FROM wb_costs_pl
+WHERE account <> 'Other income / loss'
+GROUP BY 1
+"""
+
+
+def ensure_wb_aux(con) -> None:
+    """Кладёт в соединение wb_day_costs и wb_tech_vat (из кеша или считает)."""
+    from gear.management.commands.sql.read_query import read_sql
+    key = con.execute("SELECT MAX(date_from) FROM sales.sales_long").fetchone()[0]
+    with _aux_lock:
+        hit = _aux_cache.get("v")
+        if not hit or hit[0] != key or _time.time() - hit[1] > _AUX_TTL:
+            con.execute(read_sql("wb_costs.txt").replace(
+                "CREATE OR REPLACE TEMP TABLE wb_costs AS",
+                "CREATE OR REPLACE TEMP TABLE wb_costs_pl AS", 1))
+            costs = con.execute(DAY_COSTS_SQL).df()
+            con.execute("DROP TABLE IF EXISTS wb_costs_pl")
+            tech = con.execute(TECH_VAT_SQL).df()
+            hit = (key, _time.time(), costs, tech)
+            _aux_cache["v"] = hit
+    for name, df in (("wb_day_costs", hit[2]), ("wb_tech_vat", hit[3])):
+        con.register(f"{name}_df", df)
+        con.execute(f"CREATE OR REPLACE TEMP TABLE {name} AS SELECT * FROM {name}_df")
+        con.unregister(f"{name}_df")

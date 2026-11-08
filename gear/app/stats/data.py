@@ -2121,8 +2121,7 @@ from datetime import date
 import pandas as pd
 
 from conns import get_duckdb_conn_with_opt
-from gear.app.data.queries import COMM_TECH_SQL, DAY_COST_RATE_SQL
-from gear.management.commands.sql.read_query import read_sql
+from gear.app.data.queries import COMM_TECH_SQL, DAY_COST_RATE_SQL, ensure_wb_aux
 
 
 # =====================================================================
@@ -3020,18 +3019,11 @@ def get_stats_data(
         # Создаём base
         # -------------------------------------------------------------
 
+        ensure_wb_aux(con)                  # расходы WB и служебный НДС по дням — из кеша
         con.execute(
             BASE_QUERY
         )
         con.execute(COMM_TECH_SQL)          # НДС WB служебных строк — по дням
-
-
-        # расходы WB по методике P&L — для финреза, как в дашборде продаж
-        con.execute(
-            read_sql("wb_costs.txt").replace(
-                "CREATE OR REPLACE TEMP TABLE wb_costs AS",
-                "CREATE OR REPLACE TEMP TABLE wb_costs_pl AS", 1)
-        )
 
 
         # -------------------------------------------------------------
