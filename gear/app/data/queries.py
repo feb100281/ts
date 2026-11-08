@@ -1357,6 +1357,57 @@ DROP TABLE base_raw;
 """
 
 
+# Расходы WB (разделы 3 и 4 P&L, без НДС) на проданную штуку. Источник — wb_costs_pl
+# (sql/wb_costs.txt мэн пака), как opex.txt: все счета, кроме «Other income / loss»
+# (коррекции и выплаты программы — раздел 5). Сглаживание по неделе (пн–вс), но без
+# перехода через границу месяца: расходы части недели внутри месяца делятся на штуки
+# этой части; кусок короче 3 дней присоединяется к соседней неделе того же месяца.
+# Поэтому итог за месяц совпадает с листом мэн пака «P&L дашборд с корректировкой».
+# day_rate — ставка на штуку для каждого дня. Нужна временная таблица base.
+DAY_COST_RATE_SQL = """
+day_units AS (
+    SELECT date_from::DATE AS d,
+           SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS n
+    FROM base WHERE cr_rev <> 0 GROUP BY 1
+),
+day_costs AS (
+    SELECT date_from::DATE AS d,
+           -SUM((dt - cr) / (100 + COALESCE(vat_rate, 20)) * 100) AS costs
+    FROM wb_costs_pl
+    WHERE account <> 'Other income / loss'
+    GROUP BY 1
+),
+k AS (
+    SELECT x.d, DATE_TRUNC('month', x.d)::DATE AS mo, LAST_DAY(x.d) AS me,
+           (x.d - (ISODOW(x.d) - 1) * INTERVAL 1 DAY)::DATE AS ws
+    FROM (SELECT d FROM day_units UNION SELECT d FROM day_costs) x
+),
+-- кусок недели короче 3 дней на границе месяца — к соседней неделе того же месяца
+k2 AS (
+    SELECT d, mo,
+           CASE
+               WHEN LEAST(ws + 6, me) - GREATEST(ws, mo) + 1 < 3 AND ws < mo THEN ws + 7
+               WHEN LEAST(ws + 6, me) - GREATEST(ws, mo) + 1 < 3 AND ws + 6 > me THEN ws - 7
+               ELSE ws
+           END AS kw
+    FROM k
+),
+seg AS (
+    SELECT k2.kw, k2.mo, SUM(COALESCE(u.n, 0)) AS n, SUM(COALESCE(c.costs, 0)) AS costs
+    FROM k2
+    LEFT JOIN day_units u ON u.d = k2.d
+    LEFT JOIN day_costs c ON c.d = k2.d
+    GROUP BY 1, 2
+),
+day_rate AS (
+    SELECT u.d,
+           CASE WHEN COALESCE(s.n, 0) = 0 THEN NULL ELSE s.costs / s.n END AS r
+    FROM day_units u
+    JOIN k2 ON k2.d = u.d
+    JOIN seg s ON s.kw = k2.kw AND s.mo = k2.mo
+)"""
+
+
 BASE_QUERY = """
 CREATE OR REPLACE TEMP TABLE base AS
 
@@ -1848,57 +1899,10 @@ sales_by_day AS (
         t.date_from::DATE
 ),
 
-sales_count_by_week AS (
-    SELECT
-        YEARWEEK(t.date_from::DATE) AS yw,
-
-        SUM(
-            CASE
-                WHEN t.cr_rev > 0 THEN 1
-                WHEN t.cr_rev < 0 THEN -1
-                ELSE 0
-            END
-        ) AS rev_count
-
-    FROM base t
-
-    WHERE t.cr_rev <> 0
-
-    GROUP BY
-        YEARWEEK(t.date_from::DATE)
-),
-
-wb_costs_by_week AS (
-    SELECT
-        yw,
-
-        SUM(
-            dt / (100 + vat_rate) * 100
-        )
-        -
-        SUM(
-            cr / (100 + vat_rate) * 100
-        ) AS costs
-
-    FROM wb_costs
-
-    GROUP BY yw
-),
+""" + DAY_COST_RATE_SQL + """,
 
 cost_per_sale AS (
-    SELECT
-        s.yw,
-
-        CASE
-            WHEN COALESCE(s.rev_count, 0) = 0
-                THEN NULL
-            ELSE ABS(w.costs) / s.rev_count
-        END AS cost_per_sold
-
-    FROM sales_count_by_week s
-
-    LEFT JOIN wb_costs_by_week w
-        ON w.yw = s.yw
+    SELECT d, r AS cost_per_sold FROM day_rate
 ),
 
 stock_by_day AS (
@@ -2098,7 +2102,7 @@ SELECT
 FROM sales_by_day s
 
 LEFT JOIN cost_per_sale cp
-    ON cp.yw = YEARWEEK(s.date_from)
+    ON cp.d = s.date_from
 
 LEFT JOIN stock_by_day st
     ON st.stock_date = s.date_from

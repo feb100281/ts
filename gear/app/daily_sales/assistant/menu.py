@@ -1074,30 +1074,20 @@ def file_review(b: date):
 MANAGEMENT_NOTE = ("<i>Управленческий учёт, как в дашборде продаж: выручка без НДС, себестоимость "
                    "по FIFO, продажи скорректированы на возвраты (возврат сторнирует исходную "
                    "продажу по её себестоимости), комиссия WB без НДС; расходы WB (логистика, "
-                   "хранение, штрафы, продвижение) распределены на проданные штуки по неделям.</i>")
+                   "хранение, штрафы, продвижение) распределены на проданные штуки по неделям (внутри месяца).</i>")
+from ...data.queries import DAY_COST_RATE_SQL  # noqa: E402
+
 MARGIN_SQL = """
-WITH wk AS (
-    SELECT YEARWEEK(date_from::DATE) AS yw,
-           SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS n
-    FROM base WHERE cr_rev <> 0 GROUP BY 1
-),
-cw AS (
-    SELECT yw, SUM(dt / (100 + vat_rate) * 100) - SUM(cr / (100 + vat_rate) * 100) AS costs
-    FROM wb_costs GROUP BY yw
-),
-cps AS (
-    SELECT wk.yw, CASE WHEN COALESCE(wk.n, 0) = 0 THEN NULL ELSE ABS(cw.costs) / wk.n END AS r
-    FROM wk LEFT JOIN cw ON cw.yw = wk.yw
-)
+WITH """ + DAY_COST_RATE_SQL + """
 SELECT {dims},
        SUM(CASE WHEN t.cr_rev > 0 THEN 1 WHEN t.cr_rev < 0 THEN -1 ELSE 0 END) AS qty,
        SUM(t.cr_rev / (100 + t.vat_rate) * 100) / 100 AS rev,
        SUM(t.adjusted_cogs_man) / 100 AS cogs,
        SUM(t.net_comission) / 100 AS comm,                -- с корректировкой НДС (BASE_QUERY)
        SUM((CASE WHEN t.cr_rev > 0 THEN 1 WHEN t.cr_rev < 0 THEN -1 ELSE 0 END)
-           * COALESCE(cps.r, 0)) / 100 AS wb
+           * COALESCE(dr.r, 0)) / 100 AS wb
 FROM base t
-LEFT JOIN cps ON cps.yw = YEARWEEK(t.date_from::DATE)
+LEFT JOIN day_rate dr ON dr.d = t.date_from::DATE
 WHERE t.cr_rev <> 0 AND t.date_from::DATE BETWEEN ? AND ?
 GROUP BY ALL
 """

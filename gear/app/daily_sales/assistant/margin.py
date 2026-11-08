@@ -20,6 +20,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 from conns import get_duckdb_conn_with_opt
+from gear.app.data.queries import DAY_COST_RATE_SQL
 
 CACHE_TTL = 30 * 60
 _cache: dict = {}
@@ -246,19 +247,7 @@ def margin_report(date_from=None, date_to=None, group_by="brand", search=None,
 
 # ---- маржа «как в дашборде продаж»: расходы WB за неделю делятся на проданные штуки
 DASH_SQL = """
-    WITH wk AS (
-        SELECT YEARWEEK(date_from::DATE) AS yw,
-               SUM(CASE WHEN cr_rev > 0 THEN 1 WHEN cr_rev < 0 THEN -1 ELSE 0 END) AS n
-        FROM base WHERE cr_rev <> 0 GROUP BY 1
-    ),
-    cw AS (
-        SELECT yw, SUM(dt / (100 + vat_rate) * 100) - SUM(cr / (100 + vat_rate) * 100) AS costs
-        FROM wb_costs GROUP BY yw
-    ),
-    rate AS (
-        SELECT wk.yw, CASE WHEN COALESCE(wk.n, 0) = 0 THEN NULL ELSE ABS(cw.costs) / wk.n END AS r
-        FROM wk LEFT JOIN cw ON cw.yw = wk.yw
-    )
+    WITH """ + DAY_COST_RATE_SQL.replace("wb_costs_pl", "wb_costs").replace("{", "{{").replace("}", "}}") + """
     SELECT
         COALESCE(NULLIF(TRIM({dim}), ''), 'Не указано') AS name,
         SUM(CASE WHEN b.cr_rev > 0 THEN 1 WHEN b.cr_rev < 0 THEN -1 ELSE 0 END) AS qty,
@@ -266,9 +255,9 @@ DASH_SQL = """
         SUM(b.adjusted_cogs_man) / 100 AS cogs,
         SUM(b.net_comission) / 100 AS comm,
         SUM((CASE WHEN b.cr_rev > 0 THEN 1 WHEN b.cr_rev < 0 THEN -1 ELSE 0 END)
-            * COALESCE(rate.r, 0)) / 100 AS wb
+            * COALESCE(dr.r, 0)) / 100 AS wb
     FROM base b
-    LEFT JOIN rate ON rate.yw = YEARWEEK(b.date_from::DATE)
+    LEFT JOIN day_rate dr ON dr.d = b.date_from::DATE
     WHERE b.cr_rev <> 0 AND b.date_from::DATE BETWEEN ? AND ?
     GROUP BY 1
 """
@@ -279,7 +268,8 @@ def dashboard_margin(start: date, end: date, group_by: str = "brand") -> pd.Data
     """Маржа по методике дашборда продаж: name, qty, rev, cogs, md1, wb, md2.
 
     md1 = выручка без НДС − себестоимость − комиссия; md2 = md1 − расходы WB, где расходы
-    WB недели (без НДС) делятся поровну на каждую проданную за эту неделю штуку.
+    WB (разделы 3–4 P&L, без НДС) делятся поровну на штуки, проданные за ту же неделю
+    внутри месяца.
     """
     from gear.management.commands import mp
 

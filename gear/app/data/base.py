@@ -173,6 +173,13 @@ class DashboardData:
 
     def _init_wb_costs(self) -> None:
         self.con.execute(BASE_WB_COSTS)
+        # расходы WB по методике P&L мэн пака — для финреза (DAY_COST_RATE_SQL)
+        from gear.management.commands.sql.read_query import read_sql
+        sql = read_sql("wb_costs.txt").replace(
+            "CREATE OR REPLACE TEMP TABLE wb_costs AS",
+            "CREATE OR REPLACE TEMP TABLE wb_costs_pl AS", 1)
+        assert "TEMP TABLE wb_costs_pl" in sql
+        self.con.execute(sql)
 
     # ------------------------------------------------------------------
     # Вспомогательные методы
