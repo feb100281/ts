@@ -231,52 +231,20 @@ def build_sheet(ws, data: dict, report_date: date, as_of: date | None = None):
                ("Договор", None), ("Сумма, ₽", mp.FMT_MONEY), ("Назначение", None)],
               rows1, {4}, "Нет таких поступлений — все доходы отражены в P&L.")
 
-    # ---- О.2: сопутствующие закупке, статья × контрагент × договор по месяцам
+    # ---- О.2: сопутствующие закупке — по операциям, как О.1
     costs = data.get("costs")
-    r += 3
-    mp.write(ws, r, c0, "О.2 Расходы, сопутствующие закупке товара, без проводки в P&L "
-                        "(статьи 121…, кроме 121100 «Закупка товара»)", font=f_s)
-    mp.write(ws, r + 1, c0, "Сертификация, декларирование и прочие платежи по товару, которые "
-                            "прошли по Cash Flow, но не попали в P&L. Сумма оплаты за вычетом "
-                            "возвратов не берётся: показаны только списания денег. По месяцам "
-                            "оплаты.", font=f_n)
-    r += 2
-    if costs is None or costs.empty:
-        mp.write(ws, r, c0, "Нет таких оплат — все отражены в P&L.", font=f_n)
-    else:
-        c = costs.assign(m=costs["me"].map(_d))
-        months = sorted(c["m"].unique())
-        pv = (c.pivot_table(index=["subitem", "cp", "contract", "cid"], columns="m",
-                            values="amount", aggfunc="sum", fill_value=0.0)
-              .reindex(columns=months, fill_value=0.0))
-        pv["total"] = pv.sum(axis=1)
-        pv = pv.reset_index().sort_values(["subitem", "total"], ascending=[True, False])
-        head = ["Статья CF", "Контрагент", "Договор", "ID договора"] + \
-               [f"{m:%m.%Y}" for m in months] + ["Итого, ₽"]
-        for i, name in enumerate(head):
-            mp.write(ws, r, c0 + i, name, font=f_h, fillc=mp.NAVY, align="center", wrap=True)
-            if i >= 4:
-                ws.column_dimensions[get_column_letter(c0 + i)].width = max(
-                    ws.column_dimensions[get_column_letter(c0 + i)].width or 0, 14)
-        ws.row_dimensions[r].height = 28
-        first = r + 1
-        for x in pv.itertuples(index=False):
-            r += 1
-            vals = [x[0], x[1], x[2] or "без договора",
-                    int(x[3]) if pd.notna(x[3]) else None] + list(x[4:])
-            for i, v in enumerate(vals):
-                money = i >= 4
-                mp.write(ws, r, c0 + i, float(v) if money else v, font=f_c,
-                         fmt=mp.FMT_MONEY if money else None, border=mp.B_BOTTOM,
-                         align="right" if money else ("center" if i == 3 else "left"))
-        r += 1
-        for i in range(len(head)):
-            v = "Итого" if i == 0 else None
-            if i >= 4:
-                L = get_column_letter(c0 + i)
-                v = f"=SUM({L}{first}:{L}{r - 1})"
-            mp.write(ws, r, c0 + i, v, font=f_b, fmt=mp.FMT_MONEY if i >= 4 else None,
-                     border=mp.B_TOTAL, align="right" if i >= 4 else "left")
+    rows_c = [] if costs is None else [
+        [_d(x.d), x.subitem or x.item or "без статьи", x.cp, x.contract or "без договора",
+         float(x.amount), str(x.description)[:250]]
+        for x in costs.sort_values(["d", "subitem"]).itertuples()]
+    r = table(r + 3, "О.2 Расходы, сопутствующие закупке товара, без проводки в P&L",
+              "Статьи Cash Flow 121… кроме 121100 «Закупка товара»: сертификация, декларирование, "
+              "упаковка, доставка и т. п. Показаны только списания денег; по месяцам — строка О.2 "
+              "листов P&L.",
+              [("Дата", mp.FMT_DATE), ("Статья CF", None), ("Контрагент", None),
+               ("Договор", None), ("Сумма, ₽", mp.FMT_MONEY), ("Назначение", None)],
+              rows_c, {4}, "Нет таких оплат — все отражены в P&L.")
+
     g = goods_by_month(data["goods_m"])
     rows2 = []
     if not g.empty:
