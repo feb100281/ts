@@ -366,8 +366,9 @@ ART_COLS = [
     ("turn_ord", "Оборачиваемость остатка в заказах, дней"),
     ("buy14", f"Выкупы за {RATE_DAYS} дн, шт"), ("per_day", "Выкупы в день, шт"),
     ("turn", "Оборачиваемость остатка в выкупах, дней"), ("k", "k категории"),
-    ("p_before", "Средняя цена до СПП, ₽"), ("p_after", "Средняя цена после СПП, ₽"),
-    ("spp", "СПП, %"),
+    ("p_before", f"Средняя цена до СПП за {RATE_DAYS} дн, ₽"),
+    ("p_after", f"Средняя цена после СПП за {RATE_DAYS} дн, ₽"),
+    ("spp", f"СПП за {RATE_DAYS} дн, %"),
 ]
 SUP_COLS = [
     ("brand", "Бренд"), ("category", "Категория"), ("sa", "Артикул продавца"),
@@ -445,9 +446,12 @@ NOTES = [
     ("Очередь", "Сколько штук нужно продать, чтобы закончилась эта поставка: её остаток + "
                 "остатки более старых поставок артикула (старые продаются первыми). У распроданной "
                 "поставки — пусто."),
-    ("Оборачиваемость остатка", f"(склады WB + FBS) / выкупы в день за {RATE_DAYS} дней."),
+    ("Оборачиваемость остатка", f"Остаток на складах WB + FBS / заказы (или выкупы) в день за "
+                                f"{RATE_DAYS} дней. Товар в пути к клиенту и от клиента в расчёт не "
+                                "входит — эти колонки справочно."),
     ("Цены", f"За последние {RATE_DAYS} дней по выкупам: до СПП — наша цена, после СПП — сколько "
-             "заплатил покупатель; СПП = 1 − после / до."),
+             "заплатил покупатель; СПП = 1 − после / до. Пусто — за 14 дней не было выкупов."),
+    ("Сводка", "Колонки ✅ / ⚠️ / 🔴 / ⏳ — число поставок с таким статусом; остатки — в штуках."),
     ("Источники", "Поставки — WB API «Поставки»; продажи — отчёт реализации WB; остатки — "
                   "склады WB и FBS, как в отчёте об остатках."),
 ]
@@ -503,18 +507,21 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
         new=("new", "sum"), rem=("remaining", "sum"), fc=("forecast", "median")).reset_index()
     ag = a.groupby(["brand", "category"]).agg(arts=("nm", "count"), stock=("total", "sum"),
                                               on_hand=("on_hand", "sum"),
-                                              pd_=("per_day", "sum")).reset_index()
+                                              pd_=("per_day", "sum"),
+                                              off=("off", "sum")).reset_index()
     gs = ag.merge(gs, on=["brand", "category"], how="left")
     gs["turn"] = (gs["on_hand"] / gs["pd_"]).where(gs["pd_"] > 0)
     s_cols = [("brand", "Бренд"), ("category", "Категория"), ("arts", "Артикулов с остатком, шт"),
               ("stock", "Остаток всего, шт"), ("n", "Поставок в продаже, шт"),
-              ("ok", f"✅ выкуп до {BUY_OK} дн, шт"), ("warn", f"⚠️ {BUY_OK + 1}–{BUY_WARN} дн, шт"),
-              ("bad", f"🔴 дольше {BUY_WARN} дн / нет заказов, шт"), ("new", "⏳ свежие, шт"),
-              ("rem", "Остаток по поставкам, шт"),
+              ("ok", f"✅ выкуп до {BUY_OK} дн, поставок"),
+              ("warn", f"⚠️ выкуп {BUY_OK + 1}–{BUY_WARN} дн, поставок"),
+              ("bad", f"🔴 дольше {BUY_WARN} дн / нет заказов, поставок"),
+              ("new", "⏳ свежие, поставок"),
+              ("rem", "Остаток по поставкам, шт"), ("off", "Остаток вне поставок, шт"),
               ("fc", "Медианный срок в выкупах, дней"), ("turn", "Оборачиваемость остатка в выкупах, дней")]
     gs = gs.sort_values("stock", ascending=False)
     _write_table(ws, mp, title, sub, "Бренд → категория; поставки, которые ещё продаются",
-                 [n for _, n in s_cols], _rows(gs, s_cols), totals=False, freeze_cols=2)
+                 [n for _, n in s_cols], _rows(gs, s_cols), totals=False, freeze_cols=2, header_max=16)
 
     ws = wb.create_sheet("По артикулам")
     _write_table(ws, mp, "По артикулам", sub, "Одна строка — артикул WB с остатком",
@@ -522,13 +529,13 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
                  freeze_cols=_idx(ART_COLS, "nm") + 1,
                  col_formats={_idx(ART_COLS, "per_day"): FMT_RATE,
                               _idx(ART_COLS, "ord_per_day"): FMT_RATE,
-                              _idx(ART_COLS, "k"): FMT_K})
+                              _idx(ART_COLS, "k"): FMT_K}, header_max=16)
     ws = wb.create_sheet("По поставкам")
     _write_table(ws, mp, "По поставкам", sub, "Артикул × поставка",
                  [n for _, n in SUP_COLS], _rows(sp, SUP_COLS), totals=False,
                  freeze_cols=_idx(SUP_COLS, "nm") + 1,
                  col_formats={_idx(SUP_COLS, "rate"): FMT_RATE,
-                              _idx(SUP_COLS, "orate"): FMT_RATE, _idx(SUP_COLS, "k"): FMT_K})
+                              _idx(SUP_COLS, "orate"): FMT_RATE, _idx(SUP_COLS, "k"): FMT_K}, header_max=16)
 
     # справочник категорий: заказы → выкупы
     ws = wb.create_sheet("Заказы → выкупы")
@@ -542,7 +549,7 @@ def excel(path, title: str, report_date=None, brand=None) -> int:
     _write_table(ws, mp, "Заказы → выкупы", sub,
                  f"По категориям за {K_DAYS} дней; категории с выкупами меньше {K_MIN_BUYS} — с общим k",
                  [n for _, n in k_cols], _rows(kt, k_cols), totals=False, freeze_cols=1,
-                 col_formats={4: FMT_K})
+                 col_formats={4: FMT_K}, header_max=16)
 
     ws = wb.create_sheet("Как читать")
     mp.sheet_setup(ws, landscape=False)

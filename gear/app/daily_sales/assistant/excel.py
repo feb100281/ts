@@ -85,7 +85,8 @@ def _cell_value(v):
 
 # ------------------------------------------------------------ листы
 def _write_table(ws, mp, title, subtitle, extra, columns, rows,
-                 row_formats=None, totals=True, freeze_cols=1, col_formats=None):
+                 row_formats=None, totals=True, freeze_cols=1, col_formats=None,
+                 header_max=None):
     """Таблица: шапка листа, тёмно-зелёная строка заголовков, зебра, итог."""
     first_col = mp.COL_CODE
     ncols = first_col + len(columns) - 1
@@ -108,7 +109,7 @@ def _write_table(ws, mp, title, subtitle, extra, columns, rows,
         mp.write(ws, hdr, first_col + i, str(name).upper(), font=f_hdr,
                  fillc=mp.NAVY, align="left" if fmts[i][1] == "left" else "center",
                  wrap=True)
-    ws.row_dimensions[hdr].height = 28
+    ws.row_dimensions[hdr].height = 44 if header_max else 28
 
     r = hdr
     for ri, row in enumerate(rows):
@@ -151,7 +152,7 @@ def _write_table(ws, mp, title, subtitle, extra, columns, rows,
         ws.row_dimensions[tr].height = 18
 
     for i, name in enumerate(columns):
-        sample = [len(str(name))] + [
+        sample = [min(len(str(name)), header_max) if header_max else len(str(name))] + [
             len(f"{v:,.0f}") if _is_num(v) else len(str(v or ""))
             for v in cols_vals[i][:300]]
         ws.column_dimensions[get_column_letter(first_col + i)].width = \
