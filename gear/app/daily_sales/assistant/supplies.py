@@ -22,7 +22,7 @@ OK_DAYS, WARN_DAYS = 30, 45     # цель по заказам: поставку
 BUY_OK, BUY_WARN = 90, 120      # контроль выкупов: поставка выкупается до 90 дней
 K_DAYS = 92                     # окно для коэффициента k категории (заказы / выкупы)
 K_MIN_BUYS = 100                # меньше выкупов в категории — берём общий k
-YOUNG_DAYS = 21         # моложе — «рано оценивать», если не укладывается в срок
+YOUNG_DAYS = 7          # первая неделя после приёмки — темп заказов ещё набирается
 BRAND_TOP = 12
 
 ST_OK, ST_WARN, ST_BAD, ST_NEW, ST_STOP = "✅", "⚠️", "🔴", "⏳", "🔴 нет заказов 14 дн"
@@ -78,6 +78,12 @@ ORDERS_SQL = """
     WHERE order_dt::DATE BETWEEN $k AND $end
     GROUP BY 1"""
 
+ORDERS_DAY_SQL = """
+    SELECT nm_id AS nm, order_dt::DATE AS d, COUNT(*) AS n
+    FROM pg.wb_raw.wb_orders
+    WHERE order_dt::DATE BETWEEN $r AND $end
+    GROUP BY 1, 2"""
+
 PRODUCT_SQL = """
     SELECT card_id AS nm,
            ANY_VALUE(COALESCE(NULLIF(TRIM(UPPER(brand)), ''), 'НЕ УКАЗАН')) AS brand,
@@ -119,6 +125,8 @@ def build(report_date=None, brand=None) -> dict:
         prod = con.execute(PRODUCT_SQL).df()
         orders = con.execute(ORDERS_SQL, {"r": end - timedelta(days=RATE_DAYS - 1), "end": end,
                                           "k": end - timedelta(days=K_DAYS - 1)}).df()
+        oday = con.execute(ORDERS_DAY_SQL, {"r": end - timedelta(days=RATE_DAYS - 1),
+                                            "end": end}).df()
 
     for c in ("wb_qty", "to_client", "from_client", "fbs_qty"):
         st[c] = pd.to_numeric(st[c], errors="coerce").fillna(0)
@@ -174,7 +182,16 @@ def build(report_date=None, brand=None) -> dict:
     rate_nm = (sales[sales["d"] >= w0].groupby("nm")["q"].sum().clip(lower=0) / RATE_DAYS)
     sp["rate"] = sp["nm"].map(rate_nm).fillna(0.0)
     orders = orders.set_index("nm") if not orders.empty else pd.DataFrame(columns=["o14", "ok"])
-    sp["orate"] = sp["nm"].map(orders["o14"] / RATE_DAYS).fillna(0.0)
+    # новинка: заказы делим на дни с первой приёмки артикула, а не на все 14 дней
+    first = sp.groupby("nm")["fact"].min().map(pd.Timestamp)
+    w_from = pd.Timestamp(end - timedelta(days=RATE_DAYS - 1))
+    start = first.where(first > w_from, w_from)            # окно: с первой приёмки, не раньше 14 дн
+    span = ((pd.Timestamp(end) - start).dt.days + 1).clip(lower=1, upper=RATE_DAYS)
+    oday["d"] = pd.to_datetime(oday["d"])
+    oday["start"] = oday["nm"].map(start).fillna(w_from)
+    o_win = oday[oday["d"] >= oday["start"]].groupby("nm")["n"].sum()
+    sp["orate"] = (sp["nm"].map(o_win).fillna(0.0)
+                   / sp["nm"].map(span).fillna(RATE_DAYS))
     # k категории = заказы / чистые выкупы за K_DAYS (во сколько раз выкупы медленнее заказов)
     k0 = pd.Timestamp(end - timedelta(days=K_DAYS - 1))
     buys_k = sales[sales["d"] >= k0].groupby("nm")["q"].sum()
@@ -236,7 +253,8 @@ def build(report_date=None, brand=None) -> dict:
     a["on_hand"] = a["wb_qty"] + a["fbs_qty"]
     a["turn"] = (a["on_hand"] / a["per_day"]).where(a["per_day"] > 0)
     a["ord14"] = orders["o14"].reindex(a.index)
-    a["ord_per_day"] = a["ord14"].fillna(0) / RATE_DAYS
+    a["ord_per_day"] = (a.index.map(o_win).fillna(0) if len(o_win) else 0.0) \
+        / a.index.map(span).fillna(RATE_DAYS)
     a["turn_ord"] = (a["on_hand"] / a["ord_per_day"]).where(a["ord_per_day"] > 0)
     a["k"] = a["category"].map(kcat["k"]).fillna(k_all if k_all else float("nan"))
     a["last_d_ord"] = last["d_ord"]
@@ -270,7 +288,7 @@ STATUS_NAMES = ((ST_OK, f"✅ выкупится до {BUY_OK} дней"),
                 (ST_WARN, f"⚠️ выкупится за {BUY_OK + 1}–{BUY_WARN} дней"),
                 (ST_BAD, f"🔴 дольше {BUY_WARN} дней"),
                 (ST_STOP, f"🔴 нет заказов {RATE_DAYS} дней"),
-                (ST_NEW, f"⏳ свежая поставка (меньше {YOUNG_DAYS} дней), рано оценивать"))
+                (ST_NEW, f"⏳ свежая поставка (первые {YOUNG_DAYS} дней), рано оценивать"))
 
 
 def report(report_date=None, brand=None) -> str:
@@ -373,10 +391,11 @@ NOTES = [
     ("Цель", f"Поставку заказывают за {OK_DAYS}–{WARN_DAYS} дней и выкупают до {BUY_OK} дней."),
     ("Статус", f"По прогнозу срока в выкупах (с приёмки): ✅ до {BUY_OK} дней · ⚠️ {BUY_OK + 1}–"
                f"{BUY_WARN} · 🔴 больше {BUY_WARN} · 🔴 нет заказов {RATE_DAYS} дн — артикул не "
-               f"заказывали {RATE_DAYS} дней · ⏳ свежая поставка: меньше {YOUNG_DAYS} дней с "
-               f"приёмки и по прогнозу дольше {BUY_WARN} дней — рано оценивать. Отдельная колонка — "
+               f"заказывали {RATE_DAYS} дней · ⏳ свежая поставка: первые {YOUNG_DAYS} дней после "
+               f"приёмки и по прогнозу дольше {BUY_WARN} дней — темп заказов ещё набирается. Отдельная колонка — "
                f"статус по заказам: ✅ до {OK_DAYS} · ⚠️ {OK_DAYS + 1}–{WARN_DAYS} · 🔴 больше {WARN_DAYS} дней."),
-    ("Срок в заказах", f"Дней с приёмки + очередь / заказы артикула в день за {RATE_DAYS} дней. "
+    ("Срок в заказах", f"Дней с приёмки + очередь / заказы артикула в день за {RATE_DAYS} дней "
+                       "(у новинки — за дни с первой приёмки). "
                        "Очередь — остаток этой поставки и всех более старых поставок артикула: "
                        "старые продаются первыми. Заказы — все заказы WB, включая отменённые: "
                        "товар уходит со склада в момент заказа."),
