@@ -2261,7 +2261,7 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
           </button>
         </div>
 
-        <label class="jm-manpack-label" for="jmMp2Date">Сводные таблицы</label>
+        <label class="jm-manpack-label" for="jmMp2Date">Сводные таблицы с транзакциями</label>
         <div class="jm-manpack-quick">
           <button type="button" class="jm-manpack-quick-btn" id="jmMp2Pivots">
             Cash Flow и P&amp;L, xlsx
