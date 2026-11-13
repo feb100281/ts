@@ -5,7 +5,7 @@ from .services.checko_bank import get_bank_data_by_bik, CheckoBankClientError
 from .services.checko_company import get_company_data_by_inn, CheckoCompanyClientError
 from mptt.models import MPTTModel, TreeForeignKey
 from django.core.validators import RegexValidator
-from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS, CURRENCY_CHOISE
+from utils.choises import CURRENCY_FLAGS, CURRENCY_SYMBOLS, CURRENCY_CHOISE, COUNTRY_CHOICES
 from copy import deepcopy
 
 
@@ -46,6 +46,21 @@ class Owners(models.Model):
         blank=True,
     )
 
+    # Отчётность
+    country = models.CharField(
+        max_length=2, choices=COUNTRY_CHOICES, default="RU", verbose_name="Страна",
+    )
+    currency = models.CharField(
+        max_length=3, choices=CURRENCY_CHOISE, default="RUB", verbose_name="Валюта учёта",
+    )
+    report_group = models.CharField(
+        max_length=100, default="Трендсеттер РФ", verbose_name="Группа отчётности",
+        help_text="Компании одной группы показываются в отчётах вместе",
+    )
+    in_reports = models.BooleanField(
+        default=True, verbose_name="Показывать в отчётах",
+    )
+
     class Meta:
         verbose_name = "Собственник"
         verbose_name_plural = "Собственники"
@@ -81,7 +96,17 @@ class Owners(models.Model):
 #----- БАНКИ ----#
 class Bank(models.Model):
     name = models.CharField(max_length=255, verbose_name="Наименование")
-    bik = models.CharField(max_length=9, verbose_name="БИК", unique=True, help_text="9 цифр, без пробелов")
+    bik = models.CharField(
+        max_length=9, verbose_name="БИК", unique=True, null=True, blank=True,
+        help_text="9 цифр, без пробелов. Для банков вне РФ не заполняется",
+    )
+    country = models.CharField(
+        max_length=2, choices=COUNTRY_CHOICES, default="RU", verbose_name="Страна",
+    )
+    code = models.CharField(
+        max_length=10, null=True, blank=True, db_index=True, verbose_name="Код банка",
+        help_text="Для банков вне РФ: код из номера счёта (Армения — первые 3 цифры)",
+    )
     
     logo = models.CharField(
         max_length=1,
@@ -107,7 +132,7 @@ class Bank(models.Model):
         verbose_name_plural = "Банки"
 
     def __str__(self):
-        return f"{self.name} ({self.bik})"
+        return f"{self.name} ({self.bik or self.code or '—'})"
 
 
     def fill_from_bik(self):
@@ -128,6 +153,7 @@ class Bank(models.Model):
         self.type = data.get("type") or self.type
 
     def save(self, *args, **kwargs):
+        self.bik = (self.bik or "").strip() or None      # пустой БИК не должен конфликтовать по unique
         if self.bik and not self.name:
             self.fill_from_bik()
         super().save(*args, **kwargs)

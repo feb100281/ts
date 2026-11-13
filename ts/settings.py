@@ -227,6 +227,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
+# Ключ для загрузки файлов Армении с компьютера
+AM_UPLOAD_TOKEN = os.getenv("AM_UPLOAD_TOKEN", "")
+
 JAZZMIN_SETTINGS = {
 
     "site_title": "ТРЕНДСЕТТЕР",

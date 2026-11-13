@@ -1,3 +1,4 @@
+from django.utils.html import format_html_join
 # treasury/admin.py
 
 from django.http import JsonResponse
@@ -21,8 +22,9 @@ from django.db.models import Q
 from django.contrib.admin import SimpleListFilter
 from django import forms
 from contracts.models import Contracts
-from .models import BankStatements, CfData, CfSplits,ContractsRexex
+from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation
 from utils.bsparsers.bsupdater import update_cf_data
+from utils.bsparsers.am.loader import load_statement, sniff
 from decimal import Decimal, InvalidOperation
 
 
@@ -291,7 +293,10 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 if not obj.file:
                     bad += 1
                     continue
-                result = update_cf_data(obj.file.path, obj.pk)
+                if sniff(obj.file.path):                      # Армения — свой загрузчик, без удаления строк
+                    load_statement(obj.file.path, log=lambda *_: None, bs=obj)
+                else:
+                    result = update_cf_data(obj.file.path, obj.pk)
                 # можно либо копить результаты, либо показывать кратко
                 ok += 1
             except Exception as e:
@@ -878,7 +883,14 @@ class BankStatementsAdmin(admin.ModelAdmin):
         if request.method == "POST" and "apply_migration" in request.POST:
             obj = self.get_object(request, object_id)
 
-            if obj and obj.file:
+            if obj and obj.file and sniff(obj.file.path):     # Армения — свой загрузчик
+                lines = []
+                try:
+                    load_statement(obj.file.path, log=lines.append, bs=obj)
+                    messages.success(request, format_html_join(mark_safe("<br>"), "{}", ((x,) for x in lines)))
+                except Exception as exc:
+                    messages.error(request, f"Выписка не загружена: {exc}")
+            elif obj and obj.file:
                 result = update_cf_data(obj.file.path, obj.pk)
                 messages.success(request, mark_safe(result))
             else:
@@ -957,6 +969,7 @@ class CfDataAdmin(admin.ModelAdmin):
 
     search_fields = (
         "temp",
+        "temp_ru",
         "cp_bs_name",
         "tax_id",
         "payer_account",
@@ -1843,8 +1856,11 @@ class CfDataAdmin(admin.ModelAdmin):
     def temp_short(self, obj):
         if not obj.temp:
             return "—"
-        s = obj.temp.strip().replace("\n", " ")
-        return (s[:90] + "…") if len(s) > 90 else s
+        s = (obj.temp_ru or obj.temp).strip().replace("\n", " ")
+        short = (s[:90] + "…") if len(s) > 90 else s
+        if obj.temp_ru:                                   # перевод; оригинал — во всплывающей подсказке
+            return format_html('<span title="{}">{}</span>', obj.temp, short)
+        return short
 
 
 
@@ -1953,3 +1969,23 @@ class ContractsRexexAdmin(admin.ModelAdmin):
         return (s[:80] + "…") if len(s) > 80 else (s or "—")
 
   
+
+
+
+# ---------- СЧЕТА КОНТРАГЕНТОВ И ПЕРЕВОДЫ ----------
+
+@admin.register(CounterpartyAccount)
+class CounterpartyAccountAdmin(admin.ModelAdmin):
+    list_display = ("account", "cp", "comment")
+    search_fields = ("account", "cp__name", "cp__tax_id", "comment")
+    autocomplete_fields = ("cp",)
+
+
+@admin.register(TextTranslation)
+class TextTranslationAdmin(admin.ModelAdmin):
+    list_display = ("source", "translation", "is_checked", "hits")
+    list_editable = ("translation", "is_checked")
+    list_filter = ("is_checked", ("translation", admin.EmptyFieldListFilter))
+    search_fields = ("source", "translation")
+    readonly_fields = ("key", "hits", "created_at")
+    list_per_page = 50

@@ -8,6 +8,7 @@ from django.conf.urls.static import static
 from django.contrib.auth.decorators import permission_required
 
 from .views import fx_status, cp_issues_status, treasury_status
+from treasury.views import am_upload
 from contracts.views import contracts_issues_status
 from .admin_exports import (
     export_pl_for_csv,
@@ -71,6 +72,7 @@ login_view = auth_views.LoginView.as_view(
 )
 
 urlpatterns = [
+    path("api/am/upload/", am_upload, name="am_upload"),
     path("admin/fx-status/", fx_status, name="fx_status"),
     path("admin/cp-issues-status/", cp_issues_status, name="cp_issues_status"),
     path("admin/treasury-status/", treasury_status, name="treasury_status"),

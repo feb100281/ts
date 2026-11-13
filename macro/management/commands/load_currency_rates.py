@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 CBR_DAILY_URL = settings.CBR_DAILY_URL
 
+# Валюты с мелким курсом к рублю: 4 знаков мало
+FINE_PRECISION = {"AMD"}
+FINE_STEP = Decimal("0.000001")
+
 
 def fetch_cbr_rates_for_date(date: datetime.date) -> dict:
     """
@@ -38,7 +42,8 @@ def fetch_cbr_rates_for_date(date: datetime.date) -> dict:
         try:
             nominal = Decimal(nominal_text.replace(",", "."))
             value = Decimal(value_text.replace(",", "."))
-            rate = (value / nominal).quantize(Decimal("0.0001"))
+            step = FINE_STEP if char_code in FINE_PRECISION else Decimal("0.0001")
+            rate = (value / nominal).quantize(step)
         except Exception as e:
             logger.warning("Ошибка парсинга курса %s: %s", char_code, e)
             continue
