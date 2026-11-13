@@ -8,6 +8,7 @@ from conns import get_duckdb_conn_with_opt
 import pandas as pd
 
 from treasury.models import CfData
+from django.db.models import Q
 
 # Queries
 
@@ -235,7 +236,9 @@ class Command(BaseCommand):
             with get_duckdb_conn_with_opt() as con:                
                                
                 statement_df = self._prepare_df(
-                    CfData.objects.all(),
+                    CfData.objects.filter(                          # только компании группы РФ
+                        Q(ba__isnull=True) | Q(ba__corporate__report_group="Трендсеттер РФ")
+                    ),
                     CfData
                 )                
                                

@@ -64,6 +64,8 @@ def insert_normizized(conn):
         FROM public.treasury_cfdata t
         JOIN public.corporate_bankaccount b
         ON t.ba_id = b.id
+        JOIN public.corporate_owners o                              -- только компании группы РФ
+        ON o.id = b.corporate_id AND o.report_group = 'Трендсеттер РФ'
         LEFT JOIN LATERAL (
             SELECT r.rate
             FROM public.macro_currencyrate r
