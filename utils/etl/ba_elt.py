@@ -93,7 +93,10 @@ def fletch_accounts(conn) -> dict:
     """
     q = """
     SELECT ba_id, acc_id, currency, is_active, min_date, max_date
-	FROM gl.v_bank_acounts;
+	FROM gl.v_bank_acounts v                                      -- только компании группы РФ
+    WHERE v.ba_id IN (SELECT b.id FROM public.corporate_bankaccount b
+                      JOIN public.corporate_owners o ON o.id = b.corporate_id
+                      WHERE o.report_group = 'Трендсеттер РФ');
     """
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(q)

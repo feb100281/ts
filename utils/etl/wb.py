@@ -932,6 +932,8 @@ def fletch_accounts(conn):
         FROM public.corporate_bankaccount a
         JOIN public.treasury_cfdata t 
             ON t.ba_id = a.id
+            JOIN public.corporate_owners o                              -- только компании группы РФ
+            ON o.id = a.corporate_id AND o.report_group = 'Трендсеттер РФ'
         GROUP BY a.id, a.bs_acc_id, a.currency, a.is_active
     ) x    
     """
