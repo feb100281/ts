@@ -24,6 +24,7 @@ class BankStatements(models.Model):
     bb = models.DecimalField("Начальный остаток",max_digits=12,decimal_places=2,null=True,blank=True)
     eb = models.DecimalField("Конечный остаток",max_digits=12,decimal_places=2,null=True,blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата загрузки")
+    file_sha1 = models.CharField("Отпечаток файла", max_length=40, null=True, blank=True, db_index=True)
 
     class Meta:
         verbose_name = "Выписка"

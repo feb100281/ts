@@ -27,8 +27,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("paths", nargs="+")
         parser.add_argument("--dry-run", action="store_true", help="разобрать и проверить, в базу не писать")
+        parser.add_argument("--force", action="store_true", help="перечитать и уже загруженные файлы")
 
-    def handle(self, *args, paths, dry_run, **options):
+    def handle(self, *args, paths, dry_run, force=False, **options):
         files = []
         for p in map(Path, paths):
             if p.is_dir():
@@ -43,13 +44,19 @@ class Command(BaseCommand):
         if not files and not sales_files:
             raise CommandError("армянских выписок и продаж не найдено")
 
-        total_new = errors = 0
+        total_new = errors = skipped = 0
         owners = set()
         for f in files:
-            self.stdout.write(f"— {f.name}")
             try:
                 with transaction.atomic():
-                    res = load_statement(f, log=self.stdout.write)
+                    lines = []
+                    res = load_statement(f, log=lines.append, force=force)
+                    if res.get("skipped"):
+                        skipped += 1
+                    else:
+                        self.stdout.write(f"— {f.name}")
+                        for line in lines:
+                            self.stdout.write(line)
                     total_new += res["new"]
                     owners.add(res["owner_id"])
                     if dry_run:
@@ -58,19 +65,27 @@ class Command(BaseCommand):
                 pass
             except StatementError as exc:
                 errors += 1
+                self.stdout.write(f"— {f.name}")
                 self.stdout.write(self.style.ERROR(f"  ✗ {exc}"))
 
         for f in sales_files:
-            self.stdout.write(f"— {f.name} (продажи)")
             try:
                 with transaction.atomic():
-                    load_sales(f, log=self.stdout.write)
+                    lines = []
+                    res = load_sales(f, log=lines.append, force=force)
+                    if res.get("skipped"):
+                        skipped += 1
+                    else:
+                        self.stdout.write(f"— {f.name} (продажи)")
+                        for line in lines:
+                            self.stdout.write(line)
                     if dry_run:
                         raise DryRun
             except DryRun:
                 pass
             except Exception as exc:                        # ошибка одного файла не останавливает остальные
                 errors += 1
+                self.stdout.write(f"— {f.name} (продажи)")
                 self.stdout.write(self.style.ERROR(f"  ✗ {exc}"))
 
         if not dry_run:
@@ -79,5 +94,6 @@ class Command(BaseCommand):
             retranslate(log=self.stdout.write)
 
         note = " (пробный прогон, ничего не записано)" if dry_run else ""
-        self.stdout.write(self.style.SUCCESS(f"Выписок: {len(files)}, новых операций: {total_new}, "
-                                             f"файлов продаж: {len(sales_files)}, ошибок: {errors}{note}"))
+        self.stdout.write(self.style.SUCCESS(f"Выписок: {len(files)}, файлов продаж: {len(sales_files)}, "
+                                             f"без изменений: {skipped}, новых операций: {total_new}, "
+                                             f"ошибок: {errors}{note}"))

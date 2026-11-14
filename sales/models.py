@@ -607,6 +607,7 @@ class RetailSale(models.Model):
     bonus_sum = models.DecimalField("Бонусы", max_digits=16, decimal_places=2, default=0)
     row_key = models.CharField("Ключ строки", max_length=40)
     source_file = models.CharField("Файл", max_length=255, blank=True, default="")
+    source_sha1 = models.CharField("Отпечаток файла", max_length=40, blank=True, default="", db_index=True)
 
     class Meta:
         verbose_name = "Розничная продажа"

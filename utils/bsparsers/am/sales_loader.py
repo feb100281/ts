@@ -27,10 +27,14 @@ def _aware(dt):
     return timezone.make_aware(dt) if dt is not None and timezone.is_naive(dt) else dt
 
 
-def load_sales(path, owner: Owners | None = None, log=print) -> dict:
+def load_sales(path, owner: Owners | None = None, log=print, force: bool = False) -> dict:
+    import hashlib
     path = Path(path)
-    f = parse_sales(path)
     owner = _owner(owner)
+    digest = hashlib.sha1(path.read_bytes()).hexdigest()
+    if not force and RetailSale.objects.filter(owner=owner, source_sha1=digest).exists():
+        return {"owner_id": owner.id, "rows": 0, "removed": 0, "months": [], "skipped": True}
+    f = parse_sales(path)
     months = sorted(f.months())
     if not months:
         raise SalesError("в файле нет строк")
@@ -41,7 +45,7 @@ def load_sales(path, owner: Owners | None = None, log=print) -> dict:
         barcode=r.barcode[:255], name=r.name[:500], qty=r.qty, price=r.price, amount=r.amount,
         amount_novat=r.amount_novat, cost_unit=r.cost_unit, cost_total=r.cost_total,
         disc_manual_pct=r.disc_manual_pct, disc_manual_sum=r.disc_manual_sum, disc_auto_pct=r.disc_auto_pct,
-        disc_auto_sum=r.disc_auto_sum, bonus_sum=r.bonus_sum, row_key=r.key, source_file=path.name[:255],
+        disc_auto_sum=r.disc_auto_sum, bonus_sum=r.bonus_sum, row_key=r.key, source_file=path.name[:255], source_sha1=digest,
     ) for r in f.rows]
     with transaction.atomic():
         removed, _ = RetailSale.objects.filter(owner=owner, period__in=months).delete()

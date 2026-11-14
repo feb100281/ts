@@ -121,9 +121,11 @@ def translations(texts: list[str]) -> dict[str, str | None]:
         if k not in known and k not in new:
             new[k] = TextTranslation(key=k, source=tpl, hits=0, translation=seed().get(tpl))
     TextTranslation.objects.bulk_create(new.values(), ignore_conflicts=True)
-    for k, n in hits.items():
-        TextTranslation.objects.filter(key=k).update(hits=F("hits") + n)
     known = {x.key: x for x in TextTranslation.objects.filter(key__in=set(keys.values()))}
+    for k, n in hits.items():
+        if k in known:
+            known[k].hits += n
+    TextTranslation.objects.bulk_update(known.values(), ["hits"], batch_size=500)
     out = {}
     for t, (tpl, nums) in tpls.items():
         tr = known[keys[t]].translation
@@ -212,15 +214,14 @@ def retranslate(log=print) -> None:
     with transaction.atomic():
         TextTranslation.objects.update(hits=0)
         tr = translations([t for _, t, _, _, _ in rows if t])
-        for x in CpName.objects.filter(is_checked=False):              # автоматические названия — по текущим правилам
-            auto = cp_name_ru(x.source)
-            if auto != x.name_ru:
-                CpName.objects.filter(pk=x.pk).update(name_ru=auto)
-        names = cp_names([n for _, _, _, n, _ in rows])
         counts = Counter(n for _, _, _, n, _ in rows if n)
-        for src, n in counts.items():
-            CpName.objects.filter(source=src).update(hits=n)
-        CpName.objects.exclude(source__in=counts.keys()).update(hits=0)
+        cps = list(CpName.objects.all())
+        for x in cps:                                                   # автоназвания — по текущим правилам
+            if not x.is_checked:
+                x.name_ru = cp_name_ru(x.source)
+            x.hits = counts.get(x.source, 0)
+        CpName.objects.bulk_update(cps, ["name_ru", "hits"], batch_size=500)
+        names = cp_names([n for _, _, _, n, _ in rows])
         changed = [CfData(id=i, temp_ru=tr.get(t) if t else None, cp_name_ru=names.get(n) or None)
                    for i, t, old_t, n, old_n in rows
                    if (tr.get(t) if t else None) != old_t or (names.get(n) or None) != old_n]
@@ -262,8 +263,20 @@ def check_chain(ba: BankAccount, st: Statement, log) -> list[str]:
     return warns
 
 
-def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
+def file_sha1(path) -> str:
+    import hashlib
+    return hashlib.sha1(Path(path).read_bytes()).hexdigest()
+
+
+def load_statement(path, log=print, bs: BankStatements | None = None, force: bool = False) -> dict:
     path = Path(path)
+    digest = file_sha1(path)
+    if not force and bs is None:
+        same = BankStatements.objects.filter(file_sha1=digest).select_related("ba").first()
+        if same is not None:                               # этот же файл уже загружен
+            return {"bs_id": same.pk, "owner_id": same.owner_id, "new": 0, "existing": None,
+                    "warnings": [], "account": same.ba.account if same.ba else "", "skipped": True,
+                    "period": (same.start, same.finish)}
     st = parse_statement(path)
     log(f"{st.bank} {st.currency} {st.account}: {st.start:%d.%m.%Y}–{st.finish:%d.%m.%Y}, строк {len(st.rows)}")
     if st.balance_gap:
@@ -280,13 +293,14 @@ def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
         if bs is None:
             bs = BankStatements.objects.filter(ba=ba, start=st.start, finish=st.finish).first()
         if bs is None:
-            bs = BankStatements(owner=owner, ba=ba, start=st.start, finish=st.finish, bb=st.bb, eb=st.eb)
+            bs = BankStatements(owner=owner, ba=ba, start=st.start, finish=st.finish, bb=st.bb, eb=st.eb,
+                                file_sha1=digest)
             with path.open("rb") as f:
                 bs.file.save(path.name, File(f), save=False)
             bs.save()
         else:
             BankStatements.objects.filter(pk=bs.pk).update(owner=owner, ba=ba, start=st.start, finish=st.finish,
-                                                           bb=st.bb, eb=st.eb)
+                                                           bb=st.bb, eb=st.eb, file_sha1=digest)
 
         keys = [r.key for r in st.rows]
         have = set(CfData.objects.filter(ba=ba, row_key__in=keys).values_list("row_key", flat=True))
