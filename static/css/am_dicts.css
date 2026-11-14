@@ -1,129 +1,95 @@
-/* Справочники Армении: словарь переводов, названия контрагентов, разметка */
+/* Справочники: словарь переводов, названия контрагентов, разметка → статьи */
 
 body.model-texttranslation #result_list,
 body.model-cpname #result_list,
 body.model-hintrule #result_list {
-  border-collapse: separate;
-  border-spacing: 0;
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #d6e2ef;
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
 }
 
 body.model-texttranslation #result_list thead th,
 body.model-cpname #result_list thead th,
 body.model-hintrule #result_list thead th {
-  background: #f8fafc;
-  color: #64748b;
-  font-size: 11px;
+  background: #eef4fb;
+  color: #2f7fb5;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  padding: 12px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 11px 14px;
+  border: 1px solid #d6e2ef;
   white-space: nowrap;
 }
-body.model-texttranslation #result_list thead th a,
-body.model-cpname #result_list thead th a,
-body.model-hintrule #result_list thead th a { color: inherit; }
 
 body.model-texttranslation #result_list td,
 body.model-cpname #result_list td,
 body.model-hintrule #result_list td {
-  padding: 10px 14px;
+  padding: 8px 14px;
+  border: 1px solid #e6edf5;
   vertical-align: middle;
-  border-bottom: 1px solid #f1f5f9;
-  background: #fff;
+  font-size: 14px;
+  color: #1f2937;
 }
-body.model-texttranslation #result_list tr:hover td,
-body.model-cpname #result_list tr:hover td,
-body.model-hintrule #result_list tr:hover td { background: #f8fafc; }
+body.model-texttranslation #result_list tbody tr:nth-child(even) td,
+body.model-cpname #result_list tbody tr:nth-child(even) td,
+body.model-hintrule #result_list tbody tr:nth-child(even) td { background: #fafcfe; }
+body.model-texttranslation #result_list tbody tr:hover td,
+body.model-cpname #result_list tbody tr:hover td,
+body.model-hintrule #result_list tbody tr:hover td { background: #f3f8fd; }
 
 /* Оригинал */
-.am-src {
-  display: block;
-  color: #334155;
-  font-size: 14px;
-  line-height: 1.45;
-  text-decoration: none !important;
-}
-.am-src:hover { color: #0f172a; }
+.am-src { color: #374151; line-height: 1.5; text-decoration: none !important; }
+a.am-src:hover { color: #2f7fb5; }
 .am-ph {
   display: inline-block;
-  min-width: 18px;
-  padding: 0 6px;
+  padding: 0 4px;
   margin: 0 1px;
-  border-radius: 6px;
-  background: #eef2ff;
-  color: #4f46e5;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
+  border: 1px solid #c7d7ea;
+  background: #f1f6fc;
+  color: #2f7fb5;
+  font: 600 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.am-ph.am-month { background: #fef3c7; color: #b45309; }
+.am-ph.am-month { border-color: #e7d3a8; background: #fbf6ea; color: #9a6a12; }
 
-/* Поле перевода */
-body.model-texttranslation #result_list td.field-translation input,
-body.model-cpname #result_list td.field-name_ru input,
-body.model-hintrule #result_list td.field-comment input {
-  width: 100%;
-  min-width: 360px;
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #0f172a;
-  font-size: 14px;
-  transition: border-color .15s, box-shadow .15s, background .15s;
-}
-body.model-texttranslation #result_list td.field-translation input:focus,
-body.model-cpname #result_list td.field-name_ru input:focus,
-body.model-hintrule #result_list td.field-comment input:focus {
-  outline: none;
-  background: #fff;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
-}
+/* Поля ввода */
+body.model-texttranslation #result_list td.field-translation,
+body.model-cpname #result_list td.field-name_ru { width: 48%; }
+body.model-texttranslation #result_list td input[type=text],
+body.model-cpname #result_list td input[type=text],
+body.model-hintrule #result_list td input[type=text],
 body.model-hintrule #result_list td select {
-  min-width: 260px;
+  width: 100%;
+  box-sizing: border-box;
   padding: 6px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
+  border: 1px solid #cfd9e5;
+  border-radius: 0;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  box-shadow: none;
+}
+body.model-texttranslation #result_list td input[type=text]:focus,
+body.model-cpname #result_list td input[type=text]:focus,
+body.model-hintrule #result_list td input[type=text]:focus,
+body.model-hintrule #result_list td select:focus {
+  outline: none;
+  border-color: #2f7fb5;
+  box-shadow: inset 0 0 0 1px #2f7fb5;
 }
 
-/* Галочка «проверен» */
-body.model-texttranslation #result_list td.field-is_checked,
-body.model-cpname #result_list td.field-is_checked,
-body.model-texttranslation #result_list th.column-is_checked,
-body.model-cpname #result_list th.column-is_checked { width: 90px; text-align: center; }
-body.model-texttranslation #result_list td.field-is_checked input,
-body.model-cpname #result_list td.field-is_checked input {
-  width: 18px; height: 18px; accent-color: #16a34a; cursor: pointer;
-}
-
-/* Счётчик строк */
-.am-hits {
-  display: inline-block;
-  min-width: 44px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.am-hits.am-hot { background: #dcfce7; color: #15803d; }
+/* Количество */
+.am-hits { color: #4b5563; font-variant-numeric: tabular-nums; font-weight: 600; }
+.am-hits.am-hot { color: #111827; font-weight: 700; }
 body.model-texttranslation #result_list td.field-hits_badge,
 body.model-cpname #result_list td.field-hits_badge,
-body.model-hintrule #result_list td.field-rows_count { width: 90px; text-align: right; }
+body.model-hintrule #result_list td.field-rows_count,
+body.model-texttranslation #result_list th.column-hits_badge,
+body.model-cpname #result_list th.column-hits_badge,
+body.model-hintrule #result_list th.column-rows_count { width: 110px; text-align: right; }
 
-/* Чекбоксы выбора строк — тише */
-body.model-texttranslation #result_list td.action-checkbox,
-body.model-cpname #result_list td.action-checkbox,
-body.model-hintrule #result_list td.action-checkbox { width: 36px; }
+body.model-texttranslation #result_list .action-checkbox,
+body.model-cpname #result_list .action-checkbox,
+body.model-hintrule #result_list .action-checkbox,
+body.model-texttranslation #result_list .action-checkbox-column,
+body.model-cpname #result_list .action-checkbox-column,
+body.model-hintrule #result_list .action-checkbox-column { width: 40px; text-align: center; }

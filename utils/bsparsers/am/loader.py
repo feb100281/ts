@@ -65,7 +65,7 @@ def get_owner(st: Statement, log) -> Owners:
         return owner
     if not st.owner_tax_id:
         raise StatementError("в выписке нет ИНН (ՀՎՀՀ) владельца счёта")
-    owner = Owners.objects.create(name=f"{st.owner_name or 'Компания'} (Армения)", inn=st.owner_tax_id, **NEW_OWNER)
+    owner = Owners.objects.create(name=f"{cp_name_ru(st.owner_name) or 'КОМПАНИЯ'} (АРМЕНИЯ)", inn=st.owner_tax_id, **NEW_OWNER)
     log(f"  + новая компания: {owner.name}, ИНН {owner.inn} — проверьте карточку")
     return owner
 
@@ -212,6 +212,10 @@ def retranslate(log=print) -> None:
     with transaction.atomic():
         TextTranslation.objects.update(hits=0)
         tr = translations([t for _, t, _, _, _ in rows if t])
+        for x in CpName.objects.filter(is_checked=False):              # автоматические названия — по текущим правилам
+            auto = cp_name_ru(x.source)
+            if auto != x.name_ru:
+                CpName.objects.filter(pk=x.pk).update(name_ru=auto)
         names = cp_names([n for _, _, _, n, _ in rows])
         counts = Counter(n for _, _, _, n, _ in rows if n)
         for src, n in counts.items():

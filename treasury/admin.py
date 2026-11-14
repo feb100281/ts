@@ -1996,7 +1996,7 @@ class CounterpartyAccountAdmin(admin.ModelAdmin):
 
 
 
-AM_CSS = {"all": ("css/am_dicts.css",)}
+AM_CSS = {"all": ("css/admin_overrides.css", "css/am_dicts.css")}
 
 
 def am_source(text: str, url: str = ""):
@@ -2019,9 +2019,15 @@ def am_hits(n: int):
 
 @admin.register(TextTranslation)
 class TextTranslationAdmin(admin.ModelAdmin):
-    list_display = ("source_html", "translation", "is_checked", "hits_badge")
+    list_display = ("source_html", "translation", "hits_badge")
     list_display_links = None
+    list_editable = ("translation",)
     formfield_overrides = {models.TextField: {"widget": forms.TextInput()}}
+
+    def save_model(self, request, obj, form, change):
+        if "translation" in form.changed_data:              # правка вручную — больше не перезаписывать
+            obj.is_checked = True
+        super().save_model(request, obj, form, change)
 
     class Media:
         css = AM_CSS
@@ -2033,8 +2039,7 @@ class TextTranslationAdmin(admin.ModelAdmin):
     @admin.display(description="Строк", ordering="hits")
     def hits_badge(self, obj):
         return am_hits(obj.hits)
-    list_editable = ("translation", "is_checked")
-    list_filter = ("is_checked", ("translation", admin.EmptyFieldListFilter))
+    list_filter = (("translation", admin.EmptyFieldListFilter),)
     search_fields = ("source", "translation")
     readonly_fields = ("key", "hits", "created_at")
     list_per_page = 50
@@ -2058,8 +2063,13 @@ class HintRuleAdmin(admin.ModelAdmin):
 
 @admin.register(CpName)
 class CpNameAdmin(admin.ModelAdmin):
-    list_display = ("source_html", "name_ru", "is_checked", "hits_badge")
+    list_display = ("source_html", "name_ru", "hits_badge")
     list_display_links = None
+
+    def save_model(self, request, obj, form, change):
+        if "name_ru" in form.changed_data:                  # правка вручную — больше не перезаписывать
+            obj.is_checked = True
+        super().save_model(request, obj, form, change)
 
     class Media:
         css = AM_CSS
@@ -2071,8 +2081,7 @@ class CpNameAdmin(admin.ModelAdmin):
     @admin.display(description="Операций", ordering="hits")
     def hits_badge(self, obj):
         return am_hits(obj.hits)
-    list_editable = ("name_ru", "is_checked")
-    list_filter = ("is_checked",)
+    list_editable = ("name_ru",)
     search_fields = ("source", "name_ru")
     list_per_page = 50
     formfield_overrides = {models.CharField: {"widget": forms.TextInput()}}
