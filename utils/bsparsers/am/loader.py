@@ -84,7 +84,31 @@ def get_account(st: Statement, owner: Owners, log) -> BankAccount:
     ba = BankAccount.objects.create(corporate=owner, bank=bank, account=st.account,
                                     currency=st.currency or "AMD", is_active=True)
     log(f"  + новый счёт: {ba}")
+    ensure_bs_acc(ba, log)
     return ba
+
+
+def ensure_bs_acc(ba: BankAccount, log=print):
+    """Балансовый счёт в плане счетов для банковского счёта: в той же группе, что счета РФ."""
+    from corporate.models import COA
+    if ba.bs_acc_id:
+        return ba.bs_acc
+    ru = (BankAccount.objects.filter(bs_acc__isnull=False).exclude(pk=ba.pk)
+          .values_list("bs_acc__parent_id", flat=True).order_by("bs_acc__parent_id").distinct())
+    parent_ids = [x for x in ru if x]
+    if len(parent_ids) != 1:
+        raise StatementError(f"не удалось определить группу банковских счетов в плане счетов: {parent_ids}")
+    parent = COA.objects.get(pk=parent_ids[0])
+    codes = [int(c) for c in COA.objects.filter(parent=parent).values_list("code", flat=True) if c.isdigit()]
+    code = max(codes) + 1 if codes else int(parent.code) * 10 + 1
+    while COA.objects.filter(code=f"{code:06d}").exists():
+        code += 1
+    bank = ba.bank.name if ba.bank else ""
+    acc = COA.objects.create(code=f"{code:06d}", parent=parent, name=f"{bank} {ba.currency} {ba.account}".strip())
+    BankAccount.objects.filter(pk=ba.pk).update(bs_acc=acc)
+    ba.bs_acc = acc
+    log(f"  + балансовый счёт {acc}")
+    return acc
 
 
 _seed = None
