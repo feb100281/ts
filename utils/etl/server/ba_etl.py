@@ -90,9 +90,13 @@ def fletch_accounts(conn) -> dict:
     Args:
         conn (_type_): _description_
     """
+    # переоценка в рублях — только для счетов РФ; у зарубежных компаний своя валюта учёта
     q = """
-    SELECT ba_id, acc_id, currency, is_active, min_date, max_date
-	FROM gl.v_bank_acounts;
+    SELECT v.ba_id, v.acc_id, v.currency, v.is_active, v.min_date, v.max_date
+    FROM gl.v_bank_acounts v
+    JOIN public.corporate_bankaccount b ON b.id = v.ba_id
+    JOIN public.corporate_owners o ON o.id = b.corporate_id
+    WHERE o.report_group = 'Трендсеттер РФ' AND v.acc_id IS NOT NULL;
     """
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(q)
