@@ -93,12 +93,12 @@ def ensure_bs_acc(ba: BankAccount, log=print):
     from corporate.models import COA
     if ba.bs_acc_id:
         return ba.bs_acc
-    ru = (BankAccount.objects.filter(bs_acc__isnull=False).exclude(pk=ba.pk)
-          .values_list("bs_acc__parent_id", flat=True).order_by("bs_acc__parent_id").distinct())
-    parent_ids = [x for x in ru if x]
-    if len(parent_ids) != 1:
-        raise StatementError(f"не удалось определить группу банковских счетов в плане счетов: {parent_ids}")
-    parent = COA.objects.get(pk=parent_ids[0])
+    from collections import Counter
+    used = Counter(x for x in BankAccount.objects.filter(bs_acc__isnull=False).exclude(pk=ba.pk)
+                   .values_list("bs_acc__parent_id", flat=True) if x)
+    if not used:
+        raise StatementError("в плане счетов нет группы банковских счетов")
+    parent = COA.objects.get(pk=used.most_common(1)[0][0])
     codes = [int(c) for c in COA.objects.filter(parent=parent).values_list("code", flat=True) if c.isdigit()]
     code = max(codes) + 1 if codes else int(parent.code) * 10 + 1
     while COA.objects.filter(code=f"{code:06d}").exists():

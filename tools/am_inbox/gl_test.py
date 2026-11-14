@@ -49,6 +49,14 @@ def connect_checked():
 
 gl_etl.connect_db = connect_checked
 
+if "--ru-only" in sys.argv:                       # контрольный расчёт: только счета с балансовым счётом
+    import inspect
+    src = inspect.getsource(ba_etl.insert_normizized)
+    old = "ON t.ba_id = b.id"
+    if src.count(old) != 1:
+        raise SystemExit("не нашла место для фильтра в insert_normizized")
+    exec(src.replace(old, old + " AND b.bs_acc_id IS NOT NULL"), ba_etl.__dict__)
+
 if __name__ == "__main__":
     t = time.time()
     print("Расчёт главной книги на ts_test…", flush=True)
