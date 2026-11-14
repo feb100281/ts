@@ -124,7 +124,7 @@ class Command(BaseCommand):
         rates = Rates(currencies, start, finish)
 
         ops = (CfData.objects.filter(date__gte=start, date__lte=finish)
-               .select_related("ba__corporate", "cfitem", "contract", "cp_final"))
+               .select_related("ba__corporate", "cfitem", "contract__cp", "cp_final"))
         rows = []
         total = ops.count()
         self.stdout.write(f"Операций за период: {total}")
