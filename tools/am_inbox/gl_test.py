@@ -30,6 +30,21 @@ def load_local(path, func_name="main"):
 
 engine.load_function = load_local
 
+# Локально numpy отдаёт даты как целые наносекунды; на сервере — датами. Приводим к датам.
+import datetime as _dt  # noqa: E402
+from psycopg import Copy  # noqa: E402
+
+_write_row = Copy.write_row
+
+
+def _fix(v):
+    if isinstance(v, int) and not isinstance(v, bool) and 10**17 < v < 4 * 10**18:
+        return (_dt.datetime(1970, 1, 1) + _dt.timedelta(microseconds=v // 1000)).date()
+    return v
+
+
+Copy.write_row = lambda self, row: _write_row(self, [_fix(v) for v in row])
+
 _accounts = ba_etl.fletch_accounts
 ba_etl.fletch_accounts = lambda conn: [a for a in _accounts(conn) if a["acc_id"] is not None]
 
