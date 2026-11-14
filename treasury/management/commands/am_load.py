@@ -58,7 +58,8 @@ class Command(BaseCommand):
                         for line in lines:
                             self.stdout.write(line)
                     total_new += res["new"]
-                    owners.add(res["owner_id"])
+                    if res["new"] or force:
+                        owners.add(res["owner_id"])
                     if dry_run:
                         raise DryRun
             except DryRun:
@@ -88,7 +89,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"— {f.name} (продажи)")
                 self.stdout.write(self.style.ERROR(f"  ✗ {exc}"))
 
-        if not dry_run:
+        if not dry_run and owners:                          # разноска только при новых операциях или --force
             for owner_id in owners:
                 reassign(owner_id, log=self.stdout.write)
             retranslate(log=self.stdout.write)
