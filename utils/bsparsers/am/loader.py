@@ -15,6 +15,7 @@ from pathlib import Path
 
 from django.core.files import File
 from django.db import connection, transaction
+from django.db import models
 from django.db.models import F
 
 from corporate.models import Bank, BankAccount, Owners
@@ -32,15 +33,26 @@ NEW_OWNER = {
 
 
 def sniff(path) -> bool:
-    """Быстрая проверка: армянская выписка или нет (для BankStatements.save)."""
+    """Быстрая проверка: армянская выписка или нет (для BankStatements.save и am_load)."""
+    import zipfile
+
     path = Path(path)
+    marks = ["Տեղեկանք".encode(), "Ժամանակահատված".encode(), b"AccountStatementReport",
+             "î»Õ»Ï³Ýù".encode(),                       # Տեղեկանք в ArmSCII-8, сохранённый как текст
+             b"\xee\xbb\xd5\xbb\xcf\xb3\xdd\xf9"]          # то же в однобайтовой кодировке
     try:
-        head = path.read_bytes()[:400_000]
-    except OSError:
+        if path.suffix.lower() in (".xlsx", ".xlsm"):
+            with zipfile.ZipFile(path) as z:            # текст внутри xlsx сжат — читаем части книги
+                names = [n for n in z.namelist() if n in ("xl/workbook.xml", "xl/sharedStrings.xml")
+                         or n.startswith("xl/worksheets/sheet1")]
+                head = b"".join(z.read(n)[:400_000] for n in names)
+        else:
+            head = path.read_bytes()[:400_000]
+            if b"<Workbook" not in head:
+                return False
+    except (OSError, zipfile.BadZipFile):
         return False
-    if path.suffix.lower() == ".xlsx":
-        return b"AccountStatementReport" in head or "Ժամանակահատված".encode() in head
-    return b"<Workbook" in head and "Տեղեկանք".encode() in head
+    return any(m in head for m in marks)
 
 
 # ============================================================
@@ -183,6 +195,17 @@ def auto_assign(ids: list[int], owner_id: int, log):
             log(f"  {title}: {cur.rowcount}")
 
 
+def reassign(owner_id: int, log=print) -> None:
+    """Повторная авторазноска по всем операциям компании, где что-то не заполнено. Заполненное не меняется."""
+    ids = list(CfData.objects.filter(owner_id=owner_id)
+               .filter(models.Q(cfitem__isnull=True) | models.Q(contract__isnull=True) | models.Q(hint__isnull=True)
+                       | models.Q(hint=""))
+               .values_list("id", flat=True))
+    log(f"Повторная разноска незаполненных операций: {len(ids)}")
+    with transaction.atomic():
+        auto_assign(ids, owner_id, log)
+
+
 # ============================================================
 # Загрузка
 # ============================================================
@@ -268,5 +291,5 @@ def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
 
     no_tr = sum(1 for o in objs if not o.temp_ru)
     log(f"  новых операций: {len(objs)}, уже были: {len(have)}, без перевода: {no_tr}")
-    return {"bs_id": bs.pk, "new": len(objs), "existing": len(have), "warnings": warns,
+    return {"bs_id": bs.pk, "owner_id": owner.id, "new": len(objs), "existing": len(have), "warnings": warns,
             "account": st.account, "period": (st.start, st.finish)}

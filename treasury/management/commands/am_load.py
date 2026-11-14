@@ -11,7 +11,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from utils.bsparsers.am.loader import load_statement, sniff
+from utils.bsparsers.am.loader import load_statement, reassign, sniff
 from utils.bsparsers.am.parser import StatementError
 
 
@@ -41,12 +41,14 @@ class Command(BaseCommand):
             raise CommandError("армянских выписок не найдено")
 
         total_new = errors = 0
+        owners = set()
         for f in files:
             self.stdout.write(f"— {f.name}")
             try:
                 with transaction.atomic():
                     res = load_statement(f, log=self.stdout.write)
                     total_new += res["new"]
+                    owners.add(res["owner_id"])
                     if dry_run:
                         raise DryRun
             except DryRun:
@@ -54,6 +56,10 @@ class Command(BaseCommand):
             except StatementError as exc:
                 errors += 1
                 self.stdout.write(self.style.ERROR(f"  ✗ {exc}"))
+
+        if not dry_run:
+            for owner_id in owners:
+                reassign(owner_id, log=self.stdout.write)
 
         note = " (пробный прогон, ничего не записано)" if dry_run else ""
         self.stdout.write(self.style.SUCCESS(f"Файлов: {len(files)}, новых операций: {total_new}, ошибок: {errors}{note}"))
