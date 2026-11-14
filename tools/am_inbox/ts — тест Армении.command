@@ -30,6 +30,7 @@ echo "------------------------------------------------------------"
 python manage.py am_load "$ST" "$SA"
 echo "------------------------------------------------------------"
 python manage.py dump_views "$TS/tools/am_inbox/views_dump.sql"
+python manage.py gl_probe "$TS/tools/am_inbox/gl_probe.txt"
 echo "------------------------------------------------------------"
 ( sleep 3; open "http://127.0.0.1:$PORT/admin/treasury/bankstatements/" ) &
 echo "Админка: http://127.0.0.1:$PORT/admin/   (остановить — закрыть окно)"
