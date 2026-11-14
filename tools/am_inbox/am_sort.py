@@ -36,7 +36,7 @@ SALES_NAME = "Продажи и возвраты"
 # Код банка = первые три цифры счёта
 BANK_CODES = {
     "103": "ЦБ АРМЕНИИ", "900": "ЦБ АРМЕНИИ",
-    "115": "АРМБИЗНЕСБАНК",
+    "115": "АМИО БАНК",
     "118": "АЙДИ БАНК",
     "151": "АРАРАТБАНК",
     "157": "АМЕРИАБАНК",
@@ -65,7 +65,7 @@ BANK_NAMES = [
     (re.compile(r"Արարատ|Ararat", re.I), "АРАРАТБАНК"),
     (re.compile(r"Յունի|Unibank", re.I), "ЮНИБАНК"),
     (re.compile(r"Հայէկոնոմ|Armeconom", re.I), "АРМЭКОНОМБАНК"),
-    (re.compile(r"Հայբիզնես|Armbusiness", re.I), "АРМБИЗНЕСБАНК"),
+    (re.compile(r"Ամիո|Amio|Հայբիզնես|Armbusiness", re.I), "АМИО БАНК"),
 ]
 
 CURRENCIES = {"AMD", "USD", "EUR", "RUB", "GBP", "CHF", "CNY", "GEL", "AED", "KZT"}
@@ -74,6 +74,27 @@ CURRENCIES = {"AMD", "USD", "EUR", "RUB", "GBP", "CHF", "CNY", "GEL", "AED", "KZ
 # ============================================================
 # Общее
 # ============================================================
+
+# ArmSCII-8: старая 8-битная армянская кодировка. В файле она видна как латиница с умляутами.
+_ARMSCII = {0xA2: "և", 0xA3: "։", 0xA4: ")", 0xA5: "(", 0xA6: "»", 0xA7: "«",
+            0xA8: "—", 0xA9: ".", 0xAA: "՝", 0xAB: ",", 0xAC: "-", 0xAD: "֊",
+            0xAE: "…", 0xAF: "՜", 0xB0: "՛", 0xB1: "՞", 0xFE: "՚"}
+for _i in range(38):                                     # Ա/ա … Ֆ/ֆ парами с 0xB2
+    _ARMSCII[0xB2 + 2 * _i] = chr(0x0531 + _i)
+    _ARMSCII[0xB3 + 2 * _i] = chr(0x0561 + _i)
+_ARMSCII_TABLE = {k: v for k, v in _ARMSCII.items()}
+
+
+def fix_armscii(text):
+    """Строку в ArmSCII-8, прочитанную как Latin-1, вернуть армянскими буквами. Нормальный текст — как есть."""
+    if not isinstance(text, str) or not text:
+        return text
+    if any("Ա" <= ch <= "և" for ch in text):  # уже армянский юникод
+        return text
+    if not any("¢" <= ch <= "þ" for ch in text):
+        return text
+    return "".join(_ARMSCII_TABLE.get(ord(ch), ch) for ch in text)
+
 
 def nfc(text: str) -> str:
     """macOS хранит имена в NFD — сравниваем в NFC."""
@@ -204,10 +225,16 @@ class Xlsx:
 
 def spreadsheetml_rows(path: Path, limit: int = 40) -> list[list[str]]:
     """Выписка «Банк-клиент»: XML Spreadsheet 2003 с расширением .xls."""
-    text = path.read_bytes()[:400_000].decode("utf-8", errors="replace")
+    raw = path.read_bytes()[:400_000]
+    m = re.search(rb'encoding="([^"]+)"', raw[:200])
+    enc = m.group(1).decode() if m else "utf-8"
+    try:
+        text = raw.decode(enc, errors="replace")
+    except LookupError:
+        text = raw.decode("utf-8", errors="replace")
     out = []
     for row in re.findall(r"<Row\b.*?</Row>", text, re.S)[:limit]:
-        cells = [re.sub(r"<[^>]+>", "", c).replace("&quot;", '"').replace("&amp;", "&").strip()
+        cells = [fix_armscii(re.sub(r"<[^>]+>", "", c).replace("&quot;", '"').replace("&amp;", "&").strip())
                  for c in re.findall(r"<Data\b[^>]*>(.*?)</Data>", row, re.S)]
         out.append(cells)
     return out
@@ -250,13 +277,14 @@ def read_ameria(path: Path) -> Info | None:
                 d1=parse_date(start[0]), d2=parse_date(end[0]))
 
 
-def read_bank_client(path: Path) -> Info | None:
-    """Տեղեկանք из «Банк-клиент» (АйДи, Ардшин, ВТБ-Армения и др.)."""
-    head = path.read_bytes()[:2000]
-    if b"<?xml" not in head and b"<Workbook" not in head:
-        return None
-    rows = spreadsheetml_rows(path)
-    flat = [c for r in rows[:15] for c in r]
+def read_bank_client(path: Path, rows: list[list[str]] | None = None) -> Info | None:
+    """Տեղեկանք из «Банк-клиент» (АйДи, Ардшин, ВТБ-Армения и др.): .xls (XML) или пересохранённый .xlsx."""
+    if rows is None:
+        head = path.read_bytes()[:2000]
+        if b"<?xml" not in head and b"<Workbook" not in head:
+            return None
+        rows = spreadsheetml_rows(path)
+    flat = [c for r in rows[:15] for c in r if c]
     if not any("Տեղեկանք" in c for c in flat):
         return None
     info = Info("statement")
@@ -305,7 +333,14 @@ def identify(path: Path, kind: str) -> Info | None:
     if kind == "sales":
         return read_sales(path) if ext in (".xlsx", ".xlsm") else None
     if ext in (".xlsx", ".xlsm"):
-        return read_ameria(path)
+        info = read_ameria(path)
+        if info is None:                                   # «Банк-клиент», пересохранённый в xlsx
+            try:
+                rows = [[fix_armscii(str(v)) if v is not None else "" for v in r] for r in Xlsx(path).rows(limit=15)]
+            except (zipfile.BadZipFile, KeyError, ET.ParseError):
+                return None
+            info = read_bank_client(path, rows)
+        return info
     if ext in (".xls", ".xml"):
         return read_bank_client(path)
     return None
@@ -329,7 +364,11 @@ def target_for(root: Path, info: Info, ext: str) -> Path:
 # ============================================================
 
 def is_service(rel: Path) -> bool:
-    return any(p.startswith("_") or p.startswith(".") for p in rel.parts[:-1])
+    """Служебные папки не разбираем. «_НЕ РАЗОБРАНО» — проверяем заново при каждом запуске."""
+    parts = rel.parts[:-1]
+    if parts and parts[0] == UNKNOWN and len(parts) == 1:
+        return False
+    return any(p.startswith("_") or p.startswith(".") for p in parts)
 
 
 def is_junk(path: Path) -> bool:
@@ -388,6 +427,9 @@ class Sorter:
                 continue
             placed.add(digest)
             if info is None or info.d1 is None:
+                if path.parent == self.root / UNKNOWN:     # уже там — оставить
+                    self.stats["не разобрано"] += 1
+                    continue
                 dst = free_name(self.root / UNKNOWN / path.name)
                 self._move(path, dst, "не разобрано")
                 self.stats["не разобрано"] += 1

@@ -3,7 +3,7 @@
 import hashlib
 import re
 
-NUM = re.compile(r"\d+(?:[.,]\d+)*")
+NUM = re.compile(r"[A-Za-z0-9]*\d[A-Za-z0-9]*(?:[.,]\d+)*")   # числа и коды с цифрами (5443XXXX0036, 8BY4)
 
 
 def template(text: str) -> tuple[str, list[str]]:

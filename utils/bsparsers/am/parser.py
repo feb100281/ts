@@ -21,12 +21,33 @@ from pathlib import Path
 ZERO = Decimal("0.00")
 
 BANK_CODES = {
-    "103": "ЦБ АРМЕНИИ", "900": "ЦБ АРМЕНИИ", "115": "АРМБИЗНЕСБАНК", "118": "АЙДИ БАНК",
+    "103": "ЦБ АРМЕНИИ", "900": "ЦБ АРМЕНИИ", "115": "АМИО БАНК", "118": "АЙДИ БАНК",
     "151": "АРАРАТБАНК", "157": "АМЕРИАБАНК", "160": "ВТБ-АРМЕНИЯ", "161": "ВТБ-АРМЕНИЯ",
     "163": "АРМЭКОНОМБАНК", "166": "ЭВОКАБАНК", "193": "КОНВЕРС БАНК", "205": "ИНЕКОБАНК",
     "214": "БИБЛОС БАНК", "217": "АРДШИНБАНК", "218": "АРДШИНБАНК", "247": "АРДШИНБАНК",
     "248": "АРДШИНБАНК", "220": "АКБА БАНК", "223": "АРЦАХБАНК", "241": "ЮНИБАНК",
 }
+
+
+# ArmSCII-8: старая 8-битная армянская кодировка. В файле она видна как латиница с умляутами.
+_ARMSCII = {0xA2: "և", 0xA3: "։", 0xA4: ")", 0xA5: "(", 0xA6: "»", 0xA7: "«",
+            0xA8: "—", 0xA9: ".", 0xAA: "՝", 0xAB: ",", 0xAC: "-", 0xAD: "֊",
+            0xAE: "…", 0xAF: "՜", 0xB0: "՛", 0xB1: "՞", 0xFE: "՚"}
+for _i in range(38):                                     # Ա/ա … Ֆ/ֆ парами с 0xB2
+    _ARMSCII[0xB2 + 2 * _i] = chr(0x0531 + _i)
+    _ARMSCII[0xB3 + 2 * _i] = chr(0x0561 + _i)
+_ARMSCII_TABLE = {k: v for k, v in _ARMSCII.items()}
+
+
+def fix_armscii(text):
+    """Строку в ArmSCII-8, прочитанную как Latin-1, вернуть армянскими буквами. Нормальный текст — как есть."""
+    if not isinstance(text, str) or not text:
+        return text
+    if any("Ա" <= ch <= "և" for ch in text):  # уже армянский юникод
+        return text
+    if not any("¢" <= ch <= "þ" for ch in text):
+        return text
+    return "".join(_ARMSCII_TABLE.get(ord(ch), ch) for ch in text)
 
 
 class StatementError(ValueError):
@@ -217,15 +238,32 @@ def _spreadsheetml(path: Path) -> list[list[str]]:
                     cells.append("")
                     pos += 1
             d = c.find(f"{ns}Data")
-            cells.append(clean("".join(d.itertext())) if d is not None else "")
+            cells.append(clean(fix_armscii("".join(d.itertext()))) if d is not None else "")
             pos += 1
         rows.append(cells)
         el.clear()
     return rows
 
 
-def parse_bank_client(path: Path) -> Statement:
-    rows = _spreadsheetml(path)
+def _xlsx_rows(path: Path) -> list[list[str]]:
+    """«Банк-клиент», пересохранённый в .xlsx (бывает с лишней колонкой ручной разметки)."""
+    import openpyxl
+
+    def cell(v):
+        if v is None:
+            return ""
+        if isinstance(v, float) and v.is_integer():
+            v = int(v)
+        return clean(fix_armscii(str(v)))
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    rows = [[cell(v) for v in r] for r in wb.worksheets[0].iter_rows(values_only=True)]
+    wb.close()
+    return rows
+
+
+def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statement:
+    rows = rows if rows is not None else _spreadsheetml(path)
     header_at = next((i for i, r in enumerate(rows) if "Փաստաթղթի համար" in r), None)
     if header_at is None:
         raise StatementError("не найдена строка заголовков операций")
@@ -299,7 +337,11 @@ def parse_statement(path: str | Path) -> Statement:
     path = Path(path)
     head = path.read_bytes()[:2000]
     if path.suffix.lower() in (".xlsx", ".xlsm"):
-        st = parse_ameria(path)
+        rows = _xlsx_rows(path)
+        if any("Տեղեկանք" in c for r in rows[:5] for c in r):
+            st = parse_bank_client(path, rows)
+        else:
+            st = parse_ameria(path)
     elif b"<?xml" in head or b"<Workbook" in head:
         st = parse_bank_client(path)
     else:
