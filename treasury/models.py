@@ -120,6 +120,8 @@ class CfData(models.Model):
     hint = models.CharField("Разметка", max_length=100, null=True, blank=True, db_index=True,
                             help_text="Ручная разметка из файла выписки или по похожим операциям")
     hint_auto = models.BooleanField("Разметка автоматически", default=False)
+    cp_name_ru = models.CharField("Контрагент по-русски", max_length=250, null=True, blank=True,
+                                  help_text="Из справочника «Названия контрагентов»")
     
     
     def save(self, *args, **kwargs):
@@ -349,3 +351,20 @@ class HintRule(models.Model):
 
     def __str__(self):
         return self.hint
+
+
+
+class CpName(models.Model):
+    """Название контрагента из выписки → по-русски. Заполняется автоматически, правится вручную."""
+    source = models.CharField("В выписке", max_length=250, unique=True)
+    name_ru = models.CharField("По-русски", max_length=250, blank=True, default="")
+    is_checked = models.BooleanField("Проверено", default=False)
+    hits = models.PositiveIntegerField("Операций", default=0)
+
+    class Meta:
+        verbose_name = "Название контрагента"
+        verbose_name_plural = "Названия контрагентов"
+        ordering = ("-hits",)
+
+    def __str__(self):
+        return self.name_ru or self.source

@@ -23,7 +23,7 @@ from django.contrib.admin import SimpleListFilter
 from django import forms
 from django.db import models
 from contracts.models import Contracts
-from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule
+from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule, CpName
 from utils.bsparsers.bsupdater import update_cf_data
 from utils.bsparsers.am.loader import load_statement, sniff
 from decimal import Decimal, InvalidOperation
@@ -973,6 +973,7 @@ class CfDataAdmin(admin.ModelAdmin):
         "temp_ru",
         "hint",
         "cp_bs_name",
+        "cp_name_ru",
         "tax_id",
         "payer_account",
         "reciver_account",
@@ -1538,7 +1539,15 @@ class CfDataAdmin(admin.ModelAdmin):
                 inn_tag
             )
 
-        # 3) только имя из выписки (не матчится на контрагента)
+        # 3) имя из выписки; для выписок вне РФ — по-русски, оригинал в подсказке
+        if obj.cp_name_ru:
+            return format_html(
+                '<div style="line-height:1.15;" title="{}"><div style="font-weight:900;">{}</div>'
+                '<span style="display:inline-flex;padding:2px 8px;border-radius:999px;'
+                'background:rgba(148,163,184,.16);border:1px solid rgba(148,163,184,.30);'
+                'color:#475569;font-weight:800;font-size:11px;margin-top:4px;">из выписки</span></div>',
+                obj.cp_bs_name or "", obj.cp_name_ru,
+            )
         if obj.cp_bs_name:
             bs_tag = format_html(
                 '<span style="display:inline-flex;align-items:center;gap:6px;'
@@ -2006,3 +2015,14 @@ class HintRuleAdmin(admin.ModelAdmin):
     @admin.display(description="Операций")
     def rows_count(self, obj):
         return CfData.objects.filter(hint=obj.hint).count()
+
+
+
+@admin.register(CpName)
+class CpNameAdmin(admin.ModelAdmin):
+    list_display = ("source", "name_ru", "is_checked", "hits")
+    list_editable = ("name_ru", "is_checked")
+    list_filter = ("is_checked",)
+    search_fields = ("source", "name_ru")
+    list_per_page = 50
+    formfield_overrides = {models.CharField: {"widget": forms.TextInput(attrs={"style": "width: 100%; min-width: 320px"})}}

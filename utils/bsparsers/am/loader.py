@@ -19,10 +19,10 @@ from django.db import models
 from django.db.models import F
 
 from corporate.models import Bank, BankAccount, Owners
-from treasury.models import BankStatements, CfData, CounterpartyAccount, HintRule, TextTranslation
+from treasury.models import BankStatements, CfData, CounterpartyAccount, CpName, HintRule, TextTranslation
 
 from .parser import Statement, StatementError, parse_statement
-from .translate import fill, key_of, template
+from .translate import cp_name_ru, fill, key_of, template
 
 DOC_TYPE = "Банковская операция"
 SEED = Path(__file__).with_name("translations_hy_ru.json")
@@ -97,6 +97,16 @@ def seed() -> dict[str, str]:
         import json
         _seed = json.loads(SEED.read_text(encoding="utf-8")) if SEED.exists() else {}
     return _seed
+
+
+def cp_names(names: list[str]) -> dict[str, str]:
+    """Русские названия контрагентов по справочнику; новые добавляются с автоматическим переводом."""
+    uniq = {n for n in names if n}
+    have = dict(CpName.objects.filter(source__in=uniq).values_list("source", "name_ru"))
+    new = [CpName(source=n, name_ru=cp_name_ru(n)) for n in uniq if n not in have]
+    CpName.objects.bulk_create(new, ignore_conflicts=True)
+    have.update({x.source: x.name_ru for x in new})
+    return have
 
 
 def translations(texts: list[str]) -> dict[str, str | None]:
@@ -197,14 +207,22 @@ def auto_assign(ids: list[int], owner_id: int, log):
 
 def retranslate(log=print) -> None:
     """Перевод всех операций вне РФ по текущему словарю; счётчики словаря — заново; неиспользуемые непроверенные шаблоны — удалить."""
-    rows = list(CfData.objects.filter(temp__isnull=False).exclude(owner__country="RU").values_list("id", "temp", "temp_ru"))
+    rows = list(CfData.objects.exclude(owner__country="RU").filter(owner__isnull=False)
+                .values_list("id", "temp", "temp_ru", "cp_bs_name", "cp_name_ru"))
     with transaction.atomic():
         TextTranslation.objects.update(hits=0)
-        tr = translations([t for _, t, _ in rows])
-        changed = [CfData(id=i, temp_ru=tr.get(t)) for i, t, old in rows if tr.get(t) != old]
-        CfData.objects.bulk_update(changed, ["temp_ru"], batch_size=1000)
+        tr = translations([t for _, t, _, _, _ in rows if t])
+        names = cp_names([n for _, _, _, n, _ in rows])
+        counts = Counter(n for _, _, _, n, _ in rows if n)
+        for src, n in counts.items():
+            CpName.objects.filter(source=src).update(hits=n)
+        CpName.objects.exclude(source__in=counts.keys()).update(hits=0)
+        changed = [CfData(id=i, temp_ru=tr.get(t) if t else None, cp_name_ru=names.get(n) or None)
+                   for i, t, old_t, n, old_n in rows
+                   if (tr.get(t) if t else None) != old_t or (names.get(n) or None) != old_n]
+        CfData.objects.bulk_update(changed, ["temp_ru", "cp_name_ru"], batch_size=1000)
         dropped, _ = TextTranslation.objects.filter(hits=0, is_checked=False).delete()
-    log(f"Переводы: операций {len(rows)}, обновлено {len(changed)}, лишних шаблонов удалено {dropped}")
+    log(f"Переводы и названия: операций {len(rows)}, обновлено {len(changed)}, лишних шаблонов удалено {dropped}")
 
 
 def reassign(owner_id: int, log=print) -> None:
@@ -272,6 +290,7 @@ def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
         cp_map = dict(CounterpartyAccount.objects.filter(
             account__in={r.cp_account for r in new_rows}).values_list("account", "cp_id"))
         tr = translations([r.purpose for r in new_rows])
+        names = cp_names([r.cp_name for r in new_rows])
         used = set(CfData.objects.filter(bs=bs).values_list("doc_numner", "date", "dt", "cr"))
 
         objs = []
@@ -291,7 +310,7 @@ def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
                 payer_account=r.cp_account if incoming else st.account,
                 reciver_account=st.account if incoming else r.cp_account,
                 intercompany=r.cp_account in ours and r.cp_account != st.account, cp_id=cp_map.get(r.cp_account), row_key=r.key,
-                hint=r.hint or None,
+                hint=r.hint or None, cp_name_ru=names.get(r.cp_name) or None,
             ))
         HintRule.objects.bulk_create([HintRule(hint=h) for h in {o.hint for o in objs if o.hint}],
                                      ignore_conflicts=True)            # новые метки — в справочник
