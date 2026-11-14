@@ -124,9 +124,13 @@ class Command(BaseCommand):
         rates = Rates(currencies, start, finish)
 
         ops = (CfData.objects.filter(date__gte=start, date__lte=finish)
-               .select_related("ba", "cfitem", "owner"))
+               .select_related("ba__corporate", "cfitem", "contract", "cp_final"))
         rows = []
-        for t in ops.iterator(chunk_size=5000):
+        total = ops.count()
+        self.stdout.write(f"Операций за период: {total}")
+        for n, t in enumerate(ops.iterator(chunk_size=5000), 1):
+            if n % 2000 == 0:
+                self.stdout.write(f"  обработано {n} из {total}")
             if not t.ba:
                 continue
             owner = t.ba.corporate
@@ -194,12 +198,16 @@ class Command(BaseCommand):
         ws.cell(row=1, column=1, value="Остатки на счетах Армении на конец месяца (по выпискам)").font = Font(bold=True, size=12)
         sheet_header(ws, 3, ["Банк", "Счёт", "Валюта"] + [mlabel(m) for m in months], [22, 22, 8] + [16] * len(months))
         row = 4
+        stmts = defaultdict(list)
+        for ba_id, fin, eb in (BankStatements.objects.filter(ba__corporate_id__in=am_ids)
+                               .order_by("finish").values_list("ba_id", "finish", "eb")):
+            stmts[ba_id].append((fin, eb))
         for ba in BankAccount.objects.filter(corporate_id__in=am_ids).select_related("bank").order_by("bank__name", "currency", "account"):
             vals = []
             for m in months:
-                st = (BankStatements.objects.filter(ba=ba, finish__lt=date(m.year + (m.month == 12), m.month % 12 + 1, 1))
-                      .order_by("-finish").first())
-                vals.append(st.eb if st else None)
+                nxt = date(m.year + (m.month == 12), m.month % 12 + 1, 1)
+                last = [eb for fin, eb in stmts[ba.id] if fin < nxt]
+                vals.append(last[-1] if last else None)
             put(ws, row, [ba.bank.name if ba.bank else "", ba.account, ba.currency] + vals, fmt="#,##0.00")
             row += 1
         ws.freeze_panes = "D4"
