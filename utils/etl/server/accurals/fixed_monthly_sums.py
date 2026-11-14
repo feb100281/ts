@@ -279,7 +279,7 @@ def fixed_monthly_sums(conn, **args):
                         pd.to_datetime(me[i]).date(),
                         int(args["contract_id"]),
                         int(args["condition_id"]),
-                        1,
+                        int(args.get("company_id") or 1),
                         args["acc_st_id"],
                         int(round(dt_st[i])),
                         int(round(cr_st[i])),

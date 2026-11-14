@@ -57,7 +57,7 @@ def cash_based_distibution(conn,**args):
     args["vat_mode"],    
     args["subconto_bs_id"],
     args["subconto_pl_id"],
-    1,   
+    int(args.get("company_id") or 1),
     args["condition_id"],    
     args["fn_id"],
     args["date_start"],    

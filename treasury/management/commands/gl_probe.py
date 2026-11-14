@@ -52,6 +52,19 @@ QUERIES = [
         SELECT c.relname, c.relkind, pg_get_userbyid(c.relowner) AS owner
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'gl' AND c.relkind IN ('r', 'v', 'm') ORDER BY 1"""),
+    ("Владелец витрин выгрузки", """
+        SELECT c.relname, pg_get_userbyid(c.relowner) FROM pg_class c
+        WHERE c.relname IN ('cf_to_csv', 'pl_for_csv', 'accurals_args', 'ba_to_gl')"""),
+    ("gl.ba_to_gl по компаниям", """
+        SELECT company_id, chapter, count(*), sum(dt), sum(cr) FROM gl.ba_to_gl GROUP BY 1, 2 ORDER BY 1, 2"""),
+    ("gl.accurals_args: компания договора", """
+        SELECT * FROM (SELECT to_jsonb(a) ->> 'company_id' AS company_id, count(*) FROM gl.accurals_args a GROUP BY 1) x"""),
+    ("cf_to_csv / pl_for_csv: колонка компании", """
+        SELECT 'cf' AS src, to_jsonb(t) ->> 'company' AS company, count(*), sum(amount)
+        FROM (SELECT * FROM cf_to_csv) t GROUP BY 1, 2
+        UNION ALL
+        SELECT 'pl', to_jsonb(t) ->> 'company', count(*), sum(amount)
+        FROM (SELECT * FROM pl_for_csv) t GROUP BY 1, 2"""),
     ("Текущий пользователь", "SELECT current_user, current_database()"),
 ]
 
@@ -74,7 +87,8 @@ class Command(BaseCommand):
                         lines.append(" | ".join("" if v is None else str(v) for v in row))
             except Exception as exc:
                 lines.append(f"ошибка: {exc}")
-                connection.rollback() if not connection.get_autocommit() else None
+                if not connection.get_autocommit():
+                    connection.rollback()
             lines.append("")
         Path(out).write_text("\n".join(lines), encoding="utf-8")
         self.stdout.write(f"Диагностика → {out}")

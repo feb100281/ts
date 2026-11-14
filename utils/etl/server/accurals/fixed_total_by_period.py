@@ -200,7 +200,7 @@ def annual_fixed(conn,**args):
         "date_from":me,
         "contract_id":np.full(n,args['contract_id'],dtype=int),
         "condition_id":np.full(n,args['condition_id'],dtype=int),
-        "company_id":np.full(n, 1,dtype=int),
+        "company_id":np.full(n, int(args.get("company_id") or 1), dtype=int),
         "acc_st":np.full(n,args['acc_st_id'],dtype=int),
         "dt_st":dt_st.round(0),
         "cr_st":cr_st.round(0),

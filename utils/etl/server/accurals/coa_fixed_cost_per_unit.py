@@ -14,7 +14,7 @@ def insert_accurals(conn, **args):
     pl_subconto = args.get('subconto_pl_id', None)
     bs_acc = args.get('acc_bs_id', None)
     bs_subconto = args.get('subconto_bs_id', None)
-    company_id = 1
+    company_id = int(args.get("company_id") or 1)
     
     sql_params = (
         cost_per_unit,
