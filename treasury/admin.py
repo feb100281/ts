@@ -21,6 +21,7 @@ from datetime import datetime
 from django.db.models import Q
 from django.contrib.admin import SimpleListFilter
 from django import forms
+from django.db import models
 from contracts.models import Contracts
 from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule
 from utils.bsparsers.bsupdater import update_cf_data
@@ -1987,6 +1988,7 @@ class CounterpartyAccountAdmin(admin.ModelAdmin):
 @admin.register(TextTranslation)
 class TextTranslationAdmin(admin.ModelAdmin):
     list_display = ("source", "translation", "is_checked", "hits")
+    formfield_overrides = {models.TextField: {"widget": forms.TextInput(attrs={"style": "width: 100%; min-width: 420px"})}}
     list_editable = ("translation", "is_checked")
     list_filter = ("is_checked", ("translation", admin.EmptyFieldListFilter))
     search_fields = ("source", "translation")

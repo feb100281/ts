@@ -195,6 +195,18 @@ def auto_assign(ids: list[int], owner_id: int, log):
             log(f"  {title}: {cur.rowcount}")
 
 
+def retranslate(log=print) -> None:
+    """Перевод всех операций вне РФ по текущему словарю; счётчики словаря — заново; неиспользуемые непроверенные шаблоны — удалить."""
+    rows = list(CfData.objects.filter(temp__isnull=False).exclude(owner__country="RU").values_list("id", "temp", "temp_ru"))
+    with transaction.atomic():
+        TextTranslation.objects.update(hits=0)
+        tr = translations([t for _, t, _ in rows])
+        changed = [CfData(id=i, temp_ru=tr.get(t)) for i, t, old in rows if tr.get(t) != old]
+        CfData.objects.bulk_update(changed, ["temp_ru"], batch_size=1000)
+        dropped, _ = TextTranslation.objects.filter(hits=0, is_checked=False).delete()
+    log(f"Переводы: операций {len(rows)}, обновлено {len(changed)}, лишних шаблонов удалено {dropped}")
+
+
 def reassign(owner_id: int, log=print) -> None:
     """Повторная авторазноска по всем операциям компании, где что-то не заполнено. Заполненное не меняется."""
     ids = list(CfData.objects.filter(owner_id=owner_id)

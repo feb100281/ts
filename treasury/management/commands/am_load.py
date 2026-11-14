@@ -11,7 +11,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from utils.bsparsers.am.loader import load_statement, reassign, sniff
+from utils.bsparsers.am.loader import load_statement, reassign, retranslate, sniff
 from utils.bsparsers.am.parser import StatementError
 
 
@@ -60,6 +60,7 @@ class Command(BaseCommand):
         if not dry_run:
             for owner_id in owners:
                 reassign(owner_id, log=self.stdout.write)
+            retranslate(log=self.stdout.write)
 
         note = " (пробный прогон, ничего не записано)" if dry_run else ""
         self.stdout.write(self.style.SUCCESS(f"Файлов: {len(files)}, новых операций: {total_new}, ошибок: {errors}{note}"))
