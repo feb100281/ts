@@ -1994,10 +1994,45 @@ class CounterpartyAccountAdmin(admin.ModelAdmin):
     autocomplete_fields = ("cp",)
 
 
+
+
+AM_CSS = {"all": ("css/am_dicts.css",)}
+
+
+def am_source(text: str, url: str = ""):
+    """Оригинал шаблона: # и @ — цветными метками."""
+    parts = []
+    for ch in re.split(r"([#@])", text or ""):
+        if ch == "#":
+            parts.append(format_html('<span class="am-ph" title="число или код">#</span>'))
+        elif ch == "@":
+            parts.append(format_html('<span class="am-ph am-month" title="месяц">@</span>'))
+        elif ch:
+            parts.append(format_html("{}", ch))
+    body = format_html_join("", "{}", ((p,) for p in parts))
+    return format_html('<a class="am-src" href="{}">{}</a>', url, body) if url else format_html('<span class="am-src">{}</span>', body)
+
+
+def am_hits(n: int):
+    return format_html('<span class="am-hits{}">{}</span>', " am-hot" if n >= 100 else "", f"{n:,}".replace(",", "\u202f"))
+
+
 @admin.register(TextTranslation)
 class TextTranslationAdmin(admin.ModelAdmin):
-    list_display = ("source", "translation", "is_checked", "hits")
-    formfield_overrides = {models.TextField: {"widget": forms.TextInput(attrs={"style": "width: 100%; min-width: 420px"})}}
+    list_display = ("source_html", "translation", "is_checked", "hits_badge")
+    list_display_links = None
+    formfield_overrides = {models.TextField: {"widget": forms.TextInput()}}
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="Оригинал", ordering="source")
+    def source_html(self, obj):
+        return am_source(obj.source, reverse("admin:treasury_texttranslation_change", args=[obj.pk]))
+
+    @admin.display(description="Строк", ordering="hits")
+    def hits_badge(self, obj):
+        return am_hits(obj.hits)
     list_editable = ("translation", "is_checked")
     list_filter = ("is_checked", ("translation", admin.EmptyFieldListFilter))
     search_fields = ("source", "translation")
@@ -2012,17 +2047,32 @@ class HintRuleAdmin(admin.ModelAdmin):
     list_editable = ("cfitem_dt", "cfitem_cr", "comment")
     search_fields = ("hint", "comment")
 
+    class Media:
+        css = AM_CSS
+
     @admin.display(description="Операций")
     def rows_count(self, obj):
-        return CfData.objects.filter(hint=obj.hint).count()
+        return am_hits(CfData.objects.filter(hint=obj.hint).count())
 
 
 
 @admin.register(CpName)
 class CpNameAdmin(admin.ModelAdmin):
-    list_display = ("source", "name_ru", "is_checked", "hits")
+    list_display = ("source_html", "name_ru", "is_checked", "hits_badge")
+    list_display_links = None
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="В выписке", ordering="source")
+    def source_html(self, obj):
+        return am_source(obj.source, reverse("admin:treasury_cpname_change", args=[obj.pk]))
+
+    @admin.display(description="Операций", ordering="hits")
+    def hits_badge(self, obj):
+        return am_hits(obj.hits)
     list_editable = ("name_ru", "is_checked")
     list_filter = ("is_checked",)
     search_fields = ("source", "name_ru")
     list_per_page = 50
-    formfield_overrides = {models.CharField: {"widget": forms.TextInput(attrs={"style": "width: 100%; min-width: 320px"})}}
+    formfield_overrides = {models.CharField: {"widget": forms.TextInput()}}

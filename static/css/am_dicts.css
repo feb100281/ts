@@ -1,0 +1,129 @@
+/* Справочники Армении: словарь переводов, названия контрагентов, разметка */
+
+body.model-texttranslation #result_list,
+body.model-cpname #result_list,
+body.model-hintrule #result_list {
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+}
+
+body.model-texttranslation #result_list thead th,
+body.model-cpname #result_list thead th,
+body.model-hintrule #result_list thead th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+body.model-texttranslation #result_list thead th a,
+body.model-cpname #result_list thead th a,
+body.model-hintrule #result_list thead th a { color: inherit; }
+
+body.model-texttranslation #result_list td,
+body.model-cpname #result_list td,
+body.model-hintrule #result_list td {
+  padding: 10px 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+}
+body.model-texttranslation #result_list tr:hover td,
+body.model-cpname #result_list tr:hover td,
+body.model-hintrule #result_list tr:hover td { background: #f8fafc; }
+
+/* Оригинал */
+.am-src {
+  display: block;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.45;
+  text-decoration: none !important;
+}
+.am-src:hover { color: #0f172a; }
+.am-ph {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.am-ph.am-month { background: #fef3c7; color: #b45309; }
+
+/* Поле перевода */
+body.model-texttranslation #result_list td.field-translation input,
+body.model-cpname #result_list td.field-name_ru input,
+body.model-hintrule #result_list td.field-comment input {
+  width: 100%;
+  min-width: 360px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 14px;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+body.model-texttranslation #result_list td.field-translation input:focus,
+body.model-cpname #result_list td.field-name_ru input:focus,
+body.model-hintrule #result_list td.field-comment input:focus {
+  outline: none;
+  background: #fff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
+}
+body.model-hintrule #result_list td select {
+  min-width: 260px;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+/* Галочка «проверен» */
+body.model-texttranslation #result_list td.field-is_checked,
+body.model-cpname #result_list td.field-is_checked,
+body.model-texttranslation #result_list th.column-is_checked,
+body.model-cpname #result_list th.column-is_checked { width: 90px; text-align: center; }
+body.model-texttranslation #result_list td.field-is_checked input,
+body.model-cpname #result_list td.field-is_checked input {
+  width: 18px; height: 18px; accent-color: #16a34a; cursor: pointer;
+}
+
+/* Счётчик строк */
+.am-hits {
+  display: inline-block;
+  min-width: 44px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.am-hits.am-hot { background: #dcfce7; color: #15803d; }
+body.model-texttranslation #result_list td.field-hits_badge,
+body.model-cpname #result_list td.field-hits_badge,
+body.model-hintrule #result_list td.field-rows_count { width: 90px; text-align: right; }
+
+/* Чекбоксы выбора строк — тише */
+body.model-texttranslation #result_list td.action-checkbox,
+body.model-cpname #result_list td.action-checkbox,
+body.model-hintrule #result_list td.action-checkbox { width: 36px; }

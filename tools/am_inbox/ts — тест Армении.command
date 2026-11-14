@@ -28,6 +28,8 @@ python manage.py migrate || { read -n 1 -s -r -p "Миграции не прош
 echo "------------------------------------------------------------"
 python manage.py am_load "$ST"
 echo "------------------------------------------------------------"
+python manage.py dump_views "$TS/tools/am_inbox/views_dump.sql"
+echo "------------------------------------------------------------"
 ( sleep 3; open "http://127.0.0.1:$PORT/admin/treasury/bankstatements/" ) &
 echo "Админка: http://127.0.0.1:$PORT/admin/   (остановить — закрыть окно)"
 python manage.py runserver $PORT
