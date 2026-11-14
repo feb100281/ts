@@ -90,6 +90,14 @@ QUERIES = [
     ("Контракт 109 и счета договора", """
         SELECT c.id, c.title_id, c.cp_id, c.owner_id, c.bs_id, c.st_id, c.pl_id, c.subconto_bs_id, c.subconto_pl_id
         FROM contracts_contracts c WHERE c.id IN (109, 122)"""),
+    ("Розница в книге по месяцам", """
+        SELECT date_trunc('month', f.date_from)::date AS m, f.company_id, f.chapter, a.code, sum(f.dt) / 100.0 AS dt,
+               sum(f.cr) / 100.0 AS cr, count(*)
+        FROM gl.fact f JOIN corporate_coa a ON a.id = f.acc_id
+        WHERE f.chapter IN ('PL_RETAIL', 'BS_RETAIL') GROUP BY 1, 2, 3, 4 ORDER BY 1, 3, 4"""),
+    ("Розница в pl_for_csv по компаниям", """
+        SELECT to_jsonb(t) ->> 'company' AS company, t.cost_item, count(*), sum(t.amount)
+        FROM pl_for_csv t WHERE t.cost_item LIKE '5_0190%%' GROUP BY 1, 2"""),
     ("Текущий пользователь", "SELECT current_user, current_database()"),
 ]
 

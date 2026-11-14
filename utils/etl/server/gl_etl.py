@@ -58,6 +58,21 @@ def update_gl_with_ba(conn):
     
 
 
+def update_gl_with_retail(conn):
+    """Розничные продажи зарубежных компаний."""
+    q = """
+    INSERT INTO gl.fact(
+    id, pid, date_from, acc_id, contract_id, dt, cr, description, subconto_id, company_id, chapter)
+    SELECT
+    id, pid, date_from, acc_id, contract_id, dt, cr, description, subconto_id, company_id, chapter
+    FROM gl.am_sales_to_gl
+    """
+    with conn.cursor() as cur:
+        cur.execute(q)
+    conn.commit()
+    return 'retail done'
+
+
 def main():
 
     conn = connect_db()
@@ -75,6 +90,8 @@ def main():
     update_gl_with_wb(conn)
     
     update_gl_with_ba(conn)
+
+    update_gl_with_retail(conn)
     
     engine.main(conn)
     

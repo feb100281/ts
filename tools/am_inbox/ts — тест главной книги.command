@@ -19,15 +19,11 @@ DB=$(python manage.py shell -c "from django.db import connection; print(connecti
 
 python manage.py migrate || { read -n 1 -s -r -p "Миграции не прошли — пришлите вывод выше."; exit 1; }
 echo "------------------------------------------------------------"
-echo "1/3 Расчёт без армянских счетов (контроль)"
-python "$D/gl_test.py" --ru-only 2>&1 | tee "$D/gl_run_1.log"
-python manage.py gl_probe "$D/gl_probe_1.txt"
-echo "------------------------------------------------------------"
-echo "2/3 Балансовые счета для армянских счетов"
+echo "1/2 Счета и статьи для Армении"
 python manage.py am_coa 2>&1 | tee "$D/gl_coa.log"
 echo "------------------------------------------------------------"
-echo "3/3 Расчёт с Арменией"
-python "$D/gl_test.py" 2>&1 | tee "$D/gl_run_2.log"
+echo "2/2 Расчёт главной книги"
+python "$D/gl_test.py" 2>&1 | grep -v "read_sql\|депозиты разнесены\|^good$\|^OK$\|^ok$\|cash loans" | tee "$D/gl_run_2.log"
 python manage.py gl_probe "$D/gl_probe_2.txt"
 echo "------------------------------------------------------------"
 read -n 1 -s -r -p "Готово. Напишите в чат «готово». Нажмите любую клавишу, чтобы закрыть окно."
