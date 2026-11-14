@@ -65,6 +65,11 @@ QUERIES = [
         UNION ALL
         SELECT 'pl', to_jsonb(t) ->> 'company', count(*), sum(amount)
         FROM (SELECT * FROM pl_for_csv) t GROUP BY 1, 2"""),
+    ("Разнесённость операций по компаниям", """
+        SELECT o.name, count(*) AS ops, count(t.contract_id) AS with_contract, count(t.cfitem_id) AS with_item,
+               count(*) FILTER (WHERE t.contract_id IS NOT NULL AND t.cfitem_id IS NOT NULL) AS ready
+        FROM treasury_cfdata t JOIN corporate_bankaccount a ON a.id = t.ba_id
+        JOIN corporate_owners o ON o.id = a.corporate_id GROUP BY 1 ORDER BY 1"""),
     ("Текущий пользователь", "SELECT current_user, current_database()"),
 ]
 

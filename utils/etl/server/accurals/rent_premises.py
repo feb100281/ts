@@ -50,7 +50,8 @@ def insert_accrual_distribution(conn, final: dict):
 
             for i in range(n):
                 row = [
-                    final[col][i].item() if hasattr(final[col][i], "item") else final[col][i]
+                    pd.Timestamp(final[col][i]).date() if isinstance(final[col][i], np.datetime64)
+                    else final[col][i].item() if hasattr(final[col][i], "item") else final[col][i]
                     for col in cols
                 ]
 

@@ -72,6 +72,7 @@ def insert_normizized(conn):
             ORDER BY r.date
             LIMIT 1
         ) fx ON TRUE
+        WHERE t.contract_id IS NOT NULL               -- в книгу идут только разнесённые по договору операции
     ) x  
     """
     with conn.cursor() as cur:
