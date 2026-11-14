@@ -18,7 +18,7 @@ from django.db import connection, transaction
 from django.db.models import F
 
 from corporate.models import Bank, BankAccount, Owners
-from treasury.models import BankStatements, CfData, CounterpartyAccount, TextTranslation
+from treasury.models import BankStatements, CfData, CounterpartyAccount, HintRule, TextTranslation
 
 from .parser import Statement, StatementError, parse_statement
 from .translate import fill, key_of, template
@@ -148,15 +148,38 @@ AUTO_SQL = [
         )
         UPDATE treasury_cfdata d SET cfitem_id = m.cf_item FROM m WHERE d.id = m.cf_id AND m.cf_item IS NOT NULL
     """),
+    ("разметка по похожим операциям", """
+        WITH stat AS (
+            SELECT owner_id, op_type, (dt > 0) AS incoming, hint, count(*) AS n
+            FROM treasury_cfdata
+            WHERE owner_id = %(owner)s AND hint <> '' AND NOT hint_auto AND op_type IS NOT NULL
+            GROUP BY 1, 2, 3, 4
+        ), best AS (
+            SELECT *, sum(n) OVER w AS total, row_number() OVER (w ORDER BY n DESC) AS rn
+            FROM stat WINDOW w AS (PARTITION BY owner_id, op_type, incoming)
+        )
+        UPDATE treasury_cfdata d SET hint = b.hint, hint_auto = TRUE
+        FROM best b
+        WHERE d.id = ANY(%(ids)s) AND coalesce(d.hint, '') = ''
+          AND b.owner_id = d.owner_id AND b.op_type = d.op_type AND b.incoming = (d.dt > 0)
+          AND b.rn = 1 AND b.n >= 3 AND b.n >= 0.9 * b.total
+    """),
+    ("статьи по разметке", """
+        UPDATE treasury_cfdata d
+        SET cfitem_id = CASE WHEN d.dt > 0 THEN r.cfitem_dt_id ELSE r.cfitem_cr_id END
+        FROM treasury_hintrule r
+        WHERE d.id = ANY(%(ids)s) AND d.cfitem_id IS NULL AND d.hint = r.hint
+          AND (CASE WHEN d.dt > 0 THEN r.cfitem_dt_id ELSE r.cfitem_cr_id END) IS NOT NULL
+    """),
 ]
 
 
-def auto_assign(ids: list[int], log):
+def auto_assign(ids: list[int], owner_id: int, log):
     if not ids:
         return
     with connection.cursor() as cur:
         for title, sql in AUTO_SQL:
-            cur.execute(sql, {"ids": ids})
+            cur.execute(sql, {"ids": ids, "owner": owner_id})
             log(f"  {title}: {cur.rowcount}")
 
 
@@ -233,12 +256,15 @@ def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
                 payer_account=r.cp_account if incoming else st.account,
                 reciver_account=st.account if incoming else r.cp_account,
                 intercompany=r.cp_account in ours and r.cp_account != st.account, cp_id=cp_map.get(r.cp_account), row_key=r.key,
+                hint=r.hint or None,
             ))
+        HintRule.objects.bulk_create([HintRule(hint=h) for h in {o.hint for o in objs if o.hint}],
+                                     ignore_conflicts=True)            # новые метки — в справочник
         created = CfData.objects.bulk_create(objs, batch_size=500)
         ids = [o.pk for o in created if o.pk]
         if len(ids) != len(created):
             ids = list(CfData.objects.filter(ba=ba, row_key__in=[o.row_key for o in objs]).values_list("id", flat=True))
-        auto_assign(ids, log)
+        auto_assign(ids, owner.id, log)
 
     no_tr = sum(1 for o in objs if not o.temp_ru)
     log(f"  новых операций: {len(objs)}, уже были: {len(have)}, без перевода: {no_tr}")

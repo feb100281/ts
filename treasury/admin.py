@@ -22,7 +22,7 @@ from django.db.models import Q
 from django.contrib.admin import SimpleListFilter
 from django import forms
 from contracts.models import Contracts
-from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation
+from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule
 from utils.bsparsers.bsupdater import update_cf_data
 from utils.bsparsers.am.loader import load_statement, sniff
 from decimal import Decimal, InvalidOperation
@@ -970,6 +970,7 @@ class CfDataAdmin(admin.ModelAdmin):
     search_fields = (
         "temp",
         "temp_ru",
+        "hint",
         "cp_bs_name",
         "tax_id",
         "payer_account",
@@ -1048,6 +1049,8 @@ class CfDataAdmin(admin.ModelAdmin):
                 
                    "cfitem", 
                    "contract", 
+                   "hint",
+                   "hint_auto",
                 #    "bs"
                    )
     date_hierarchy = "date"
@@ -1989,3 +1992,15 @@ class TextTranslationAdmin(admin.ModelAdmin):
     search_fields = ("source", "translation")
     readonly_fields = ("key", "hits", "created_at")
     list_per_page = 50
+
+
+
+@admin.register(HintRule)
+class HintRuleAdmin(admin.ModelAdmin):
+    list_display = ("hint", "cfitem_dt", "cfitem_cr", "rows_count", "comment")
+    list_editable = ("cfitem_dt", "cfitem_cr", "comment")
+    search_fields = ("hint", "comment")
+
+    @admin.display(description="Операций")
+    def rows_count(self, obj):
+        return CfData.objects.filter(hint=obj.hint).count()

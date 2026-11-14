@@ -67,6 +67,7 @@ class Row:
     dt_eq: Decimal | None = None    # в AMD для валютных счетов, если банк дал эквивалент
     cr_eq: Decimal | None = None
     key: str = ""
+    hint: str = ""                  # ручная разметка из файла («Продажа», «Эквайринг»…), если есть
 
 
 @dataclass
@@ -313,6 +314,7 @@ def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statem
                    owner_name=re.sub(r"\d+$", "", owner).strip(), owner_tax_id=(re.search(r"(\d{8})$", owner) or [None, ""])[1])
     g = lambda r, n: r[idx[n]] if idx[n] < len(r) else ""
     foreign = currency and currency != "AMD"
+    hint_col = _hint_column(rows[header_at + 1:], {i for n, i in idx.items() if n and n not in ("Назначение", "Назначения")})
     for r in rows[header_at + 1:]:
         if not r or to_date(g(r, "Ամսաթիվ")) is None or r[0].startswith("("):
             continue
@@ -325,8 +327,26 @@ def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statem
             purpose=g(r, "Նպատակը"),
             dt_eq=money(r[idx["eq_dt"]]) if foreign and "eq_dt" in idx and idx["eq_dt"] < len(r) else None,
             cr_eq=money(r[idx["eq_cr"]]) if foreign and "eq_cr" in idx and idx["eq_cr"] < len(r) else None,
+            hint=r[hint_col] if hint_col is not None and hint_col < len(r) else "",
         ))
     return st
+
+
+_HINT = re.compile(r"^[А-Яа-яЁё][А-Яа-яЁё ,.\-]*$")
+
+
+def _hint_column(rows: list[list[str]], known: set[int]) -> int | None:
+    """Колонка ручной разметки: вне колонок банка, значения — русские слова."""
+    best, best_n = None, 0
+    width = max((len(r) for r in rows), default=0)
+    for i in range(width):
+        if i in known:
+            continue
+        vals = [r[i] for r in rows if i < len(r) and r[i]]
+        n = sum(1 for v in vals if _HINT.match(v))
+        if vals and n >= len(vals) * 0.5 and n > best_n:
+            best, best_n = i, n
+    return best
 
 
 # ============================================================

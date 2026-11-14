@@ -33,4 +33,15 @@ class Migration(migrations.Migration):
             name="row_key",
             field=models.CharField(blank=True, db_index=True, max_length=40, null=True, verbose_name="Ключ операции"),
         ),
+        migrations.AddField(
+            model_name="cfdata",
+            name="hint",
+            field=models.CharField(blank=True, db_index=True, max_length=100, null=True, verbose_name="Разметка",
+                                   help_text="Ручная разметка из файла выписки или по похожим операциям"),
+        ),
+        migrations.AddField(
+            model_name="cfdata",
+            name="hint_auto",
+            field=models.BooleanField(default=False, verbose_name="Разметка автоматически"),
+        ),
     ]

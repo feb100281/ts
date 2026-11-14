@@ -117,6 +117,9 @@ class CfData(models.Model):
     dt_eq = models.DecimalField("Дт в валюте учёта", max_digits=14, decimal_places=2, null=True, blank=True)
     cr_eq = models.DecimalField("Кр в валюте учёта", max_digits=14, decimal_places=2, null=True, blank=True)
     row_key = models.CharField("Ключ операции", max_length=40, null=True, blank=True, db_index=True)
+    hint = models.CharField("Разметка", max_length=100, null=True, blank=True, db_index=True,
+                            help_text="Ручная разметка из файла выписки или по похожим операциям")
+    hint_auto = models.BooleanField("Разметка автоматически", default=False)
     
     
     def save(self, *args, **kwargs):
@@ -327,3 +330,22 @@ class TextTranslation(models.Model):
 
     def __str__(self):
         return self.source[:80]
+
+
+
+class HintRule(models.Model):
+    """Разметка операции → статья CF. Применяется, если статья не найдена по договору."""
+    hint = models.CharField("Разметка", max_length=100, unique=True)
+    cfitem_dt = models.ForeignKey(CfItems, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="hint_rules_dt", verbose_name="Статья CF для прихода")
+    cfitem_cr = models.ForeignKey(CfItems, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="hint_rules_cr", verbose_name="Статья CF для расхода")
+    comment = models.CharField("Комментарий", max_length=255, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Разметка → статья"
+        verbose_name_plural = "Разметка → статьи"
+        ordering = ("hint",)
+
+    def __str__(self):
+        return self.hint
