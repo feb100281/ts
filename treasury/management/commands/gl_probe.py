@@ -70,6 +70,26 @@ QUERIES = [
                count(*) FILTER (WHERE t.contract_id IS NOT NULL AND t.cfitem_id IS NOT NULL) AS ready
         FROM treasury_cfdata t JOIN corporate_bankaccount a ON a.id = t.ba_id
         JOIN corporate_owners o ON o.id = a.corporate_id GROUP BY 1 ORDER BY 1"""),
+    ("Соответствие полей WB счетам", """
+        SELECT m.*, a.code AS pl_code, a.name AS pl_name
+        FROM gl.wb_mapping m LEFT JOIN corporate_coa a ON a.id = (to_jsonb(m) ->> 'acc_pl')::bigint
+        ORDER BY 1"""),
+    ("План счетов: группы P&L и балансовые верхнего уровня", """
+        SELECT a.id, a.code, a.name, a.parent_id, p.code AS parent_code
+        FROM corporate_coa a LEFT JOIN corporate_coa p ON p.id = a.parent_id
+        WHERE a.parent_id IS NULL OR a.parent_id IN (25, 26, 27) OR a.id IN (25, 26, 27)
+        ORDER BY a.code"""),
+    ("Обороты gl.fact по счетам P&L", """
+        SELECT f.acc_id, a.code, a.name, f.chapter, count(*), sum(f.dt), sum(f.cr)
+        FROM gl.fact f JOIN corporate_coa a ON a.id = f.acc_id
+        WHERE a.parent_id IN (25, 26, 27) GROUP BY 1, 2, 3, 4 ORDER BY 2, 4"""),
+    ("Статьи ДДС с id, верхний уровень и выручка", """
+        SELECT i.id, i.code, i.name, i.parent_id FROM corporate_cfitems i
+        WHERE i.parent_id IS NULL OR i.name ILIKE '%%выручк%%' OR i.name ILIKE '%%себестоим%%' OR i.name ILIKE '%%продаж%%'
+        ORDER BY i.code"""),
+    ("Контракт 109 и счета договора", """
+        SELECT c.id, c.title_id, c.cp_id, c.owner_id, c.bs_id, c.st_id, c.pl_id, c.subconto_bs_id, c.subconto_pl_id
+        FROM contracts_contracts c WHERE c.id IN (109, 122)"""),
     ("Текущий пользователь", "SELECT current_user, current_database()"),
 ]
 
