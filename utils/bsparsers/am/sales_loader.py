@@ -38,7 +38,7 @@ def load_sales(path, owner: Owners | None = None, log=print) -> dict:
         owner=owner, kind=r.kind, period=date(r.doc_date.year, r.doc_date.month, 1),
         doc_number=r.doc_number, doc_date=_aware(r.doc_date), check_number=r.check_number,
         check_date=_aware(r.check_date), article_invoice=r.article_invoice, article=r.article, size=r.size,
-        barcode=r.barcode, name=r.name[:500], qty=r.qty, price=r.price, amount=r.amount,
+        barcode=r.barcode[:255], name=r.name[:500], qty=r.qty, price=r.price, amount=r.amount,
         amount_novat=r.amount_novat, cost_unit=r.cost_unit, cost_total=r.cost_total,
         disc_manual_pct=r.disc_manual_pct, disc_manual_sum=r.disc_manual_sum, disc_auto_pct=r.disc_auto_pct,
         disc_auto_sum=r.disc_auto_sum, bonus_sum=r.bonus_sum, row_key=r.key, source_file=path.name[:255],
