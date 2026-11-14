@@ -4,6 +4,7 @@
 
 TS="$HOME/Documents/Projects/ts"
 ST="$HOME/Desktop/ТРЕНДСЕТТЕР/10 Армения/01 Банковские выписки"
+SA="$HOME/Desktop/ТРЕНДСЕТТЕР/10 Армения/02 Продажи"
 PORT=8001
 export DB_NAME=ts_test                      # главное: только тестовая база
 
@@ -26,7 +27,7 @@ echo "База: $DB (тестовая)"
 echo "------------------------------------------------------------"
 python manage.py migrate || { read -n 1 -s -r -p "Миграции не прошли — пришлите вывод выше."; exit 1; }
 echo "------------------------------------------------------------"
-python manage.py am_load "$ST"
+python manage.py am_load "$ST" "$SA"
 echo "------------------------------------------------------------"
 python manage.py dump_views "$TS/tools/am_inbox/views_dump.sql"
 echo "------------------------------------------------------------"

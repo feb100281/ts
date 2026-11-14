@@ -42,7 +42,13 @@ def am_upload(request):
     target.write_bytes(data)
 
     if kind == "sales":
-        return JsonResponse({"ok": True, "file": rel, "message": "продажи сохранены, загрузка в отчёты — следующим шагом"})
+        from utils.bsparsers.am.sales_loader import load_sales
+        log = []
+        try:
+            res = load_sales(target, log=log.append)
+        except Exception as exc:
+            return JsonResponse({"ok": False, "file": rel, "error": str(exc), "log": log}, status=422)
+        return JsonResponse({"ok": True, "file": rel, "message": "; ".join(log)})
 
     if not sniff(target):
         return JsonResponse({"ok": False, "file": rel, "error": "не похоже на армянскую выписку"}, status=400)

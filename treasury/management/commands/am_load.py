@@ -13,6 +13,8 @@ from django.db import transaction
 
 from utils.bsparsers.am.loader import load_statement, reassign, retranslate, sniff
 from utils.bsparsers.am.parser import StatementError
+from utils.bsparsers.am.sales import SalesError, is_sales_file
+from utils.bsparsers.am.sales_loader import load_sales
 
 
 class DryRun(Exception):
@@ -36,9 +38,10 @@ class Command(BaseCommand):
                 files.append(p)
             else:
                 raise CommandError(f"нет такого пути: {p}")
-        files = [f for f in files if sniff(f)]
-        if not files:
-            raise CommandError("армянских выписок не найдено")
+        sales_files = [f for f in files if f.suffix.lower() == ".xlsx" and is_sales_file(f)]
+        files = [f for f in files if f not in sales_files and sniff(f)]
+        if not files and not sales_files:
+            raise CommandError("армянских выписок и продаж не найдено")
 
         total_new = errors = 0
         owners = set()
@@ -57,10 +60,24 @@ class Command(BaseCommand):
                 errors += 1
                 self.stdout.write(self.style.ERROR(f"  ✗ {exc}"))
 
+        for f in sales_files:
+            self.stdout.write(f"— {f.name} (продажи)")
+            try:
+                with transaction.atomic():
+                    load_sales(f, log=self.stdout.write)
+                    if dry_run:
+                        raise DryRun
+            except DryRun:
+                pass
+            except SalesError as exc:
+                errors += 1
+                self.stdout.write(self.style.ERROR(f"  ✗ {exc}"))
+
         if not dry_run:
             for owner_id in owners:
                 reassign(owner_id, log=self.stdout.write)
             retranslate(log=self.stdout.write)
 
         note = " (пробный прогон, ничего не записано)" if dry_run else ""
-        self.stdout.write(self.style.SUCCESS(f"Файлов: {len(files)}, новых операций: {total_new}, ошибок: {errors}{note}"))
+        self.stdout.write(self.style.SUCCESS(f"Выписок: {len(files)}, новых операций: {total_new}, "
+                                             f"файлов продаж: {len(sales_files)}, ошибок: {errors}{note}"))

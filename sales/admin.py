@@ -442,3 +442,21 @@ class WBDocumentAdmin(admin.ModelAdmin):
         )
 
         return response
+
+from .models import RetailSale  # noqa: E402
+
+
+@admin.register(RetailSale)
+class RetailSaleAdmin(admin.ModelAdmin):
+    list_display = ("doc_date", "kind", "doc_number", "article", "size", "name", "qty", "amount", "amount_novat",
+                    "cost_total", "owner")
+    list_filter = ("owner", "kind", "period")
+    search_fields = ("doc_number", "check_number", "article", "barcode", "name")
+    date_hierarchy = "doc_date"
+    list_per_page = 50
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
