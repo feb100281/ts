@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
+from django.db import connection
 from django.db.models import Max, Min, Sum
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -123,38 +124,42 @@ class Command(BaseCommand):
         currencies = set(BankAccount.objects.values_list("currency", flat=True)) | {"AMD"}
         rates = Rates(currencies, start, finish)
 
-        ops = (CfData.objects.filter(date__gte=start, date__lte=finish)
-               .select_related("ba__corporate", "cfitem", "contract__cp", "cp_final"))
+        sql = """
+            SELECT t.date, t.dt, t.cr, t.dt_eq, t.cr_eq, a.account, upper(coalesce(a.currency, 'RUB')),
+                   o.id, o.name, i.code, i.name,
+                   coalesce(c.title, ''), coalesce(t.cp_name_ru, cp.name, t.cp_bs_name, ''),
+                   left(coalesce(t.temp_ru, t.temp, ''), 500)
+            FROM treasury_cfdata t
+            JOIN corporate_bankaccount a ON a.id = t.ba_id
+            JOIN corporate_owners o ON o.id = a.corporate_id
+            LEFT JOIN corporate_cfitems i ON i.id = t.cfitem_id
+            LEFT JOIN contracts_contracts c ON c.id = t.contract_id
+            LEFT JOIN counterparties_counterparty cp ON cp.id = t.cp_final_id
+            WHERE t.date BETWEEN %s AND %s"""
+        with connection.cursor() as cur:
+            cur.execute(sql, [start, finish])
+            data = cur.fetchall()
+        self.stdout.write(f"Операций за период: {len(data)}")
         rows = []
-        total = ops.count()
-        self.stdout.write(f"Операций за период: {total}")
-        for n, t in enumerate(ops.iterator(chunk_size=5000), 1):
-            if n % 2000 == 0:
-                self.stdout.write(f"  обработано {n} из {total}")
-            if not t.ba:
-                continue
-            owner = t.ba.corporate
-            is_am = owner.id in am_ids
-            cur = (t.ba.currency or "RUB").upper()
-            amount = (t.dt or 0) - (t.cr or 0)
-            r_cur = rates.get(cur, t.date)
+        for (d, dt, cr, dt_eq, cr_eq, account, cur, oid, oname, icode, iname, contract, cp, temp) in data:
+            is_am = oid in am_ids
+            amount = (dt or 0) - (cr or 0)
+            r_cur = rates.get(cur, d)
             rub = amount * r_cur if r_cur is not None else None
             amd = None
             if is_am:
                 if cur == "AMD":
                     amd = amount
-                elif t.dt_eq is not None or t.cr_eq is not None:
-                    amd = (t.dt_eq or 0) - (t.cr_eq or 0)
+                elif dt_eq is not None or cr_eq is not None:
+                    amd = (dt_eq or 0) - (cr_eq or 0)
                 else:
-                    r_amd = rates.get("AMD", t.date)
+                    r_amd = rates.get("AMD", d)
                     amd = rub / r_amd if rub is not None and r_amd else None
-            item = f"{t.cfitem.code} {t.cfitem.name}" if t.cfitem else "— без статьи"
-            rows.append({"company": "Армения" if is_am else "Трендсеттер РФ", "owner": owner.name,
-                         "month": t.date.replace(day=1), "item": item, "account": t.ba.account,
+            item = f"{icode} {iname}" if icode else "— без статьи"
+            rows.append({"company": "Армения" if is_am else "Трендсеттер РФ", "owner": oname,
+                         "month": d.replace(day=1), "item": item, "account": account,
                          "currency": cur, "amount": amount, "amd": amd, "rub": rub,
-                         "contract": str(t.contract) if t.contract_id else "",
-                         "cp": t.cp_name_ru or (str(t.cp_final) if t.cp_final_id else "") or t.cp_bs_name or "",
-                         "temp": t.temp_ru or t.temp or "", "date": t.date})
+                         "contract": contract, "cp": cp, "temp": temp, "date": d})
         am_rows = [r for r in rows if r["company"] == "Армения"]
 
         wb = Workbook()
