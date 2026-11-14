@@ -275,6 +275,8 @@ def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
         ba = get_account(st, owner, log)
         warns = check_chain(ba, st, log)
 
+        covered = list(BankStatements.objects.filter(ba=ba, start__lte=st.finish, finish__gte=st.start)
+                       .exclude(pk=getattr(bs, "pk", None)).values_list("start", "finish"))
         if bs is None:
             bs = BankStatements.objects.filter(ba=ba, start=st.start, finish=st.finish).first()
         if bs is None:
@@ -324,6 +326,12 @@ def load_statement(path, log=print, bs: BankStatements | None = None) -> dict:
             ids = list(CfData.objects.filter(ba=ba, row_key__in=[o.row_key for o in objs]).values_list("id", flat=True))
         auto_assign(ids, owner.id, log)
 
+    suspects = [o for o in objs if any(s <= o.date <= f for s, f in covered if s and f)]
+    if suspects:                                            # дни уже были загружены, а строки «новые»
+        w = (f"{len(suspects)} новых операций приходятся на уже загруженные дни — "
+             f"проверьте на дубли (банк мог изменить текст назначения)")
+        warns.append(w)
+        log(f"  ! {w}")
     no_tr = sum(1 for o in objs if not o.temp_ru)
     log(f"  новых операций: {len(objs)}, уже были: {len(have)}, без перевода: {no_tr}")
     return {"bs_id": bs.pk, "owner_id": owner.id, "new": len(objs), "existing": len(have), "warnings": warns,

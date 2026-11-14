@@ -1046,7 +1046,7 @@ class CfDataAdmin(admin.ModelAdmin):
                 #    ByInnBadgeFilter, 
                    'cp', 
                    "intercompany", 
-                #    "owner", 
+                   "owner", 
                    "ba", 
                 
                    "cfitem", 
