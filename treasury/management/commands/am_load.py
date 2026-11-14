@@ -69,7 +69,7 @@ class Command(BaseCommand):
                         raise DryRun
             except DryRun:
                 pass
-            except SalesError as exc:
+            except Exception as exc:                        # ошибка одного файла не останавливает остальные
                 errors += 1
                 self.stdout.write(self.style.ERROR(f"  ✗ {exc}"))
 
