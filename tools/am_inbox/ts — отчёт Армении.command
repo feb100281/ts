@@ -20,7 +20,7 @@ from datetime import timedelta, date
 from django.db.models import Max
 from macro.models import CurrencyRate
 d = CurrencyRate.objects.filter(currency='AMD').aggregate(m=Max('date'))['m']
-print((d + timedelta(days=1)) if d and d >= date(2026, 1, 1) else '2026-01-01')
+print((d + timedelta(days=1)) if d and d >= date(2026, 8, 1) else '2026-08-25')
 " 2>/dev/null | tail -1)
 TODAY=$(date +%F)
 if [[ "$FROM" < "$TODAY" || "$FROM" == "$TODAY" ]]; then
