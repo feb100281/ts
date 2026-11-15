@@ -214,15 +214,24 @@ for i, f in enumerate(FIELDS["pl"]):
     if f["values"] and f["name"] not in ("date_from",):
         PL_VALUES[i] = [v for v in f["values"] if v]
 
+# Компания — последняя колонка источников и фильтр отчёта над сводной.
+# Справочник при сборке пакета заменяется фактическими значениями (mp.sync_pivot_items).
+COMPANY = "company"
+COMPANY_VALUES = ["ТРЕНДСЕТТЕР ООО"]
+CF_BASE = [f["name"] for f in FIELDS["cf"] if f["name"] not in ("Months", "Quarters", "Years")]
+PL_BASE = [f["name"] for f in FIELDS["pl"] if f["name"] not in ("Months", "Quarters", "Years")]
+CF_VALUES[len(CF_BASE)] = COMPANY_VALUES
+PL_VALUES[len(PL_BASE)] = COMPANY_VALUES
+
 PIVOTS = {
     "cf": {
         "cache": "xl/pivotCache/pivotCacheDefinition1.xml",
         "table": "xl/pivotTables/pivotTable1.xml",
         "source": "raw_cf",
         "cacheId": "538",
-        "base": [f["name"] for f in FIELDS["cf"]
-                 if f["name"] not in ("Months", "Quarters", "Years")],
+        "base": CF_BASE + [COMPANY],
         "values": CF_VALUES,
+        "page": [len(CF_BASE)],
         "rows": [7, 8, 9, 10, 5, 4],       # вид → операция → статья →
                                            # подстатья → контрагент → договор
         "amount": 14,
@@ -232,9 +241,9 @@ PIVOTS = {
         "table": "xl/pivotTables/pivotTable2.xml",
         "source": "raw_pl",
         "cacheId": "531",
-        "base": [f["name"] for f in FIELDS["pl"]
-                 if f["name"] not in ("Months", "Quarters", "Years")],
+        "base": PL_BASE + [COMPANY],
         "values": PL_VALUES,
+        "page": [len(PL_BASE)],
         "rows": [6, 7, 9, 11, 10],         # раздел → строка P&L → статья →
                                            # контрагент → договор (группа
                                            # статей дублировала строку P&L)
@@ -321,12 +330,21 @@ def build_table(cfg, dxf_date=None):
             pf.append('<pivotField axis="axisRow" showAll="0"'
                       ' sortType="ascending">%s</pivotField>'
                       % items(cnt, i not in open_levels))
+        elif i in cfg.get("page", []):
+            cnt = len(cfg["values"].get(i, [""]))
+            pf.append('<pivotField axis="axisPage" showAll="0" sortType="ascending">'
+                      '%s</pivotField>' % items(cnt, False))
         elif i == cfg["amount"]:
             pf.append('<pivotField dataField="1" showAll="0"/>')
         else:
             pf.append('<pivotField showAll="0"/>')
 
     row_fields = "".join('<field x="%d"/>' % i for i in rows)
+    page = cfg.get("page", [])
+    page_attr = ' rowPageCount="%d" colPageCount="1"' % len(page) if page else ""
+    page_fields = ('<pageFields count="%d">%s</pageFields>'
+                   % (len(page), "".join('<pageField fld="%d" hier="-1"/>' % i for i in page))
+                   if page else "")
 
     return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
             '<pivotTableDefinition'
@@ -340,7 +358,7 @@ def build_table(cfg, dxf_date=None):
             ' indent="0" showHeaders="0" outline="1" outlineData="1"'
             ' multipleFieldFilters="0" grandTotalCaption="ИТОГО">'
             '<location ref="A3:C7" firstHeaderRow="1" firstDataRow="2"'
-            ' firstDataCol="1"/>'
+            ' firstDataCol="1"%s/>'
             '<pivotFields count="%d">%s</pivotFields>'
             '<rowFields count="%d">%s</rowFields>'
             '<rowItems count="3"><i><x/></i><i r="1"><x/></i>'
@@ -348,7 +366,7 @@ def build_table(cfg, dxf_date=None):
             '<colFields count="3">'
             '<field x="%d"/><field x="%d"/><field x="0"/></colFields>'
             '<colItems count="2"><i><x v="1"/></i><i t="grand"><x/></i>'
-            '</colItems>'
+            '</colItems>%s'
             '<dataFields count="1">'
             '<dataField name="в российских рублях (RUB)" fld="%d"'
             ' baseField="0" baseItem="0" numFmtId="171"/></dataFields>'
@@ -356,8 +374,8 @@ def build_table(cfg, dxf_date=None):
             ' showColHeaders="1" showRowStripes="1" showColStripes="0"'
             ' showLastColumn="1"/>'
             '</pivotTableDefinition>'
-            % (cfg["source"], cfg["cacheId"], n + 3, "".join(pf),
-               len(rows), row_fields, years_i, months_i, cfg["amount"]))
+            % (cfg["source"], cfg["cacheId"], page_attr, n + 3, "".join(pf),
+               len(rows), row_fields, years_i, months_i, page_fields, cfg["amount"]))
 
 
 # ------------------------------------------------------------------- стили
@@ -593,15 +611,42 @@ SHEET_VIEWS = {
     "xl/worksheets/sheet3.xml": RAW_VIEW,     # raw_pl
 }
 
+def add_column(table_xml, sheet_xml, name):
+    """Новая последняя колонка «умной таблицы» и её заголовок на листе."""
+    ref = re.search(r'ref="A1:([A-Z]+)(\d+)"', table_xml)
+    cnt = int(re.search(r'<tableColumns count="(\d+)"', table_xml).group(1))
+    last = col_letter(cnt + 1)
+    table_xml = table_xml.replace('ref="A1:%s%s"' % (ref.group(1), ref.group(2)),
+                                  'ref="A1:%s%s"' % (last, ref.group(2)))
+    table_xml = table_xml.replace('<tableColumns count="%d">' % cnt,
+                                  '<tableColumns count="%d">' % (cnt + 1))
+    table_xml = table_xml.replace('</tableColumns>',
+                                  '<tableColumn id="%d" name="%s"/></tableColumns>'
+                                  % (cnt + 1, esc(name)))
+    style = re.findall(r'<c r="[A-Z]+1" s="(\d+)"', sheet_xml)
+    cell = ('<c r="%s1"%s t="inlineStr"><is><t>%s</t></is></c>'
+            % (last, ' s="%s"' % style[-1] if style else "", esc(name)))
+    sheet_xml = re.sub(r'(<row r="1"[^>]*>.*?)(</row>)', lambda m: m.group(1) + cell + m.group(2),
+                       sheet_xml, count=1, flags=re.S)
+    sheet_xml = re.sub(r'<dimension ref="A1:[A-Z]+1"/>', '<dimension ref="A1:%s1"/>' % last,
+                       sheet_xml, count=1)
+    return table_xml, sheet_xml
+
+
+for tpart, spart in (("xl/tables/table1.xml", "xl/worksheets/sheet2.xml"),
+                     ("xl/tables/table2.xml", "xl/worksheets/sheet3.xml")):
+    repl[tpart], repl[spart] = add_column(src.read(tpart).decode("utf-8"),
+                                          src.read(spart).decode("utf-8"), COMPANY)
+
 repl.update(vat_parts(src))
 repl["xl/workbook.xml"] = reorder_sheets(repl["xl/workbook.xml"])
 SHEET_VIEWS["xl/worksheets/sheet5.xml"] = PIVOT_VIEW          # Сводная НДС
 
 for part, view in SHEET_VIEWS.items():
-    if part in src.namelist():
-        repl[part] = set_view(src.read(part).decode("utf-8"), view)
-    elif part in repl:
+    if part in repl:
         repl[part] = set_view(repl[part], view)
+    elif part in src.namelist():
+        repl[part] = set_view(src.read(part).decode("utf-8"), view)
 
 out = zipfile.ZipFile(DST, "w", zipfile.ZIP_DEFLATED)
 for info in src.infolist():

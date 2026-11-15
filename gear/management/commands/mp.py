@@ -5990,6 +5990,7 @@ PIVOT_LAYOUT = {
         "source": "raw_cf",
         "rows": ["activity", "operation", "item", "subitem",
                  "cp_name", "contract_name"],
+        "page": ["company"],
     },
     "xl/pivotTables/pivotTable2.xml": {
         "cache": "xl/pivotCache/pivotCacheDefinition2.xml",
@@ -6001,6 +6002,7 @@ PIVOT_LAYOUT = {
         # раскрыты только разделы P&L; строки P&L свёрнуты под «+»
         "open_levels": 1,
         "row_stripes": False,
+        "page": ["company"],
     },
     "xl/pivotTables/pivotTable3.xml": {
         "cache": "xl/pivotCache/pivotCacheDefinition3.xml",
@@ -6068,7 +6070,8 @@ def sync_pivot_items(path, data):
         pivot_fields = list(table.find(tag("pivotFields")))
         names = [f.get("name") for f in cache_fields]
 
-        for level, name in enumerate(cfg["rows"]):
+        levels = list(enumerate(cfg["rows"])) + [(-1, n) for n in cfg.get("page", [])]
+        for level, name in levels:
             if name not in names:
                 continue
             index = names.index(name)
@@ -6076,6 +6079,7 @@ def sync_pivot_items(path, data):
             if not values and not blank:
                 continue
 
+            # фильтр отчёта (level −1) не сворачивается
             collapsed = level >= cfg.get("open_levels", PIVOT_OPEN_LEVELS)
 
             shared = ET.SubElement(cache_fields[index], tag("sharedItems"))
@@ -6111,6 +6115,10 @@ def sync_pivot_items(path, data):
             if old is not None:
                 pivot_fields[index].remove(old)
             pivot_fields[index].append(items)
+
+        if _scope.currency(_PACK["scope"]) == "AMD":
+            for df in table.iter(tag("dataField")):
+                df.set("name", "в армянских драмах (AMD)")
 
         if "row_stripes" in cfg:
             style = table.find(tag("pivotTableStyleInfo"))
