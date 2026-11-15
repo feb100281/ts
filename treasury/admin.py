@@ -26,6 +26,7 @@ from contracts.models import Contracts
 from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule, CpName
 from utils.bsparsers.bsupdater import update_cf_data
 from utils.bsparsers.am.loader import auto_assign, load_statement, sniff, unassigned
+from utils.bsparsers.am.staff import auto_staff
 from decimal import Decimal, InvalidOperation
 
 
@@ -297,6 +298,9 @@ class BankStatementsAdmin(admin.ModelAdmin):
                     continue
                 if sniff(obj.file.path):                      # Армения — свой загрузчик, без удаления строк
                     load_statement(obj.file.path, log=lambda *_: None, bs=obj)
+                    staff = []
+                    auto_staff(obj.owner_id, staff.append)          # новые сотрудники — договор по образцу
+                    notes += [f"{obj}:{x}" for x in staff]
                     ids = list(unassigned(CfData.objects.filter(bs=obj)).values_list("id", flat=True))
                     lines = []
                     auto_assign(ids, obj.owner_id, lines.append)   # разноска и уже загруженных строк

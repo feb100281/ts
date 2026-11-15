@@ -57,5 +57,11 @@ def am_upload(request):
         res = load_statement(target, log=log.append)
     except Exception as exc:                       # ответ с причиной — кнопка покажет её
         return JsonResponse({"ok": False, "file": rel, "error": str(exc), "log": log}, status=422)
+    if res.get("new"):
+        from utils.bsparsers.am.staff import auto_staff
+        try:
+            auto_staff(res["owner_id"], log.append)       # новые сотрудники — договор по образцу
+        except Exception as exc:
+            log.append(f"  сотрудники не заведены: {exc}")
     return JsonResponse({"ok": True, "file": rel, "new": res["new"], "existing": res["existing"],
                          "warnings": res["warnings"], "log": log})
