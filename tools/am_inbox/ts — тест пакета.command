@@ -23,9 +23,11 @@ DB=$(python manage.py shell -c "from django.db import connection; print(connecti
 LOCAL="$TS/analytics/analytics_test.duckdb"
 if [ ! -f "$LOCAL" ] || [ -n "$(find "$LOCAL" -mtime +1 2>/dev/null)" ]; then
     echo "Ищу аналитическую базу на сервере…"
-    REMOTE=$(ssh "$SERVER" "ls -t /opt/*/analytics/analytics.duckdb /home/*/*/analytics/analytics.duckdb /srv/*/analytics/analytics.duckdb /var/www/*/analytics/analytics.duckdb 2>/dev/null | head -1")
+    REMOTE=$(ssh "$SERVER" "find / -xdev \( -path /proc -o -path /sys \) -prune -o -name '*.duckdb' -size +1M -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -5")
+    echo "$REMOTE"
+    REMOTE=$(echo "$REMOTE" | grep -i analytics | head -1 | cut -d' ' -f2-)
     if [ -z "$REMOTE" ]; then
-        echo "Не нашла analytics.duckdb на сервере — пришлите мне этот текст."
+        echo "Не нашла analytics.duckdb на сервере — пришлите мне текст выше."
         read -n 1 -s -r; exit 1
     fi
     echo "Копирую $REMOTE …"
