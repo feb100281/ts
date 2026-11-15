@@ -120,7 +120,7 @@ class CfData(models.Model):
     row_key = models.CharField("Ключ операции", max_length=40, null=True, blank=True, db_index=True)
     hint = models.CharField("Разметка", max_length=100, null=True, blank=True, db_index=True,
                             help_text="Ручная разметка из файла выписки или по похожим операциям")
-    hint_auto = models.BooleanField("Разметка автоматически", default=False)
+    hint_auto = models.BooleanField("Разметка автоматически", default=False, db_default=False)
     cp_name_ru = models.CharField("Контрагент по-русски", max_length=250, null=True, blank=True,
                                   help_text="Из справочника «Названия контрагентов»")
     
