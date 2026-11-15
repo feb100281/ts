@@ -20,8 +20,13 @@
   .cv-btn{padding:7px 14px;border-radius:4px;border:1px solid #1d4ed8;background:#eff6ff;color:#1d4ed8;
           font-weight:700;cursor:pointer}
   h2.cv-h{font-size:16px;margin:18px 0 8px}
+  .tb-back{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;padding:7px 14px;border-radius:4px;
+           border:1px solid #c9ddd5;background:#e7f1ed;color:#1f5e4e;font-weight:700;font-size:13px;
+           text-decoration:none;transition:background .15s ease}
+  .tb-back:hover{background:#d5e8e0;color:#1f5e4e}
 </style>
 <div class="cv-wrap">
+  <a href="{% url 'admin:treasury_bankstatements_changelist' %}" class="tb-back">← К выпискам</a>
   <h1>Контроль выписок</h1>
   <form method="get" class="cv-head">
     <select name="owner" onchange="this.form.submit()">
