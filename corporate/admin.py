@@ -156,6 +156,7 @@ class OwnersAdmin(admin.ModelAdmin):
                 ("country", "currency"),
                 "report_group",
                 "in_reports",
+                "activity_start",
             ),
         },
     ),

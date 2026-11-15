@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Контроль выписок{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block content %}
+<style>
+  .cv-wrap{max-width:1200px}
+  .cv-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .cv-head select{padding:6px 10px;border:1px solid #cbd5e1;border-radius:4px}
+  .cv-note{color:#64748b;font-size:13px}
+  .cv-tbl{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:13px}
+  .cv-tbl th{background:#1e293b;color:#fff;text-align:left;padding:7px 8px;font-weight:600}
+  .cv-tbl td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  .cv-ok{color:#15803d;font-weight:600}
+  .cv-bad{color:#b91c1c}
+  .cv-issue{margin:0 0 3px}
+  .cv-issue b{color:#b91c1c}
+  .cv-num{text-align:right;white-space:nowrap}
+  .cv-text{width:100%;min-height:340px;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+           padding:10px;border:1px solid #cbd5e1;border-radius:4px}
+  .cv-btn{padding:7px 14px;border-radius:4px;border:1px solid #1d4ed8;background:#eff6ff;color:#1d4ed8;
+          font-weight:700;cursor:pointer}
+  h2.cv-h{font-size:16px;margin:18px 0 8px}
+</style>
+<div class="cv-wrap">
+  <h1>Контроль выписок</h1>
+  <form method="get" class="cv-head">
+    <select name="owner" onchange="this.form.submit()">
+      {% for o in owners %}<option value="{{ o.pk }}" {% if o.pk == data.owner.pk %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+    </select>
+    <span class="cv-note">
+      Проверка с {% if data.start %}{{ data.start|date:"d.m.Y" }}{% else %}первой выписки (начало деятельности в карточке компании не указано){% endif %}
+      по {{ data.end|date:"d.m.Y" }} — последний закрытый месяц.
+    </span>
+  </form>
+
+  {% if data.ok %}<p class="cv-ok">По известным счетам выписки полные, остатки сходятся.</p>{% endif %}
+
+  <h2 class="cv-h">Счета компании</h2>
+  <table class="cv-tbl">
+    <tr><th>Банк</th><th>Счёт</th><th>Вал.</th><th>Статус</th><th>Выписок</th><th>Период</th>
+        <th class="cv-num">Исх. остаток</th><th>Замечания</th></tr>
+    {% for r in data.rows %}
+    <tr>
+      <td>{{ r.bank }}</td><td>{{ r.ba.account }}</td><td>{{ r.ba.currency }}</td>
+      <td>{% if r.ba.is_active is False %}закрыт{% else %}действующий{% endif %}</td>
+      <td>{{ r.count }}</td>
+      <td>{% if r.first %}{{ r.first|date:"d.m.Y" }} – {{ r.last|date:"d.m.Y" }}{% else %}—{% endif %}</td>
+      <td class="cv-num">{% if r.eb is not None %}{{ r.eb|floatformat:2 }}{% else %}—{% endif %}</td>
+      <td>{% for k, v in r.issues %}<p class="cv-issue"><b>{{ k }}</b>: {{ v }}</p>{% empty %}<span class="cv-ok">в порядке</span>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  {% if data.unknown %}
+  <h2 class="cv-h">Возможные счета компании без выписок</h2>
+  <p class="cv-note">Счета из присланных выписок: получатель или плательщик — сама компания, либо назначение «перевод собственных средств».</p>
+  <table class="cv-tbl">
+    <tr><th>Счёт</th><th>Название в выписке</th><th>Операций</th><th>Период</th><th>Пример назначения</th></tr>
+    {% for u in data.unknown %}
+    <tr><td>{{ u.account }}</td><td>{{ u.name }}</td><td>{{ u.count }}</td>
+        <td>{{ u.first|date:"d.m.Y" }} – {{ u.last|date:"d.m.Y" }}</td><td>{{ u.sample }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <h2 class="cv-h">Текст запроса</h2>
+  <textarea id="cv-text" class="cv-text">{{ data.text }}</textarea>
+  <p><button type="button" class="cv-btn"
+      onclick="navigator.clipboard.writeText(document.getElementById('cv-text').value);this.textContent='Скопировано';">
+      Скопировать текст</button></p>
+</div>
+{% endblock %}

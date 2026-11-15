@@ -204,6 +204,12 @@
   ⚙️ Обработать выписку
 </button>
 
+<a href="{% url 'admin:treasury_bankstatements_coverage' %}"
+   style="margin-top:2px;font-size:13px;padding:6px 12px;border-radius:2px;display:inline-flex;align-items:center;gap:6px;
+          border:1px solid rgba(29,78,216,.2);background:#eff6ff;color:#1d4ed8;font-weight:900;text-decoration:none;">
+  📋 Контроль выписок
+</a>
+
 <form id="process-selected-form"
       method="post"
       action="{% url 'admin:treasury_bankstatements_process_selected' %}"

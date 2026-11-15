@@ -60,6 +60,10 @@ class Owners(models.Model):
     in_reports = models.BooleanField(
         default=True, verbose_name="Показывать в отчётах",
     )
+    activity_start = models.DateField(
+        null=True, blank=True, verbose_name="Начало деятельности",
+        help_text="С этой даты проверяется полнота банковских выписок",
+    )
 
     class Meta:
         verbose_name = "Собственник"

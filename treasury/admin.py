@@ -250,6 +250,11 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 name="treasury_bankstatements_process_selected",
             ),
             path(
+                "coverage/",
+                self.admin_site.admin_view(self.coverage_view),
+                name="treasury_bankstatements_coverage",
+            ),
+            path(
                 "export-eod-xlsx/",
                 self.admin_site.admin_view(export_eod_xlsx),
                 name="treasury_bankstatements_export_eod_xlsx",
@@ -262,6 +267,19 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
     
     
+    def coverage_view(self, request):
+        """Полнота выписок по компании и текст запроса недостающего."""
+        from django.template.response import TemplateResponse
+        from corporate.models import Owners
+        from treasury.coverage import check
+
+        owners = list(Owners.objects.exclude(country="RU").order_by("name")) or list(Owners.objects.order_by("name"))
+        pick = request.GET.get("owner")
+        owner = next((o for o in owners if str(o.pk) == pick), owners[0] if owners else None)
+        ctx = {**self.admin_site.each_context(request), "title": "Контроль выписок",
+               "owners": owners, "data": check(owner) if owner else None}
+        return TemplateResponse(request, "admin/treasury/bankstatements/coverage.html", ctx)
+
     def process_selected_view(self, request):
         """
         POST принимает ids выбранных выписок.
