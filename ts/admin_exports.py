@@ -309,6 +309,12 @@ def _export_manpack_csv(request, kind, prefix):
         return HttpResponseBadRequest(str(exc))
 
 
+def export_pack_companies(request):
+    """Варианты «Компания» для окна управленческого пакета (из карточек собственников)."""
+    from gear.management.commands.sql.scope import options
+    return JsonResponse({"options": [{"value": v, "label": t} for v, t in options()]})
+
+
 def export_cf_csv(request):
     """Витрина движения денежных средств на отчётную дату, csv с «|»."""
     return _export_manpack_csv(request, "cf", "cash_flow")

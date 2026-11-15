@@ -2214,6 +2214,7 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
   const CF_CSV_URL = "/admin/export/management-pack/cf-csv/";
   const PL_CSV_URL = "/admin/export/management-pack/pl-csv/";
   const PIVOTS_URL = "/admin/export/management-pack/pivots/";
+  const COMPANIES_URL = "/admin/export/management-pack/companies/";
 
   function toYmd(dateObj) {
     const y = dateObj.getFullYear();
@@ -2264,9 +2265,6 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
         <label class="jm-manpack-label" for="jmMp2Company">Компания</label>
         <select id="jmMp2Company" class="jm-manpack-input">
           <option value="ru">Трендсеттер РФ</option>
-          <option value="am_amd">Армения, драмы</option>
-          <option value="am_rub">Армения, рубли</option>
-          <option value="all">Консолидация, рубли</option>
         </select>
 
         <label class="jm-manpack-label" for="jmMp2Date">Сводные таблицы с транзакциями</label>
@@ -2306,9 +2304,30 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
     const dateInput = backdrop.querySelector("#jmMp2Date");
     const errorBox = backdrop.querySelector("#jmMp2Error");
 
+    const companySelect = backdrop.querySelector("#jmMp2Company");
+
+    function loadCompanies() {
+      fetch(COMPANIES_URL, { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data || !data.options || !data.options.length) return;
+          const current = companySelect.value || "ru";
+          companySelect.innerHTML = "";
+          data.options.forEach((o) => {
+            const opt = document.createElement("option");
+            opt.value = o.value;
+            opt.textContent = o.label;
+            companySelect.appendChild(opt);
+          });
+          companySelect.value = data.options.some((o) => o.value === current) ? current : "ru";
+        })
+        .catch(() => {});
+    }
+
     function open() {
       errorBox.classList.remove("is-visible");
       if (!dateInput.value) dateInput.value = todayYmd();
+      loadCompanies();
       backdrop.classList.add("is-open");
     }
 
@@ -2347,7 +2366,7 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
 
       errorBox.classList.remove("is-visible");
       close();
-      const company = backdrop.querySelector("#jmMp2Company").value || "ru";
+      const company = companySelect.value || "ru";
       window.location.href = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}` +
         `&company=${encodeURIComponent(company)}`;
     }

@@ -1,61 +1,102 @@
 # gear/management/commands/sql/scope.py
-"""Компания пакета: РФ, Армения (₽ или AMD), консолидация.
+"""Компания пакета: группа отчётности из карточек собственников (в своей валюте или в рублях)
+или консолидация.
 
 Источники из Postgres (pl_for_csv, cf_to_csv, gl.fact, банковские счета) подменяются
-временными представлениями DuckDB с отбором по компании и, для AMD, пересчётом сумм
+временными представлениями DuckDB с отбором по компании и, для валюты компании, пересчётом сумм
 по курсу ЦБ РФ на дату проводки. Все запросы идут через ScopedCon, который делает подмену.
 """
 from __future__ import annotations
 
 RU_GROUP = "Трендсеттер РФ"
-
-# ключ: (название, группы компаний или None для всех, валюта)
-SCOPES = {
-    "ru": ("Трендсеттер РФ", [RU_GROUP], "RUB"),
-    "am_rub": ("Армения", ["Армения"], "RUB"),
-    "am_amd": ("Армения", ["Армения"], "AMD"),
-    "all": ("Консолидация", None, "RUB"),
-}
 DEFAULT = "ru"
+ALL = "all"
+LEGACY = {"am_rub": "Армения|RUB", "am_amd": "Армения|AMD"}
 
-# порядок важен: длинные имена раньше коротких
-SUBST = [
-    ("pg.public.pl_for_csv", "scope_pl_for_csv"),
-    ("pg.pl_for_csv", "scope_pl_for_csv"),
-    ("pg.public.cf_to_csv", "scope_cf_to_csv"),
-    ("pg.cf_to_csv", "scope_cf_to_csv"),
-    ("pg.gl.fact", "scope_gl_fact"),
-    ("pg.public.ba_balance_csv", "scope_ba_balance_csv"),
-    ("pg.ba_balance_csv", "scope_ba_balance_csv"),
-    ("pg.public.corporate_bankaccount", "scope_bankaccount"),
-    ("pg.corporate_bankaccount", "scope_bankaccount"),
-    ("pg.public.wb_balance_for_csv", "scope_wb_balance"),
-    ("pg.wb_balance_for_csv", "scope_wb_balance"),
-    ("pg.public.grossbook_vatadjustment", "scope_vatadjustment"),
-    ("pg.grossbook_vatadjustment", "scope_vatadjustment"),
-]
+CURRENCY_NAMES = {"RUB": "рубли", "AMD": "драмы", "KZT": "тенге", "USD": "доллары",
+                  "EUR": "евро", "CNY": "юани", "KGS": "сомы", "UZS": "сумы",
+                  "AZN": "манаты", "AED": "дирхамы", "GEL": "лари", "BYN": "бел. рубли"}
+CURRENCY_TITLES = {"RUB": "Российский рубль (RUB)", "AMD": "Армянский драм (AMD)",
+                   "KZT": "Казахстанский тенге (KZT)", "USD": "Доллар США (USD)",
+                   "EUR": "Евро (EUR)", "CNY": "Китайский юань (CNY)", "KGS": "Киргизский сом (KGS)",
+                   "UZS": "Узбекский сум (UZS)", "AZN": "Азербайджанский манат (AZN)",
+                   "AED": "Дирхам ОАЭ (AED)"}
+CURRENCY_SIGNS = {"RUB": "₽", "AMD": "֏", "KZT": "₸", "USD": "$", "EUR": "€", "CNY": "¥",
+                  "KGS": "сом", "UZS": "сум", "AZN": "₼", "AED": "AED"}
+CURRENCY_PREP = {"AMD": "драмах", "KZT": "тенге", "USD": "долларах", "EUR": "евро",
+                 "CNY": "юанях", "KGS": "сомах", "UZS": "сумах", "AZN": "манатах", "AED": "дирхамах"}
+CURRENCY_DATA = {"RUB": "в российских рублях (RUB)", "AMD": "в армянских драмах (AMD)",
+                 "KZT": "в тенге (KZT)", "USD": "в долларах США (USD)", "EUR": "в евро (EUR)"}
+
+
+def _groups():
+    """Группы отчётности из карточек собственников: {группа: валюта учёта}."""
+    from collections import Counter
+    from corporate.models import Owners
+    cur = {}
+    for g, c in (Owners.objects.filter(in_reports=True).exclude(report_group="")
+                 .values_list("report_group", "currency")):
+        cur.setdefault(g, Counter())[(c or "RUB").upper()] += 1
+    return {g: c.most_common(1)[0][0] for g, c in cur.items()}
+
+
+def options():
+    """Варианты выбора компании для окна выгрузки: [(ключ, подпись)]."""
+    out = [(DEFAULT, RU_GROUP)]
+    for g, c in sorted(_groups().items()):
+        if g == RU_GROUP:
+            continue
+        if c != "RUB":
+            out.append((f"{g}|{c}", f"{g}, {CURRENCY_NAMES.get(c, c)}"))
+        out.append((f"{g}|RUB", f"{g}, рубли"))
+    out.append((ALL, "Консолидация, рубли"))
+    return out
+
+
+def resolve(key: str | None):
+    """(название, группы или None для всех, валюта)."""
+    key = LEGACY.get(key, key) or DEFAULT
+    if key == ALL:
+        return "Консолидация", None, "RUB"
+    if "|" in key:
+        g, c = key.split("|", 1)
+        if g and c.isalpha() and len(c) == 3:
+            return g, [g], c.upper()
+    return RU_GROUP, [RU_GROUP], "RUB"
 
 
 def norm(key: str | None) -> str:
-    return key if key in SCOPES else DEFAULT
+    name, groups, cur = resolve(key)
+    if groups is None:
+        return ALL
+    if groups == [RU_GROUP]:
+        return DEFAULT
+    return f"{groups[0]}|{cur}"
 
 
 def title(key: str) -> str:
-    name, _, cur = SCOPES[norm(key)]
-    return name if name != "Армения" else f"{name}, {'драмы' if cur == 'AMD' else 'рубли'}"
+    name, groups, cur = resolve(key)
+    return name if groups is None or name == RU_GROUP else f"{name}, {CURRENCY_NAMES.get(cur, cur)}"
 
 
 def suffix(key: str) -> str:
-    return "" if norm(key) == DEFAULT else "_" + norm(key)
+    """Суффикс имени файла: латиница и цифры."""
+    import re
+    k = norm(key)
+    if k == DEFAULT:
+        return ""
+    tr = str.maketrans("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+                       "abvgdeejziiklmnoprstufhccss_y_eua")
+    return "_" + re.sub(r"[^a-z0-9]+", "_", k.lower().translate(tr)).strip("_")
 
 
 def has_ru(key: str) -> bool:
-    groups = SCOPES[norm(key)][1]
+    groups = resolve(key)[1]
     return groups is None or RU_GROUP in groups
 
 
 def currency(key: str) -> str:
-    return SCOPES[norm(key)][2]
+    return resolve(key)[2]
 
 
 def apply(sql: str) -> str:
@@ -67,7 +108,7 @@ def apply(sql: str) -> str:
 def prepare(con, key: str):
     """Временные представления для выбранной компании на сыром подключении."""
     key = norm(key)
-    _, groups, cur = SCOPES[key]
+    _, groups, cur = resolve(key)
     if groups is None:
         owners = "SELECT id FROM pg.public.corporate_owners"
     else:
@@ -76,11 +117,11 @@ def prepare(con, key: str):
     con.execute(f"CREATE OR REPLACE TEMP TABLE scope_owners AS {owners}")
     ru_only = "TRUE" if has_ru(key) else "FALSE"
 
-    if cur == "AMD":
-        con.execute("""
+    if cur != "RUB":
+        con.execute(f"""
             CREATE OR REPLACE TEMP TABLE scope_rate AS
             SELECT date::DATE AS d, rate::DOUBLE AS rate FROM pg.public.macro_currencyrate
-            WHERE currency = 'AMD' AND base_currency = 'RUB' ORDER BY 1""")
+            WHERE currency = '{cur}' AND base_currency = 'RUB' ORDER BY 1""")
 
         def conv(src, cols, money_int=False):
             rep = ", ".join(

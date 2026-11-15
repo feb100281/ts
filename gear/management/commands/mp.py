@@ -1916,8 +1916,8 @@ def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=Non
         "Управленческая отчётность (management pack) · %s" % _scope.title(_PACK["scope"]),
         ncols,
         extra="%s · дата отчёта: %s · период: %s — %s"
-              % ("Армянский драм (AMD)" if _scope.currency(_PACK["scope"]) == "AMD"
-                 else "Российский рубль (RUB)",
+              % (_scope.CURRENCY_TITLES.get(_scope.currency(_PACK["scope"]),
+                                            _scope.currency(_PACK["scope"])),
                  as_of.strftime("%d.%m.%Y"),
                  month_label(months[0]), month_label(months[-1])),
         show_back=False,
@@ -5416,10 +5416,12 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None,
         ws.row_dimensions[r].height = 26
         r += 1
 
-def _to_amd(wb):
-    """Подписи валюты в книге в драмах: суммы уже пересчитаны."""
-    pairs = (("₽", "֏"), ("млн руб.", "млн драм"), ("тыс. руб.", "тыс. драм"), (" руб.", " драм"),
-             ("рублях", "драмах"), ("Российский рубль (RUB)", "Армянский драм (AMD)"))
+def _to_currency(wb, cur):
+    """Подписи валюты в книге: суммы уже пересчитаны в валюту компании."""
+    sign = _scope.CURRENCY_SIGNS.get(cur, cur)
+    pairs = (("₽", sign), ("млн руб.", "млн " + sign), ("тыс. руб.", "тыс. " + sign),
+             (" руб.", " " + sign), ("рублях", _scope.CURRENCY_PREP.get(cur, "валюте " + cur)),
+             ("Российский рубль (RUB)", _scope.CURRENCY_TITLES.get(cur, cur)))
     for ws in wb.worksheets:
         for row in ws.iter_rows():
             for c in row:
@@ -5755,8 +5757,8 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                 ordered.append(wb[n])
     ordered += [ws for ws in wb.worksheets if ws not in ordered]
     wb._sheets = ordered
-    if _scope.currency(company) == "AMD":
-        _to_amd(wb)
+    if _scope.currency(company) != "RUB":
+        _to_currency(wb, _scope.currency(company))
     if PL_DASHBOARD_SHEET_NAME in wb.sheetnames:          # служебный лист: скрыт, в оглавлении нет
         wb[PL_DASHBOARD_SHEET_NAME].sheet_state = "hidden"
     wb.save(path)
@@ -6116,9 +6118,10 @@ def sync_pivot_items(path, data):
                 pivot_fields[index].remove(old)
             pivot_fields[index].append(items)
 
-        if _scope.currency(_PACK["scope"]) == "AMD":
+        cur = _scope.currency(_PACK["scope"])
+        if cur != "RUB":
             for df in table.iter(tag("dataField")):
-                df.set("name", "в армянских драмах (AMD)")
+                df.set("name", _scope.CURRENCY_DATA.get(cur, "в валюте %s" % cur))
 
         if "row_stripes" in cfg:
             style = table.find(tag("pivotTableStyleInfo"))
@@ -6418,8 +6421,9 @@ class Command(BaseCommand):
             help="Путь к xlsx. По умолчанию <BASE_DIR>/reports/manpack_<дата>.xlsx",
         )
         parser.add_argument(
-            "--company", default="ru", choices=sorted(_scope.SCOPES),
-            help="ru — Трендсеттер РФ, am_rub / am_amd — Армения, all — консолидация.",
+            "--company", default="ru",
+            help="ru — Трендсеттер РФ, all — консолидация, «Группа|ВАЛЮТА» — группа отчётности "
+                 "(например «Армения|AMD»); am_amd / am_rub — то же для Армении.",
         )
 
     def handle(self, *args, **options):

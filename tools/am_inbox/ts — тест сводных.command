@@ -15,11 +15,13 @@ if ! nc -z 127.0.0.1 5433 2>/dev/null; then
 fi
 [ -f "$DUCKDB_PATH" ] || { echo "Нет копии аналитической базы — сначала «ts — тест пакета»"; read -n 1 -s -r; exit 1; }
 mkdir -p "$OUT"
-for C in all am_amd ru; do
+echo "Варианты «Компания» в окне пакета:"
+python manage.py shell -c "from gear.management.commands.sql.scope import options; [print('  ', v, '—', t) for v, t in options()]" 2>&1 | tail -8
+for C in all "Армения|AMD" ru; do
     echo "Сводные: $C"
     python manage.py shell -c "
 from gear.management.commands.mp import build_pivots_workbook
-print(build_pivots_workbook('$DATE', out_path='$OUT/pivots_${DATE}_$C.xlsx', company='$C'))
+print(build_pivots_workbook('$DATE', out_path='$OUT/pivots_${DATE}_${C//|/_}.xlsx', company='$C'))
 " 2>&1 | tail -3
 done
 read -n 1 -s -r -p "Готово. Напишите в чат «готово»."
