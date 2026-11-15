@@ -124,7 +124,7 @@ def _unknown_accounts(owner, ours: set) -> list:
 def _request(owner, start, end, ask, refetch, unknown) -> str:
     L = [f"Коллеги, добрый день!", "",
          f"Для управленческого учёта {owner.name} прошу прислать банковские выписки "
-         f"(Excel из интернет-банка, по одному файлу на месяц, обязательно с входящим и исходящим остатком):", ""]
+         f"(Excel из интернет-банка, за любой период, обязательно с входящим и исходящим остатком):", ""]
     for bank in sorted(ask):
         L.append(bank)
         for ba, per in ask[bank]:
