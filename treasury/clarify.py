@@ -100,7 +100,8 @@ def to_xlsx(owner, groups) -> bytes:
             c.number_format = "# ##0.00"
         for c in (row[10], row[11]):
             c.alignment = Alignment(wrap_text=True, vertical="top")
-    ws.freeze_panes = "A2"
+    ws.freeze_panes = "C2"                     # шапка и контрагент остаются на месте
+    ws.row_dimensions[1].height = 32
     ws.auto_filter.ref = ws.dimensions
     buf = BytesIO()
     wb.save(buf)
