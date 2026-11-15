@@ -175,6 +175,7 @@ AUTO_SQL = [
             JOIN contracts_contracts c
               ON c.owner_id = d.owner_id AND c.regex IS NOT NULL AND c.regex <> '' AND d.temp ~* c.regex
             WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL
+              AND (d.cp_id IS NULL OR c.cp_id = d.cp_id)        -- контрагент известен: только его договоры
             ORDER BY d.id, length(c.regex) DESC, c.id
         )
         UPDATE treasury_cfdata d SET contract_id = m.contract_id FROM m WHERE d.id = m.cf_id
