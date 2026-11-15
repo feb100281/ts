@@ -16,7 +16,7 @@ SALARY = re.compile(r"աշխատավարձ|արձակուրդ|պարգև", re.I)
 
 def _name(names: Counter) -> str:
     n = names.most_common(1)[0][0] if names else ""
-    return " ".join(w.capitalize() for w in n.split())
+    return " ".join(n.upper().split())
 
 
 class Command(BaseCommand):
