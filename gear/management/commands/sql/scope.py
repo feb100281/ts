@@ -99,6 +99,24 @@ def currency(key: str) -> str:
     return resolve(key)[2]
 
 
+# порядок важен: длинные имена раньше коротких
+SUBST = [
+    ("pg.public.pl_for_csv", "scope_pl_for_csv"),
+    ("pg.pl_for_csv", "scope_pl_for_csv"),
+    ("pg.public.cf_to_csv", "scope_cf_to_csv"),
+    ("pg.cf_to_csv", "scope_cf_to_csv"),
+    ("pg.gl.fact", "scope_gl_fact"),
+    ("pg.public.ba_balance_csv", "scope_ba_balance_csv"),
+    ("pg.ba_balance_csv", "scope_ba_balance_csv"),
+    ("pg.public.corporate_bankaccount", "scope_bankaccount"),
+    ("pg.corporate_bankaccount", "scope_bankaccount"),
+    ("pg.public.wb_balance_for_csv", "scope_wb_balance"),
+    ("pg.wb_balance_for_csv", "scope_wb_balance"),
+    ("pg.public.grossbook_vatadjustment", "scope_vatadjustment"),
+    ("pg.grossbook_vatadjustment", "scope_vatadjustment"),
+]
+
+
 def apply(sql: str) -> str:
     for a, b in SUBST:
         sql = sql.replace(a, b)
