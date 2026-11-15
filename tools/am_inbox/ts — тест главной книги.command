@@ -19,6 +19,9 @@ DB=$(python manage.py shell -c "from django.db import connection; print(connecti
 
 python manage.py migrate || { read -n 1 -s -r -p "Миграции не прошли — пришлите вывод выше."; exit 1; }
 echo "------------------------------------------------------------"
+echo "Курсы ЦБ РФ за последние дни"
+python manage.py load_currency_rates --from "$(date -v-10d +%F)" --to "$(date +%F)" > /dev/null || echo "  курсы не загрузились"
+echo "------------------------------------------------------------"
 echo "1/2 Счета и статьи для Армении"
 python manage.py am_coa 2>&1 | tee "$D/gl_coa.log"
 echo "------------------------------------------------------------"
