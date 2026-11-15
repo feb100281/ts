@@ -24,8 +24,11 @@ def ensure_pl_src(con) -> bool:
     """
     from django.conf import settings
     zup = Path(settings.BASE_DIR) / "data" / "zup"
+    # ЗУП — зарплата Трендсеттер РФ: в пакете без РФ не подключается
+    from . import scope as _scope
+    with_ru = _scope.has_ru(getattr(con, "scope", _scope.DEFAULT))
     # payroll.parquet (с 2026) и payroll_2025.parquet (разовая загрузка) читаются вместе
-    if list(zup.glob("payroll*.parquet")) and list(zup.glob("contributions*.parquet")):
+    if with_ru and list(zup.glob("payroll*.parquet")) and list(zup.glob("contributions*.parquet")):
         try:
             con.execute(read_sql("pl_src.txt")
                         .replace("{payroll}", str(zup / "payroll*.parquet").replace("'", "''"))

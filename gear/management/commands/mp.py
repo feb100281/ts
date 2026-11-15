@@ -215,9 +215,24 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
         after_spp, dashboard = False, True
     rev = "1.18" if corrected else "1.4"
     calc_vat = corrected   # подписи без привязки к источнику
+    wb_lines = _scope.has_ru(_PACK["scope"])        # без РФ — нет WB, СПП и комиссии
+    if not wb_lines:
+        after_spp = dashboard = corrected = calc_vat = False
+        rev = "1.4"
 
     # ------------------------------------------------ 1. Выручка и маржа
     add(("band", "1", "ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ", None, 0, None))
+    if not wb_lines:
+        add(("item", "1.4", "Выручка без НДС (за вычетом возвратов)",
+             (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
+        add(("item", "1.6", "Себестоимость проданного товара",
+             (SEC_REVENUE, "1.6. Себестоимость", -1), 1, FMT_MONEY))
+        add(("calc", "1.7", "МАРЖА ПРОДАЖ (валовая прибыль)",
+             [("1.4", 1), ("1.6", 1)], 0, FMT_MONEY))
+        add(("ratio", "1.8", "Маржа продаж, % к выручке",
+             ("1.7", "1.4", 1), 2, FMT_PCT))
+        add(("blank", None, None, None, 1, None))
+        return _pl_layout_tail(L, "1.7", rev, after_spp, corrected, wb_lines=False)
     add(("item", "1.1", "Продажи до СПП с НДС (валовый оборот)",
          (SEC_REVENUE, "1.1. Продажи до СПП", 1), 1, FMT_MONEY))
     add(("item", "1.2", "Продажи по отчёту WB с НДС",
@@ -232,7 +247,7 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
          else "Продажи без НДС (как в дашборде)" if dashboard
          else "Продажи без НДС до СПП (чистая выручка)",
          (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
-    retail = _PACK["scope"] != _scope.DEFAULT
+    retail = _PACK["scope"] != _scope.DEFAULT     # консолидация: розница справочно
     if retail:
         add(("item", "1.4р", "в т.ч. выручка розница (магазины)",
              (SEC_RETAIL, RETAIL_REV, 1), 2, FMT_MONEY))
@@ -280,6 +295,21 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
              ("1.17", "1.18", 1), 2, FMT_PCT))
         gp_base = "1.17"
     add(("blank", None, None, None, 1, None))
+    return _pl_layout_tail(L, gp_base, rev, after_spp, corrected, wb_lines=True)
+
+
+def _pl_layout_tail(L, gp_base, rev, after_spp, corrected, wb_lines=True):
+    """Разделы 3–8 и справочные блоки P&L. Без WB — без разделов 3–4, юнит-экономики и НДС."""
+    add = L.append
+    if not wb_lines:
+        add(("band", "5", "ПРОЧИЕ ДОХОДЫ И РАСХОДЫ", None, 0, None))
+        add(("sum", "5", "Итого прочие доходы и расходы", SEC_OTHER, 0, FMT_MONEY))
+        add(("calc", "GP3", "ПРИБЫЛЬ ПОСЛЕ ПРОЧИХ ДОХОДОВ/РАСХОДОВ",
+             [(gp_base, 1), ("5", 1)], 0, FMT_MONEY))
+        add(("ratio", "GP3%", "Рентабельность после прочих, % к выручке",
+             ("GP3", rev, 1), 2, FMT_PCT))
+        add(("blank", None, None, None, 1, None))
+        return _pl_layout_bottom(L, rev, after_spp, corrected, wb_lines)
 
     # ------------------------------------------------ 3. Расходы на реализацию
     add(("band", "3", "РАСХОДЫ НА РЕАЛИЗАЦИЮ", None, 0, None))
@@ -313,6 +343,12 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("ratio", "GP3%", "Рентабельность после прочих, % к выручке",
          ("GP3", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
+    return _pl_layout_bottom(L, rev, after_spp, corrected, wb_lines)
+
+
+def _pl_layout_bottom(L, rev, after_spp, corrected, wb_lines=True):
+    """Разделы 6–8, налог, чистая прибыль и справочные блоки."""
+    add = L.append
 
     # ------------------------------------------------ 6-7. Накладные и корп.
     add(("band", "6", "НАКЛАДНЫЕ РАСХОДЫ", None, 0, None))
@@ -339,6 +375,8 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("ratio", "NP%", "Рентабельность по чистой прибыли, % к выручке",
          ("NP", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
+    if not wb_lines:
+        return L
 
     # ------------------------------------------------ Справочно: юнит-экономика
     add(("band", "2", "СПРАВОЧНО: ЮНИТ-ЭКОНОМИКА", None, 0, None))
@@ -5378,6 +5416,21 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None,
         ws.row_dimensions[r].height = 26
         r += 1
 
+def _to_amd(wb):
+    """Подписи валюты в книге в драмах: суммы уже пересчитаны."""
+    pairs = (("₽", "֏"), ("млн руб.", "млн драм"), ("тыс. руб.", "тыс. драм"), (" руб.", " драм"),
+             ("рублях", "драмах"), ("Российский рубль (RUB)", "Армянский драм (AMD)"))
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                if isinstance(c.value, str) and not c.value.startswith("="):
+                    v = c.value
+                    for a, b in pairs:
+                        v = v.replace(a, b)
+                    if v != c.value:
+                        c.value = v
+
+
 def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=None, company=None):
     """
     Собирает управленческий пакет (Титул + P&L + Cash Flow + пояснения)
@@ -5456,6 +5509,11 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
             % (report_date, start_year))
 
     months = month_columns(start_year, report_date)
+    if not with_ru:                         # без РФ — только месяцы, где есть данные
+        seen = [k[0] for k, v in pl_data.items() if v] + [k[0] for k, v in cf_data.items() if v]
+        if seen:
+            first_m = min(seen)
+            months = [m for m in months if m >= first_m] or months
 
     # налог на прибыль из Cash Flow
     tax_by_month = defaultdict(float)
@@ -5502,7 +5560,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                                   as_of=date_from)
     pl_rowmap = {}
     # отдельное подключение дашборда — после закрытия read-only соединения пакета
-    dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from)
+    dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from) if with_ru else []
     taxes_paid = defaultdict(lambda: defaultdict(float))     # подстатья НДС -> месяц
     for key, v in cf_data.items():
         sub = str(key[4] or key[3])
@@ -5514,7 +5572,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         vat_ref.update(off_pl.pl_items(offpl_data, SEC_OFFPL, OP_IN, OP_GOODS_PAID,
                                        OP_GOODS_UPD, OP_GOODS_UNC, OP_COSTS))
     build_pl(ws_pl_spp, {**pl_after_spp(pl_data), **vat_ref}, tax_by_month, months,
-             report_date, as_of=date_from, note_anchors=note_anchors, after_spp=True,
+             report_date, as_of=date_from, note_anchors=note_anchors, after_spp=with_ru,
              rowmap_out=pl_rowmap)
     build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors,
@@ -5603,11 +5661,30 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                 ("manpack_%s%s.xlsx" % (report_date.isoformat(), _scope.suffix(company))))
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    if not with_ru:                         # листы WB, НДС РФ и пустые — не показываются
+        drop = {SUMMARY_SHEET_NAME, PL_DASHBOARD_SHEET_NAME, PL_CORRECTED_SHEET_NAME,
+                PL_BRIDGE_SHEET_NAME, "Юнит-экономика", BREAKEVEN_SHEET_NAME,
+                PAYOUTS_SHEET_NAME, VAT_CHECK_SHEET_NAME, VAT_OPS_SHEET_NAME,
+                OFFPL_SHEET_NAME, "Пояснения P&L", "Пояснения Юнит-экономика",
+                BE_NOTES_SHEET_NAME, "Пояснения Cash Flow"}
+        if not note_rows:
+            drop.add(NOTES_SHEET_NAME)
+        if not cf_data:
+            drop.add("Cash Flow")
+        if not bank_rows and not deposit_balance:
+            drop.add("Остатки ДС")
+        for name in drop:
+            if name in wb.sheetnames:
+                del wb[name]
+        ws_pl_spp.title = "P&L"
+    pl_sheet = ws_pl_spp.title
+
     contents = [
         (SUMMARY_SHEET_NAME, "Главное за отчётный месяц простым языком: результат, "
                              "точка безубыточности, отклонения, прогноз"),
-        (PL_AFTER_SPP_SHEET_NAME, "Отчёт о прибылях и убытках: выручка и комиссия WB "
-                                  "по цене покупателя (после СПП)"),
+        (pl_sheet, "Отчёт о прибылях и убытках: выручка и комиссия WB "
+                   "по цене покупателя (после СПП)" if with_ru else
+                   "Отчёт о прибылях и убытках: выручка, себестоимость, расходы"),
         (PL_CORRECTED_SHEET_NAME, "P&L как в дашборде (до СПП) с корректировкой "
                                   "маржи до итогов «P&L после СПП»"),
         (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
@@ -5642,8 +5719,11 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ]
     descr = {n: d for n, d in contents}
     grouped = []
+    def _names(names):
+        return [pl_sheet if n == PL_AFTER_SPP_SHEET_NAME else n for n in names]
+
     for div, _color, names in sheet_groups():
-        items = [(n, descr.get(n, "")) for n in names
+        items = [(n, descr.get(n, "")) for n in _names(names)
                  if n in wb.sheetnames and n != TOC_SHEET_NAME]
         if not items:
             continue
@@ -5669,12 +5749,14 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         if div and div in wb.sheetnames:
             wb[div].sheet_properties.tabColor = DIVIDER_TAB
             ordered.append(wb[div])
-        for n in names:
+        for n in _names(names):
             if n in wb.sheetnames:
                 wb[n].sheet_properties.tabColor = color
                 ordered.append(wb[n])
     ordered += [ws for ws in wb.worksheets if ws not in ordered]
     wb._sheets = ordered
+    if _scope.currency(company) == "AMD":
+        _to_amd(wb)
     if PL_DASHBOARD_SHEET_NAME in wb.sheetnames:          # служебный лист: скрыт, в оглавлении нет
         wb[PL_DASHBOARD_SHEET_NAME].sheet_state = "hidden"
     wb.save(path)
