@@ -45,11 +45,12 @@ PLAN = [
       K("Внутригрупповые расчеты", "փոխանակում|փոխարկում", st="790003", cf="410201")]),
     ("ГОСБЮДЖЕТ РА", "AM-STATE-BUDGET",
      ["900005010120", "900005000618", "900005001699", "900005003703", "900005001186", "900005160719",
-      "900008000490"],
+      "900008000490", "900005017109"],
      [K("Без договора", "ԱՎԵԼԱՑՎԱԾ", st="730006", cf="125400"),
       K("Без договора", "ՄԱՔՍԱ", st="720001", bs="130001", sbs="610102", cf="121400"),
       K("Без договора", "Ապահովագրավճար|Դրոշմանիշ", st="750002", cf="125100"),    # удержания из зарплаты
-      K("Без договора", "գրանցման", st="750004", pl="620000", spl="560103", cf="123010")]),
+      K("Без договора", "գրանցման", st="750004", pl="620000", spl="560103", cf="123010"),
+      K("Без договора", "Բնապահպան", st="750000", pl="610000", spl="540701", cf="125710")]),
     ("KRASSULA LLP", "AM-KRASSULA", ["KZ566017131000002662"], [K("Договор поставки", "KRASSULA", **GOODS, cur="KZT")]),
     ("OVS SPA", "AM-OVS", ["IT67W0200809440000030020014"], [K("Договор поставки", **GOODS, cur="EUR")]),
     ("SAS JSC", "AM-SASJSC", ["FR7611306000304815431801425"], [K("Договор поставки", **GOODS, cur="EUR")]),
@@ -69,6 +70,8 @@ PLAN = [
      [K("Договор", st="720001", pl="520000", spl="520303", cf="121400", cur="USD")]),
     ("ФЕШН ИНВЕСТ ЗАО", "AM-FASHIONINVEST", ["1150008526466410"],
      [K("Договор займа", st="770001", pl="630000", spl="590403", cf="321100")]),
+    ("ТАЙМВЕБ.КЛАУД ООО", "7810945525", ["40702810555000083723"],
+     [K("Лицензионный договор", st="720001", pl="610000", spl="540401", cf="123700", cur="RUB")]),
     ("РЕЕСТР АКЦИОНЕРОВ И РЕГИСТРАЦИЯ", "AM-REGISTRY",
      ["11500056665966", "1150062112015200", "1150063110010600", "1150040210080300"],
      [K("Без договора", st="720001", pl="620000", spl="560103", cf="123010")]),
@@ -79,7 +82,8 @@ REGEX_FIX = {
     535: ("գործ|վերադարձ|վճարահաշվարկ", "գործ|վերադարձ|վճարահաշվարկ|POS անբավարար"),
     536: ("Commission|փոխանցումից", "Commission|փոխանցումից|միջնորդավճար"),
 }
-EXTRA_ACCOUNTS = {"1570062112451000": "AM-AMERIABANK"}       # абонплата Америабанка → АМЕРИАБАНК
+EXTRA_ACCOUNTS = {"1570062112451000": 536}       # абонплата Америабанка → контрагент договора РКО 536
+STAFF_AUTO = ("Зарплата|Аванс|Отпускные", "Зарплата|Аванс|Отпускные|Пособие|Հիվանդության")
 
 
 class Command(BaseCommand):
@@ -125,8 +129,9 @@ class Command(BaseCommand):
                                   f"| статья {k['cf']} {items[k['cf']].name}")
         for cid, (old, new) in REGEX_FIX.items():
             self.stdout.write(f"\nДоговор {cid}: RegEx «{old}» → «{new}»")
-        for a, tax in EXTRA_ACCOUNTS.items():
-            self.stdout.write(f"Счёт {a} → контрагент [{tax}]")
+        for a, cid in EXTRA_ACCOUNTS.items():
+            self.stdout.write(f"Счёт {a} → контрагент договора {cid}")
+        self.stdout.write(f"Трудовые договоры: правило статьи «{STAFF_AUTO[0]}» → «{STAFF_AUTO[1]}»")
 
         if not apply:
             self.stdout.write("\nПроверка без записи. Для создания добавьте --apply.")
@@ -154,11 +159,12 @@ class Command(BaseCommand):
                     made += 1
             for cid, (old, new) in REGEX_FIX.items():
                 Contracts.objects.filter(pk=cid, owner=owner, regex=old).update(regex=new)
-            for a, tax in EXTRA_ACCOUNTS.items():
-                cp = (Counterparty.objects.filter(tax_id=tax).first()
-                      or Counterparty.objects.filter(name__icontains="АМЕРИАБАНК").first())
-                if cp and a not in taken:
-                    CounterpartyAccount.objects.create(account=a, cp=cp)
+            for a, cid in EXTRA_ACCOUNTS.items():
+                c = Contracts.objects.filter(pk=cid, owner=owner).first()
+                if c:
+                    CounterpartyAccount.objects.update_or_create(account=a, defaults={"cp": c.cp})
+            CfItemAuto.objects.filter(contract__owner=owner, contract__title__title="Трудовой договор",
+                                      regex=STAFF_AUTO[0]).update(regex=STAFF_AUTO[1])
             ids = list(unassigned(CfData.objects.filter(owner=owner)).values_list("id", flat=True))
             lines = []
             auto_assign(ids, owner.id, lines.append)
