@@ -15,7 +15,8 @@ src AS (
            '1.1 НДС с продаж WB' AS line, 'Продажи WB' AS grp, 'Продажи WB' AS item,
            'ВАЙЛДБЕРРИЗ' AS cp, 'без договора' AS contract, NULL::BIGINT AS contract_id,
            'расчёт по ставке карточки' AS source,
-           vat_amount AS vat
+           vat_amount AS vat,
+           (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ') AS co
     FROM pl_sales
     WHERE date_from::DATE <= $date_from
 
@@ -28,11 +29,13 @@ src AS (
            'УПД № ' || d.number || ' от ' || strftime(d.date, '%d.%m.%Y')
                || ' · id ' || CAST(d.id AS VARCHAR),
            d.contract_id, 'УПД поставщика',
-           COALESCE(l.upd_vat_amount, l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100)
+           COALESCE(l.upd_vat_amount, l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100),
+           (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ')
     FROM pg.public.upd_income_lines l
     JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
     LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = d.counterparty_id
     WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+      AND (SELECT has_ru FROM scope_flags)
 
     UNION ALL
     SELECT g.me, '2. К вычету', '2.0а Закупки на баланс 130: НДС по оплатам без УПД',
@@ -40,12 +43,13 @@ src AS (
            COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика'),
            COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(c.number, 'б/н') || ' · id '
                || CAST(c.id AS VARCHAR),
-           c.id, 'назначение платежа минус УПД', g.vat
+           c.id, 'назначение платежа минус УПД', g.vat,
+           (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ')
     FROM bs130_vat g
     JOIN pg.public.contracts_contracts c ON c.id = g.cid
     LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = c.title_id
     LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
-    WHERE ABS(g.vat) >= 0.01
+    WHERE ABS(g.vat) >= 0.01 AND (SELECT has_ru FROM scope_flags)
 
     UNION ALL
     SELECT rr_dt::DATE, '2. К вычету',
@@ -53,22 +57,26 @@ src AS (
            CASE WHEN COALESCE(sop_name, '') IN ('Продажа', 'Возврат') THEN sop_name
                 ELSE 'Технические строки' END,
            'ВАЙЛДБЕРРИЗ', 'без договора', NULL, 'отчёт WB',
-           CASE WHEN COALESCE(sop_name, '') = 'Возврат' THEN -ppvz_vw_nds ELSE ppvz_vw_nds END
+           CASE WHEN COALESCE(sop_name, '') = 'Возврат' THEN -ppvz_vw_nds ELSE ppvz_vw_nds END,
+           (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ')
     FROM sales.wb_raw
     WHERE rr_dt::DATE <= $date_from AND COALESCE(ppvz_vw_nds, 0) <> 0
+      AND (SELECT has_ru FROM scope_flags)
 
     UNION ALL
     SELECT date_from::DATE, '2. К вычету',
            CASE WHEN account = 'WB Deduction' THEN '2.3 Продвижение WB' ELSE '2.2 Расходы WB' END,
            account, cost_item, 'ВАЙЛДБЕРРИЗ', 'без договора', NULL, 'расчёт по ставке строки',
-           -(dt - cr) * COALESCE(vat_rate, 20) / (100 + COALESCE(vat_rate, 20)) / 100
+           -(dt - cr) * COALESCE(vat_rate, 20) / (100 + COALESCE(vat_rate, 20)) / 100,
+           (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ')
     FROM wb_costs
     WHERE date_from::DATE <= $date_from AND account != 'Other income / loss'
 
     UNION ALL
     SELECT date_from::DATE, '1. Начисленный', '1.2 НДС с выплат WB по программе сотрудничества',
            'Выплаты WB', cost_item, 'ВАЙЛДБЕРРИЗ', 'без договора', NULL, 'расчёт 22/122 от суммы',
-           (dt - cr) * COALESCE(vat_rate, 22) / (100 + COALESCE(vat_rate, 22)) / 100
+           (dt - cr) * COALESCE(vat_rate, 22) / (100 + COALESCE(vat_rate, 22)) / 100,
+           (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ')
     FROM wb_costs
     WHERE date_from::DATE <= $date_from AND cost_item = '5.4. Выплаты WB по программе сотрудничества'
 
@@ -91,8 +99,10 @@ src AS (
                     || ' · id ' || CAST(c.id AS VARCHAR), 'без договора'),
            c.id,
            'учёт: ' || COALESCE(p.vat_mode, '') || ' ' || COALESCE(CAST(p.vat_rate AS VARCHAR), '') || '%',
-           CASE WHEN (v.dt - v.cr < 0 AND COALESCE(LEFT(CAST(a.code AS VARCHAR), 3), '') NOT IN ('610', '620', '420', '630')) THEN ABS(v.dt - v.cr) ELSE v.dt - v.cr END / 100.0
+           CASE WHEN (v.dt - v.cr < 0 AND COALESCE(LEFT(CAST(a.code AS VARCHAR), 3), '') NOT IN ('610', '620', '420', '630')) THEN ABS(v.dt - v.cr) ELSE v.dt - v.cr END / 100.0,
+           COALESCE(ow.name, (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ'))
     FROM pg.gl.fact v
+    LEFT JOIN pg.public.corporate_owners ow ON ow.id = v.company_id
     -- статья и договор — из строки начисления (accural_distribution): при режиме
     -- vat_only проводки в P&L нет, а счёт P&L в начислении есть
     LEFT JOIN pg.gl.accural_distribution p ON p.id = v.pid
@@ -116,7 +126,8 @@ src AS (
            CASE WHEN kind = 'writeoff' THEN 'Не принят к вычету' ELSE 'Корректировка' END,
            COALESCE(NULLIF(TRIM(comment), ''), 'Без комментария'),
            'ИФНС', 'без договора', NULL, 'корректировка',
-           CASE WHEN kind = 'writeoff' THEN -amount ELSE amount END
+           CASE WHEN kind = 'writeoff' THEN -amount ELSE amount END,
+           (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ')
     FROM pg.public.grossbook_vatadjustment
     WHERE date <= $date_from
 
@@ -131,9 +142,19 @@ src AS (
            COALESCE(NULLIF(TRIM(contract_name), ''), 'без договора')
                || COALESCE(' · id ' || CAST(TRY_CAST(contract_id AS BIGINT) AS VARCHAR), ''),
            TRY_CAST(contract_id AS BIGINT), 'Cash Flow',
-           -amount
+           -amount,
+           COALESCE(CAST(TO_JSON(cf) ->> 'company' AS VARCHAR), (SELECT MIN(name) FROM pg.public.corporate_owners WHERE report_group = 'Трендсеттер РФ'))
     FROM cf
     WHERE STARTS_WITH(COALESCE(subitem, ''), '125') AND subitem LIKE '%НДС%'
+
+    -- розница зарубежных компаний: НДС с продаж и возвратов из файлов 1С
+    UNION ALL
+    SELECT d, '1. Начисленный', '1.4 НДС с продаж розница', 'Продажи розница',
+           CASE WHEN kind = 'sale' THEN 'Продажа' ELSE 'Возврат' END,
+           'Розничные покупатели', 'без договора', NULL, 'файл продаж 1С',
+           vat, co
+    FROM scope_retail_vat
+    WHERE d <= $date_from
 )
 SELECT d AS "Дата",
        YEAR(d) AS "Год",
@@ -148,8 +169,9 @@ SELECT d AS "Дата",
        source AS "Источник",
        ROUND(SUM(vat), 2) AS "НДС, ₽",
        ROUND(SUM(CASE WHEN direction = '1. Начисленный' THEN -vat ELSE vat END), 2)
-           AS "НДС: к уплате −, к вычету +, ₽"
+           AS "НДС: к уплате −, к вычету +, ₽",
+       co AS "Компания"
 FROM src
-GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14
 HAVING ROUND(SUM(vat), 2) <> 0
 ORDER BY 1, 5, 6, 7

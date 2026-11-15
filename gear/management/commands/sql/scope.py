@@ -147,6 +147,29 @@ def prepare(con, key: str):
     con.execute("""CREATE OR REPLACE TEMP VIEW scope_ba_balance_csv AS
         SELECT t.* FROM pg.public.ba_balance_csv t
         WHERE t.acc_id IN (SELECT bs_acc_id FROM scope_bankaccount)""")
+    con.execute(f"CREATE OR REPLACE TEMP TABLE scope_flags AS SELECT {ru_only} AS has_ru")
+    # НДС розницы: в валюте пакета (своя валюта компании или рубли по курсу ЦБ на дату)
+    con.execute("""
+        CREATE OR REPLACE TEMP TABLE scope_rates_all AS
+        SELECT upper(currency) AS cur, date::DATE AS d, rate::DOUBLE AS rate
+        FROM pg.public.macro_currencyrate WHERE base_currency = 'RUB' ORDER BY 1, 2""")
+    to_rub = "CASE WHEN x.cur = 'RUB' THEN 1 ELSE r.rate END"
+    factor = (to_rub if cur == "RUB" else
+              f"CASE WHEN x.cur = '{cur}' THEN 1 ELSE {to_rub} / NULLIF(t.rate, 0) END")
+    con.execute(f"""
+        CREATE OR REPLACE TEMP VIEW scope_retail_vat AS
+        SELECT x.d, x.co, x.kind, x.vat * {factor} AS vat
+        FROM (
+            SELECT s.doc_date::DATE AS d, s.kind,
+                   CASE WHEN s.kind = 'sale' THEN 1 ELSE -1 END
+                       * (s.amount - s.amount_novat)::DOUBLE AS vat,
+                   ow.name AS co, upper(COALESCE(ow.currency, 'RUB')) AS cur
+            FROM pg.public.sales_retailsale s
+            JOIN pg.public.corporate_owners ow ON ow.id = s.owner_id
+            WHERE s.owner_id IN (SELECT id FROM scope_owners)
+        ) x
+        ASOF LEFT JOIN scope_rates_all r ON r.cur = x.cur AND x.d >= r.d
+        ASOF LEFT JOIN (SELECT * FROM scope_rates_all WHERE cur = '{cur}') t ON x.d >= t.d""")
     con.execute(f"CREATE OR REPLACE TEMP VIEW scope_wb_balance AS "
                 f"SELECT * FROM pg.public.wb_balance_for_csv WHERE {ru_only}")
     con.execute(f"CREATE OR REPLACE TEMP VIEW scope_vatadjustment AS "

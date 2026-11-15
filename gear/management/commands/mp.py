@@ -6014,6 +6014,7 @@ PIVOT_LAYOUT = {
                  "Договор"],
         "open_levels": 2,
         "row_stripes": False,
+        "page": ["Компания"],
     },
 }
 
@@ -6348,19 +6349,14 @@ def build_pivots_workbook(date_from, out_path=None, company=None):
             data[name] = ([d[0] for d in cur.description], cur.fetchall())
         pl_columns, pl_rows, mismatches = pivot_pl_source(con, date_from)
         data["raw_pl"] = (pl_columns, pl_rows)
-        vat_src = None
-        if _scope.has_ru(company):   # НДС считается только по РФ (WB, УПД)
-            try:                     # витрины pl_sales и wb_costs уже собраны выше
-                cur = con.execute(read_sql("pivot_vat.txt"), parameters={"date_from": date_from})
-                vat_src = ([d[0] for d in cur.description], cur.fetchall())
-            except Exception as e:
-                print("Источник по НДС не собран: %s: %s" % (type(e).__name__, e))
+        try:                         # витрины pl_sales и wb_costs уже собраны выше
+            cur = con.execute(read_sql("pivot_vat.txt"), parameters={"date_from": date_from})
+            vat_src = ([d[0] for d in cur.description], cur.fetchall())
+        except Exception as e:
+            print("Источник по НДС не собран: %s: %s" % (type(e).__name__, e))
+            vat_src = None
 
     wb = load_workbook(PIVOTS_SKELETON)
-    if not _scope.has_ru(company):   # без РФ сводной по НДС нет
-        for name in ("Сводная НДС", "raw_vat"):
-            if name in wb.sheetnames:
-                del wb[name]
 
     counts = {}
     for name, (columns, rows) in data.items():
