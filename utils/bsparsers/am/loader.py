@@ -186,6 +186,18 @@ AUTO_SQL = [
         WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL AND d.cp_id = r.cp_id
           AND c.owner_id = d.owner_id AND d.temp ~* r.regex
     """),
+    ("единственный договор контрагента", """
+        WITH one AS (
+            SELECT owner_id, cp_id, min(id) AS contract_id
+            FROM contracts_contracts
+            GROUP BY owner_id, cp_id
+            HAVING count(*) = 1
+        )
+        UPDATE treasury_cfdata d SET contract_id = one.contract_id
+        FROM one
+        WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL
+          AND one.owner_id = d.owner_id AND one.cp_id = d.cp_id
+    """),
     ("контрагент по договору", """
         UPDATE treasury_cfdata d SET cp_final_id = c.cp_id
         FROM contracts_contracts c
@@ -258,6 +270,12 @@ def retranslate(log=print) -> None:
         CfData.objects.bulk_update(changed, ["temp_ru", "cp_name_ru"], batch_size=1000)
         dropped, _ = TextTranslation.objects.filter(hits=0, is_checked=False).delete()
     log(f"Переводы и названия: операций {len(rows)}, обновлено {len(changed)}, лишних шаблонов удалено {dropped}")
+
+
+def unassigned(qs):
+    """Операции, где не заполнено хотя бы одно поле разноски."""
+    return qs.filter(models.Q(cfitem__isnull=True) | models.Q(contract__isnull=True) | models.Q(hint__isnull=True)
+                     | models.Q(hint="") | models.Q(cp__isnull=True) | models.Q(cp_final__isnull=True))
 
 
 def reassign(owner_id: int, log=print) -> None:

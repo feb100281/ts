@@ -25,7 +25,7 @@ from django.db import models
 from contracts.models import Contracts
 from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule, CpName
 from utils.bsparsers.bsupdater import update_cf_data
-from utils.bsparsers.am.loader import load_statement, sniff
+from utils.bsparsers.am.loader import auto_assign, load_statement, sniff, unassigned
 from decimal import Decimal, InvalidOperation
 
 
@@ -289,6 +289,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
         ok = 0
         bad = 0
+        notes = []
         for obj in qs:
             try:
                 if not obj.file:
@@ -296,17 +297,23 @@ class BankStatementsAdmin(admin.ModelAdmin):
                     continue
                 if sniff(obj.file.path):                      # Армения — свой загрузчик, без удаления строк
                     load_statement(obj.file.path, log=lambda *_: None, bs=obj)
+                    ids = list(unassigned(CfData.objects.filter(bs=obj)).values_list("id", flat=True))
+                    lines = []
+                    auto_assign(ids, obj.owner_id, lines.append)   # разноска и уже загруженных строк
+                    notes.append(f"{obj}: без разноски было {len(ids)}; " + ", ".join(x.strip() for x in lines))
                 else:
                     result = update_cf_data(obj.file.path, obj.pk)
-                # можно либо копить результаты, либо показывать кратко
                 ok += 1
             except Exception as e:
                 bad += 1
+                notes.append(f"{obj}: ошибка — {e}")
 
         if ok:
             messages.success(request, f"Обработано выписок: {ok}")
         if bad:
             messages.error(request, f"Ошибок/пропусков: {bad} (нет файла или ошибка обработки).")
+        for n in notes:
+            messages.info(request, n)
 
         # вернуть обратно на changelist с теми же фильтрами
         return redirect(request.META.get("HTTP_REFERER", ".."))
