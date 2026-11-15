@@ -72,37 +72,48 @@ def request_text(owner, groups):
 
 
 def to_xlsx(owner, groups) -> bytes:
+    from datetime import date
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from treasury.xlsx_style import cover, table
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Уточнить"
-    head = ["№ группы", "Контрагент", "Название в выписке", "Счёт контрагента", "Дата", "Банк", "Наш счёт",
-            "Валюта", "Поступление", "Списание", "Назначение (оригинал)", "Назначение (перевод)", "Пояснение"]
-    ws.append(head)
-    for c in ws[1]:
-        c.font = Font(bold=True, color="FFFFFF")
-        c.fill = PatternFill("solid", fgColor="1E293B")
-        c.alignment = Alignment(wrap_text=True, vertical="center")
+    ws.title = "Запрос"
+    total = sum(len(g["ops"]) for g in groups)
+    lines = ["Коллеги, добрый день!", "",
+             f"По {owner.name} есть платежи, назначение которых нам непонятно — всего {total} "
+             f"в {len(groups)} группах (группа — один контрагент).", "",
+             "Просим на листе «Платежи» заполнить жёлтые колонки:",
+             "   • «Что за платёж / услуга» — товар, аренда, услуги (какие), заём, налог, возврат и т.п.;",
+             "   • «Договор / счёт» — номер и дата договора или счёта, если есть.",
+             "Если пояснение одно на всю группу, достаточно заполнить первую строку группы.", "",
+             "Группы:"]
+    for n, g in enumerate(groups, 1):
+        tot = []
+        if g["dt"]:
+            tot.append(f"поступления {_money(g['dt'])}")
+        if g["cr"]:
+            tot.append(f"списания {_money(g['cr'])}")
+        lines.append(f"   {n}. {g['name'] or 'Контрагент не указан'}"
+                     f"{', счёт ' + g['account'] if g['account'] else ''} — операций {len(g['ops'])}; "
+                     f"{', '.join(tot)} {g['cur']}")
+    lines += ["", "Спасибо!"]
+    cover(ws, "Уточнение платежей", f"{owner.name} · сформировано {date.today():%d.%m.%Y}", lines,
+          link_sheet="Платежи", link_text="→ Таблица для заполнения — на листе «Платежи»")
+
+    rows = []
     for n, g in enumerate(groups, 1):
         for o in g["ops"]:
-            ws.append([n, g["name"], g["name_src"], g["account"], o.date,
-                       o.ba.bank.name if o.ba and o.ba.bank else "", o.ba.account if o.ba else "",
-                       o.ba.currency if o.ba else "", float(o.dt or 0) or None, float(o.cr or 0) or None,
-                       o.temp or "", o.temp_ru or "", ""])
-    widths = [8, 32, 32, 22, 11, 16, 20, 7, 14, 14, 50, 50, 40]
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
-    for row in ws.iter_rows(min_row=2):
-        row[4].number_format = "DD.MM.YYYY"
-        for c in (row[8], row[9]):
-            c.number_format = "# ##0.00"
-        for c in (row[10], row[11]):
-            c.alignment = Alignment(wrap_text=True, vertical="top")
-    ws.freeze_panes = "C2"                     # шапка и контрагент остаются на месте
-    ws.row_dimensions[1].height = 32
-    ws.auto_filter.ref = ws.dimensions
+            rows.append([n, g["name"], g["name_src"], g["account"], o.date,
+                         o.ba.bank.name if o.ba and o.ba.bank else "", o.ba.account if o.ba else "",
+                         o.ba.currency if o.ba else "", float(o.dt or 0) or None, float(o.cr or 0) or None,
+                         o.temp or "", o.temp_ru or "", "", ""])
+    table(wb.create_sheet("Платежи"),
+          ["Группа", "Контрагент", "Название в выписке", "Счёт контрагента", "Дата", "Банк", "Наш счёт",
+           "Валюта", "Поступление", "Списание", "Назначение (оригинал)", "Назначение (перевод)",
+           "Что за платёж / услуга", "Договор / счёт (№, дата)"],
+          rows, [9, 30, 30, 22, 11, 15, 20, 7, 14, 14, 45, 45, 40, 26],
+          money=(9, 10), dates=(5,), wrap=(2, 3, 11, 12, 13, 14), inputs=(13, 14), freeze="C2")
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()

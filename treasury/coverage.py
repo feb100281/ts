@@ -149,3 +149,35 @@ def _request(owner, start, end, ask, refetch, unknown) -> str:
           f"депозитным и карточным — с {since} по {fmt(end)}, а также список всех счетов компании "
           f"с датами открытия и закрытия (справка из банков или из налоговой).", "", "Спасибо!"]
     return "\n".join(L)
+
+
+def to_xlsx(data) -> bytes:
+    from io import BytesIO
+    from openpyxl import Workbook
+    from treasury.xlsx_style import cover, table
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Запрос"
+    owner = data["owner"]
+    per = f"проверка с {fmt(data['start'])}" if data["start"] else "проверка с первой выписки"
+    cover(ws, "Запрос банковских выписок", f"{owner.name} · {per} по {fmt(data['end'])} · "
+          f"сформировано {date.today():%d.%m.%Y}", data["text"].split("\n"),
+          link_sheet="Счета", link_text="→ Подробности по каждому счёту — на листе «Счета»")
+
+    rows = [[r["bank"], r["ba"].account, r["ba"].currency,
+             "закрыт" if r["ba"].is_active is False else "действующий", r["count"], r["first"], r["last"],
+             float(r["eb"]) if r["eb"] is not None else None,
+             "\n".join(f"{k}: {v}" for k, v in r["issues"]) or "в порядке"] for r in data["rows"]]
+    table(wb.create_sheet("Счета"),
+          ["Банк", "Счёт", "Валюта", "Статус", "Выписок", "Первая с", "Последняя по", "Исходящий остаток",
+           "Замечания"], rows, [18, 24, 8, 13, 9, 12, 13, 18, 70],
+          money=(8,), dates=(6, 7), wrap=(9,), freeze="C2")
+    if data["unknown"]:
+        rows = [[u["account"], u["name"], u["count"], u["first"], u["last"], u["sample"], ""] for u in data["unknown"]]
+        table(wb.create_sheet("Возможные счета"),
+              ["Счёт", "Название в выписке", "Операций", "С", "По", "Пример назначения", "Наш ли это счёт?"],
+              rows, [26, 40, 10, 12, 12, 60, 30], dates=(4, 5), wrap=(2, 6, 7), inputs=(7,), freeze="B2")
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

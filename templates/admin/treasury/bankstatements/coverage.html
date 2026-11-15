@@ -31,6 +31,7 @@
       Проверка с {% if data.start %}{{ data.start|date:"d.m.Y" }}{% else %}первой выписки (начало деятельности в карточке компании не указано){% endif %}
       по {{ data.end|date:"d.m.Y" }} — последний закрытый месяц.
     </span>
+    <a class="cv-btn" style="text-decoration:none" href="?owner={{ data.owner.pk }}&xlsx=1">Скачать Excel</a>
   </form>
 
   {% if data.ok %}<p class="cv-ok">По известным счетам выписки полные, остатки сходятся.</p>{% endif %}

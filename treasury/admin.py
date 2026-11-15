@@ -312,8 +312,16 @@ class BankStatementsAdmin(admin.ModelAdmin):
         owners = list(Owners.objects.exclude(country="RU").order_by("name")) or list(Owners.objects.order_by("name"))
         pick = request.GET.get("owner")
         owner = next((o for o in owners if str(o.pk) == pick), owners[0] if owners else None)
+        data = check(owner) if owner else None
+        if data and request.GET.get("xlsx"):
+            from django.http import HttpResponse
+            from treasury.coverage import to_xlsx
+            resp = HttpResponse(to_xlsx(data),
+                                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            resp["Content-Disposition"] = 'attachment; filename="statements_request.xlsx"'
+            return resp
         ctx = {**self.admin_site.each_context(request), "title": "Контроль выписок",
-               "owners": owners, "data": check(owner) if owner else None}
+               "owners": owners, "data": data}
         return TemplateResponse(request, "admin/treasury/bankstatements/coverage.html", ctx)
 
     def process_selected_view(self, request):
