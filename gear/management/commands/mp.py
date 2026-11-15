@@ -173,6 +173,24 @@ SEC_CORP = "7. КОРПОРАТИВНЫЕ РАСХОДЫ"
 SEC_FIN = "8. ФИНАНСОВЫЕ РАСХОДЫ"
 SEC_VATREF = "Н. СПРАВОЧНО: НДС"     # только листы «P&L после СПП» и «с корректировкой»
 SEC_OFFPL = "О. СПРАВОЧНО: ВНЕ P&L"  # те же листы
+SEC_RETAIL = "Р. СПРАВОЧНО: РОЗНИЦА"  # розница зарубежных компаний, уже внутри 1.4 и 1.6
+RETAIL_REV = "1.4р Выручка розница"
+RETAIL_COGS = "1.6р Себестоимость розница"
+
+
+def add_retail(pl_data):
+    """Розница (раздел SEC_RETAIL) входит в строки 1.4 и 1.6."""
+    for (me, sec, itm), v in list(pl_data.items()):
+        if sec == SEC_RETAIL and v:
+            key = (me, SEC_REVENUE, "1.4 Продажи без НДС" if itm == RETAIL_REV else "1.6. Себестоимость")
+            pl_data[key] = round((pl_data.get(key) or 0.0) + v, 2)
+    return pl_data
+
+
+def retail_of(pl_data, me):
+    """(выручка, себестоимость) розницы за месяц — входят в строки 1.4 и 1.6."""
+    return (pl_data.get((me, SEC_RETAIL, RETAIL_REV)) or 0.0,
+            pl_data.get((me, SEC_RETAIL, RETAIL_COGS)) or 0.0)
 OP_IN = "О.1 Поступления в CF без P&L"
 OP_GOODS_PAID = "О.2а Оплачено поставщикам товаров на баланс"
 OP_GOODS_UPD = "О.4 Получено по УПД, все"
@@ -214,8 +232,15 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
          else "Продажи без НДС (как в дашборде)" if dashboard
          else "Продажи без НДС до СПП (чистая выручка)",
          (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
+    retail = _PACK["scope"] != _scope.DEFAULT
+    if retail:
+        add(("item", "1.4р", "в т.ч. выручка розница (магазины)",
+             (SEC_RETAIL, RETAIL_REV, 1), 2, FMT_MONEY))
     add(("item", "1.6", "Себестоимость проданного товара",
          (SEC_REVENUE, "1.6. Себестоимость", -1), 1, FMT_MONEY))
+    if retail:
+        add(("item", "1.6р", "в т.ч. себестоимость розница (магазины)",
+             (SEC_RETAIL, RETAIL_COGS, -1), 2, FMT_MONEY))
     add(("calc", "1.7", "МАРЖА ПРОДАЖ (валовая прибыль)",
          [("1.4", 1), ("1.6", 1)], 0, FMT_MONEY))
     add(("ratio", "1.8", "Маржа продаж, % к выручке",
@@ -1009,8 +1034,9 @@ def pl_dashboard(pl_data, dash_rows):
     for me, amount, retail, rev, cogs, comm, wb in dash_rows:
         out[(me, SEC_REVENUE, "1.1. Продажи до СПП")] = round(amount, 2)
         out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
-        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
-        out[(me, SEC_REVENUE, "1.6. Себестоимость")] = round(cogs, 2)
+        r_rev, r_cogs = retail_of(pl_data, me)
+        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev + r_rev, 2)
+        out[(me, SEC_REVENUE, "1.6. Себестоимость")] = round(cogs + r_cogs, 2)
         out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(DASH_COMM_CORR.get(me, comm), 2)
         actual = sum(v or 0 for (m, sec, _i), v in out.items()
                      if m == me and sec in (SEC_SELLING, SEC_PROMO))
@@ -1136,6 +1162,7 @@ def pl_dashboard_corrected(pl_data, dash_rows):
         p = lambda itm: pl_data.get((me, SEC_REVENUE, itm)) or 0.0
         out[(me, SEC_REVENUE, "1.1. Продажи до СПП")] = round(amount, 2)
         out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
+        rev += retail_of(pl_data, me)[0]
         out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
         out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(comm, 2)
         out[(me, SEC_REVENUE, CORR_VAT_REV)] = round(p("1.4 Продажи без НДС") - rev, 2)
@@ -4545,16 +4572,17 @@ def fetch_pack_data(con, date_from):
     """).fetchall()
 
     # розница зарубежных компаний: строки 1.4 и 1.6 из главной книги
-    pl_rows += con.execute("""
-        SELECT LAST_DAY(date_from)::DATE AS me, $sec AS section,
-               CASE WHEN STARTS_WITH(cost_item, '510190') THEN '1.4 Продажи без НДС'
-                    ELSE '1.6. Себестоимость' END AS item,
+    retail = con.execute("""
+        SELECT LAST_DAY(date_from)::DATE AS me,
+               STARTS_WITH(cost_item, '510190') AS is_rev,
                SUM(CASE WHEN STARTS_WITH(cost_item, '510190') THEN amount ELSE -amount END) AS value
         FROM pg.public.pl_for_csv
         WHERE (STARTS_WITH(cost_item, '510190') OR STARTS_WITH(cost_item, '520190'))
           AND date_from <= $date_from
-        GROUP BY 1, 2, 3
-    """, parameters={"sec": SEC_REVENUE, "date_from": date_from}).fetchall()
+        GROUP BY 1, 2
+    """, parameters={"date_from": date_from}).fetchall()
+    for me, is_rev, value in retail:                # прибавляется к 1.4/1.6 в add_retail
+        pl_rows.append((me, SEC_RETAIL, RETAIL_REV if is_rev else RETAIL_COGS, value))
 
     cf_rows = con.execute("""
         SELECT
@@ -5389,6 +5417,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         pl_data[(me, section, item)] = (round(float(value), 2)
                                         if value is not None else None)
     apply_vat_writeoffs(pl_data, vat_adj)
+    add_retail(pl_data)
 
     cf_data = {}
     for me, act, op, itm, sub, cp, contract, amount in cf_rows:

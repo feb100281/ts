@@ -89,13 +89,13 @@ def prepare(con, key: str):
             return (f"SELECT t.* REPLACE ({rep}) FROM {src} t "
                     f"ASOF LEFT JOIN scope_rate r ON t.date_from::DATE >= r.d "
                     f"WHERE t.company_id IN (SELECT id FROM scope_owners)")
-        pl = conv("pg.public.pl_for_csv", ["dt", "cr", "amount"])
-        cf = conv("pg.public.cf_to_csv", ["dt", "cr", "amount"])
+        pl = conv("pg.public.pl_for_csv_all", ["dt", "cr", "amount"])
+        cf = conv("pg.public.cf_to_csv_all", ["dt", "cr", "amount"])
         gl = conv("pg.gl.fact", ["dt", "cr"], money_int=True)
     else:
         flt = "WHERE company_id IN (SELECT id FROM scope_owners)"
-        pl = f"SELECT * FROM pg.public.pl_for_csv {flt}"
-        cf = f"SELECT * FROM pg.public.cf_to_csv {flt}"
+        pl = f"SELECT * FROM pg.public.pl_for_csv_all {flt}"
+        cf = f"SELECT * FROM pg.public.cf_to_csv_all {flt}"
         gl = f"SELECT * FROM pg.gl.fact {flt}"
 
     con.execute(f"CREATE OR REPLACE TEMP VIEW scope_pl_for_csv AS {pl}")

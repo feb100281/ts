@@ -61,10 +61,10 @@ QUERIES = [
         SELECT * FROM (SELECT to_jsonb(a) ->> 'company_id' AS company_id, count(*) FROM gl.accurals_args a GROUP BY 1) x"""),
     ("cf_to_csv / pl_for_csv: колонка компании", """
         SELECT 'cf' AS src, to_jsonb(t) ->> 'company' AS company, count(*), sum(amount)
-        FROM (SELECT * FROM cf_to_csv) t GROUP BY 1, 2
+        FROM (SELECT * FROM cf_to_csv_all) t GROUP BY 1, 2
         UNION ALL
         SELECT 'pl', to_jsonb(t) ->> 'company', count(*), sum(amount)
-        FROM (SELECT * FROM pl_for_csv) t GROUP BY 1, 2"""),
+        FROM (SELECT * FROM pl_for_csv_all) t GROUP BY 1, 2"""),
     ("Разнесённость операций по компаниям", """
         SELECT o.name, count(*) AS ops, count(t.contract_id) AS with_contract, count(t.cfitem_id) AS with_item,
                count(*) FILTER (WHERE t.contract_id IS NOT NULL AND t.cfitem_id IS NOT NULL) AS ready
@@ -97,7 +97,7 @@ QUERIES = [
         WHERE f.chapter IN ('PL_RETAIL', 'BS_RETAIL') GROUP BY 1, 2, 3, 4 ORDER BY 1, 3, 4"""),
     ("Розница в pl_for_csv по компаниям", """
         SELECT to_jsonb(t) ->> 'company' AS company, t.cost_item, count(*), sum(t.amount)
-        FROM pl_for_csv t WHERE t.cost_item LIKE '5_0190%%' GROUP BY 1, 2"""),
+        FROM pl_for_csv_all t WHERE t.cost_item LIKE '5_0190%%' GROUP BY 1, 2"""),
     ("Текущий пользователь", "SELECT current_user, current_database()"),
 ]
 
