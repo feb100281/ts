@@ -24,6 +24,7 @@ class BankStatements(models.Model):
     bb = models.DecimalField("Начальный остаток",max_digits=12,decimal_places=2,null=True,blank=True)
     eb = models.DecimalField("Конечный остаток",max_digits=12,decimal_places=2,null=True,blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата загрузки")
+    file_sha1 = models.CharField("Отпечаток файла", max_length=40, null=True, blank=True, db_index=True)
 
     class Meta:
         verbose_name = "Выписка"
@@ -44,6 +45,13 @@ class BankStatements(models.Model):
         # Триггер: заполняем только если поля ещё пустые (можешь поменять условие)
         need_parse = any(v is None for v in (self.start, self.finish, self.bb, self.eb))
         if not need_parse:
+            return
+
+        # Армянская выписка: разбор и загрузка своим загрузчиком
+        from utils.bsparsers.am.loader import sniff
+        if sniff(self.file.path):
+            from utils.bsparsers.am.loader import load_statement
+            load_statement(self.file.path, log=lambda *_: None, bs=self)
             return
 
         # Парсим файл
@@ -103,6 +111,18 @@ class CfData(models.Model):
     contract = models.ForeignKey(Contracts,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Договор")
     cfitem = models.ForeignKey(CfItems,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Статья CF" )
     ba = models.ForeignKey(BankAccount,on_delete=models.CASCADE,null=True,blank=True,verbose_name="Расчетный счет")
+
+    # Выписки вне РФ
+    temp_ru = models.TextField("Назначение (перевод)", null=True, blank=True)
+    op_type = models.CharField("Тип операции банка", max_length=100, null=True, blank=True)
+    dt_eq = models.DecimalField("Дт в валюте учёта", max_digits=14, decimal_places=2, null=True, blank=True)
+    cr_eq = models.DecimalField("Кр в валюте учёта", max_digits=14, decimal_places=2, null=True, blank=True)
+    row_key = models.CharField("Ключ операции", max_length=40, null=True, blank=True, db_index=True)
+    hint = models.CharField("Разметка", max_length=100, null=True, blank=True, db_index=True,
+                            help_text="Ручная разметка из файла выписки или по похожим операциям")
+    hint_auto = models.BooleanField("Разметка автоматически", default=False)
+    cp_name_ru = models.CharField("Контрагент по-русски", max_length=250, null=True, blank=True,
+                                  help_text="Из справочника «Названия контрагентов»")
     
     
     def save(self, *args, **kwargs):
@@ -281,3 +301,71 @@ class ContractsRexex(models.Model):
         # чтобы валидация срабатывала и в админке, и при save() из кода
         self.full_clean()
         return super().save(*args, **kwargs)
+
+class CounterpartyAccount(models.Model):
+    """Счёт контрагента из выписки → контрагент. Нужен там, где в выписке нет ИНН (Армения)."""
+    account = models.CharField("Счёт контрагента", max_length=50, unique=True)
+    cp = models.ForeignKey(Counterparty, on_delete=models.CASCADE, verbose_name="Контрагент", related_name="bank_accounts")
+    comment = models.CharField("Комментарий", max_length=255, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Счёт контрагента"
+        verbose_name_plural = "Счета контрагентов"
+
+    def __str__(self):
+        return f"{self.account} → {self.cp}"
+
+
+class TextTranslation(models.Model):
+    """Словарь переводов назначений платежа. Числа в шаблоне заменены на #."""
+    key = models.CharField("Ключ", max_length=40, unique=True)
+    source = models.TextField("Шаблон (оригинал)")
+    translation = models.TextField("Перевод", null=True, blank=True,
+                                   help_text="Числа обозначены # — в том же порядке, что в оригинале")
+    is_checked = models.BooleanField("Проверен", default=False)
+    hits = models.PositiveIntegerField("Встречается, строк", default=0)
+    created_at = models.DateTimeField("Добавлен", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Перевод назначения"
+        verbose_name_plural = "Словарь переводов"
+        ordering = ("-hits",)
+
+    def __str__(self):
+        return self.source[:80]
+
+
+
+class HintRule(models.Model):
+    """Разметка операции → статья CF. Применяется, если статья не найдена по договору."""
+    hint = models.CharField("Разметка", max_length=100, unique=True)
+    cfitem_dt = models.ForeignKey(CfItems, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="hint_rules_dt", verbose_name="Статья CF для прихода")
+    cfitem_cr = models.ForeignKey(CfItems, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="hint_rules_cr", verbose_name="Статья CF для расхода")
+    comment = models.CharField("Комментарий", max_length=255, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Разметка → статья"
+        verbose_name_plural = "Разметка → статьи"
+        ordering = ("hint",)
+
+    def __str__(self):
+        return self.hint
+
+
+
+class CpName(models.Model):
+    """Название контрагента из выписки → по-русски. Заполняется автоматически, правится вручную."""
+    source = models.CharField("В выписке", max_length=250, unique=True)
+    name_ru = models.CharField("По-русски", max_length=250, blank=True, default="")
+    is_checked = models.BooleanField("Проверено", default=False)
+    hits = models.PositiveIntegerField("Операций", default=0)
+
+    class Meta:
+        verbose_name = "Название контрагента"
+        verbose_name_plural = "Названия контрагентов"
+        ordering = ("-hits",)
+
+    def __str__(self):
+        return self.name_ru or self.source

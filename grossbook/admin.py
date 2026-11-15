@@ -310,6 +310,7 @@ class LoanAdjustmentAdmin(admin.ModelAdmin):
         "is_active",
         "reason",
         "adjustment_date",
+        ("contract__owner", RelatedOnlyFieldListFilter),
         (
             "contract",
             RelatedOnlyFieldListFilter,
@@ -938,9 +939,9 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
             "cf_from", "cf_to")
 
     def changelist_view(self, request, extra_context=None):
-        # свои фильтры (не list_filter): month=YYYY-MM, cp=id, cf=1/0, sort=asc/desc
+        # свои фильтры (не list_filter): month=YYYY-MM, cp=id, cf=1/0, owner=id, sort=asc/desc
         q = request.GET.copy()
-        f = {k: q.pop(k)[0] for k in ("month", "cp", "cf", "sort") if k in q}
+        f = {k: q.pop(k)[0] for k in ("month", "cp", "cf", "owner", "sort") if k in q}
         request.GET = q
         request._gla = f
         response = super().changelist_view(request, extra_context)
@@ -983,9 +984,18 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
             "sort_label": "Дата ↑ (сначала старые)" if f.get("sort") == "asc" else "Дата ↓ (сначала новые)",
             "cf_links": [{"label": l, "url": link(cf=v), "on": f.get("cf", "") == v}
                          for l, v in (("Все", ""), ("С переносом в CF", "1"), ("Без CF", "0"))],
+            "owner_links": [{"label": "Все", "url": link(owner=""), "on": not f.get("owner")}]
+                + [{"label": name, "url": link(owner=str(oid)), "on": f.get("owner") == str(oid)}
+                   for oid, name in self._owners()],
             "hidden": {k: v for k, v in base.items() if k != "cp"},
         })
         return response
+
+    def _owners(self):
+        """Компании, по которым есть корректировки (для фильтра)."""
+        from corporate.models import Owners
+        ids = GlAdjustment.objects.values_list("owner_id", flat=True).distinct()
+        return list(Owners.objects.filter(id__in=ids).order_by("name").values_list("id", "name"))
 
     def _cps(self):
         """Контрагенты, по которым есть корректировки (для фильтра)."""
@@ -1003,6 +1013,8 @@ class GlAdjustmentAdmin(admin.ModelAdmin):
             if f.get("month"):
                 y, m = (int(x) for x in f["month"].split("-"))
                 qs = qs.filter(date__year=y, date__month=m)
+            if f.get("owner"):
+                qs = qs.filter(owner_id=int(f["owner"]))
             if f.get("cp"):
                 cp = int(f["cp"])
                 qs = qs.filter(Q(dt_contract__cp_id=cp) | Q(cr_contract__cp_id=cp))

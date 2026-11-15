@@ -575,3 +575,45 @@ class MVDataMartProduct(models.Model):
 # -- Если часто фильтруешь по типу транзакции
 # CREATE INDEX IF NOT EXISTS salesdata_transaction_type_idx
 #   ON sales_salesdata (transaction_type);
+
+
+class RetailSale(models.Model):
+    """Розничные продажи и возвраты магазинов (выгрузка из 1С), построчно. Суммы — в валюте компании."""
+
+    KIND_CHOICES = (("sale", "Продажа"), ("return", "Возврат"))
+
+    owner = models.ForeignKey("corporate.Owners", on_delete=models.CASCADE, verbose_name="Компания")
+    kind = models.CharField("Вид", max_length=10, choices=KIND_CHOICES, db_index=True)
+    period = models.DateField("Месяц", db_index=True)
+    doc_number = models.CharField("Документ", max_length=100)
+    doc_date = models.DateTimeField("Дата", db_index=True)
+    check_number = models.CharField("Чек продажи", max_length=100, blank=True, default="")
+    check_date = models.DateTimeField("Дата чека продажи", null=True, blank=True)
+    article_invoice = models.CharField("Артикул инвойс", max_length=100, blank=True, default="")
+    article = models.CharField("Артикул", max_length=100, blank=True, default="", db_index=True)
+    size = models.CharField("Размер", max_length=100, blank=True, default="")
+    barcode = models.CharField("Штрихкод / код маркировки", max_length=255, blank=True, default="")
+    name = models.CharField("Наименование", max_length=500, blank=True, default="")
+    qty = models.DecimalField("Количество", max_digits=14, decimal_places=3, default=0)
+    price = models.DecimalField("Цена", max_digits=16, decimal_places=2, default=0)
+    amount = models.DecimalField("Сумма с НДС", max_digits=16, decimal_places=2, default=0)
+    amount_novat = models.DecimalField("Сумма без НДС", max_digits=16, decimal_places=2, default=0)
+    cost_unit = models.DecimalField("Себестоимость ед.", max_digits=16, decimal_places=2, default=0)
+    cost_total = models.DecimalField("Себестоимость", max_digits=16, decimal_places=2, default=0)
+    disc_manual_pct = models.DecimalField("Скидка ручная, %", max_digits=9, decimal_places=4, default=0)
+    disc_manual_sum = models.DecimalField("Скидка ручная", max_digits=16, decimal_places=2, default=0)
+    disc_auto_pct = models.DecimalField("Скидка авто, %", max_digits=9, decimal_places=4, default=0)
+    disc_auto_sum = models.DecimalField("Скидка авто", max_digits=16, decimal_places=2, default=0)
+    bonus_sum = models.DecimalField("Бонусы", max_digits=16, decimal_places=2, default=0)
+    row_key = models.CharField("Ключ строки", max_length=40)
+    source_file = models.CharField("Файл", max_length=255, blank=True, default="")
+    source_sha1 = models.CharField("Отпечаток файла", max_length=40, blank=True, default="", db_index=True)
+
+    class Meta:
+        verbose_name = "Розничная продажа"
+        verbose_name_plural = "Розничные продажи"
+        constraints = [models.UniqueConstraint(fields=["owner", "row_key"], name="uniq_retailsale_owner_key")]
+        indexes = [models.Index(fields=["owner", "period", "kind"], name="retailsale_owner_period_kind")]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} {self.doc_number} от {self.doc_date:%d.%m.%Y}"

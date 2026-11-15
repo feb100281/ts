@@ -41,6 +41,10 @@ from .sql.read_query import (
     wb_payouts,
     ensure_pl_src,
 )
+from .sql import scope as _scope
+
+# компания текущей сборки (РФ / Армения / консолидация), см. sql/scope.py
+_PACK = {"scope": _scope.DEFAULT}
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -169,6 +173,24 @@ SEC_CORP = "7. КОРПОРАТИВНЫЕ РАСХОДЫ"
 SEC_FIN = "8. ФИНАНСОВЫЕ РАСХОДЫ"
 SEC_VATREF = "Н. СПРАВОЧНО: НДС"     # только листы «P&L после СПП» и «с корректировкой»
 SEC_OFFPL = "О. СПРАВОЧНО: ВНЕ P&L"  # те же листы
+SEC_RETAIL = "Р. СПРАВОЧНО: РОЗНИЦА"  # розница зарубежных компаний, уже внутри 1.4 и 1.6
+RETAIL_REV = "1.4р Выручка розница"
+RETAIL_COGS = "1.6р Себестоимость розница"
+
+
+def add_retail(pl_data):
+    """Розница (раздел SEC_RETAIL) входит в строки 1.4 и 1.6."""
+    for (me, sec, itm), v in list(pl_data.items()):
+        if sec == SEC_RETAIL and v:
+            key = (me, SEC_REVENUE, "1.4 Продажи без НДС" if itm == RETAIL_REV else "1.6. Себестоимость")
+            pl_data[key] = round((pl_data.get(key) or 0.0) + v, 2)
+    return pl_data
+
+
+def retail_of(pl_data, me):
+    """(выручка, себестоимость) розницы за месяц — входят в строки 1.4 и 1.6."""
+    return (pl_data.get((me, SEC_RETAIL, RETAIL_REV)) or 0.0,
+            pl_data.get((me, SEC_RETAIL, RETAIL_COGS)) or 0.0)
 OP_IN = "О.1 Поступления в CF без P&L"
 OP_GOODS_PAID = "О.2а Оплачено поставщикам товаров на баланс"
 OP_GOODS_UPD = "О.4 Получено по УПД, все"
@@ -193,9 +215,24 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
         after_spp, dashboard = False, True
     rev = "1.18" if corrected else "1.4"
     calc_vat = corrected   # подписи без привязки к источнику
+    wb_lines = _scope.has_ru(_PACK["scope"])        # без РФ — нет WB, СПП и комиссии
+    if not wb_lines:
+        after_spp = dashboard = corrected = calc_vat = False
+        rev = "1.4"
 
     # ------------------------------------------------ 1. Выручка и маржа
     add(("band", "1", "ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ", None, 0, None))
+    if not wb_lines:
+        add(("item", "1.4", "Выручка без НДС (за вычетом возвратов)",
+             (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
+        add(("item", "1.6", "Себестоимость проданного товара",
+             (SEC_REVENUE, "1.6. Себестоимость", -1), 1, FMT_MONEY))
+        add(("calc", "1.7", "МАРЖА ПРОДАЖ (валовая прибыль)",
+             [("1.4", 1), ("1.6", 1)], 0, FMT_MONEY))
+        add(("ratio", "1.8", "Маржа продаж, % к выручке",
+             ("1.7", "1.4", 1), 2, FMT_PCT))
+        add(("blank", None, None, None, 1, None))
+        return _pl_layout_tail(L, "1.7", rev, after_spp, corrected, wb_lines=False)
     add(("item", "1.1", "Продажи до СПП с НДС (валовый оборот)",
          (SEC_REVENUE, "1.1. Продажи до СПП", 1), 1, FMT_MONEY))
     add(("item", "1.2", "Продажи по отчёту WB с НДС",
@@ -210,8 +247,15 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
          else "Продажи без НДС (как в дашборде)" if dashboard
          else "Продажи без НДС до СПП (чистая выручка)",
          (SEC_REVENUE, "1.4 Продажи без НДС", 1), 0, FMT_MONEY))
+    retail = _PACK["scope"] != _scope.DEFAULT     # консолидация: розница справочно
+    if retail:
+        add(("item", "1.4р", "в т.ч. выручка розница (магазины)",
+             (SEC_RETAIL, RETAIL_REV, 1), 2, FMT_MONEY))
     add(("item", "1.6", "Себестоимость проданного товара",
          (SEC_REVENUE, "1.6. Себестоимость", -1), 1, FMT_MONEY))
+    if retail:
+        add(("item", "1.6р", "в т.ч. себестоимость розница (магазины)",
+             (SEC_RETAIL, RETAIL_COGS, -1), 2, FMT_MONEY))
     add(("calc", "1.7", "МАРЖА ПРОДАЖ (валовая прибыль)",
          [("1.4", 1), ("1.6", 1)], 0, FMT_MONEY))
     add(("ratio", "1.8", "Маржа продаж, % к выручке",
@@ -251,6 +295,21 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
              ("1.17", "1.18", 1), 2, FMT_PCT))
         gp_base = "1.17"
     add(("blank", None, None, None, 1, None))
+    return _pl_layout_tail(L, gp_base, rev, after_spp, corrected, wb_lines=True)
+
+
+def _pl_layout_tail(L, gp_base, rev, after_spp, corrected, wb_lines=True):
+    """Разделы 3–8 и справочные блоки P&L. Без WB — без разделов 3–4, юнит-экономики и НДС."""
+    add = L.append
+    if not wb_lines:
+        add(("band", "5", "ПРОЧИЕ ДОХОДЫ И РАСХОДЫ", None, 0, None))
+        add(("sum", "5", "Итого прочие доходы и расходы", SEC_OTHER, 0, FMT_MONEY))
+        add(("calc", "GP3", "ПРИБЫЛЬ ПОСЛЕ ПРОЧИХ ДОХОДОВ/РАСХОДОВ",
+             [(gp_base, 1), ("5", 1)], 0, FMT_MONEY))
+        add(("ratio", "GP3%", "Рентабельность после прочих, % к выручке",
+             ("GP3", rev, 1), 2, FMT_PCT))
+        add(("blank", None, None, None, 1, None))
+        return _pl_layout_bottom(L, rev, after_spp, corrected, wb_lines)
 
     # ------------------------------------------------ 3. Расходы на реализацию
     add(("band", "3", "РАСХОДЫ НА РЕАЛИЗАЦИЮ", None, 0, None))
@@ -284,6 +343,12 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("ratio", "GP3%", "Рентабельность после прочих, % к выручке",
          ("GP3", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
+    return _pl_layout_bottom(L, rev, after_spp, corrected, wb_lines)
+
+
+def _pl_layout_bottom(L, rev, after_spp, corrected, wb_lines=True):
+    """Разделы 6–8, налог, чистая прибыль и справочные блоки."""
+    add = L.append
 
     # ------------------------------------------------ 6-7. Накладные и корп.
     add(("band", "6", "НАКЛАДНЫЕ РАСХОДЫ", None, 0, None))
@@ -310,6 +375,8 @@ def pl_layout(after_spp=False, dashboard=False, corrected=False):
     add(("ratio", "NP%", "Рентабельность по чистой прибыли, % к выручке",
          ("NP", rev, 1), 2, FMT_PCT))
     add(("blank", None, None, None, 1, None))
+    if not wb_lines:
+        return L
 
     # ------------------------------------------------ Справочно: юнит-экономика
     add(("band", "2", "СПРАВОЧНО: ЮНИТ-ЭКОНОМИКА", None, 0, None))
@@ -1005,8 +1072,9 @@ def pl_dashboard(pl_data, dash_rows):
     for me, amount, retail, rev, cogs, comm, wb in dash_rows:
         out[(me, SEC_REVENUE, "1.1. Продажи до СПП")] = round(amount, 2)
         out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
-        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
-        out[(me, SEC_REVENUE, "1.6. Себестоимость")] = round(cogs, 2)
+        r_rev, r_cogs = retail_of(pl_data, me)
+        out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev + r_rev, 2)
+        out[(me, SEC_REVENUE, "1.6. Себестоимость")] = round(cogs + r_cogs, 2)
         out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(DASH_COMM_CORR.get(me, comm), 2)
         actual = sum(v or 0 for (m, sec, _i), v in out.items()
                      if m == me and sec in (SEC_SELLING, SEC_PROMO))
@@ -1132,6 +1200,7 @@ def pl_dashboard_corrected(pl_data, dash_rows):
         p = lambda itm: pl_data.get((me, SEC_REVENUE, itm)) or 0.0
         out[(me, SEC_REVENUE, "1.1. Продажи до СПП")] = round(amount, 2)
         out[(me, SEC_REVENUE, "1.3. Продажи после СПП")] = round(retail, 2)
+        rev += retail_of(pl_data, me)[0]
         out[(me, SEC_REVENUE, "1.4 Продажи без НДС")] = round(rev, 2)
         out[(me, SEC_REVENUE, "1.9. Комиссия WB")] = round(comm, 2)
         out[(me, SEC_REVENUE, CORR_VAT_REV)] = round(p("1.4 Продажи без НДС") - rev, 2)
@@ -1844,10 +1913,12 @@ def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=Non
     title_band(
         ws,
         "УПРАВЛЕНЧЕСКИЙ ПАКЕТ ОТЧЁТНОСТИ",
-        "Управленческая отчётность (management pack)",
+        "Управленческая отчётность (management pack) · %s" % _scope.title(_PACK["scope"]),
         ncols,
-        extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s"
-              % (as_of.strftime("%d.%m.%Y"),
+        extra="%s · дата отчёта: %s · период: %s — %s"
+              % (_scope.CURRENCY_TITLES.get(_scope.currency(_PACK["scope"]),
+                                            _scope.currency(_PACK["scope"])),
+                 as_of.strftime("%d.%m.%Y"),
                  month_label(months[0]), month_label(months[-1])),
         show_back=False,
     )
@@ -4519,6 +4590,9 @@ def fetch_pack_data(con, date_from):
     con.execute(base_stocks)
     con.execute(wb_costs)
     con.execute(dayly_sales_agg)
+    if not _scope.has_ru(_PACK["scope"]):          # данные WB есть только у РФ
+        for t in ("base", "stocks_daily", "wb_costs", "pl_sales"):
+            con.execute(f"DELETE FROM {t}")
     con.execute(margin, parameters={"date_from": date_from})
     ensure_pl_src(con)                    # зарплата по начислению из ЗУП, если есть
     con.execute(opex, parameters={"date_from": date_from})
@@ -4534,6 +4608,19 @@ def fetch_pack_data(con, date_from):
         SELECT me, section, item, value
         FROM opex
     """).fetchall()
+
+    # розница зарубежных компаний: строки 1.4 и 1.6 из главной книги
+    retail = con.execute("""
+        SELECT LAST_DAY(date_from)::DATE AS me,
+               STARTS_WITH(cost_item, '510190') AS is_rev,
+               SUM(CASE WHEN STARTS_WITH(cost_item, '510190') THEN amount ELSE -amount END) AS value
+        FROM pg.public.pl_for_csv
+        WHERE (STARTS_WITH(cost_item, '510190') OR STARTS_WITH(cost_item, '520190'))
+          AND date_from <= $date_from
+        GROUP BY 1, 2
+    """, parameters={"date_from": date_from}).fetchall()
+    for me, is_rev, value in retail:                # прибавляется к 1.4/1.6 в add_retail
+        pl_rows.append((me, SEC_RETAIL, RETAIL_REV if is_rev else RETAIL_COGS, value))
 
     cf_rows = con.execute("""
         SELECT
@@ -5329,7 +5416,24 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None,
         ws.row_dimensions[r].height = 26
         r += 1
 
-def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=None):
+def _to_currency(wb, cur):
+    """Подписи валюты в книге: суммы уже пересчитаны в валюту компании."""
+    sign = _scope.CURRENCY_SIGNS.get(cur, cur)
+    pairs = (("₽", sign), ("млн руб.", "млн " + sign), ("тыс. руб.", "тыс. " + sign),
+             (" руб.", " " + sign), ("рублях", _scope.CURRENCY_PREP.get(cur, "валюте " + cur)),
+             ("Российский рубль (RUB)", _scope.CURRENCY_TITLES.get(cur, cur)))
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                if isinstance(c.value, str) and not c.value.startswith("="):
+                    v = c.value
+                    for a, b in pairs:
+                        v = v.replace(a, b)
+                    if v != c.value:
+                        c.value = v
+
+
+def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=None, company=None):
     """
     Собирает управленческий пакет (Титул + P&L + Cash Flow + пояснения)
     и сохраняет xlsx. Возвращает (путь, статистика).
@@ -5340,17 +5444,21 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     """
     if isinstance(date_from, str):
         date_from = date.fromisoformat(date_from)
+    company = _scope.norm(company)
+    _PACK["scope"] = company
+    with_ru = _scope.has_ru(company)
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt(ro=True) as raw:
+        con = _scope.ScopedCon(raw, company)
         (pl_rows, cf_rows, unit_rows, treasury_rows,
         deposit_balance, note_rows, payout_rows,
         conv_rows, vat_rows) = fetch_pack_data(con, date_from)
-        vat_ops_rows = fetch_vat_summary(con, date_from)
+        vat_ops_rows = fetch_vat_summary(con, date_from) if with_ru else []
         vat_adj = fetch_vat_adjustments(con, date_from)
         deposit_rows = fetch_deposit_rows(con, date_from)
         from gear.app.manpack import off_pl
         try:
-            offpl_data = off_pl.fetch(con, date_from)
+            offpl_data = off_pl.fetch(con, date_from) if with_ru else None
         except Exception as e:                    # пакет собирается и без блока
             print(f"[mp] вне P&L: {type(e).__name__}: {e}", flush=True)
             offpl_data = None
@@ -5364,6 +5472,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         pl_data[(me, section, item)] = (round(float(value), 2)
                                         if value is not None else None)
     apply_vat_writeoffs(pl_data, vat_adj)
+    add_retail(pl_data)
 
     cf_data = {}
     for me, act, op, itm, sub, cp, contract, amount in cf_rows:
@@ -5402,6 +5511,11 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
             % (report_date, start_year))
 
     months = month_columns(start_year, report_date)
+    if not with_ru:                         # без РФ — только месяцы, где есть данные
+        seen = [k[0] for k, v in pl_data.items() if v] + [k[0] for k, v in cf_data.items() if v]
+        if seen:
+            first_m = min(seen)
+            months = [m for m in months if m >= first_m] or months
 
     # налог на прибыль из Cash Flow
     tax_by_month = defaultdict(float)
@@ -5448,7 +5562,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                                   as_of=date_from)
     pl_rowmap = {}
     # отдельное подключение дашборда — после закрытия read-only соединения пакета
-    dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from)
+    dash_rows = fetch_dashboard_rows(months[0].replace(day=1), date_from) if with_ru else []
     taxes_paid = defaultdict(lambda: defaultdict(float))     # подстатья НДС -> месяц
     for key, v in cf_data.items():
         sub = str(key[4] or key[3])
@@ -5460,7 +5574,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         vat_ref.update(off_pl.pl_items(offpl_data, SEC_OFFPL, OP_IN, OP_GOODS_PAID,
                                        OP_GOODS_UPD, OP_GOODS_UNC, OP_COSTS))
     build_pl(ws_pl_spp, {**pl_after_spp(pl_data), **vat_ref}, tax_by_month, months,
-             report_date, as_of=date_from, note_anchors=note_anchors, after_spp=True,
+             report_date, as_of=date_from, note_anchors=note_anchors, after_spp=with_ru,
              rowmap_out=pl_rowmap)
     build_pl(ws_pl_dash, pl_dashboard(pl_data, dash_rows), tax_by_month, months,
              report_date, as_of=date_from, note_anchors=note_anchors,
@@ -5546,14 +5660,33 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         path = Path(out_path).expanduser().resolve()
     else:
         path = (Path(settings.BASE_DIR) / "reports" /
-                ("manpack_%s.xlsx" % report_date.isoformat()))
+                ("manpack_%s%s.xlsx" % (report_date.isoformat(), _scope.suffix(company))))
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not with_ru:                         # листы WB, НДС РФ и пустые — не показываются
+        drop = {SUMMARY_SHEET_NAME, PL_DASHBOARD_SHEET_NAME, PL_CORRECTED_SHEET_NAME,
+                PL_BRIDGE_SHEET_NAME, "Юнит-экономика", BREAKEVEN_SHEET_NAME,
+                PAYOUTS_SHEET_NAME, VAT_CHECK_SHEET_NAME, VAT_OPS_SHEET_NAME,
+                OFFPL_SHEET_NAME, "Пояснения P&L", "Пояснения Юнит-экономика",
+                BE_NOTES_SHEET_NAME, "Пояснения Cash Flow"}
+        if not note_rows:
+            drop.add(NOTES_SHEET_NAME)
+        if not cf_data:
+            drop.add("Cash Flow")
+        if not bank_rows and not deposit_balance:
+            drop.add("Остатки ДС")
+        for name in drop:
+            if name in wb.sheetnames:
+                del wb[name]
+        ws_pl_spp.title = "P&L"
+    pl_sheet = ws_pl_spp.title
 
     contents = [
         (SUMMARY_SHEET_NAME, "Главное за отчётный месяц простым языком: результат, "
                              "точка безубыточности, отклонения, прогноз"),
-        (PL_AFTER_SPP_SHEET_NAME, "Отчёт о прибылях и убытках: выручка и комиссия WB "
-                                  "по цене покупателя (после СПП)"),
+        (pl_sheet, "Отчёт о прибылях и убытках: выручка и комиссия WB "
+                   "по цене покупателя (после СПП)" if with_ru else
+                   "Отчёт о прибылях и убытках: выручка, себестоимость, расходы"),
         (PL_CORRECTED_SHEET_NAME, "P&L как в дашборде (до СПП) с корректировкой "
                                   "маржи до итогов «P&L после СПП»"),
         (PL_DASHBOARD_SHEET_NAME, "Тот же P&L, но выручка и комиссия WB по методу "
@@ -5588,8 +5721,11 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     ]
     descr = {n: d for n, d in contents}
     grouped = []
+    def _names(names):
+        return [pl_sheet if n == PL_AFTER_SPP_SHEET_NAME else n for n in names]
+
     for div, _color, names in sheet_groups():
-        items = [(n, descr.get(n, "")) for n in names
+        items = [(n, descr.get(n, "")) for n in _names(names)
                  if n in wb.sheetnames and n != TOC_SHEET_NAME]
         if not items:
             continue
@@ -5615,12 +5751,14 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         if div and div in wb.sheetnames:
             wb[div].sheet_properties.tabColor = DIVIDER_TAB
             ordered.append(wb[div])
-        for n in names:
+        for n in _names(names):
             if n in wb.sheetnames:
                 wb[n].sheet_properties.tabColor = color
                 ordered.append(wb[n])
     ordered += [ws for ws in wb.worksheets if ws not in ordered]
     wb._sheets = ordered
+    if _scope.currency(company) != "RUB":
+        _to_currency(wb, _scope.currency(company))
     if PL_DASHBOARD_SHEET_NAME in wb.sheetnames:          # служебный лист: скрыт, в оглавлении нет
         wb[PL_DASHBOARD_SHEET_NAME].sheet_state = "hidden"
     wb.save(path)
@@ -5682,7 +5820,7 @@ def _csv_value(v):
     return " ".join(text.split())
 
 
-def export_raw_csv(kind, date_from, out_path=None):
+def export_raw_csv(kind, date_from, out_path=None, company=None):
     """Выгружает витрину «cf» или «pl» в csv. Возвращает (путь, число строк)."""
     if kind not in CSV_SOURCES:
         raise ValueError("Неизвестная выгрузка: %s" % kind)
@@ -5692,13 +5830,14 @@ def export_raw_csv(kind, date_from, out_path=None):
 
     prefix, sql = CSV_SOURCES[kind]
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt(ro=True) as raw:
+        con = _scope.ScopedCon(raw, company)
         cur = con.execute(sql, parameters={"date_from": date_from})
         columns = [d[0] for d in cur.description]
         rows = cur.fetchall()
 
     path = Path(out_path) if out_path else Path(
-        "%s_%s.csv" % (prefix, date_from.isoformat()))
+        "%s_%s%s.csv" % (prefix, date_from.isoformat(), _scope.suffix(company)))
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8-sig", newline="") as fh:
@@ -5743,6 +5882,11 @@ PIVOT_PL_CHECK_SQL = """
         UNION ALL
         SELECT me, section, value FROM opex
         UNION ALL
+        SELECT LAST_DAY(date_from)::DATE, '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ', amount
+        FROM pl_src
+        WHERE (STARTS_WITH(cost_item, '510190') OR STARTS_WITH(cost_item, '520190'))
+          AND date_from <= $date_from
+        UNION ALL
         SELECT LAST_DAY(date_from)::DATE, '9. НАЛОГ НА ПРИБЫЛЬ', amount
         FROM cf WHERE subitem = '125200 Налог на прибыль'
         UNION ALL
@@ -5773,6 +5917,9 @@ def pivot_pl_source(con, date_from):
     con.execute(read_sql("base_stocks.txt"))
     con.execute(read_sql("wb_costs.txt"))
     con.execute(read_sql("dayly_sales_agg.txt"))
+    if not _scope.has_ru(_PACK["scope"]):          # данные WB есть только у РФ
+        for t in ("base", "stocks_daily", "wb_costs", "pl_sales"):
+            con.execute(f"DELETE FROM {t}")
     con.execute(read_sql("cf.txt"), parameters=params)
     ensure_pl_src(con)
     con.execute(read_sql("pivot_pl.txt"), parameters=params)
@@ -5845,6 +5992,7 @@ PIVOT_LAYOUT = {
         "source": "raw_cf",
         "rows": ["activity", "operation", "item", "subitem",
                  "cp_name", "contract_name"],
+        "page": ["company"],
     },
     "xl/pivotTables/pivotTable2.xml": {
         "cache": "xl/pivotCache/pivotCacheDefinition2.xml",
@@ -5856,6 +6004,7 @@ PIVOT_LAYOUT = {
         # раскрыты только разделы P&L; строки P&L свёрнуты под «+»
         "open_levels": 1,
         "row_stripes": False,
+        "page": ["company"],
     },
     "xl/pivotTables/pivotTable3.xml": {
         "cache": "xl/pivotCache/pivotCacheDefinition3.xml",
@@ -5865,6 +6014,7 @@ PIVOT_LAYOUT = {
                  "Договор"],
         "open_levels": 2,
         "row_stripes": False,
+        "page": ["Компания"],
     },
 }
 
@@ -5923,7 +6073,8 @@ def sync_pivot_items(path, data):
         pivot_fields = list(table.find(tag("pivotFields")))
         names = [f.get("name") for f in cache_fields]
 
-        for level, name in enumerate(cfg["rows"]):
+        levels = list(enumerate(cfg["rows"])) + [(-1, n) for n in cfg.get("page", [])]
+        for level, name in levels:
             if name not in names:
                 continue
             index = names.index(name)
@@ -5931,6 +6082,7 @@ def sync_pivot_items(path, data):
             if not values and not blank:
                 continue
 
+            # фильтр отчёта (level −1) не сворачивается
             collapsed = level >= cfg.get("open_levels", PIVOT_OPEN_LEVELS)
 
             shared = ET.SubElement(cache_fields[index], tag("sharedItems"))
@@ -5966,6 +6118,11 @@ def sync_pivot_items(path, data):
             if old is not None:
                 pivot_fields[index].remove(old)
             pivot_fields[index].append(items)
+
+        cur = _scope.currency(_PACK["scope"])
+        if cur != "RUB":
+            for df in table.iter(tag("dataField")):
+                df.set("name", _scope.CURRENCY_DATA.get(cur, "в валюте %s" % cur))
 
         if "row_stripes" in cfg:
             style = table.find(tag("pivotTableStyleInfo"))
@@ -6172,7 +6329,7 @@ def write_raw_vat(wb, columns, rows):
     return len(rows)
 
 
-def build_pivots_workbook(date_from, out_path=None):
+def build_pivots_workbook(date_from, out_path=None, company=None):
     """Собирает книгу со сводными на отчётную дату."""
     if isinstance(date_from, str):
         date_from = date.fromisoformat(date_from)
@@ -6183,13 +6340,16 @@ def build_pivots_workbook(date_from, out_path=None):
             "assets/build_pivots_skeleton.py" % PIVOTS_SKELETON.name)
 
     data = {}
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    company = _scope.norm(company)
+    _PACK["scope"] = company
+    with get_duckdb_conn_with_opt(ro=True) as raw:
+        con = _scope.ScopedCon(raw, company)
         for name, sql in PIVOT_SOURCES.items():
             cur = con.execute(sql, parameters={"date_from": date_from})
             data[name] = ([d[0] for d in cur.description], cur.fetchall())
         pl_columns, pl_rows, mismatches = pivot_pl_source(con, date_from)
         data["raw_pl"] = (pl_columns, pl_rows)
-        try:                     # витрины pl_sales и wb_costs уже собраны выше
+        try:                         # витрины pl_sales и wb_costs уже собраны выше
             cur = con.execute(read_sql("pivot_vat.txt"), parameters={"date_from": date_from})
             vat_src = ([d[0] for d in cur.description], cur.fetchall())
         except Exception as e:
@@ -6225,7 +6385,7 @@ def build_pivots_workbook(date_from, out_path=None):
     wb._sheets = ordered
 
     path = Path(out_path) if out_path else Path(
-        "pivots_%s.xlsx" % date_from.isoformat())
+        "pivots_%s%s.xlsx" % (date_from.isoformat(), _scope.suffix(company)))
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
 
@@ -6256,6 +6416,11 @@ class Command(BaseCommand):
             "--out", type=str, default=None,
             help="Путь к xlsx. По умолчанию <BASE_DIR>/reports/manpack_<дата>.xlsx",
         )
+        parser.add_argument(
+            "--company", default="ru",
+            help="ru — Трендсеттер РФ, all — консолидация, «Группа|ВАЛЮТА» — группа отчётности "
+                 "(например «Армения|AMD»); am_amd / am_rub — то же для Армении.",
+        )
 
     def handle(self, *args, **options):
         try:
@@ -6263,6 +6428,7 @@ class Command(BaseCommand):
                 options["date_from"],
                 start_year=options["start_year"],
                 out_path=options["out"],
+                company=options["company"],
             )
         except ValueError as exc:
             raise CommandError(str(exc)) from exc

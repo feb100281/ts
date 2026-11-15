@@ -8,6 +8,7 @@ from django.conf.urls.static import static
 from django.contrib.auth.decorators import permission_required
 
 from .views import fx_status, cp_issues_status, treasury_status
+from treasury.views import am_upload
 from contracts.views import contracts_issues_status
 from .admin_exports import (
     export_pl_for_csv,
@@ -16,6 +17,7 @@ from .admin_exports import (
     export_manpack,
     export_management_pack,
     export_cf_csv,
+    export_pack_companies,
     export_pl_csv,
     export_pivots,
     export_vat_contracts,
@@ -71,6 +73,7 @@ login_view = auth_views.LoginView.as_view(
 )
 
 urlpatterns = [
+    path("api/am/upload/", am_upload, name="am_upload"),
     path("admin/fx-status/", fx_status, name="fx_status"),
     path("admin/cp-issues-status/", cp_issues_status, name="cp_issues_status"),
     path("admin/treasury-status/", treasury_status, name="treasury_status"),
@@ -82,6 +85,7 @@ urlpatterns = [
     path("admin/export/stocks-map/", export_view(export_stocks_map, "export_stocks"), name="export_stocks_map"),
     path("admin/export/manpack/", export_view(export_manpack, "export_manpack"), name="export_manpack"),
     path("admin/export/management-pack/", export_view(export_management_pack, "export_management_pack"), name="export_management_pack"),
+    path("admin/export/management-pack/companies/", export_view(export_pack_companies, "export_management_pack"), name="export_pack_companies"),
     path("admin/export/management-pack/cf-csv/", export_view(export_cf_csv, "export_management_pack"), name="export_cf_csv"),
     path("admin/export/management-pack/pl-csv/", export_view(export_pl_csv, "export_management_pack"), name="export_pl_csv"),
     path("admin/export/management-pack/pivots/", export_view(export_pivots, "export_management_pack"), name="export_pivots"),

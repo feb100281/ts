@@ -94,7 +94,8 @@ class BankAccountInline(admin.TabularInline):
 @admin.register(Owners)
 class OwnersAdmin(admin.ModelAdmin):
 
-    list_display = ("name", "inn", "ceo_display", "bankaccounts_count_display")
+    list_display = ("name", "inn", "country", "currency", "report_group", "in_reports", "ceo_display", "bankaccounts_count_display")
+    list_filter = ("country", "report_group", "in_reports")
     inlines = [BankAccountInline]
     search_fields = ("name", "inn", "full_name", "ceo_name", "email")
 
@@ -146,6 +147,16 @@ class OwnersAdmin(admin.ModelAdmin):
                 "ceo_record_date",
             ),
             "classes": ("collapse",),  
+        },
+    ),
+    (
+        mark_safe("📊 <b>Отчётность</b>"),
+        {
+            "fields": (
+                ("country", "currency"),
+                "report_group",
+                "in_reports",
+            ),
         },
     ),
 )
@@ -223,8 +234,8 @@ class OwnersAdmin(admin.ModelAdmin):
 class BankAdmin(admin.ModelAdmin):
     form = BankForm
     exclude = ("inn", "kpp")
-    list_display = ( "logo_preview","name", "bik", "corr_account")
-    search_fields = ("name", "bik")
+    list_display = ( "logo_preview","name", "country", "bik", "code", "corr_account")
+    search_fields = ("name", "bik", "code")
     list_display_links = ("name",)
     readonly_fields = ("type", "address")
     list_filter = ("bik", "name",)
@@ -239,7 +250,7 @@ class BankAdmin(admin.ModelAdmin):
     (
         mark_safe("💳 <b>Платёжные реквизиты</b>"),
         {
-            "fields": ("bik", "corr_account"),
+            "fields": ("country", "bik", "code", "corr_account"),
         },
     ),
     (

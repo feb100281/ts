@@ -44,6 +44,9 @@
   </div>
 
   <div class="gla-bar">
+    <div><span class="lbl">Компания</span><span class="gla-seg">{% for m in gla.owner_links %}<a href="{{ m.url }}" class="{% if m.on %}on{% endif %}">{{ m.label }}</a>{% endfor %}</span></div>
+  </div>
+  <div class="gla-bar">
     <div><span class="lbl">Месяц</span><span class="gla-seg">{% for m in gla.month_links %}<a href="{{ m.url }}" class="{% if m.on %}on{% endif %}">{{ m.label }}</a>{% endfor %}</span></div>
   </div>
   <div class="gla-bar">

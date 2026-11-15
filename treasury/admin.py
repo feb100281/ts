@@ -1,3 +1,4 @@
+from django.utils.html import format_html_join
 # treasury/admin.py
 
 from django.http import JsonResponse
@@ -20,9 +21,11 @@ from datetime import datetime
 from django.db.models import Q
 from django.contrib.admin import SimpleListFilter
 from django import forms
+from django.db import models
 from contracts.models import Contracts
-from .models import BankStatements, CfData, CfSplits,ContractsRexex
+from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule, CpName
 from utils.bsparsers.bsupdater import update_cf_data
+from utils.bsparsers.am.loader import load_statement, sniff
 from decimal import Decimal, InvalidOperation
 
 
@@ -291,7 +294,10 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 if not obj.file:
                     bad += 1
                     continue
-                result = update_cf_data(obj.file.path, obj.pk)
+                if sniff(obj.file.path):                      # Армения — свой загрузчик, без удаления строк
+                    load_statement(obj.file.path, log=lambda *_: None, bs=obj)
+                else:
+                    result = update_cf_data(obj.file.path, obj.pk)
                 # можно либо копить результаты, либо показывать кратко
                 ok += 1
             except Exception as e:
@@ -878,7 +884,14 @@ class BankStatementsAdmin(admin.ModelAdmin):
         if request.method == "POST" and "apply_migration" in request.POST:
             obj = self.get_object(request, object_id)
 
-            if obj and obj.file:
+            if obj and obj.file and sniff(obj.file.path):     # Армения — свой загрузчик
+                lines = []
+                try:
+                    load_statement(obj.file.path, log=lines.append, bs=obj)
+                    messages.success(request, format_html_join(mark_safe("<br>"), "{}", ((x,) for x in lines)))
+                except Exception as exc:
+                    messages.error(request, f"Выписка не загружена: {exc}")
+            elif obj and obj.file:
                 result = update_cf_data(obj.file.path, obj.pk)
                 messages.success(request, mark_safe(result))
             else:
@@ -957,7 +970,10 @@ class CfDataAdmin(admin.ModelAdmin):
 
     search_fields = (
         "temp",
+        "temp_ru",
+        "hint",
         "cp_bs_name",
+        "cp_name_ru",
         "tax_id",
         "payer_account",
         "reciver_account",
@@ -1030,11 +1046,13 @@ class CfDataAdmin(admin.ModelAdmin):
                 #    ByInnBadgeFilter, 
                    'cp', 
                    "intercompany", 
-                #    "owner", 
+                   "owner", 
                    "ba", 
                 
                    "cfitem", 
                    "contract", 
+                   "hint",
+                   "hint_auto",
                 #    "bs"
                    )
     date_hierarchy = "date"
@@ -1521,7 +1539,15 @@ class CfDataAdmin(admin.ModelAdmin):
                 inn_tag
             )
 
-        # 3) только имя из выписки (не матчится на контрагента)
+        # 3) имя из выписки; для выписок вне РФ — по-русски, оригинал в подсказке
+        if obj.cp_name_ru:
+            return format_html(
+                '<div style="line-height:1.15;" title="{}"><div style="font-weight:900;">{}</div>'
+                '<span style="display:inline-flex;padding:2px 8px;border-radius:999px;'
+                'background:rgba(148,163,184,.16);border:1px solid rgba(148,163,184,.30);'
+                'color:#475569;font-weight:800;font-size:11px;margin-top:4px;">из выписки</span></div>',
+                obj.cp_bs_name or "", obj.cp_name_ru,
+            )
         if obj.cp_bs_name:
             bs_tag = format_html(
                 '<span style="display:inline-flex;align-items:center;gap:6px;'
@@ -1843,8 +1869,11 @@ class CfDataAdmin(admin.ModelAdmin):
     def temp_short(self, obj):
         if not obj.temp:
             return "—"
-        s = obj.temp.strip().replace("\n", " ")
-        return (s[:90] + "…") if len(s) > 90 else s
+        s = (obj.temp_ru or obj.temp).strip().replace("\n", " ")
+        short = (s[:90] + "…") if len(s) > 90 else s
+        if obj.temp_ru:                                   # перевод; оригинал — во всплывающей подсказке
+            return format_html('<span title="{}">{}</span>', obj.temp, short)
+        return short
 
 
 
@@ -1953,3 +1982,106 @@ class ContractsRexexAdmin(admin.ModelAdmin):
         return (s[:80] + "…") if len(s) > 80 else (s or "—")
 
   
+
+
+
+# ---------- СЧЕТА КОНТРАГЕНТОВ И ПЕРЕВОДЫ ----------
+
+@admin.register(CounterpartyAccount)
+class CounterpartyAccountAdmin(admin.ModelAdmin):
+    list_display = ("account", "cp", "comment")
+    search_fields = ("account", "cp__name", "cp__tax_id", "comment")
+    autocomplete_fields = ("cp",)
+
+
+
+
+AM_CSS = {"all": ("css/admin_overrides.css", "css/am_dicts.css")}
+
+
+def am_source(text: str, url: str = ""):
+    """Оригинал шаблона: # и @ — цветными метками."""
+    parts = []
+    for ch in re.split(r"([#@])", text or ""):
+        if ch == "#":
+            parts.append(format_html('<span class="am-ph" title="число или код">#</span>'))
+        elif ch == "@":
+            parts.append(format_html('<span class="am-ph am-month" title="месяц">@</span>'))
+        elif ch:
+            parts.append(format_html("{}", ch))
+    body = format_html_join("", "{}", ((p,) for p in parts))
+    return format_html('<a class="am-src" href="{}">{}</a>', url, body) if url else format_html('<span class="am-src">{}</span>', body)
+
+
+def am_hits(n: int):
+    return format_html('<span class="am-hits{}">{}</span>', " am-hot" if n >= 100 else "", f"{n:,}".replace(",", "\u202f"))
+
+
+@admin.register(TextTranslation)
+class TextTranslationAdmin(admin.ModelAdmin):
+    list_display = ("source_html", "translation", "hits_badge")
+    list_display_links = None
+    list_editable = ("translation",)
+    formfield_overrides = {models.TextField: {"widget": forms.TextInput()}}
+
+    def save_model(self, request, obj, form, change):
+        if "translation" in form.changed_data:              # правка вручную — больше не перезаписывать
+            obj.is_checked = True
+        super().save_model(request, obj, form, change)
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="Оригинал", ordering="source")
+    def source_html(self, obj):
+        return am_source(obj.source, reverse("admin:treasury_texttranslation_change", args=[obj.pk]))
+
+    @admin.display(description="Строк", ordering="hits")
+    def hits_badge(self, obj):
+        return am_hits(obj.hits)
+    list_filter = (("translation", admin.EmptyFieldListFilter),)
+    search_fields = ("source", "translation")
+    readonly_fields = ("key", "hits", "created_at")
+    list_per_page = 50
+
+
+
+@admin.register(HintRule)
+class HintRuleAdmin(admin.ModelAdmin):
+    list_display = ("hint", "cfitem_dt", "cfitem_cr", "rows_count", "comment")
+    list_editable = ("cfitem_dt", "cfitem_cr", "comment")
+    search_fields = ("hint", "comment")
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="Операций")
+    def rows_count(self, obj):
+        return am_hits(CfData.objects.filter(hint=obj.hint).count())
+
+
+
+@admin.register(CpName)
+class CpNameAdmin(admin.ModelAdmin):
+    list_display = ("source_html", "name_ru", "hits_badge")
+    list_display_links = None
+
+    def save_model(self, request, obj, form, change):
+        if "name_ru" in form.changed_data:                  # правка вручную — больше не перезаписывать
+            obj.is_checked = True
+        super().save_model(request, obj, form, change)
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="В выписке", ordering="source")
+    def source_html(self, obj):
+        return am_source(obj.source, reverse("admin:treasury_cpname_change", args=[obj.pk]))
+
+    @admin.display(description="Операций", ordering="hits")
+    def hits_badge(self, obj):
+        return am_hits(obj.hits)
+    list_editable = ("name_ru",)
+    search_fields = ("source", "name_ru")
+    list_per_page = 50
+    formfield_overrides = {models.CharField: {"widget": forms.TextInput()}}
