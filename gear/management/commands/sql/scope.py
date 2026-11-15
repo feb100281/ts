@@ -162,9 +162,29 @@ def prepare(con, key: str):
     con.execute(f"CREATE OR REPLACE TEMP VIEW scope_gl_fact AS {gl}")
     con.execute("""CREATE OR REPLACE TEMP VIEW scope_bankaccount AS
         SELECT * FROM pg.public.corporate_bankaccount WHERE corporate_id IN (SELECT id FROM scope_owners)""")
-    con.execute("""CREATE OR REPLACE TEMP VIEW scope_ba_balance_csv AS
-        SELECT t.* FROM pg.public.ba_balance_csv t
-        WHERE t.acc_id IN (SELECT bs_acc_id FROM scope_bankaccount)""")
+    if cur == "RUB":
+        con.execute("""CREATE OR REPLACE TEMP VIEW scope_ba_balance_csv AS
+            SELECT t.* FROM pg.public.ba_balance_csv t
+            WHERE t.acc_id IN (SELECT bs_acc_id FROM scope_bankaccount)""")
+    else:
+        # счета в валюте пакета — обороты из выписок без пересчёта; прочие — из книги по курсу на дату
+        con.execute(f"""CREATE OR REPLACE TEMP VIEW scope_ba_balance_csv AS
+            SELECT d.date AS date_from, ba.bs_acc_id AS acc_id, c.name AS "Банковский счет",
+                   ROUND(SUM(COALESCE(d.dt, 0)), 2) AS "Поступления",
+                   ROUND(SUM(COALESCE(d.cr, 0)), 2) AS "Расход",
+                   ROUND(SUM(COALESCE(d.dt, 0) - COALESCE(d.cr, 0)), 2) AS "Обороты"
+            FROM pg.public.treasury_cfdata d
+            JOIN scope_bankaccount ba ON ba.id = d.ba_id
+            JOIN pg.public.corporate_coa c ON c.id = ba.bs_acc_id
+            WHERE upper(ba.currency) = '{cur}' AND d.date IS NOT NULL
+            GROUP BY 1, 2, 3
+            UNION ALL
+            SELECT t.* REPLACE (ROUND(t."Поступления" / r.rate, 2) AS "Поступления",
+                                ROUND(t."Расход" / r.rate, 2) AS "Расход",
+                                ROUND(t."Обороты" / r.rate, 2) AS "Обороты")
+            FROM pg.public.ba_balance_csv t
+            ASOF LEFT JOIN scope_rate r ON t.date_from::DATE >= r.d
+            WHERE t.acc_id IN (SELECT bs_acc_id FROM scope_bankaccount WHERE upper(currency) <> '{cur}')""")
     con.execute(f"CREATE OR REPLACE TEMP TABLE scope_flags AS SELECT {ru_only} AS has_ru")
     # НДС розницы: в валюте пакета (своя валюта компании или рубли по курсу ЦБ на дату)
     con.execute("""
