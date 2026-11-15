@@ -952,7 +952,26 @@ class CfDataAdmin(admin.ModelAdmin):
     readonly_fields = ("source_dt", "source_cr")
     change_list_template = "admin/treasury/cfdata/change_list.html"
     action_form = CfDataActionForm
-    actions = ["copy_selected_rows", "create_storno_manual_entries",]
+    actions = ["copy_selected_rows", "create_storno_manual_entries", "reassign_foreign"]
+
+    @admin.action(description="Переразнести по правилам (зарубежные компании)")
+    def reassign_foreign(self, request, queryset):
+        """Заполняет пустые контрагент, договор, статью и разметку по текущим правилам. Заполненное не меняется."""
+        from utils.bsparsers.am.loader import auto_assign
+        lines = []
+        rows = queryset.exclude(owner__country="RU").exclude(owner__isnull=True).values_list("owner_id", "id")
+        by_owner = {}
+        for owner_id, pk in rows:
+            by_owner.setdefault(owner_id, []).append(pk)
+        if not by_owner:
+            self.message_user(request, "Среди выбранных нет операций зарубежных компаний.", level="warning")
+            return
+        from django.db import transaction
+        with transaction.atomic():
+            for owner_id, ids in by_owner.items():
+                auto_assign(ids, owner_id, lines.append)
+        total = sum(len(v) for v in by_owner.values())
+        self.message_user(request, f"Проверено операций: {total}. " + "; ".join(x.strip() for x in lines))
 
     list_display = (
         "date_short",

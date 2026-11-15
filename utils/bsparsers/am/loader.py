@@ -162,6 +162,12 @@ def translations(texts: list[str]) -> dict[str, str | None]:
 # ============================================================
 
 AUTO_SQL = [
+    ("контрагенты по счёту", """
+        UPDATE treasury_cfdata d SET cp_id = a.cp_id
+        FROM treasury_counterpartyaccount a
+        WHERE d.id = ANY(%(ids)s) AND d.cp_id IS NULL
+          AND a.account = CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END
+    """),
     ("договоры по назначению", """
         WITH m AS (
             SELECT DISTINCT ON (d.id) d.id AS cf_id, c.id AS contract_id
@@ -258,7 +264,7 @@ def reassign(owner_id: int, log=print) -> None:
     """Повторная авторазноска по всем операциям компании, где что-то не заполнено. Заполненное не меняется."""
     ids = list(CfData.objects.filter(owner_id=owner_id)
                .filter(models.Q(cfitem__isnull=True) | models.Q(contract__isnull=True) | models.Q(hint__isnull=True)
-                       | models.Q(hint=""))
+                       | models.Q(hint="") | models.Q(cp__isnull=True) | models.Q(cp_final__isnull=True))
                .values_list("id", flat=True))
     log(f"Повторная разноска незаполненных операций: {len(ids)}")
     with transaction.atomic():
