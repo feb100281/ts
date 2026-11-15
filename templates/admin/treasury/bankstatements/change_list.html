@@ -210,6 +210,12 @@
   📋 Контроль выписок
 </a>
 
+<a href="{% url 'admin:treasury_bankstatements_clarify' %}"
+   style="margin-top:2px;font-size:13px;padding:6px 12px;border-radius:2px;display:inline-flex;align-items:center;gap:6px;
+          border:1px solid rgba(180,83,9,.25);background:#fffbeb;color:#b45309;font-weight:900;text-decoration:none;">
+  ❓ Уточнить платежи
+</a>
+
 <form id="process-selected-form"
       method="post"
       action="{% url 'admin:treasury_bankstatements_process_selected' %}"

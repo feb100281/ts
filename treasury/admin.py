@@ -250,6 +250,11 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 name="treasury_bankstatements_process_selected",
             ),
             path(
+                "clarify/",
+                self.admin_site.admin_view(self.clarify_view),
+                name="treasury_bankstatements_clarify",
+            ),
+            path(
                 "coverage/",
                 self.admin_site.admin_view(self.coverage_view),
                 name="treasury_bankstatements_coverage",
@@ -267,6 +272,37 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
     
     
+    def clarify_view(self, request):
+        """Неразнесённые операции зарубежной компании и запрос на уточнение."""
+        from datetime import date
+        from django.http import HttpResponse
+        from django.template.response import TemplateResponse
+        from corporate.models import Owners
+        from treasury.clarify import pending, request_text, to_xlsx
+
+        owners = list(Owners.objects.exclude(country="RU").order_by("name"))
+        pick = request.GET.get("owner")
+        owner = next((o for o in owners if str(o.pk) == pick), owners[0] if owners else None)
+
+        def d(key):
+            try:
+                return date.fromisoformat(request.GET.get(key, ""))
+            except ValueError:
+                return None
+        date_from, date_to = d("from"), d("to")
+        groups = pending(owner, date_from, date_to) if owner else []
+        if owner and request.GET.get("xlsx"):
+            resp = HttpResponse(to_xlsx(owner, groups),
+                                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            resp["Content-Disposition"] = 'attachment; filename="clarify.xlsx"'
+            return resp
+        ctx = {**self.admin_site.each_context(request), "title": "Уточнить платежи", "owners": owners,
+               "owner": owner, "groups": groups, "total": sum(len(g["ops"]) for g in groups),
+               "date_from": date_from.isoformat() if date_from else "",
+               "date_to": date_to.isoformat() if date_to else "",
+               "text": request_text(owner, groups) if owner and groups else ""}
+        return TemplateResponse(request, "admin/treasury/bankstatements/clarify.html", ctx)
+
     def coverage_view(self, request):
         """Полнота выписок по компании и текст запроса недостающего."""
         from django.template.response import TemplateResponse
