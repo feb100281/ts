@@ -1934,7 +1934,8 @@ def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=Non
     # ---- KPI-карточки
     r = 7
     cards = [
-        ("ВЫРУЧКА БЕЗ НДС до СПП", kpi.get("revenue"), FMT_MONEY, True),
+        ("ВЫРУЧКА БЕЗ НДС до СПП" if _scope.has_ru(_PACK["scope"]) else "ВЫРУЧКА БЕЗ НДС",
+         kpi.get("revenue"), FMT_MONEY, True),
         ("EBITDA", kpi.get("ebitda"), FMT_MONEY, False),
         ("ЧИСТАЯ ПРИБЫЛЬ", kpi.get("net"), FMT_MONEY, False),
         ("ОСТАТОК ДС НА КОНЕЦ", kpi.get("cash"), FMT_MONEY, False),
@@ -2492,6 +2493,7 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
     """
     sheet_setup(ws, landscape=False)
     ncols = 8
+    with_wb = _scope.has_ru(_PACK["scope"])           # без РФ — нет WB и денег в пути
     
     def status_rank(row):
         status = str(row[3] or "").lower()
@@ -2548,6 +2550,8 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
         # ("Банковские депозиты", _f(deposit_balance),
         #     "Справочно: размещены под проценты, в итог денежных средств не включаются"),
     ]
+    if not with_wb:
+        summary = summary[:1]
     
 
     
@@ -2567,7 +2571,7 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
 
     write(ws, r, 2, "ИТОГО ДЕНЕЖНЫХ СРЕДСТВ", font=f_label_b, fillc=TOTAL_ROW,
           border=B_GRAND, align="left", indent=1)
-    write(ws, r, 3, "=SUM(C%d:C%d)" % (first_sum_row, first_sum_row + 2),
+    write(ws, r, 3, "=SUM(C%d:C%d)" % (first_sum_row, first_sum_row + len(summary) - 1),
       font=f_bold_num, fmt=FMT_MONEY, fillc=TOTAL_ROW, border=B_GRAND,
       align="right")
     for cc in range(4, ncols + 1):
@@ -2576,50 +2580,51 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
     ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
     ws.row_dimensions[r].height = 20
     r += 2
-    
-    
-    r = section(r, "СПРАВОЧНО")
 
-    write(ws, r, 2, "Банковские депозиты", font=f_label, border=B_BOTTOM,
-        align="left", indent=1)
-    write(ws, r, 3, _f(deposit_balance), font=f_income, fmt=FMT_MONEY,
-        border=B_BOTTOM, align="right")
-    write(ws, r, 4, "Размещены под проценты; не включаются в итог денежных средств"
-          + (" · «+» слева — по договорам" if deposit_rows else ""),
-        font=f_note, border=B_BOTTOM, align="left", indent=1)
-    ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
-    for cc in range(5, ncols + 1):
-        ws.cell(row=r, column=cc).border = B_BOTTOM
-    ws.row_dimensions[r].height = 17
-    ws.sheet_properties.outlinePr.summaryBelow = False   # «+» над расшифровкой
-    r += 1
+    show_deposits = with_wb or deposit_rows or abs(_f(deposit_balance)) >= 0.5
+    if show_deposits:
+        r = section(r, "СПРАВОЧНО")
 
-    def hidden(rr):
-        ws.row_dimensions[rr].outline_level = 1
-        ws.row_dimensions[rr].hidden = True
-
-    if deposit_rows:
-        for col, h in ((2, "Контрагент · договор"), (3, "Остаток"), (4, "Первое размещение"),
-                       (5, "Размещено"), (6, "Возвращено")):
-            write(ws, r, col, h, font=f_note, border=B_BOTTOM,
-                  align="left" if col == 2 else "right", indent=2 if col == 2 else 0)
-        hidden(r)
+        write(ws, r, 2, "Банковские депозиты", font=f_label, border=B_BOTTOM,
+            align="left", indent=1)
+        write(ws, r, 3, _f(deposit_balance), font=f_income, fmt=FMT_MONEY,
+            border=B_BOTTOM, align="right")
+        write(ws, r, 4, "Размещены под проценты; не включаются в итог денежных средств"
+              + (" · «+» слева — по договорам" if deposit_rows else ""),
+            font=f_note, border=B_BOTTOM, align="left", indent=1)
+        ws.merge_cells(start_row=r, start_column=4, end_row=r, end_column=ncols)
+        for cc in range(5, ncols + 1):
+            ws.cell(row=r, column=cc).border = B_BOTTOM
+        ws.row_dimensions[r].height = 17
+        ws.sheet_properties.outlinePr.summaryBelow = False   # «+» над расшифровкой
         r += 1
-        for cp, contract, first_in, placed, returned, bal in deposit_rows:
-            write(ws, r, 2, "%s · %s" % (cp, contract), font=f_label, border=B_BOTTOM,
-                  align="left", indent=2, wrap=True)
-            write(ws, r, 3, _f(bal), font=f_income, fmt=FMT_MONEY, border=B_BOTTOM,
-                  align="right")
-            write(ws, r, 4, first_in.strftime("%d.%m.%Y") if first_in else "",
-                  font=f_label, border=B_BOTTOM, align="right")
-            write(ws, r, 5, _f(placed), font=f_income, fmt=FMT_MONEY, border=B_BOTTOM,
-                  align="right")
-            write(ws, r, 6, _f(returned), font=f_expense, fmt=FMT_MONEY,
-                  border=B_BOTTOM, align="right")
+
+        def hidden(rr):
+            ws.row_dimensions[rr].outline_level = 1
+            ws.row_dimensions[rr].hidden = True
+
+        if deposit_rows:
+            for col, h in ((2, "Контрагент · договор"), (3, "Остаток"), (4, "Первое размещение"),
+                           (5, "Размещено"), (6, "Возвращено")):
+                write(ws, r, col, h, font=f_note, border=B_BOTTOM,
+                      align="left" if col == 2 else "right", indent=2 if col == 2 else 0)
             hidden(r)
             r += 1
+            for cp, contract, first_in, placed, returned, bal in deposit_rows:
+                write(ws, r, 2, "%s · %s" % (cp, contract), font=f_label, border=B_BOTTOM,
+                      align="left", indent=2, wrap=True)
+                write(ws, r, 3, _f(bal), font=f_income, fmt=FMT_MONEY, border=B_BOTTOM,
+                      align="right")
+                write(ws, r, 4, first_in.strftime("%d.%m.%Y") if first_in else "",
+                      font=f_label, border=B_BOTTOM, align="right")
+                write(ws, r, 5, _f(placed), font=f_income, fmt=FMT_MONEY, border=B_BOTTOM,
+                      align="right")
+                write(ws, r, 6, _f(returned), font=f_expense, fmt=FMT_MONEY,
+                      border=B_BOTTOM, align="right")
+                hidden(r)
+                r += 1
 
-    r += 1
+        r += 1
 
     # -------------------------------------------- расшифровка по счетам
     r = section(r, "РАСШИФРОВКА ПО БАНКОВСКИМ СЧЕТАМ")
@@ -2695,6 +2700,11 @@ def build_treasury(ws, bank_rows, wb_row, report_date, as_of=None, deposit_balan
 
     # сводка ссылается на итог расшифровки — цифры не разъезжаются
     ws.cell(row=first_sum_row, column=3).value = "=G%d" % bank_total_row
+
+    if not with_wb:
+        apply_zebra(ws, 8, r - 1, 2, ncols)
+        ws.freeze_panes = ws.cell(row=7, column=1)
+        return r
 
     # ----------------------------------------------------- баланс WB
     wb_as_of = wb_row[9] if wb_row else None
@@ -5702,8 +5712,10 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
                                "и чувствительность к марже"),
         ("Cash Flow", "Отчёт о движении денежных средств прямым методом "
                       "по видам деятельности"),
-        ("Остатки ДС", "Банковские счета, деньги в пути, баланс WB "
-                       "и депозиты с расшифровкой по счетам"),
+        ("Остатки ДС", ("Банковские счета, деньги в пути, баланс WB "
+                        "и депозиты с расшифровкой по счетам")
+                       if _scope.has_ru(_PACK["scope"])
+                       else "Остатки на банковских счетах с расшифровкой по счетам"),
         (PAYOUTS_SHEET_NAME, "Поступления от площадки на расчётный счёт: "
                              "даты, суммы и количество по месяцам"),
         (VAT_OPS_SHEET_NAME, "Справочно: НДС с продаж, комиссии и расходов WB, накладных "
