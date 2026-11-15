@@ -332,7 +332,7 @@ def build_table(cfg, dxf_date=None):
                       % items(cnt, i not in open_levels))
         elif i in cfg.get("page", []):
             cnt = len(cfg["values"].get(i, [""]))
-            pf.append('<pivotField axis="axisPage" showAll="0" sortType="ascending">'
+            pf.append('<pivotField name="Компания" axis="axisPage" showAll="0" sortType="ascending">'
                       '%s</pivotField>' % items(cnt, False))
         elif i == cfg["amount"]:
             pf.append('<pivotField dataField="1" showAll="0"/>')
