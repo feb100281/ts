@@ -1,0 +1,168 @@
+"""План разноски Армении: контрагенты, счета, договоры и правила статей. Без --apply только показывает."""
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from contracts.models import CfItemAuto, Contracts, ContractsTitle
+from corporate.models import COA, CfItems, Owners
+from counterparties.models import Counterparty
+from treasury.models import CfData, CounterpartyAccount
+from utils.bsparsers.am.loader import auto_assign, unassigned
+
+OWNER_TAX = "00532316"
+OWN = ["11817103567800", "1570016863008700", "1570016863000146", "1570016863000158", "1570016863000101",
+       "1150011484654604", "2470003205871007", "2470003205871052", "2470003205871025", "2470003205871070",
+       "2470003205871061", "16062007242300"]
+
+
+def K(title, regex=None, st=None, bs=None, sbs=None, pl=None, spl=None, cf=None, cur="AMD"):
+    """Договор: тип, RegEx карточки, счета (коды), статья CF для Дт и Кт."""
+    return dict(title=title, regex=regex, st=st, bs=bs, sbs=sbs, pl=pl, spl=spl, cf=cf, cur=cur)
+
+
+ACQ = dict(st="799100", cf="111300")                                   # поступления розницы
+FEE = dict(st="720001", pl="610000", spl="540204", cf="123992")        # комиссия эквайринга
+RKO = dict(st="720001", pl="610000", spl="540203", cf="123100")        # комиссии банка
+GOODS = dict(st="720001", bs="130001", sbs="610101", cf="121100")      # закуп товара
+LOGIST = dict(st="720001", pl="520000", spl="520302", cf="121200")     # логистика закупа
+
+# (контрагент, ИНН-заглушка, [счета], [договоры])
+PLAN = [
+    ("ЭКВАЙРИНГ АРДШИНБАНК", "AM-ACQ-ARDSHIN",
+     ["2470010211270000", "2470000332300010", "2470036366410000", "36910000002145", "2470050477480000"],
+     [K("Эквайринг", **ACQ)]),
+    ("АРДШИНБАНК", "AM-ARDSHINBANK",
+     ["SELF:2470003205871007", "2470030575170000", "2470036329880000", "2470036329700000", "62111090001850"],
+     [K("Комиссия эквайринг", "Գործարք ԱԿ-ում", **FEE),
+      K("Бизнес карта", "Անկանխիկ վճարում", st="720001", pl="620000", spl="580101", cf="123940"),
+      K("Договор РКО", "սպասարկման|միջնորդավճար|ինկասաց", **RKO)]),
+    ("ЭКВАЙРИНГ ВТБ-АРМЕНИЯ", "AM-ACQ-VTB", ["29190480000419", "62010000000053"],
+     [K("Эквайринг", "Բանկի POS-ից", **ACQ)]),
+    ("ВТБ-АРМЕНИЯ", "AM-VTB", ["SELF:16062007242300"], [K("Комиссия эквайринг", **FEE)]),
+    ("ЭКВАЙРИНГ АКБА БАНК", "AM-ACQ-ACBA", ["220008609657000", "220008609350000"], [K("Эквайринг", **ACQ)]),
+    ("АРАРАТ ИНКАССАЦИЯ ЗАО", "AM-ARARAT-INKAS", ["2470032194060000"], [K("Договор", **ACQ)]),
+    ("ТРЕНДСЕТТЕР ЗАО (АРМЕНИЯ) — СОБСТВЕННЫЕ СЧЕТА", "AM-OWN-" + OWNER_TAX, OWN,
+     [K("Внутригрупповые расчеты", "տեղափոխ|միջև|Սեփական", st="790001", cf="410101"),
+      K("Внутригрупповые расчеты", "փոխանակում|փոխարկում", st="790003", cf="410201")]),
+    ("ГОСБЮДЖЕТ РА", "AM-STATE-BUDGET",
+     ["900005010120", "900005000618", "900005001699", "900005003703", "900005001186", "900005160719",
+      "900008000490"],
+     [K("Без договора", "ԱՎԵԼԱՑՎԱԾ", st="730006", cf="125400"),
+      K("Без договора", "ՄԱՔՍԱ", st="720001", bs="130001", sbs="610102", cf="121400"),
+      K("Без договора", "Ապահովագրավճար|Դրոշմանիշ", st="750003", cf="125300"),
+      K("Без договора", "գրանցման", st="750004", pl="620000", spl="560103", cf="123010")]),
+    ("KRASSULA LLP", "AM-KRASSULA", ["KZ566017131000002662"], [K("Договор поставки", "KRASSULA", **GOODS, cur="KZT")]),
+    ("OVS SPA", "AM-OVS", ["IT67W0200809440000030020014"], [K("Договор поставки", **GOODS, cur="EUR")]),
+    ("SAS JSC", "AM-SASJSC", ["FR7611306000304815431801425"], [K("Договор поставки", **GOODS, cur="EUR")]),
+    ("MEXX FASHION B.V.", "AM-MEXX", ["NL88ABNA0254216188"], [K("Договор поставки", **GOODS, cur="EUR")]),
+    ("TAKE OFF LIMITED", "AM-TAKEOFF", ["MT66VALL22013000000040023185412"], [K("Договор поставки", **GOODS, cur="EUR")]),
+    ("FASHION TRADING DMCC", "AM-FASHIONTRADING", ["AE880351031326767523003"],
+     [K("Договор поставки", **GOODS, cur="EUR")]),
+    ("GAS MILANO 1984 S.P.A.", "AM-GASMILANO", ["IT95I0200812011000106350105"],
+     [K("Договор поставки", **GOODS, cur="EUR")]),
+    ("LLP (ОБУВЬ, КАЗАХСТАН) KZ22821ZKXEW10000004", "AM-KZ22821ZKXEW", ["KZ22821ZKXEW10000004"],
+     [K("Договор поставки", **GOODS, cur="USD")]),
+    ("JIAXING J AND Y TRADING CO LTD", "AM-JIAXING", ["9550880211317900435"],
+     [K("Договор поставки", **GOODS, cur="USD")]),
+    ("BMJ GMBH INTERNATIONAL LOGISTICS", "AM-BMJ", ["GB37MOLU00992889665412"], [K("Договор", **LOGIST, cur="EUR")]),
+    ("PROLOG SAS", "AM-PROLOG", ["FR7610096185650009317160185"], [K("Договор", **LOGIST, cur="EUR")]),
+    ("LAM SHIPPING AGENCIES GEORGIA", "AM-LAMSHIPPING", ["GE14BG0000000162590600"],
+     [K("Договор", st="720001", pl="520000", spl="520303", cf="121400", cur="USD")]),
+    ("ФЕШН ИНВЕСТ ЗАО", "AM-FASHIONINVEST", ["1150008526466410"],
+     [K("Договор займа", st="770001", pl="630000", spl="590403", cf="321100")]),
+    ("РЕЕСТР АКЦИОНЕРОВ И РЕГИСТРАЦИЯ", "AM-REGISTRY",
+     ["11500056665966", "1150062112015200", "1150063110010600", "1150040210080300"],
+     [K("Без договора", st="720001", pl="620000", spl="560103", cf="123010")]),
+]
+
+# правки RegEx существующих договоров: {id: (было, стало)}
+REGEX_FIX = {
+    535: ("գործ|վերադարձ|վճարահաշվարկ", "գործ|վերադարձ|վճարահաշվարկ|POS անբավարար"),
+    536: ("Commission|փոխանցումից", "Commission|փոխանցումից|միջնորդավճար"),
+}
+EXTRA_ACCOUNTS = {"1570062112451000": "AM-AMERIABANK"}       # абонплата Америабанка → АМЕРИАБАНК
+
+
+class Command(BaseCommand):
+    help = "План разноски Армении; без --apply только проверка и список"
+
+    def add_arguments(self, p):
+        p.add_argument("--apply", action="store_true")
+
+    def handle(self, apply, **_):
+        owner = Owners.objects.exclude(country="RU").filter(name__icontains="АРМЕН").first()
+        if owner is None:
+            raise CommandError("нет компании со страной Армения")
+        coa = {c.code: c for c in COA.objects.all()}
+        items = {c.code: c for c in CfItems.objects.all()}
+        titles = {t.title: t for t in ContractsTitle.objects.all()}
+
+        missing = set()
+        for _, _, _, ks in PLAN:
+            for k in ks:
+                for f in ("st", "bs", "pl"):
+                    if k[f] and k[f] not in coa:
+                        missing.add(f"счёт {k[f]}")
+                for f in ("sbs", "spl", "cf"):
+                    if k[f] and k[f] not in items:
+                        missing.add(f"статья {k[f]}")
+                if k["title"] not in titles:
+                    missing.add(f"тип договора «{k['title']}»")
+        if missing:
+            raise CommandError("Нет в справочниках (новые не создаю): " + ", ".join(sorted(missing)))
+
+        taken = dict(CounterpartyAccount.objects.values_list("account", "cp__name"))
+        self.stdout.write(f"Компания: {owner}")
+        for name, tax, accs, ks in PLAN:
+            cp = Counterparty.objects.filter(tax_id=tax).first()
+            self.stdout.write(f"\n● {name} [{tax}]{' — уже есть' if cp else ''}")
+            for a in accs:
+                busy = taken.get(a)
+                self.stdout.write(f"    счёт {a}" + (f"  (уже привязан к «{busy}» — пропуск)" if busy else ""))
+            for k in ks:
+                parts = [f"ST {k['st']}"] + [f"{lbl} {k[f]}" for lbl, f in
+                                              (("BS", "bs"), ("субк.BS", "sbs"), ("PL", "pl"), ("субк.PL", "spl")) if k[f]]
+                self.stdout.write(f"    договор «{k['title']}» {k['cur']} | {' | '.join(parts)} | RegEx {k['regex'] or '—'} "
+                                  f"| статья {k['cf']} {items[k['cf']].name}")
+        for cid, (old, new) in REGEX_FIX.items():
+            self.stdout.write(f"\nДоговор {cid}: RegEx «{old}» → «{new}»")
+        for a, tax in EXTRA_ACCOUNTS.items():
+            self.stdout.write(f"Счёт {a} → контрагент [{tax}]")
+
+        if not apply:
+            self.stdout.write("\nПроверка без записи. Для создания добавьте --apply.")
+            return
+
+        made = 0
+        with transaction.atomic():
+            for name, tax, accs, ks in PLAN:
+                cp, _ = Counterparty.objects.get_or_create(tax_id=tax, defaults={"name": name, "country": "AM"})
+                for a in accs:
+                    if a not in taken:
+                        CounterpartyAccount.objects.create(account=a, cp=cp)
+                        taken[a] = cp.name
+                for k in ks:
+                    if Contracts.objects.filter(owner=owner, cp=cp, regex=k["regex"], bs=coa[k["st"]]).exists():
+                        continue
+                    c = Contracts.objects.create(
+                        owner=owner, cp=cp, title=titles[k["title"]], currency=k["cur"], regex=k["regex"],
+                        bs=coa[k["st"]], st=coa.get(k["bs"]) if k["bs"] else None,
+                        subconto_bs=items.get(k["sbs"]) if k["sbs"] else None,
+                        pl=coa.get(k["pl"]) if k["pl"] else None,
+                        subconto_pl=items.get(k["spl"]) if k["spl"] else None)
+                    CfItemAuto.objects.create(contract=c, regex=".", defaultcfdt=items[k["cf"]],
+                                              defaultcfcr=items[k["cf"]])
+                    made += 1
+            for cid, (old, new) in REGEX_FIX.items():
+                Contracts.objects.filter(pk=cid, owner=owner, regex=old).update(regex=new)
+            for a, tax in EXTRA_ACCOUNTS.items():
+                cp = (Counterparty.objects.filter(tax_id=tax).first()
+                      or Counterparty.objects.filter(name__icontains="АМЕРИАБАНК").first())
+                if cp and a not in taken:
+                    CounterpartyAccount.objects.create(account=a, cp=cp)
+            ids = list(unassigned(CfData.objects.filter(owner=owner)).values_list("id", flat=True))
+            lines = []
+            auto_assign(ids, owner.id, lines.append)
+        left = unassigned(CfData.objects.filter(owner=owner)).filter(contract__isnull=True).count()
+        self.stdout.write(f"\nНовых договоров: {made}. Проверено операций: {len(ids)}; без договора осталось: {left}")
+        for x in lines:
+            self.stdout.write(x)

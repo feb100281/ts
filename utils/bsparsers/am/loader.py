@@ -165,9 +165,12 @@ def translations(texts: list[str]) -> dict[str, str | None]:
 AUTO_SQL = [
     ("контрагенты по счёту", """
         UPDATE treasury_cfdata d SET cp_id = a.cp_id
-        FROM treasury_counterpartyaccount a
-        WHERE d.id = ANY(%(ids)s) AND d.cp_id IS NULL
-          AND a.account = CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END
+        FROM treasury_counterpartyaccount a, corporate_bankaccount b
+        WHERE d.id = ANY(%(ids)s) AND d.cp_id IS NULL AND b.id = d.ba_id
+          -- корр. счёт равен своему счёту выписки (удержания банка) — привязка «SELF:<счёт>»
+          AND a.account = CASE WHEN (CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END) = b.account
+                               THEN 'SELF:' || b.account
+                               ELSE (CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END) END
     """),
     ("договоры по назначению", """
         WITH m AS (
