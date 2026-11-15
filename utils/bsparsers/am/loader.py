@@ -161,6 +161,7 @@ def translations(texts: list[str]) -> dict[str, str | None]:
 # Авторазноска новых строк
 # ============================================================
 
+# RegEx проверяется и по оригиналу назначения, и по переводу
 AUTO_SQL = [
     ("контрагенты по счёту", """
         UPDATE treasury_cfdata d SET cp_id = a.cp_id
@@ -173,7 +174,8 @@ AUTO_SQL = [
             SELECT DISTINCT ON (d.id) d.id AS cf_id, c.id AS contract_id
             FROM treasury_cfdata d
             JOIN contracts_contracts c
-              ON c.owner_id = d.owner_id AND c.regex IS NOT NULL AND c.regex <> '' AND d.temp ~* c.regex
+              ON c.owner_id = d.owner_id AND c.regex IS NOT NULL AND c.regex <> ''
+              AND (d.temp ~* c.regex OR coalesce(d.temp_ru, '') ~* c.regex)
             WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL
               AND (d.cp_id IS NULL OR c.cp_id = d.cp_id)        -- контрагент известен: только его договоры
             ORDER BY d.id, length(c.regex) DESC, c.id
@@ -185,7 +187,7 @@ AUTO_SQL = [
         FROM treasury_contractsrexex r
         JOIN contracts_contracts c ON c.id = r.contract_id
         WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL AND d.cp_id = r.cp_id
-          AND c.owner_id = d.owner_id AND d.temp ~* r.regex
+          AND c.owner_id = d.owner_id AND (d.temp ~* r.regex OR coalesce(d.temp_ru, '') ~* r.regex)
     """),
     ("единственный договор контрагента", """
         WITH one AS (
@@ -209,7 +211,8 @@ AUTO_SQL = [
             SELECT DISTINCT ON (d.id) d.id AS cf_id,
                    CASE WHEN d.dt = 0 THEN t.defaultcfcr_id ELSE t.defaultcfdt_id END AS cf_item
             FROM treasury_cfdata d
-            JOIN contracts_cfitemauto t ON t.contract_id = d.contract_id AND d.temp ~* t.regex
+            JOIN contracts_cfitemauto t ON t.contract_id = d.contract_id
+             AND (d.temp ~* t.regex OR coalesce(d.temp_ru, '') ~* t.regex)
             WHERE d.id = ANY(%(ids)s) AND d.cfitem_id IS NULL
             ORDER BY d.id, length(t.regex) DESC, t.id
         )
