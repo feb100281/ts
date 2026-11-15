@@ -178,6 +178,30 @@ FROM gl
 
 UNION ALL
 
+-- розница зарубежных компаний (главная книга): строки 1.4 и 1.6
+SELECT
+    p.date_from::DATE,
+    TRY_CAST(p.acc_id AS BIGINT),
+    TRY_CAST(p.subconto_id AS BIGINT),
+    TRY_CAST(p.contract_id AS BIGINT),
+    NULL,
+    NULL,
+    '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ',
+    CASE WHEN STARTS_WITH(p.cost_item, '510190') THEN '1.4 Продажи без НДС' ELSE '1.6. Себестоимость' END,
+    'Продажи розница',
+    p.cost_item,
+    'Без договора',
+    COALESCE(CAST(TO_JSON(p) ->> 'company' AS VARCHAR), 'Без контрагента'),
+    TRY_CAST(p.dt AS DOUBLE),
+    TRY_CAST(p.cr AS DOUBLE),
+    p.amount::DOUBLE,
+    CAST(p.description AS VARCHAR)
+FROM pl_src p
+WHERE (STARTS_WITH(p.cost_item, '510190') OR STARTS_WITH(p.cost_item, '520190'))
+  AND p.date_from <= $date_from
+
+UNION ALL
+
 SELECT
     date_from::DATE,
     TRY_CAST(acc_id AS BIGINT),

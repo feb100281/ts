@@ -238,14 +238,18 @@ def export_management_pack(request):
         DEFAULT_START_YEAR,
     )
 
+    from gear.management.commands.sql.scope import norm, suffix
+    company = norm(request.GET.get("company"))
+
     temp_dir = Path(tempfile.gettempdir())
-    file_path = temp_dir / f"management_pack_{report_date.strftime('%Y%m%d')}.xlsx"
+    file_path = temp_dir / f"management_pack_{report_date.strftime('%Y%m%d')}{suffix(company)}.xlsx"
 
     def build():
         build_management_pack(
             report_date,
             start_year=start_year or DEFAULT_START_YEAR,
             out_path=file_path,
+            company=company,
         )
         return FileResponse(
             open(file_path, "rb"),
@@ -280,19 +284,22 @@ def _export_manpack_csv(request, kind, prefix):
 
     # импорт внутри view: модуль тянет duckdb-подключение и sql-витрины
     from gear.management.commands.mp import export_raw_csv
+    from gear.management.commands.sql.scope import norm, suffix
+    company = norm(request.GET.get("company"))
 
     temp_dir = Path(tempfile.gettempdir())
-    file_path = temp_dir / f"{prefix}_{report_date.strftime('%Y%m%d')}.csv"
+    file_path = temp_dir / f"{prefix}_{report_date.strftime('%Y%m%d')}{suffix(company)}.csv"
 
     def build():
-        export_raw_csv(kind, report_date, out_path=file_path)
+        export_raw_csv(kind, report_date, out_path=file_path, company=company)
 
         # имя файла постоянное (cash_flow.csv, pl.csv): он подключается
-        # источником к сводной и от выгрузки к выгрузке не меняется
+        # источником к сводной и от выгрузки к выгрузке не меняется;
+        # для других компаний — с суффиксом (cash_flow_am_rub.csv)
         return FileResponse(
             open(file_path, "rb"),
             as_attachment=True,
-            filename=f"{prefix}.csv",
+            filename=f"{prefix}{suffix(company)}.csv",
             content_type="text/csv; charset=utf-8",
         )
 
@@ -422,12 +429,14 @@ def export_pivots(request):
 
     # импорт внутри view: модуль тянет duckdb-подключение и sql-витрины
     from gear.management.commands.mp import build_pivots_workbook
+    from gear.management.commands.sql.scope import norm, suffix
+    company = norm(request.GET.get("company"))
 
     temp_dir = Path(tempfile.gettempdir())
-    file_path = temp_dir / f"pivots_{report_date.strftime('%Y%m%d')}.xlsx"
+    file_path = temp_dir / f"pivots_{report_date.strftime('%Y%m%d')}{suffix(company)}.xlsx"
 
     def build():
-        build_pivots_workbook(report_date, out_path=file_path)
+        build_pivots_workbook(report_date, out_path=file_path, company=company)
 
         return FileResponse(
             open(file_path, "rb"),

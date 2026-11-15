@@ -2261,6 +2261,14 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
           </button>
         </div>
 
+        <label class="jm-manpack-label" for="jmMp2Company">Компания</label>
+        <select id="jmMp2Company" class="jm-manpack-input">
+          <option value="ru">Трендсеттер РФ</option>
+          <option value="am_amd">Армения, драмы</option>
+          <option value="am_rub">Армения, рубли</option>
+          <option value="all">Консолидация, рубли</option>
+        </select>
+
         <label class="jm-manpack-label" for="jmMp2Date">Сводные таблицы с транзакциями</label>
         <div class="jm-manpack-quick">
           <button type="button" class="jm-manpack-quick-btn" id="jmMp2Pivots">
@@ -2339,7 +2347,9 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
 
       errorBox.classList.remove("is-visible");
       close();
-      window.location.href = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}`;
+      const company = backdrop.querySelector("#jmMp2Company").value || "ru";
+      window.location.href = `${baseUrl}?report_date=${encodeURIComponent(reportDate)}` +
+        `&company=${encodeURIComponent(company)}`;
     }
 
     backdrop.querySelector("#jmMp2Download").addEventListener("click", function () {

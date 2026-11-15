@@ -41,6 +41,10 @@ from .sql.read_query import (
     wb_payouts,
     ensure_pl_src,
 )
+from .sql import scope as _scope
+
+# компания текущей сборки (РФ / Армения / консолидация), см. sql/scope.py
+_PACK = {"scope": _scope.DEFAULT}
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -1844,10 +1848,12 @@ def build_cover(ws, report_date, months, kpi, out_name, contents=None, as_of=Non
     title_band(
         ws,
         "УПРАВЛЕНЧЕСКИЙ ПАКЕТ ОТЧЁТНОСТИ",
-        "Управленческая отчётность (management pack)",
+        "Управленческая отчётность (management pack) · %s" % _scope.title(_PACK["scope"]),
         ncols,
-        extra="Российский рубль (RUB) · дата отчёта: %s · период: %s — %s"
-              % (as_of.strftime("%d.%m.%Y"),
+        extra="%s · дата отчёта: %s · период: %s — %s"
+              % ("Армянский драм (AMD)" if _scope.currency(_PACK["scope"]) == "AMD"
+                 else "Российский рубль (RUB)",
+                 as_of.strftime("%d.%m.%Y"),
                  month_label(months[0]), month_label(months[-1])),
         show_back=False,
     )
@@ -4519,6 +4525,9 @@ def fetch_pack_data(con, date_from):
     con.execute(base_stocks)
     con.execute(wb_costs)
     con.execute(dayly_sales_agg)
+    if not _scope.has_ru(_PACK["scope"]):          # данные WB есть только у РФ
+        for t in ("base", "stocks_daily", "wb_costs", "pl_sales"):
+            con.execute(f"DELETE FROM {t}")
     con.execute(margin, parameters={"date_from": date_from})
     ensure_pl_src(con)                    # зарплата по начислению из ЗУП, если есть
     con.execute(opex, parameters={"date_from": date_from})
@@ -4534,6 +4543,18 @@ def fetch_pack_data(con, date_from):
         SELECT me, section, item, value
         FROM opex
     """).fetchall()
+
+    # розница зарубежных компаний: строки 1.4 и 1.6 из главной книги
+    pl_rows += con.execute("""
+        SELECT LAST_DAY(date_from)::DATE AS me, $sec AS section,
+               CASE WHEN STARTS_WITH(cost_item, '510190') THEN '1.4 Продажи без НДС'
+                    ELSE '1.6. Себестоимость' END AS item,
+               SUM(CASE WHEN STARTS_WITH(cost_item, '510190') THEN amount ELSE -amount END) AS value
+        FROM pg.public.pl_for_csv
+        WHERE (STARTS_WITH(cost_item, '510190') OR STARTS_WITH(cost_item, '520190'))
+          AND date_from <= $date_from
+        GROUP BY 1, 2, 3
+    """, parameters={"sec": SEC_REVENUE, "date_from": date_from}).fetchall()
 
     cf_rows = con.execute("""
         SELECT
@@ -5329,7 +5350,7 @@ def build_vat_ops(ws, rows, months, report_date, as_of=None, paid=None,
         ws.row_dimensions[r].height = 26
         r += 1
 
-def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=None):
+def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=None, company=None):
     """
     Собирает управленческий пакет (Титул + P&L + Cash Flow + пояснения)
     и сохраняет xlsx. Возвращает (путь, статистика).
@@ -5340,17 +5361,21 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
     """
     if isinstance(date_from, str):
         date_from = date.fromisoformat(date_from)
+    company = _scope.norm(company)
+    _PACK["scope"] = company
+    with_ru = _scope.has_ru(company)
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt(ro=True) as raw:
+        con = _scope.ScopedCon(raw, company)
         (pl_rows, cf_rows, unit_rows, treasury_rows,
         deposit_balance, note_rows, payout_rows,
         conv_rows, vat_rows) = fetch_pack_data(con, date_from)
-        vat_ops_rows = fetch_vat_summary(con, date_from)
+        vat_ops_rows = fetch_vat_summary(con, date_from) if with_ru else []
         vat_adj = fetch_vat_adjustments(con, date_from)
         deposit_rows = fetch_deposit_rows(con, date_from)
         from gear.app.manpack import off_pl
         try:
-            offpl_data = off_pl.fetch(con, date_from)
+            offpl_data = off_pl.fetch(con, date_from) if with_ru else None
         except Exception as e:                    # пакет собирается и без блока
             print(f"[mp] вне P&L: {type(e).__name__}: {e}", flush=True)
             offpl_data = None
@@ -5546,7 +5571,7 @@ def build_management_pack(date_from, start_year=DEFAULT_START_YEAR, out_path=Non
         path = Path(out_path).expanduser().resolve()
     else:
         path = (Path(settings.BASE_DIR) / "reports" /
-                ("manpack_%s.xlsx" % report_date.isoformat()))
+                ("manpack_%s%s.xlsx" % (report_date.isoformat(), _scope.suffix(company))))
     path.parent.mkdir(parents=True, exist_ok=True)
 
     contents = [
@@ -5682,7 +5707,7 @@ def _csv_value(v):
     return " ".join(text.split())
 
 
-def export_raw_csv(kind, date_from, out_path=None):
+def export_raw_csv(kind, date_from, out_path=None, company=None):
     """Выгружает витрину «cf» или «pl» в csv. Возвращает (путь, число строк)."""
     if kind not in CSV_SOURCES:
         raise ValueError("Неизвестная выгрузка: %s" % kind)
@@ -5692,13 +5717,14 @@ def export_raw_csv(kind, date_from, out_path=None):
 
     prefix, sql = CSV_SOURCES[kind]
 
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    with get_duckdb_conn_with_opt(ro=True) as raw:
+        con = _scope.ScopedCon(raw, company)
         cur = con.execute(sql, parameters={"date_from": date_from})
         columns = [d[0] for d in cur.description]
         rows = cur.fetchall()
 
     path = Path(out_path) if out_path else Path(
-        "%s_%s.csv" % (prefix, date_from.isoformat()))
+        "%s_%s%s.csv" % (prefix, date_from.isoformat(), _scope.suffix(company)))
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8-sig", newline="") as fh:
@@ -5743,6 +5769,11 @@ PIVOT_PL_CHECK_SQL = """
         UNION ALL
         SELECT me, section, value FROM opex
         UNION ALL
+        SELECT LAST_DAY(date_from)::DATE, '1. ВЫРУЧКА И МАРЖИНАЛЬНОСТЬ', amount
+        FROM pl_src
+        WHERE (STARTS_WITH(cost_item, '510190') OR STARTS_WITH(cost_item, '520190'))
+          AND date_from <= $date_from
+        UNION ALL
         SELECT LAST_DAY(date_from)::DATE, '9. НАЛОГ НА ПРИБЫЛЬ', amount
         FROM cf WHERE subitem = '125200 Налог на прибыль'
         UNION ALL
@@ -5773,6 +5804,9 @@ def pivot_pl_source(con, date_from):
     con.execute(read_sql("base_stocks.txt"))
     con.execute(read_sql("wb_costs.txt"))
     con.execute(read_sql("dayly_sales_agg.txt"))
+    if not _scope.has_ru(_PACK["scope"]):          # данные WB есть только у РФ
+        for t in ("base", "stocks_daily", "wb_costs", "pl_sales"):
+            con.execute(f"DELETE FROM {t}")
     con.execute(read_sql("cf.txt"), parameters=params)
     ensure_pl_src(con)
     con.execute(read_sql("pivot_pl.txt"), parameters=params)
@@ -6172,7 +6206,7 @@ def write_raw_vat(wb, columns, rows):
     return len(rows)
 
 
-def build_pivots_workbook(date_from, out_path=None):
+def build_pivots_workbook(date_from, out_path=None, company=None):
     """Собирает книгу со сводными на отчётную дату."""
     if isinstance(date_from, str):
         date_from = date.fromisoformat(date_from)
@@ -6183,7 +6217,10 @@ def build_pivots_workbook(date_from, out_path=None):
             "assets/build_pivots_skeleton.py" % PIVOTS_SKELETON.name)
 
     data = {}
-    with get_duckdb_conn_with_opt(ro=True) as con:
+    company = _scope.norm(company)
+    _PACK["scope"] = company
+    with get_duckdb_conn_with_opt(ro=True) as raw:
+        con = _scope.ScopedCon(raw, company)
         for name, sql in PIVOT_SOURCES.items():
             cur = con.execute(sql, parameters={"date_from": date_from})
             data[name] = ([d[0] for d in cur.description], cur.fetchall())
@@ -6225,7 +6262,7 @@ def build_pivots_workbook(date_from, out_path=None):
     wb._sheets = ordered
 
     path = Path(out_path) if out_path else Path(
-        "pivots_%s.xlsx" % date_from.isoformat())
+        "pivots_%s%s.xlsx" % (date_from.isoformat(), _scope.suffix(company)))
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
 
@@ -6256,6 +6293,10 @@ class Command(BaseCommand):
             "--out", type=str, default=None,
             help="Путь к xlsx. По умолчанию <BASE_DIR>/reports/manpack_<дата>.xlsx",
         )
+        parser.add_argument(
+            "--company", default="ru", choices=sorted(_scope.SCOPES),
+            help="ru — Трендсеттер РФ, am_rub / am_amd — Армения, all — консолидация.",
+        )
 
     def handle(self, *args, **options):
         try:
@@ -6263,6 +6304,7 @@ class Command(BaseCommand):
                 options["date_from"],
                 start_year=options["start_year"],
                 out_path=options["out"],
+                company=options["company"],
             )
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
