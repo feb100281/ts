@@ -137,7 +137,7 @@ class Command(BaseCommand):
             currencies = [c.strip().upper() for c in options["currencies"].split(",")]
         else:
             # по умолчанию — наши 6 основных валют
-            currencies = ["USD", "EUR", "CNY", "HKD", "AED", "AMD", "KGS",]
+            currencies = ["USD", "EUR", "CNY", "HKD", "AED", "AMD", "KGS", "KZT"]
 
         for c in currencies:
             if c not in valid_currencies:

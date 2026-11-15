@@ -67,9 +67,9 @@ def insert_normizized(conn):
         LEFT JOIN LATERAL (
             SELECT r.rate
             FROM public.macro_currencyrate r
-            WHERE r.date = t.date
+            WHERE r.date <= t.date                    -- последний курс ЦБ на дату операции
             AND r.currency = b.currency
-            ORDER BY r.date
+            ORDER BY r.date DESC
             LIMIT 1
         ) fx ON TRUE
         WHERE t.contract_id IS NOT NULL               -- в книгу идут только разнесённые по договору операции
