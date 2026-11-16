@@ -150,6 +150,7 @@ def read_excel(data: bytes, filename: str) -> list[dict]:
         title = text(get(r, "title"))
         sa = text(get(r, "number")) or text(get(r, "art"))
         out.append({
+            "_pos": int(num(r[0])),
             "brand": title.split()[-1] if title and len(title.split()) > 1 else None,
             "upd_sa_name": sa,
             "upd_title": title,
@@ -164,7 +165,55 @@ def read_excel(data: bytes, filename: str) -> list[dict]:
         })
     if not out:
         raise ValueError(f"На листе «{name}» нет товарных строк")
+    _apply_channels(book, out)
+    for r in out:
+        r.pop("_pos", None)
     return out
+
+
+# --- «Рабочий щит»: канал продаж и отгрузка по номеру строки ---
+
+def channel_of(v):
+    s = _norm(v)
+    if not s:
+        return "none"
+    if re.search(r"вб|wb|wildberr|вайлд", s):
+        return "wb"
+    if re.search(r"ритейл|розниц|retail|магазин", s):
+        return "retail"
+    return "none"
+
+
+def _apply_channels(book, rows):
+    """Если в файле есть лист с колонкой «Канал продаж» — канал по каждой строке; пустой → не распределено."""
+    sheet = next((n for n in book.sheet_names if re.search(r"рабоч", n, re.I)), None)
+    if not sheet:
+        return
+    data = book.parse(sheet, header=None, dtype=object)
+    data = data.where(data.notna(), None).values.tolist()
+    for h, row in enumerate(data[:30]):
+        cells = [_norm(v) for v in row]
+        ch = next((j for j, c in enumerate(cells) if "канал" in c), None)
+        if ch is None:
+            continue
+        sh = next((j for j, c in enumerate(cells) if "отгруз" in c), None)
+        nb = next((j for j, c in enumerate(cells) if re.fullmatch(r"(номер|модель)", c)), None)
+        qt = next((j for j, c in enumerate(cells) if c.replace(" ", "").startswith(("коли", "кодич"))), None)
+        marks = {}
+        for r in data[h + 1:]:
+            pos = num(r[0])
+            if pos is None or (qt is not None and not num(r[qt])):
+                continue
+            marks[int(pos)] = (channel_of(r[ch]),
+                               (_norm(r[sh]) in ("да", "yes", "1")) if sh is not None and _norm(r[sh]) else None,
+                               text(r[nb]) if nb is not None else None)
+        for r in rows:
+            m = marks.get(r["_pos"])
+            if m and (m[2] is None or m[2] == r["upd_sa_name"]):   # сверка по артикулу
+                r["channel"], r["shipped"] = m[0], m[1]
+            else:
+                r["channel"] = "none"
+        return
 
 
 def read_file(data: bytes, filename: str) -> list[dict]:

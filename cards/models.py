@@ -5,6 +5,9 @@ from contracts.models import Contracts
 from django.contrib.postgres.fields import ArrayField
 from utils.choises import CURRENCY_CHOISE
 
+# Канал продаж товара из УПД: на склад WB идут только строки «ВБ»
+CHANNELS = [("wb", "ВБ"), ("retail", "Розница"), ("none", "Не распределено")]
+
 class WbCardRaw(models.Model):
 
     nm_id = models.BigIntegerField(primary_key=True)
@@ -148,6 +151,14 @@ class UpdDocument(models.Model):
 
     comment = models.TextField(
         blank=True
+    )
+
+    default_channel = models.CharField(
+        max_length=10,
+        choices=CHANNELS,
+        default="wb",
+        verbose_name="Канал по умолчанию",
+        help_text="Для строк без своего канала. На склад WB идут только строки «ВБ».",
     )
     
     class Meta:       
@@ -417,6 +428,21 @@ class UPDData(models.Model):
         choices=CURRENCY_CHOISE,
         default='RUB',
         verbose_name='Валюта',
+    )
+
+    channel = models.CharField(
+        max_length=10,
+        choices=CHANNELS,
+        null=True,
+        blank=True,
+        verbose_name="Канал",
+        help_text="Пусто — канал по умолчанию из УПД",
+    )
+
+    shipped = models.BooleanField(
+        null=True,
+        blank=True,
+        verbose_name="Отгружено",
     )
 
     class Meta:

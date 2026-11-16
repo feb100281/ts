@@ -137,6 +137,20 @@ def build_upd_grid(df):
             {"field": "brand", "headerName": "Бренд", "width": 120, "pinned": "left"},
             {"field": "upd_title", "headerName": "Название УПД", "width": 300, "pinned": "left"},
             {"field": "upd_sa_name", "headerName": "Артикул УПД", "width": 160, "pinned": "left"},
+            {
+                "field": "channel",
+                "headerName": "Канал",
+                "width": 140,
+                "cellStyle": {
+                    "styleConditions": [
+                        {"condition": "params.value === 'Не распределено'",
+                         "style": {"backgroundColor": "#fff4cc"}},
+                        {"condition": "params.value === 'Розница'",
+                         "style": {"backgroundColor": "#e8f0fe"}},
+                    ],
+                    "defaultStyle": {"backgroundColor": "transparent"},
+                },
+            },
             {"field": "sa_name", "headerName": "Артикул продавца", "width": 160},
 
             {

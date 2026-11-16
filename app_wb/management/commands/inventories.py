@@ -56,6 +56,17 @@ WHERE u.chrt_id IS NULL
 
 LEFT_CHRT = "SELECT count(*) FROM upd_income_lines WHERE nm_id IS NOT NULL AND chrt_id IS NULL"
 
+# приходы вне склада WB по каналам: розница и не распределено
+CHANNEL_SUMMARY = """
+SELECT COALESCE(t.channel, u.default_channel, 'wb') AS ch,
+       string_agg(DISTINCT u.number, ', ' ORDER BY u.number) AS upds,
+       SUM(t.upd_qty) AS qty
+FROM inventories.upd_income t
+LEFT JOIN inventories.upd_documents u ON u.id = t.upd_document_id
+WHERE COALESCE(t.channel, u.default_channel, 'wb') <> 'wb'
+GROUP BY 1 ORDER BY 1
+"""
+
 
 def connect_db():
     return psycopg.connect(
@@ -230,7 +241,9 @@ LEFT JOIN inventories.upd_documents u
     ON u.id = t.upd_document_id,
 UNNEST(range(CAST(t.upd_qty AS BIGINT))) x(i)
 
-WHERE t.nm_id IS NOT NULL;
+WHERE t.nm_id IS NOT NULL
+  -- склад WB: только строки канала «ВБ» (свой канал строки или канал по умолчанию УПД)
+  AND COALESCE(t.channel, u.default_channel, 'wb') = 'wb';
 """
 
 MAKE_PRE_WO = """ 
@@ -894,6 +907,11 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.NOTICE("Делаем таблицы для списаний продаж")                    
                 )
+                for ch, upds, qty in con.execute(CHANNEL_SUMMARY).fetchall():
+                    label = {"retail": "Розница", "none": "Не распределено"}.get(ch, ch)
+                    self.stdout.write(
+                        self.style.WARNING(f"Не в складе WB — {label}: {qty:,.0f} шт (УПД: {upds})")
+                    )
                 con.execute(MAKE_SALES_GL)
                 con.execute(MAKE_INV_GL)
                 con.execute(MAKE_PRE_WO)

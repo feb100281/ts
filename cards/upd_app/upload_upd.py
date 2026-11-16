@@ -102,6 +102,10 @@ def upload_data(
        
 
                 currency_code="RUB",
+
+                channel=r.get("channel"),
+
+                shipped=r.get("shipped"),
             )
         )
 

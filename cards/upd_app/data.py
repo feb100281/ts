@@ -45,8 +45,13 @@ def get_grid_data(upd_id) -> pd.DataFrame:
                 (t.upd_price_vatless * t.upd_qty) AS upd_amount_vatless,
                 t.upd_vat_rate,            
                 t.man_cost_per_unit,
-                t.currency_code
+                t.currency_code,
+                CASE COALESCE(t.channel, d.default_channel, 'wb')
+                    WHEN 'wb' THEN 'ВБ' WHEN 'retail' THEN 'Розница' ELSE 'Не распределено'
+                END AS channel
             FROM pg.public.upd_income_lines t            
+            LEFT JOIN pg.public.cards_upddocument d
+                ON d.id = t.upd_document_id
             LEFT JOIN analytics.cards.product p 
                 ON p.nm_id = t.nm_id
             LEFT JOIN analytics.cards.sizes s 

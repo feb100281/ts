@@ -114,6 +114,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         'cost_diff_percent_display',
         'total_qty_display',
         'lines_count_display',
+        'channels_display',
         'nm_missing_count',
         'chrt_missing_count',
         'vat_mismatch_count',
@@ -122,7 +123,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     
     list_display_links = ('counterparty_short', 'upd_link')
 
-    list_filter = ('counterparty',)
+    list_filter = ('counterparty', 'default_channel')
 
     search_fields = (
         'number', 'comment',
@@ -472,6 +473,17 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     @admin.display(description='Строк УПД', ordering='lines_count')
     def lines_count_display(self, obj):
         return obj.lines_count or 0
+
+    @admin.display(description='Каналы, шт')
+    def channels_display(self, obj):
+        from django.db.models.functions import Coalesce
+        from django.db.models import Value
+        rows = (obj.income_lines
+                .annotate(ch=Coalesce('channel', Value(obj.default_channel)))
+                .values('ch').annotate(q=Sum('upd_qty')).order_by('ch'))
+        names = {'wb': 'ВБ', 'retail': 'Розница', 'none': 'Не распр.'}
+        return ' · '.join(f"{names.get(r['ch'], r['ch'])} {r['q'] or 0:,.0f}".replace(',', ' ')
+                          for r in rows) or '—'
 
     @admin.display(description='Нет nm_id', ordering='nm_missing')
     def nm_missing_count(self, obj):
