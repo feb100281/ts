@@ -236,3 +236,78 @@ class ScopedCon:
 
     def __exit__(self, *exc):
         return False
+
+
+# --- Проверки (НДС, договоры, баланс, удержания WB): отбор по компании, суммы в рублях ---
+
+CHECK_SUBST = [
+    ("pg.gl.accural_distribution", "scope_accural_distribution"),
+    ("pg.public.grossbook_gladjustment", "scope_gladjustment"),
+    ("pg.public.upd_income_lines", "scope_upd_lines"),
+    ("pg.public.treasury_cfdata", "scope_cfdata"),
+    ("pg.wb_dwh.realization_kv", "scope_realization_kv"),
+    ("inventories.inv_gl", "scope_inv_gl"),
+]
+
+
+def check_options():
+    """Компании для проверок: только рублёвые варианты."""
+    return [(k, t) for k, t in options() if k in (DEFAULT, ALL) or k.endswith("|RUB")]
+
+
+def check_key(key: str | None) -> str:
+    """Ключ проверки всегда в рублях: учёт договоров и НДС ведётся в рублях."""
+    _, groups, _ = resolve(key)
+    if groups is None:
+        return ALL
+    return DEFAULT if groups == [RU_GROUP] else f"{groups[0]}|RUB"
+
+
+def prepare_checks(con, key: str):
+    key = check_key(key)
+    prepare(con, key)
+    if resolve(key)[1] is None:
+        for src, dst in CHECK_SUBST:
+            con.execute(f"CREATE OR REPLACE TEMP VIEW {dst} AS SELECT * FROM {src}")
+        return
+    ru = "TRUE" if has_ru(key) else "FALSE"
+    con.execute("""CREATE OR REPLACE TEMP TABLE scope_contracts AS
+        SELECT id FROM pg.public.contracts_contracts WHERE owner_id IN (SELECT id FROM scope_owners)""")
+    con.execute(f"""CREATE OR REPLACE TEMP VIEW scope_accural_distribution AS
+        SELECT * FROM pg.gl.accural_distribution
+        WHERE contract_id IN (SELECT id FROM scope_contracts) OR (contract_id IS NULL AND {ru})""")
+    con.execute("""CREATE OR REPLACE TEMP VIEW scope_gladjustment AS
+        SELECT * FROM pg.public.grossbook_gladjustment WHERE owner_id IN (SELECT id FROM scope_owners)""")
+    con.execute(f"""CREATE OR REPLACE TEMP VIEW scope_upd_lines AS
+        SELECT l.* FROM pg.public.upd_income_lines l
+        JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+        WHERE d.contract_id IN (SELECT id FROM scope_contracts) OR (d.contract_id IS NULL AND {ru})""")
+    con.execute("""CREATE OR REPLACE TEMP VIEW scope_cfdata AS
+        SELECT * FROM pg.public.treasury_cfdata WHERE ba_id IN (SELECT id FROM scope_bankaccount)""")
+    con.execute(f"CREATE OR REPLACE TEMP VIEW scope_realization_kv AS "
+                f"SELECT * FROM pg.wb_dwh.realization_kv WHERE {ru}")
+    con.execute(f"CREATE OR REPLACE TEMP VIEW scope_inv_gl AS "
+                f"SELECT * FROM inventories.inv_gl WHERE {ru}")
+
+
+class CheckCon(ScopedCon):
+    """Подключение для проверок: источники выбранной компании, суммы в рублях."""
+
+    def __init__(self, con, key: str):
+        self._con = con
+        self.scope = check_key(key)
+        prepare_checks(con, self.scope)
+
+    @staticmethod
+    def _sql(sql):
+        if not isinstance(sql, str):
+            return sql
+        for a, b in CHECK_SUBST:
+            sql = sql.replace(a, b)
+        return apply(sql)
+
+    def execute(self, sql, *args, **kwargs):
+        return self._con.execute(self._sql(sql), *args, **kwargs)
+
+    def sql(self, sql, *args, **kwargs):
+        return self._con.sql(self._sql(sql), *args, **kwargs)

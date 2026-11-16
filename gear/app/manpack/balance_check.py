@@ -477,8 +477,10 @@ def to_excel(res: dict, report_date: date) -> bytes:
     return buf.getvalue()
 
 
-def build_balance_workbook(report_date: date) -> tuple[bytes, str]:
+def build_balance_workbook(report_date: date, company: str | None = None) -> tuple[bytes, str]:
     from conns import get_duckdb_conn_with_opt
+    from gear.management.commands.sql.scope import CheckCon, check_key, suffix
+    key = check_key(company)
     with get_duckdb_conn_with_opt(ro=True) as con:
-        res = build(report_date, con)
-    return to_excel(res, report_date), f"Баланс (проверка) {report_date:%Y%m%d}.xlsx"
+        res = build(report_date, CheckCon(con, key))
+    return to_excel(res, report_date), f"Баланс (проверка) {report_date:%Y%m%d}{suffix(key)}.xlsx"

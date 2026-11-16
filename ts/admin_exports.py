@@ -315,6 +315,12 @@ def export_pack_companies(request):
     return JsonResponse({"options": [{"value": v, "label": t} for v, t in options()]})
 
 
+def export_check_companies(request):
+    """Варианты «Компания» для окна проверок (только рубли)."""
+    from gear.management.commands.sql.scope import check_options
+    return JsonResponse({"options": [{"value": v, "label": t} for v, t in check_options()]})
+
+
 def export_cf_csv(request):
     """Витрина движения денежных средств на отчётную дату, csv с «|»."""
     return _export_manpack_csv(request, "cf", "cash_flow")
@@ -338,7 +344,7 @@ def export_vat_contracts(request):
     from gear.app.manpack.vat_contracts import build_vat_contracts_workbook
 
     def build():
-        data, name = build_vat_contracts_workbook(report_date)
+        data, name = build_vat_contracts_workbook(report_date, request.GET.get("company"))
         resp = HttpResponse(
             data,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -362,7 +368,7 @@ def export_balance_check(request):
     from gear.app.manpack.balance_check import build_balance_workbook
 
     def build():
-        data, name = build_balance_workbook(report_date)
+        data, name = build_balance_workbook(report_date, request.GET.get("company"))
         resp = HttpResponse(
             data,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -386,7 +392,7 @@ def export_wb_deductions(request):
     from gear.app.manpack.wb_deductions import build_wb_deductions_workbook
 
     def build():
-        data, name = build_wb_deductions_workbook(report_date)
+        data, name = build_wb_deductions_workbook(report_date, request.GET.get("company"))
         resp = HttpResponse(
             data,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -410,7 +416,7 @@ def export_contracts_writeoff(request):
     from gear.app.manpack.contracts_check import build_contracts_check_workbook
 
     def build():
-        data, name = build_contracts_check_workbook(report_date)
+        data, name = build_contracts_check_workbook(report_date, request.GET.get("company"))
         resp = HttpResponse(
             data,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

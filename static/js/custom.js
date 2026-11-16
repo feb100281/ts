@@ -2425,6 +2425,7 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
   const WRITEOFF_URL = "/admin/export/checks/contracts-writeoff/";
   const BALANCE_URL = "/admin/export/checks/balance/";
   const WBDED_URL = "/admin/export/checks/wb-deductions/";
+  const COMPANIES_URL = "/admin/export/checks/companies/";
 
   function ymd(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -2443,6 +2444,10 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
         <div class="jm-manpack-subtitle">
           Сверка данных учёта. Проверка идёт за весь период до выбранной даты.
         </div>
+        <label class="jm-manpack-label" for="jmChkCompany">Компания</label>
+        <select id="jmChkCompany" class="jm-manpack-input">
+          <option value="ru">Трендсеттер РФ</option>
+        </select>
         <label class="jm-manpack-label" for="jmChkDate">Дата</label>
         <input type="date" id="jmChkDate" class="jm-manpack-input" />
         <label class="jm-manpack-label">Выгрузки, xlsx</label>
@@ -2470,10 +2475,30 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
 
     const dateInput = backdrop.querySelector("#jmChkDate");
     const errorBox = backdrop.querySelector("#jmChkError");
+    const companySelect = backdrop.querySelector("#jmChkCompany");
+
+    function loadCompanies() {
+      fetch(COMPANIES_URL, { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data || !data.options || !data.options.length) return;
+          const current = companySelect.value || "ru";
+          companySelect.innerHTML = "";
+          data.options.forEach((o) => {
+            const opt = document.createElement("option");
+            opt.value = o.value;
+            opt.textContent = o.label;
+            companySelect.appendChild(opt);
+          });
+          companySelect.value = data.options.some((o) => o.value === current) ? current : "ru";
+        })
+        .catch(() => {});
+    }
 
     function open() {
       errorBox.classList.remove("is-visible");
       if (!dateInput.value) dateInput.value = ymd(new Date());
+      loadCompanies();
       backdrop.classList.add("is-open");
     }
     function close() {
@@ -2485,7 +2510,8 @@ console.log("✅ management_pack_export.js loaded — pivots v3");
         return;
       }
       close();
-      window.location.href = `${url}?report_date=${encodeURIComponent(dateInput.value)}`;
+      window.location.href = `${url}?report_date=${encodeURIComponent(dateInput.value)}` +
+        `&company=${encodeURIComponent(companySelect.value || "ru")}`;
     }
 
     backdrop.querySelector("#jmChkVat").addEventListener("click", () => download(VAT_URL));
