@@ -12,6 +12,8 @@ from treasury.models import BankStatements, CfData
 DAY = timedelta(days=1)
 OWN_NAME = re.compile(r"трендсеттер|trendsetter|տրենդսետտեր", re.I)
 OWN_TRANSFER = re.compile(r"սեփական միջոց|իմ հաշիվների|sobstvennyh|собственных средств", re.I)
+TRANSIT = re.compile(r"swift transfer|տարանցիկ|transit", re.I)          # служебные счета банков
+CORR = re.compile(r"\d[\d ]{12,20}\d")                                    # номер счёта внутри реквизитов
 
 
 def period_end(today: date) -> date:
@@ -109,10 +111,16 @@ def _unknown_accounts(owner, ours: set) -> list:
         "date", "dt", "cr", "payer_account", "reciver_account", "cp_bs_name", "temp")
     for d, dt, cr, payer, recv, name, temp in rows:
         acc = payer if (dt or 0) > 0 else recv
-        if not acc or acc in ours:
+        if not acc or acc in ours or TRANSIT.search(name or ""):
             continue
         if not (OWN_NAME.search(name or "") or OWN_TRANSFER.search(temp or "")):
             continue
+        if acc.startswith("301"):                                  # корсчёт банка РФ — берём счёт из реквизитов
+            real = [x.replace(" ", "") for x in CORR.findall(name or "")]
+            real = [x for x in real if 14 <= len(x) <= 16 and x not in ours]
+            if not real:
+                continue
+            acc, name = real[0], f"{name} (через корсчёт {acc})"
         x = found.setdefault(acc, {"account": acc, "name": name or "", "count": 0, "first": d, "last": d,
                                    "sample": (temp or "")[:90]})
         x["count"] += 1
