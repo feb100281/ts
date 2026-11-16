@@ -87,7 +87,8 @@ REGEX_FIX = {
     536: ("Commission|փոխանցումից", "Commission|փոխանցումից|միջնորդավճար"),
 }
 EXTRA_ACCOUNTS = {"1570062112451000": 536}       # абонплата Америабанка → контрагент договора РКО 536
-STAFF_AUTO = ("Зарплата|Аванс|Отпускные", "Зарплата|Аванс|Отпускные|Пособие|Հիվանդության")
+STAFF_AUTO = (("Зарплата|Аванс|Отпускные", "Зарплата|Аванс|Отпускные|Пособие|Հիվանդության"),
+              "Зарплата|Аванс|Отпускные|Пособие|Հիվանդության|Преми|Պարգև")
 
 
 class Command(BaseCommand):
@@ -135,7 +136,7 @@ class Command(BaseCommand):
             self.stdout.write(f"\nДоговор {cid}: RegEx «{old}» → «{new}»")
         for a, cid in EXTRA_ACCOUNTS.items():
             self.stdout.write(f"Счёт {a} → контрагент договора {cid}")
-        self.stdout.write(f"Трудовые договоры: правило статьи «{STAFF_AUTO[0]}» → «{STAFF_AUTO[1]}»")
+        self.stdout.write(f"Трудовые договоры: правило статьи → «{STAFF_AUTO[1]}»")
 
         if not apply:
             self.stdout.write("\nПроверка без записи. Для создания добавьте --apply.")
@@ -168,7 +169,7 @@ class Command(BaseCommand):
                 if c:
                     CounterpartyAccount.objects.update_or_create(account=a, defaults={"cp": c.cp})
             CfItemAuto.objects.filter(contract__owner=owner, contract__title__title="Трудовой договор",
-                                      regex=STAFF_AUTO[0]).update(regex=STAFF_AUTO[1])
+                                      regex__in=STAFF_AUTO[0]).update(regex=STAFF_AUTO[1])
             ids = list(unassigned(CfData.objects.filter(owner=owner)).values_list("id", flat=True))
             lines = []
             auto_assign(ids, owner.id, lines.append)
