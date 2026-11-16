@@ -10,11 +10,37 @@ from .data import (
     get_grid_data,
 )
 
-from .upload_upd import upload_data
+from .upload_upd import upload_data, update_channels
 from .upload_man_cost import upload_man_cost
 
 
 def register_callbacks(app):
+
+    @app.callback(
+        Output("alert-slot", "children", allow_duplicate=True),
+        Output("upd-grid", "rowData", allow_duplicate=True),
+        Input("channels-upd-btn", "n_clicks"),
+        State("upd-upload", "contents"),
+        State("upd-upload", "filename"),
+        State("upd-id-store", "data"),
+        prevent_initial_call=True,
+    )
+    def update_channels_callback(n_clicks, contents, filename, upd_id):
+        if not contents:
+            return dmc.Alert(title="Файл не выбран", children="Выберите файл УПД с листом «Рабочий щит»",
+                             color="red", variant="filled", withCloseButton=True), no_update
+        try:
+            data = base64.b64decode(contents.split(",")[1])
+            changed, missed = update_channels(upd_id, data, filename)
+            text = f"{filename} → изменено строк: {changed:,}".replace(",", " ")
+            if missed:
+                text += f"; не совпали по позиции и артикулу: {missed}"
+            return (dmc.Alert(title="Каналы обновлены", children=text,
+                              color="orange" if missed else "green", variant="filled", withCloseButton=True),
+                    get_grid_data(upd_id).to_dict("records"))
+        except Exception as e:
+            return dmc.Alert(title="Ошибка", children=str(e), color="red",
+                             variant="filled", withCloseButton=True), no_update
 
     @app.callback(
         Output("dummy", "children"),

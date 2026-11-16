@@ -155,6 +155,13 @@ def build_upd_header(upd):
                                 id="import-upd-btn",
                                 color="blue",
                             ),
+
+                            dmc.Button(
+                                "Обновить каналы",
+                                id="channels-upd-btn",
+                                color="teal",
+                                variant="light",
+                            ),
                         ],
                         gap="sm",
                         align="center",
