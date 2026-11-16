@@ -41,6 +41,14 @@ def _to_decimal(value) -> Decimal | None:
         return None
 
 
+def _channel(v):
+    """Канал из шаблона: ВБ или Розница. Пусто и «Не распределено» — не менять,
+    чтобы старый шаблон не затёр разметку, пришедшую позже."""
+    from .parse_upd import channel_of
+    ch = channel_of(v) if _norm(v) else None
+    return ch if ch in ("wb", "retail") else None
+
+
 def _norm(v) -> str:
     return " ".join(str(v or "").split()).strip().lower()
 
@@ -75,6 +83,8 @@ def read_man_cost_excel(
                     cols.setdefault("sa", j)
                 elif c == "размер":
                     cols.setdefault("size", j)
+                elif c == "канал":
+                    cols.setdefault("channel", j)
                 elif c.startswith("себестоимость") and "сумма" not in c:
                     cols.setdefault("cost", j)
             break
@@ -92,11 +102,14 @@ def read_man_cost_excel(
             raise ValueError(f"В Excel повторяется ID {row_id}.")
         seen.add(row_id)
         cost = _to_decimal(get(r, "cost"))
+        channel = _channel(get(r, "channel")) if "channel" in cols else None
         if cost is None:
             empty += 1
-            continue
+            if channel is None:
+                continue
         pos = get(r, "pos")
         result.append({
+            "channel": channel,
             "id": row_id,
             "pos": int(pos) if isinstance(pos, (int, float)) else None,
             "sa": _norm(get(r, "sa")),
@@ -105,7 +118,7 @@ def read_man_cost_excel(
         })
 
     if not result:
-        raise ValueError("В файле не заполнена себестоимость ни в одной строке.")
+        raise ValueError("В файле не заполнены ни себестоимость, ни канал.")
     return result, empty
 
 
@@ -144,7 +157,7 @@ def upload_man_cost(
                 if line is None:
                     missing.append(r["id"])
                     continue
-                updates.append((r["man_cost_per_unit"], line[0], upd_id, line))
+                updates.append((r["man_cost_per_unit"], line[0], upd_id, line, r["channel"]))
 
             if missing:
                 preview = ", ".join(map(str, missing[:10])) + (", …" if len(missing) > 10 else "")
@@ -156,17 +169,20 @@ def upload_man_cost(
             cur.executemany(
                 """
                 UPDATE public.upd_income_lines
-                SET man_cost_per_unit = %s
+                SET man_cost_per_unit = COALESCE(%s, man_cost_per_unit),
+                    channel = COALESCE(%s, channel)
                 WHERE id = %s AND upd_document_id = %s
                 """,
-                [u[:3] for u in updates],
+                [(u[0], u[4], u[1], u[2]) for u in updates],
             )
         conn.commit()
 
-    cost = sum((u[0] * Decimal(str(u[3][5] or 0)) for u in updates), Decimal("0"))
-    base = sum((Decimal(str(u[3][4] or 0)) for u in updates), Decimal("0"))
+    priced = [u for u in updates if u[0] is not None]
+    cost = sum((u[0] * Decimal(str(u[3][5] or 0)) for u in priced), Decimal("0"))
+    base = sum((Decimal(str(u[3][4] or 0)) for u in priced), Decimal("0"))
     return {
-        "updated": len(updates),
+        "updated": len(priced),
+        "channels": sum(1 for u in updates if u[4] is not None),
         "by_key": by_key,
         "empty": empty,
         "total_cost": cost.quantize(Decimal("0.01")),

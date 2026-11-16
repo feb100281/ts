@@ -152,7 +152,7 @@ class SingleUpdExporter:
         band(2, 7, n, f"Поставщик: {upd_document.counterparty or 'не указан'}",
              Font(name="Helvetica Light", size=11, bold=True, color=COLORS["white"]))
 
-        ws.cell(row=3, column=1, value="Заполните жёлтую колонку «Себестоимость за ед.». "
+        ws.cell(row=3, column=1, value="Заполните жёлтую колонку «Себестоимость за ед.» и, если известно, «Канал» (ВБ / Розница). "
                 "Суммы и наценка считаются автоматически. Колонки ID и Позиция не меняйте."
                 ).font = FONTS["subtitle"]
 
@@ -253,6 +253,12 @@ class SingleUpdExporter:
                            f'ROW({rng("Сумма без НДС")})-{first},0)),'
                            f'--({rng("Себестоимость за ед.")}<>""))-1,"")'))
         c.number_format, c.alignment = pct, ALIGNMENTS["right"]
+
+        if lines:
+            from openpyxl.worksheet.datavalidation import DataValidation
+            dv = DataValidation(type="list", formula1='"ВБ,Розница,Не распределено"', allow_blank=True)
+            dv.add(f"{L(C['Канал'])}{first}:{L(C['Канал'])}{last}")
+            ws.add_data_validation(dv)
 
         ws.auto_filter.ref = f"A{head}:{L(n)}{max(last, head)}"
         ws.freeze_panes = ws.cell(row=first, column=C["Наименование товара"])

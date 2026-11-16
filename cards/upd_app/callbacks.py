@@ -17,10 +17,12 @@ from .upload_man_cost import upload_man_cost
 def man_cost_summary(filename, r):
     """Итог загрузки себестоимости: строки, суммы, наценка."""
     fmt = lambda v: f"{v:,.2f}".replace(",", " ")
-    parts = [f"{filename}: обновлено строк {r['updated']:,}".replace(",", " "),
+    parts = [f"{filename}: себестоимость в {r['updated']:,} строках".replace(",", " "),
              f"себестоимость {fmt(r['total_cost'])} ₽ к УПД без НДС {fmt(r['base'])} ₽"]
     if r["markup"] is not None:
         parts.append(f"наценка {r['markup'] * 100:+.1f}%")
+    if r.get("channels"):
+        parts.append(f"канал из файла: {r['channels']:,} строк".replace(",", " "))
     if r["by_key"]:
         parts.append(f"по позиции и артикулу (ID сменились): {r['by_key']}")
     if r["empty"]:
