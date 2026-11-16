@@ -30,6 +30,33 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME")
 
 
+# Нормализация размера: регистр, пробелы, запятая, кириллица-двойники латиницы
+SIZE_NORM = (
+    "replace(regexp_replace(translate(upper(trim({x})), 'ХМСЕОАВКРТН', 'XMCEOABKPTH'), "
+    "'\s+', '', 'g'), ',', '.')"
+)
+
+# chrt_id по карточке и размеру УПД: только пустые строки и только однозначное совпадение
+FILL_CHRT = f"""
+WITH s AS (
+    SELECT nm_id, {SIZE_NORM.format(x='tech_size')} AS sz, min(chrt_id) AS chrt_id
+    FROM wb_sizes
+    WHERE tech_size IS NOT NULL
+    GROUP BY 1, 2
+    HAVING count(*) = 1
+)
+UPDATE upd_income_lines u
+SET chrt_id = s.chrt_id
+FROM s
+WHERE u.chrt_id IS NULL
+  AND u.nm_id = s.nm_id
+  AND u.upd_size IS NOT NULL
+  AND {SIZE_NORM.format(x='u.upd_size')} = s.sz
+"""
+
+LEFT_CHRT = "SELECT count(*) FROM upd_income_lines WHERE nm_id IS NOT NULL AND chrt_id IS NULL"
+
+
 def connect_db():
     return psycopg.connect(
         dbname=os.getenv("DB_NAME"),  # DB_NAME
@@ -845,6 +872,24 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS("USK обновлены для всех приходов по УПД")                    
                 )  
+
+                self.stdout.write(
+                    self.style.NOTICE("Подставляем размеры WB (chrt_id) по размеру из УПД")
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(FILL_CHRT)
+                    filled = cursor.rowcount
+                    cursor.execute(LEFT_CHRT)
+                    left = cursor.fetchone()[0]
+                con.execute("""
+                    UPDATE inventories.upd_income u
+                    SET chrt_id = p.chrt_id
+                    FROM pg.public.upd_income_lines p
+                    WHERE p.id = u.id AND u.chrt_id IS NULL AND p.chrt_id IS NOT NULL
+                """)
+                self.stdout.write(
+                    self.style.SUCCESS(f"Размеры подставлены: {filled} строк; без размера осталось {left}")
+                )
                 
                 self.stdout.write(
                     self.style.NOTICE("Делаем таблицы для списаний продаж")                    
