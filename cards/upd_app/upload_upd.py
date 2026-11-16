@@ -1,11 +1,8 @@
 # upload_upd.py
 
-from tempfile import NamedTemporaryFile
-
-import duckdb
-
 from django.db import transaction
 
+from .parse_upd import read_file
 from cards.models import (
     UPDData,
     UpdDocument,
@@ -23,40 +20,11 @@ def delete_lines(upd_id):
     )
 
 
-def read_parquet(file_bytes):
-    """
-    Читаем parquet через DuckDB.
-    """
-
-    with NamedTemporaryFile(
-        suffix=".parquet"
-    ) as tmp:
-
-        tmp.write(file_bytes)
-        tmp.flush()
-
-        with duckdb.connect() as con:
-
-            rows = con.execute("""
-                SELECT *
-                FROM read_parquet(?)
-            """, [tmp.name]).fetchall()
-
-            columns = [
-                x[0]
-                for x in con.description
-            ]
-
-    return [
-        dict(zip(columns, row))
-        for row in rows
-    ]
-
-
 @transaction.atomic
 def upload_data(
     upd_id,
-    parquet_bytes,
+    file_bytes,
+    filename="upd.parquet",
 ):
 
     upd_document = (
@@ -66,8 +34,9 @@ def upload_data(
 
     delete_lines(upd_id)
 
-    rows = read_parquet(
-        parquet_bytes
+    rows = read_file(
+        file_bytes,
+        filename,
     )
 
     objs = []

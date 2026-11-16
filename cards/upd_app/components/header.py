@@ -133,9 +133,9 @@ def build_upd_header(upd):
                             dcc.Upload(
                                 id="upd-upload",
                                 multiple=False,
-                                accept=".parquet",
+                                accept=".parquet,.xml,.xls,.xlsx",
                                 children=dmc.Button(
-                                    "📦 Parquet",
+                                    "📦 Файл УПД",
                                     variant="light",
                                     color="green",
                                 ),

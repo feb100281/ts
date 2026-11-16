@@ -155,7 +155,7 @@ def register_callbacks(app):
                 dmc.Alert(
                     title="Файл не выбран",
                     children=(
-                        "Выберите parquet"
+                        "Выберите файл УПД: xml, xls, xlsx или parquet"
                     ),
                     color="red",
                     variant="filled",
@@ -180,6 +180,7 @@ def register_callbacks(app):
                 upload_data(
                     upd_id,
                     parquet_bytes,
+                    filename,
                 )
             )
 
