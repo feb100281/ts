@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from tempfile import NamedTemporaryFile
-
-import duckdb
-
 from conns import connect_db
 
 
@@ -45,95 +41,72 @@ def _to_decimal(value) -> Decimal | None:
         return None
 
 
+def _norm(v) -> str:
+    return " ".join(str(v or "").split()).strip().lower()
+
+
 def read_man_cost_excel(
     excel_bytes: bytes,
 ) -> list[dict]:
     """
-    Читает Excel-шаблон управленческой себестоимости.
-
-    Ожидаем:
-      - лист: УПД;
-      - ID строки: колонка A;
-      - себестоимость: колонка L;
-      - данные начинаются с 10-й строки.
-
-    Конечная строка определяется автоматически:
-    берутся только строки с числовым ID в колонке A.
+    Читает шаблон себестоимости (лист «УПД»). Колонки ищутся по шапке:
+    ID, Позиция, Артикул, Размер, Себестоимость (за ед.).
+    Подходят и старые шаблоны (ID в A, себестоимость в L).
+    Пустая себестоимость — строка пропускается.
     """
+    import io
+    from openpyxl import load_workbook
 
-    with NamedTemporaryFile(
-        suffix=".xlsx",
-    ) as tmp:
+    wb = load_workbook(io.BytesIO(excel_bytes), read_only=True, data_only=True)
+    ws = wb["УПД"] if "УПД" in wb.sheetnames else wb.worksheets[0]
+    rows = list(ws.iter_rows(values_only=True))
 
-        tmp.write(excel_bytes)
-        tmp.flush()
+    head, cols = None, {}
+    for n, r in enumerate(rows[:60]):
+        cells = [_norm(v) for v in r]
+        if cells and cells[0] == "id" and any("себестоимость" in c for c in cells):
+            head = n
+            for j, c in enumerate(cells):
+                if c == "id":
+                    cols.setdefault("id", j)
+                elif c == "позиция":
+                    cols.setdefault("pos", j)
+                elif c.startswith("артикул"):
+                    cols.setdefault("sa", j)
+                elif c == "размер":
+                    cols.setdefault("size", j)
+                elif c.startswith("себестоимость") and "сумма" not in c:
+                    cols.setdefault("cost", j)
+            break
+    if head is None or "cost" not in cols:
+        raise ValueError("Не нашла шапку с колонками «ID» и «Себестоимость» на листе «УПД».")
 
-        with duckdb.connect() as con:
-            rows = con.execute(
-                """
-                SELECT
-                    TRY_CAST(
-                        TRIM("A")
-                        AS BIGINT
-                    ) AS id,
-
-                    "L" AS man_cost_raw
-
-                FROM read_xlsx(
-                        ?,
-                        sheet = 'УПД',
-                        range = 'A10:L1048576',
-                        header = false,
-                        all_varchar = true
-                    )
-
-                WHERE TRY_CAST(
-                    TRIM("A")
-                    AS BIGINT
-                ) IS NOT NULL
-                """,
-                [tmp.name],
-            ).fetchall()
-
-    result = []
-    seen_ids = set()
-
-    for row_id, raw_cost in rows:
-        row_id = int(row_id)
-
-        if row_id in seen_ids:
-            raise ValueError(
-                f"В Excel повторяется ID {row_id}."
-            )
-
-        seen_ids.add(row_id)
-
-        man_cost = _to_decimal(
-            raw_cost
-        )
-
-        if man_cost is None:
-            raise ValueError(
-                f"Для ID {row_id} не заполнена "
-                "управленческая себестоимость "
-                "в колонке L."
-            )
-
-        result.append(
-            {
-                "id": row_id,
-                "man_cost_per_unit": man_cost,
-            }
-        )
+    get = lambda r, k: r[cols[k]] if k in cols and cols[k] < len(r) else None
+    result, seen, empty = [], set(), 0
+    for r in rows[head + 1:]:
+        try:
+            row_id = int(str(get(r, "id")).strip())
+        except (TypeError, ValueError):
+            continue                                   # итоги и пустые строки
+        if row_id in seen:
+            raise ValueError(f"В Excel повторяется ID {row_id}.")
+        seen.add(row_id)
+        cost = _to_decimal(get(r, "cost"))
+        if cost is None:
+            empty += 1
+            continue
+        pos = get(r, "pos")
+        result.append({
+            "id": row_id,
+            "pos": int(pos) if isinstance(pos, (int, float)) else None,
+            "sa": _norm(get(r, "sa")),
+            "size": _norm(get(r, "size")),
+            "man_cost_per_unit": cost,
+        })
 
     if not result:
-        raise ValueError(
-            "В файле не найдены строки с ID "
-            "в колонке A и себестоимостью "
-            "в колонке L."
-        )
-
-    return result
+        raise ValueError("В файле не заполнена себестоимость ни в одной строке.")
+    return result, empty
 
 
 def upload_man_cost(
@@ -141,102 +114,62 @@ def upload_man_cost(
     excel_bytes: bytes,
 ) -> dict:
     """
-    Обновляет управленческую себестоимость только
-    для строк выбранного УПД.
-
-    Защита от неправильного файла:
-    все ID из Excel должны относиться к открытому УПД.
+    Себестоимость в строки открытого УПД. Строка ищется по ID, а если УПД
+    перезагружали и ID сменились — по позиции, артикулу и размеру.
+    Строки, не найденные ни так, ни так, — ошибка, ничего не сохраняется.
     """
-
     upd_id = int(upd_id)
-
-    rows = read_man_cost_excel(
-        excel_bytes
-    )
-
-    file_ids = [
-        row["id"]
-        for row in rows
-    ]
+    rows, empty = read_man_cost_excel(excel_bytes)
 
     with connect_db() as conn:
         with conn.cursor() as cur:
-
-            # Находим строки, принадлежащие открытому УПД.
             cur.execute(
                 """
-                SELECT id
+                SELECT id, upd_pos, upd_sa_name, upd_size, upd_amount_vatless, upd_qty
                 FROM public.upd_income_lines
                 WHERE upd_document_id = %s
-                  AND id = ANY(%s)
                 """,
-                (
-                    upd_id,
-                    file_ids,
-                ),
+                (upd_id,),
             )
+            lines = cur.fetchall()
+            by_id = {int(l[0]): l for l in lines}
+            by_pos = {(l[1], _norm(l[2]), _norm(l[3])): l for l in lines}
 
-            matched_ids = {
-                int(row[0])
-                for row in cur.fetchall()
-            }
+            updates, missing, by_key = [], [], 0
+            for r in rows:
+                line = by_id.get(r["id"])
+                if line is None:
+                    line = by_pos.get((r["pos"], r["sa"], r["size"]))
+                    by_key += line is not None
+                if line is None:
+                    missing.append(r["id"])
+                    continue
+                updates.append((r["man_cost_per_unit"], line[0], upd_id, line))
 
-            missing_ids = [
-                row_id
-                for row_id in file_ids
-                if row_id not in matched_ids
-            ]
-
-            # Не разрешаем частично загрузить чужой файл.
-            if missing_ids:
-                preview = ", ".join(
-                    map(
-                        str,
-                        missing_ids[:10],
-                    )
-                )
-
-                if len(missing_ids) > 10:
-                    preview += ", …"
-
+            if missing:
+                preview = ", ".join(map(str, missing[:10])) + (", …" if len(missing) > 10 else "")
                 raise ValueError(
                     "Excel не соответствует открытому УПД. "
-                    f"Не найдены ID: {preview}. "
-                    "Изменения не сохранены."
+                    f"Не найдены строки с ID: {preview}. Изменения не сохранены."
                 )
-
-            update_values = [
-                (
-                    row["man_cost_per_unit"],
-                    row["id"],
-                    upd_id,
-                )
-                for row in rows
-            ]
 
             cur.executemany(
                 """
                 UPDATE public.upd_income_lines
-
                 SET man_cost_per_unit = %s
-
-                WHERE id = %s
-                  AND upd_document_id = %s
+                WHERE id = %s AND upd_document_id = %s
                 """,
-                update_values,
+                [u[:3] for u in updates],
             )
-
         conn.commit()
 
-    total_cost = sum(
-        (
-            row["man_cost_per_unit"]
-            for row in rows
-        ),
-        Decimal("0.00"),
-    )
-
+    cost = sum((u[0] * Decimal(str(u[3][5] or 0)) for u in updates), Decimal("0"))
+    base = sum((Decimal(str(u[3][4] or 0)) for u in updates), Decimal("0"))
     return {
-        "updated": len(rows),
-        "total_cost": total_cost,
+        "updated": len(updates),
+        "by_key": by_key,
+        "empty": empty,
+        "total_cost": cost.quantize(Decimal("0.01")),
+        "base": base.quantize(Decimal("0.01")),
+        "markup": (cost / base - 1) if base else None,
     }

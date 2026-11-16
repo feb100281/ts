@@ -14,6 +14,20 @@ from .upload_upd import upload_data, update_channels
 from .upload_man_cost import upload_man_cost
 
 
+def man_cost_summary(filename, r):
+    """Итог загрузки себестоимости: строки, суммы, наценка."""
+    fmt = lambda v: f"{v:,.2f}".replace(",", " ")
+    parts = [f"{filename}: обновлено строк {r['updated']:,}".replace(",", " "),
+             f"себестоимость {fmt(r['total_cost'])} ₽ к УПД без НДС {fmt(r['base'])} ₽"]
+    if r["markup"] is not None:
+        parts.append(f"наценка {r['markup'] * 100:+.1f}%")
+    if r["by_key"]:
+        parts.append(f"по позиции и артикулу (ID сменились): {r['by_key']}")
+    if r["empty"]:
+        parts.append(f"не заполнено строк: {r['empty']}")
+    return " · ".join(parts)
+
+
 def register_callbacks(app):
 
     @app.callback(
@@ -407,11 +421,8 @@ def register_callbacks(app):
                         "Управленческая "
                         "себестоимость обновлена"
                     ),
-                    children=(
-                        f"{filename} → "
-                        f"{result['updated']:,} строк"
-                    ),
-                    color="green",
+                    children=man_cost_summary(filename, result),
+                    color="orange" if result["empty"] else "green",
                     variant="filled",
                     withCloseButton=True,
                 ),
