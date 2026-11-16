@@ -140,7 +140,10 @@ def build_upd_grid(df):
             {
                 "field": "channel",
                 "headerName": "Канал",
-                "width": 140,
+                "width": 150,
+                "editable": True,
+                "cellEditor": "agSelectCellEditor",
+                "cellEditorParams": {"values": ["ВБ", "Розница", "Не распределено"]},
                 "cellStyle": {
                     "styleConditions": [
                         {"condition": "params.value === 'Не распределено'",

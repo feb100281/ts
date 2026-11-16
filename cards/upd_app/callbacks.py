@@ -5,6 +5,7 @@ import dash_mantine_components as dmc
 import base64
 
 from .data import (
+    update_channel,
     update_size,
     get_grid_data,
 )
@@ -51,6 +52,13 @@ def register_callbacks(app):
             list,
         ):
             change = change[-1]
+
+        if change.get("colId") == "channel":
+            row_id = change.get("data", {}).get("id")
+            if row_id is None:
+                return no_update, no_update
+            update_channel(row_id, change.get("value"))
+            return "", get_grid_data(upd_id).to_dict("records")
 
         if (
             change.get(

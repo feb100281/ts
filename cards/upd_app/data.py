@@ -90,6 +90,17 @@ def get_size_options(nm_id):
     ]
     return data
     
+CHANNEL_CODES = {"ВБ": "wb", "Розница": "retail", "Не распределено": "none"}
+
+
+def update_channel(row_id, label):
+    """Канал строки УПД вручную."""
+    from cards.models import UPDData
+    code = CHANNEL_CODES.get(label)
+    if code:
+        UPDData.objects.filter(pk=row_id).update(channel=code)
+
+
 def update_size(row_id, chrt_id):
     with connect_db() as conn:
         with conn.cursor() as cur:
