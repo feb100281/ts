@@ -25,10 +25,10 @@ RKO = dict(st="720001", pl="610000", spl="540203", cf="123100")        # ком�
 GOODS = dict(st="720001", bs="130001", sbs="610101", cf="121100")      # закуп товара
 LOGIST = dict(st="720001", pl="520000", spl="520302", cf="121200")     # логистика закупа
 
-CAPIT = dict(st="720001", bs="130001", sbs="610102", cf="121450")   # подготовка товара — в стоимость товара
+CERT = dict(st="720001", pl="520000", spl="520304", cf="121440")    # маркировка, сертификация
 CUSTOMS_SRV = dict(st="720001", pl="520000", spl="520303", cf="121400")  # брокер, таможенный склад
 STORAGE = dict(st="720001", pl="610000", spl="540302", cf="123500")  # склад
-RENT = dict(st="720001", pl="610000", spl="540301", cf="123500")     # аренда помещения магазина
+RENT = dict(st="720001", pl="610000", spl="540306", cf="123500")     # аренда торговых помещений
 NET = dict(st="720001", pl="610000", spl="540406", cf="123700")      # интернет и связь
 LABELS = dict(st="720001", pl="610000", spl="540501", cf="123930")   # ценники, стикеры
 ADS = dict(st="720001", pl="610000", spl="540110", cf="123900")      # типография, реклама
@@ -39,7 +39,7 @@ PACK = dict(st="720001", pl="610000", spl="540502", cf="121300")     # паке�
 
 # поставщики по реестру расходов коллег: (название, счёт, шаблон)
 SUPPLIERS = [
-    ("ЭСЭЛЭС СЕНТР ООО (SLS CENTER)", "1510064545585400", CAPIT),
+    ("ЭСЭЛЭС СЕНТР ООО (SLS CENTER)", "1510064545585400", CERT),
     ("ФИВИ ЗАО", "1570026516910100", GOODS),
     ("ФИВИ ЗАО", "11500460450604", GOODS),
     ("ВАН ТАЙМ ООО", "1570031975380100", GOODS),
@@ -151,6 +151,33 @@ STAFF_AUTO = (("Зарплата|Аванс|Отпускные", "Зарплат
 class Command(BaseCommand):
     help = "План разноски Армении; без --apply только проверка и список"
 
+    @staticmethod
+    def _sync(owner, coa, items):
+        """Единственный договор контрагента из плана — привести счета и статью к плану; статью в операциях тоже."""
+        n = 0
+        for name, tax, accs, ks in PLAN:
+            if len(ks) != 1:
+                continue
+            k = ks[0]
+            cs = list(Contracts.objects.filter(owner=owner, cp__tax_id=tax))
+            if len(cs) != 1:
+                continue
+            c = cs[0]
+            want = dict(bs=coa[k["st"]], st=coa.get(k["bs"]) if k["bs"] else None,
+                        subconto_bs=items.get(k["sbs"]) if k["sbs"] else None,
+                        pl=coa.get(k["pl"]) if k["pl"] else None,
+                        subconto_pl=items.get(k["spl"]) if k["spl"] else None)
+            if any(getattr(c, f) != v for f, v in want.items()):
+                Contracts.objects.filter(pk=c.pk).update(**want)
+                n += 1
+            cf = items[k["cf"]]
+            old = set(CfItemAuto.objects.filter(contract=c).exclude(defaultcfcr=cf)
+                      .values_list("defaultcfcr_id", flat=True)) - {None}
+            CfItemAuto.objects.filter(contract=c, regex=".").update(defaultcfdt=cf, defaultcfcr=cf)
+            if old:
+                CfData.objects.filter(contract=c, cfitem_id__in=old).update(cfitem=cf)
+        return n
+
     def add_arguments(self, p):
         p.add_argument("--apply", action="store_true")
 
@@ -229,10 +256,12 @@ class Command(BaseCommand):
                     CounterpartyAccount.objects.update_or_create(account=a, defaults={"cp": c.cp})
             CfItemAuto.objects.filter(contract__owner=owner, contract__title__title="Трудовой договор",
                                       regex__in=STAFF_AUTO[0]).update(regex=STAFF_AUTO[1])
+            synced = self._sync(owner, coa, items)
             ids = list(unassigned(CfData.objects.filter(owner=owner)).values_list("id", flat=True))
             lines = []
             auto_assign(ids, owner.id, lines.append)
         left = unassigned(CfData.objects.filter(owner=owner)).filter(contract__isnull=True).count()
-        self.stdout.write(f"\nНовых договоров: {made}. Проверено операций: {len(ids)}; без договора осталось: {left}")
+        self.stdout.write(f"\nДоговоров с обновлёнными настройками: {synced}.")
+        self.stdout.write(f"Новых договоров: {made}. Проверено операций: {len(ids)}; без договора осталось: {left}")
         for x in lines:
             self.stdout.write(x)
