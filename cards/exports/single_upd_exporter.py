@@ -68,6 +68,20 @@ ALIGNMENTS = {
 class SingleUpdExporter:
     """Класс для выгрузки отдельных УПД в Excel"""
 
+    @staticmethod
+    def filename(upd_document) -> str:
+        """«Контрагент УПД номер от дата.xlsx» без символов, недопустимых в имени файла."""
+        import re
+        cp = str(upd_document.counterparty or "").split(" (ИНН:")[0]
+        cp = re.sub(r'[«»"\'“”]', "", cp).strip()
+        name = f"{cp} УПД {upd_document.number} от {upd_document.date:%d.%m.%Y}".strip()
+        return re.sub(r'[\\/:*?<>|]+', "_", name) + ".xlsx"
+
+    @staticmethod
+    def _disposition(name: str) -> str:
+        from urllib.parse import quote
+        return f"attachment; filename*=UTF-8''{quote(name)}"
+
     @classmethod
     def generate_response(cls, upd_document):
         """Генерация HTTP-ответа для одной УПД"""
@@ -76,8 +90,7 @@ class SingleUpdExporter:
             excel_buffer.getvalue(),
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        filename = f"УПД_{upd_document.number}_от_{upd_document.date.strftime('%Y-%m-%d')}.xlsx"
-        response['Content-Disposition'] = f'attachment; filename={filename}'
+        response['Content-Disposition'] = cls._disposition(cls.filename(upd_document))
         return response
 
     @classmethod
@@ -87,12 +100,11 @@ class SingleUpdExporter:
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for upd_document in upd_documents:
                 excel_buffer = cls._generate_excel_buffer(upd_document)
-                filename = f"УПД_{upd_document.number}_от_{upd_document.date.strftime('%Y-%m-%d')}.xlsx"
-                zip_file.writestr(filename, excel_buffer.getvalue())
+                zip_file.writestr(cls.filename(upd_document), excel_buffer.getvalue())
         
         zip_buffer.seek(0)
         response = HttpResponse(zip_buffer, content_type='application/zip')
-        response['Content-Disposition'] = f'attachment; filename=УПД_пакет_{upd_documents.count()}_шт.zip'
+        response['Content-Disposition'] = cls._disposition(f"УПД пакет {upd_documents.count()} шт.zip")
         return response
 
     @classmethod
@@ -107,13 +119,14 @@ class SingleUpdExporter:
         lines = list(upd_document.income_lines.select_related("nm").order_by("upd_pos"))
 
         cols = [  # (заголовок, ширина, выравнивание)
-            ("ID", 10, "center"), ("Позиция", 9, "center"), ("Канал", 16, "center"),
-            ("Артикул поставщика", 24, "left"), ("Наименование товара", 36, "left"),
-            ("Размер", 10, "center"), ("Ставка НДС, %", 10, "center"), ("Ед. изм.", 8, "center"),
-            ("Кол-во", 10, "right"), ("Цена без НДС", 14, "right"), ("Сумма без НДС", 16, "right"),
-            ("Сумма с НДС", 16, "right"), ("Себестоимость за ед.", 16, "right"),
-            ("Себестоимость, сумма", 18, "right"), ("Наценка к УПД, %", 12, "right"),
-            ("Валюта", 8, "center"), ("Карточка WB", 14, "center"),
+            # ширины D–J рассчитаны и на свод по каналам над таблицей
+            ("ID", 11, "center"), ("Позиция", 10, "center"), ("Канал", 18, "center"),
+            ("Артикул поставщика", 30, "left"), ("Наименование товара", 30, "left"),
+            ("Размер", 16, "center"), ("Ставка НДС, %", 20, "center"), ("Ед. изм.", 20, "center"),
+            ("Кол-во", 16, "right"), ("Цена без НДС", 18, "right"), ("Сумма без НДС", 18, "right"),
+            ("Сумма с НДС", 18, "right"), ("Себестоимость за ед.", 18, "right"),
+            ("Себестоимость, сумма", 20, "right"), ("Наценка к УПД, %", 14, "right"),
+            ("Валюта", 9, "center"), ("Карточка WB", 15, "center"),
         ]
         n = len(cols)
         C = {h: i + 1 for i, (h, _, _) in enumerate(cols)}
@@ -155,7 +168,7 @@ class SingleUpdExporter:
         for j, h in enumerate(sh):
             c = ws.cell(row=top, column=4 + j, value=h)
             c.font, c.fill, c.alignment, c.border = FONTS["header"], FILLS["header"], ALIGNMENTS["center_wrap"], BORDERS["thin"]
-        ws.row_dimensions[top].height = 28
+        ws.row_dimensions[top].height = 32
         for k, ch in enumerate(present + ["__total"]):
             r = top + 1 + k
             total = ch == "__total"
