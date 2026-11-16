@@ -144,6 +144,8 @@ REGEX_FIX = {
     536: ("Commission|փոխանցումից", "Commission|փոխանցումից|միջնորդավճար"),
 }
 EXTRA_ACCOUNTS = {"1570062112451000": 536}       # абонплата Америабанка → контрагент договора РКО 536
+# разовые операции: (дата, расход, ИНН контрагента договора, ST договора, статья CF)
+OP_FIX = [("2026-10-19", "3630000.00", "AM-STATE-BUDGET", "750002", "125100")]   # налоги с ФОТ за сентябрь
 STAFF_AUTO = (("Зарплата|Аванс|Отпускные", "Зарплата|Аванс|Отпускные|Пособие|Հիվանդության"),
               "Зарплата|Аванс|Отпускные|Пособие|Հիվանդության|Преми|Պարգև")
 
@@ -257,6 +259,11 @@ class Command(BaseCommand):
             CfItemAuto.objects.filter(contract__owner=owner, contract__title__title="Трудовой договор",
                                       regex__in=STAFF_AUTO[0]).update(regex=STAFF_AUTO[1])
             synced = self._sync(owner, coa, items)
+            for d, amount, tax, st, cf in OP_FIX:
+                c = Contracts.objects.filter(owner=owner, cp__tax_id=tax, bs__code=st).first()
+                if c:
+                    CfData.objects.filter(owner=owner, date=d, cr=amount, contract__isnull=True).update(
+                        contract=c, cp_final=c.cp, cfitem=items[cf])
             ids = list(unassigned(CfData.objects.filter(owner=owner)).values_list("id", flat=True))
             lines = []
             auto_assign(ids, owner.id, lines.append)
