@@ -119,10 +119,10 @@ import dash_ag_grid as dag
 
 
 def build_upd_grid(df):
-    # Рассчитаем дельты относительно управленческой себестоимости
-    df['cost_delta_rub'] = (df['upd_price_vatless'] - df['man_cost_per_unit']).round(2)
+    # Наценка управленческой себестоимости к закупочной цене УПД (база — цена без НДС)
+    df['cost_delta_rub'] = (df['man_cost_per_unit'] - df['upd_price_vatless']).round(2)
     df['cost_delta_percent'] = (
-        (df['upd_price_vatless'] - df['man_cost_per_unit']) / df['man_cost_per_unit'] * 100
+        (df['man_cost_per_unit'] - df['upd_price_vatless']) / df['upd_price_vatless'] * 100
     ).round(2)
 
     # Флаг, что управленческая себестоимость выше обычной
@@ -239,7 +239,7 @@ def build_upd_grid(df):
                 },
             },
             
-            # Дельта в рублях (отклонение обычной от управленческой)
+            # Дельта в рублях: упр. себестоимость − закупочная
             {
                 "field": "cost_delta_rub",
                 "headerName": "Дельта, руб",
@@ -248,14 +248,14 @@ def build_upd_grid(df):
                 "cellStyle": {
                     "styleConditions": [
                         {
-                            "condition": "params.value < 0",  # Отрицательная дельта = перерасход
+                            "condition": "params.value < 0",  # упр. ниже закупочной — проверить
                             "style": {
                                 "color": "#d32f2f",
                                 "fontWeight": "bold",
                             },
                         },
                         {
-                            "condition": "params.value > 0",  # Положительная дельта = экономия
+                            "condition": "params.value > 0",  # упр. выше закупочной — норма
                             "style": {
                                 "color": "#2e7d32",
                                 "fontWeight": "bold",
@@ -275,14 +275,14 @@ def build_upd_grid(df):
                 "cellStyle": {
                     "styleConditions": [
                         {
-                            "condition": "params.value < 0",  # Отрицательная дельта = перерасход
+                            "condition": "params.value < 0",  # упр. ниже закупочной — проверить
                             "style": {
                                 "color": "#d32f2f",
                                 "fontWeight": "bold",
                             },
                         },
                         {
-                            "condition": "params.value > 0",  # Положительная дельта = экономия
+                            "condition": "params.value > 0",  # упр. выше закупочной — норма
                             "style": {
                                 "color": "#2e7d32",
                                 "fontWeight": "bold",
