@@ -1,4 +1,4 @@
-"""Справка по себестоимости УПД: бренды, каналы, наценка к закупочной цене, пробелы в разметке."""
+"""Справка по себестоимости УПД: бренды, каналы, дельта закупочной и управленческой себестоимости."""
 from __future__ import annotations
 
 import io
@@ -55,7 +55,13 @@ def collect(docs) -> list[dict]:
 
 
 def markup(a):
-    return float(a["cost"] / a["base_priced"] - 1) if a["base_priced"] else None
+    """Дельта, % — как в таблице УПД: (закупочная − управл. с/сть) / управл. с/сть."""
+    return float((a["base_priced"] - a["cost"]) / a["cost"]) if a["cost"] else None
+
+
+def delta(a):
+    """Дельта, руб — закупочная − управл. с/сть (по строкам с заполненной с/сть)."""
+    return a["base_priced"] - a["cost"]
 
 
 def _m(v) -> str:
@@ -75,7 +81,7 @@ def _lines(item) -> list[str]:
     cp = str(doc.counterparty or "—").split(" (ИНН:")[0]
     L = [f"УПД № {doc.number} от {doc.date:%d.%m.%Y} · {cp}:",
          f"  Позиций {t['rows']}, штук {_q(t['qty'])}. Закупочная без НДС {_m(t['base'])}.",
-         (f"  Управленческая себестоимость {_m(t['cost'])}, наценка к закупочной {_p(markup(t))}"
+         (f"  Управленческая себестоимость {_m(t['cost'])}, дельта {_p(markup(t))}"
           + (f" (по заполненным строкам; не заполнено {t['no_cost']})" if t["no_cost"] else "") + "."),
          "  Каналы: " + " · ".join(f"{CH[c]} {_q(t['ch'][c])} шт" for c in CH_ORDER if t["ch"].get(c)) + "."]
     if t["below"]:
@@ -94,7 +100,7 @@ def _lines(item) -> list[str]:
         warn = f"; ниже закупочной {a['below']} из {a['rows']}" if a["below"] else ""
         empty = f"; без себестоимости {a['no_cost']}" if a["no_cost"] else ""
         L.append(f"  • {b}: {_q(a['qty'])} шт ({ch}); закупочная {_m(a['base'])}, "
-                 f"себестоимость {_m(a['cost'])}, наценка {_p(markup(a))}{warn}{empty}.")
+                 f"себестоимость {_m(a['cost'])}, дельта {_p(markup(a))}{warn}{empty}.")
     L.append("")
     return L
 
@@ -104,7 +110,7 @@ def build_workbook(docs) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Справка"
-    lines = ["Наценка = управленческая себестоимость / закупочная цена без НДС − 1, "
+    lines = ["Дельта = (закупочная без НДС − управл. с/сть) / управл. с/сть, "
              "по строкам с заполненной себестоимостью. На склад WB идут только строки канала «ВБ».", ""]
     for it in items:
         lines += _lines(it)
@@ -120,7 +126,7 @@ def build_workbook(docs) -> bytes:
             rows.append([d.number, d.date, b, CH[c], a["rows"], float(a["qty"]), float(a["base"]),
                          float(a["cost"]), mk, a["below"], a["no_cost"], a["no_nm"], a["no_chrt"]])
     X.table(t, ["УПД", "Дата", "Бренд", "Канал", "Строк", "Кол-во", "Закупочная без НДС",
-                "Упр. себестоимость", "Наценка", "Ниже закупочной, строк", "Без себестоимости, строк",
+                "Управл. с/сть", "Дельта, %", "Ниже закупочной, строк", "Без себестоимости, строк",
                 "Без карточки WB", "Без размера WB"],
             rows, [12, 12, 18, 18, 9, 11, 18, 18, 11, 13, 13, 12, 12],
             money=(7, 8), dates=(2,))
@@ -204,7 +210,7 @@ def _share(a, b) -> str:
 def _row(cls, name, a):
     m = markup(a)
     return (f'<tr class="{cls}"><td>{_esc(name)}</td><td>{_q(a["qty"])}</td><td>{_r(a["base"])}</td>'
-            f'<td>{_r(a["cost"])}</td><td>{_r(a["cost"] - a["base_priced"])}</td>'
+            f'<td>{_r(a["cost"])}</td><td>{_r(delta(a))}</td>'
             f'<td{_neg(m)}>{_pc(m)}</td><td>{a["below"] or "—"}</td></tr>')
 
 
@@ -233,7 +239,7 @@ def _doc_html(it) -> str:
                      "Позиции не включаются в складской учёт WB до определения канала.")
     if t["no_cost"]:
         notes.append(f"Управленческая себестоимость не указана в {t['no_cost']} строках; "
-                     "наценка рассчитана по строкам с заполненной себестоимостью.")
+                     "дельта рассчитана по строкам с заполненной себестоимостью.")
     if t["no_nm"] or t["no_chrt"]:
         parts = [f"без карточки WB — {t['no_nm']}" if t["no_nm"] else "",
                  f"без размера WB — {t['no_chrt']}" if t["no_chrt"] else ""]
@@ -264,8 +270,8 @@ def _doc_html(it) -> str:
     <tr><td>Количество, шт.</td><td>{_q(t["qty"])}</td></tr>
     <tr><td>Закупочная стоимость без НДС, руб.</td><td>{_r(t["base"])}</td></tr>
     <tr><td>Управленческая себестоимость, руб.</td><td>{_r(t["cost"])}</td></tr>
-    <tr><td>Отклонение от закупочной стоимости, руб.</td><td>{_r(t["cost"] - t["base_priced"])}</td></tr>
-    <tr class="k"><td>Наценка к закупочной стоимости</td><td{_neg(mk)}>{_pc(mk)}</td></tr>
+    <tr><td>Дельта (закупочная − управл. с/сть), руб.</td><td>{_r(delta(t))}</td></tr>
+    <tr class="k"><td>Дельта, % к управл. с/сть</td><td{_neg(mk)}>{_pc(mk)}</td></tr>
   </table>
 
   <h3>2. Распределение по каналам продаж</h3>
@@ -275,10 +281,10 @@ def _doc_html(it) -> str:
     {ch_rows}
   </table>
 
-  <h3>3. Себестоимость в разрезе брендов и каналов, руб.</h3>
+  <h3>3. Управленческая себестоимость в разрезе брендов и каналов, руб.</h3>
   <table class="t">
-    <tr><th>Бренд / канал</th><th>Кол-во, шт.</th><th>Закупочная</th><th>Себестоимость</th>
-        <th>Отклонение</th><th>Наценка</th><th>Ниже закуп., строк</th></tr>
+    <tr><th>Бренд / канал</th><th>Кол-во, шт.</th><th>Закупочная</th><th>Управл. с/сть</th>
+        <th>Дельта, руб</th><th>Дельта, %</th><th>Ниже закуп., строк</th></tr>
     {''.join(rows)}
   </table>
 
@@ -299,8 +305,8 @@ def build_html(docs) -> str:
   <div class="meta">Дата формирования: {datetime.now():%d.%m.%Y %H:%M} · Документов: {len(items)}</div>
 </div>
 {body}
-<p class="muted" style="margin-top:6mm">Методика: наценка = управленческая себестоимость / закупочная стоимость
-без НДС − 1, по строкам с заполненной себестоимостью. Себестоимость единицы округляется до копеек.
+<p class="muted" style="margin-top:6mm">Методика: как в таблице УПД — дельта, руб = закупочная стоимость без НДС − управленческая
+себестоимость; дельта, % = дельта / управленческая себестоимость; по строкам с заполненной управленческой себестоимостью. Управленческая себестоимость единицы округляется до копеек.
 В складской учёт WB включаются только позиции канала «ВБ».</p>
 <table class="sign"><tr><td style="width:45mm">Подготовил(а)</td><td class="line"></td>
 <td style="width:10mm"></td><td style="width:20mm">Дата</td><td class="line" style="width:35mm"></td></tr></table>
