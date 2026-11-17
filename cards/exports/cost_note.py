@@ -165,6 +165,12 @@ table.t tr.b td { font-weight: bold; }
 table.t tr.c td:first-child { padding-left: 6mm; color: #444; }
 table.t tr.k td { font-weight: bold; border-top: .4mm solid #1f3d34; border-bottom: .4mm solid #1f3d34; }
 .neg { color: #a31515; }
+table.bar { table-layout: fixed; margin: 1mm 0 2.5mm; }
+table.bar td { height: 7mm; padding: 0; color: #fff; font-size: 8pt; font-weight: bold;
+     text-align: center; white-space: nowrap; overflow: hidden; border-right: .5mm solid #fff; }
+table.bar td:last-child { border-right: 0; }
+.wb { background: #1f3d34; } .retail { background: #5e8f80; } .none { background: #b9bdbb; color: #333 !important; }
+.sw { display: inline-block; width: 3mm; height: 3mm; margin-right: 2mm; vertical-align: -.4mm; }
 ol.notes { margin: 0; padding-left: 5mm; }
 ol.notes li { margin-bottom: 1.2mm; }
 .muted { color: #666; font-size: 8pt; }
@@ -208,9 +214,15 @@ def _doc_html(it) -> str:
     mk = markup(t)
     contract = getattr(doc, "contract", None)
 
+    present = [c for c in CH_ORDER if t["ch"].get(c)]
     ch_rows = "".join(
-        f'<tr><td>{CH[c]}</td><td>{_q(t["ch"][c])}</td><td>{_share(t["ch"][c], t["qty"])}</td></tr>'
-        for c in CH_ORDER if t["ch"].get(c))
+        f'<tr><td><span class="sw {c}"></span>{CH[c]}</td><td>{_q(t["ch"][c])}</td>'
+        f'<td>{_share(t["ch"][c], t["qty"])}</td></tr>' for c in present)
+    qty = t["qty"] or Decimal(1)
+    bar = "".join(
+        f'<td class="{c}" style="width:{max(float(t["ch"][c] / qty * 100), 1.5):.2f}%">'
+        f'{_share(t["ch"][c], t["qty"]) if t["ch"][c] / qty >= Decimal("0.06") else ""}</td>'
+        for c in present)
 
     notes = []
     if t["below"]:
@@ -257,6 +269,7 @@ def _doc_html(it) -> str:
   </table>
 
   <h3>2. Распределение по каналам продаж</h3>
+  <table class="bar"><tr>{bar}</tr></table>
   <table class="sum">
     <tr><th>Канал</th><th>Количество, шт.</th><th>Доля</th></tr>
     {ch_rows}
