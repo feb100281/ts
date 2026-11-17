@@ -215,9 +215,10 @@ class SingleUpdExporter:
                 "Сумма без НДС": float(l.upd_amount_vatless or 0),
                 "Сумма с НДС": float(l.upd_amount_vatadd or 0),
                 "Себестоимость за ед.": float(l.man_cost_per_unit) if l.man_cost_per_unit is not None else None,
-                "Себестоимость, сумма": f'=IF({cost}="","",{q}*{cost})',
+                # как в базе: цена за ед. хранится с 2 знаками
+                "Себестоимость, сумма": f'=IF({cost}="","",{q}*ROUND({cost},2))',
                 "Наценка к УПД, %": f'=IF(OR({cost}="",{L(C["Цена без НДС"])}{r}=0),"",'
-                                     f'{cost}/{L(C["Цена без НДС"])}{r}-1)',
+                                     f'ROUND({cost},2)/{L(C["Цена без НДС"])}{r}-1)',
                 "Валюта": l.currency_code or "RUB",
                 "Карточка WB": str(l.nm_id) if l.nm_id else "—",
             }
