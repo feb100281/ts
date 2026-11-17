@@ -333,7 +333,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         from urllib.parse import quote
         from .exports.cost_note import build_pdf
         from .exports.single_upd_exporter import SingleUpdExporter
-        docs = list(queryset.select_related('counterparty').order_by('date', 'number'))
+        docs = list(queryset.select_related('counterparty', 'contract').order_by('date', 'number'))
         name = (SingleUpdExporter.filename(docs[0]).replace('.xlsx', ' справка.pdf') if len(docs) == 1
                 else f"Справка по себестоимости, УПД {len(docs)} шт.pdf")
         resp = HttpResponse(build_pdf(docs), content_type='application/pdf')

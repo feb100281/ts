@@ -135,36 +135,42 @@ def build_workbook(docs) -> bytes:
 # --- PDF ---
 
 CSS = """
-@page { size: A4; margin: 14mm 12mm; }
-body { font-family: 'DejaVu Sans', Arial, sans-serif; color: #1f1f1f; font-size: 10pt; }
-h1 { font-size: 17pt; color: #2F6656; margin: 0 0 2mm; }
-.sub { color: #666; font-size: 9pt; margin-bottom: 5mm; }
-.doc { page-break-inside: avoid; margin-bottom: 8mm; }
+@page {
+  size: A4; margin: 18mm 16mm 20mm;
+  @bottom-left { content: "Справка по себестоимости УПД"; font: 7.5pt 'DejaVu Sans', Arial, sans-serif; color: #777; }
+  @bottom-right { content: "Стр. " counter(page) " из " counter(pages); font: 7.5pt 'DejaVu Sans', Arial, sans-serif; color: #777; }
+}
+body { font-family: 'DejaVu Sans', Arial, sans-serif; color: #222; font-size: 9pt; line-height: 1.35; }
+.top { border-bottom: .6mm solid #1f3d34; padding-bottom: 2mm; margin-bottom: 5mm; }
+.top .org { font-size: 8pt; letter-spacing: .6pt; text-transform: uppercase; color: #555; }
+.top h1 { font-size: 14pt; font-weight: bold; margin: 1mm 0 0; color: #111; }
+.top .meta { font-size: 8pt; color: #555; margin-top: 1mm; }
 .doc + .doc { page-break-before: always; }
-.head { background: #2F6656; color: #fff; padding: 3mm 4mm; border-radius: 2mm; }
-.head b { font-size: 13pt; }
-.head span { float: right; font-size: 10pt; margin-top: 1mm; }
-.kpi { width: 100%; border-collapse: separate; border-spacing: 2mm; margin: 2mm -2mm; }
-.kpi td { background: #E7F1ED; border-radius: 2mm; padding: 3mm; width: 25%; vertical-align: top; }
-.kpi .l { color: #555; font-size: 8pt; text-transform: uppercase; letter-spacing: .3pt; }
-.kpi .v { font-size: 13pt; font-weight: bold; margin-top: 1mm; white-space: nowrap; }
-.kpi .n { color: #666; font-size: 8pt; }
-.pos { color: #2e7d32; } .neg { color: #c62828; }
-table.bar { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 2mm 0 1mm; }
-table.bar td { height: 6mm; color: #fff; font-size: 7.5pt; text-align: center; white-space: nowrap; overflow: hidden; padding: 0; }
-.wb { background: #7B2CBF; } .retail { background: #2F6656; } .none { background: #B0A06A; }
-.legend { font-size: 8.5pt; color: #444; margin-bottom: 3mm; }
-.legend i { display: inline-block; width: 3mm; height: 3mm; border-radius: .7mm; margin: 0 1mm 0 3mm; vertical-align: -.3mm; }
-.warn { background: #FDECEC; border-left: 1.2mm solid #c62828; padding: 2.5mm 3mm; margin: 2mm 0; font-size: 9.5pt; }
-.info { background: #FFF8E1; border-left: 1.2mm solid #B8860B; padding: 2.5mm 3mm; margin: 2mm 0; font-size: 9.5pt; }
-table.t { width: 100%; border-collapse: collapse; margin-top: 3mm; font-size: 9pt; }
-table.t th { background: #2F6656; color: #fff; font-weight: normal; padding: 1.8mm 2mm; text-align: right; }
-table.t th:first-child, table.t td:first-child { text-align: left; }
-table.t td { padding: 1.6mm 2mm; border-bottom: .2mm solid #ddd; text-align: right; white-space: nowrap; }
-table.t tr.brand td { background: #E7F1ED; font-weight: bold; border-top: .4mm solid #2F6656; }
-table.t tr.ch td:first-child { padding-left: 6mm; color: #444; }
-table.t tr.total td { background: #DCECE6; font-weight: bold; border-top: .5mm solid #2F6656; }
-.foot { color: #777; font-size: 8pt; margin-top: 4mm; }
+h2 { font-size: 10.5pt; margin: 0 0 2mm; color: #111; }
+h3 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .5pt; color: #1f3d34;
+     margin: 5mm 0 1.5mm; border-bottom: .2mm solid #1f3d34; padding-bottom: .8mm; }
+table { width: 100%; border-collapse: collapse; }
+table.req td { padding: .8mm 0; vertical-align: top; }
+table.req td.k { width: 42mm; color: #555; }
+table.sum td, table.sum th, table.t td, table.t th { padding: 1.4mm 2mm; border-bottom: .2mm solid #cfcfcf; }
+table.sum th, table.t th { font-weight: bold; font-size: 8pt; color: #333; text-align: right;
+     border-top: .4mm solid #1f3d34; border-bottom: .4mm solid #1f3d34; background: #f3f5f4; }
+table.sum th:first-child, table.t th:first-child { text-align: left; }
+table.sum td { text-align: right; white-space: nowrap; }
+table.sum td:first-child { text-align: left; color: #333; }
+table.sum tr.k td { font-weight: bold; border-top: .4mm solid #1f3d34; }
+table.t td { text-align: right; white-space: nowrap; }
+table.t td:first-child { text-align: left; }
+table.t tr.b td { font-weight: bold; }
+table.t tr.c td:first-child { padding-left: 6mm; color: #444; }
+table.t tr.k td { font-weight: bold; border-top: .4mm solid #1f3d34; border-bottom: .4mm solid #1f3d34; }
+.neg { color: #a31515; }
+ol.notes { margin: 0; padding-left: 5mm; }
+ol.notes li { margin-bottom: 1.2mm; }
+.muted { color: #666; font-size: 8pt; }
+.sign { margin-top: 10mm; font-size: 8.5pt; }
+.sign td { padding-top: 6mm; }
+.sign .line { border-bottom: .2mm solid #333; width: 55mm; }
 """
 
 
@@ -173,84 +179,98 @@ def _esc(s) -> str:
     return html.escape(str(s))
 
 
-def _cls(v):
-    return "" if v is None else ("neg" if v < 0 else "pos")
-
-
 def _r(v) -> str:
-    """Рубли без копеек — для плиток и таблицы справки."""
-    return f"{v:,.0f}".replace(",", " ") + " ₽"
+    return f"{v:,.2f}".replace(",", " ").replace(".", ",")
+
+
+def _pc(v) -> str:
+    return "—" if v is None else f"{v * 100:+.1f}%".replace(".", ",")
+
+
+def _neg(v) -> str:
+    return ' class="neg"' if v is not None and v < 0 else ""
+
+
+def _share(a, b) -> str:
+    return f"{float(a / b * 100):.1f}%".replace(".", ",") if b else "—"
+
+
+def _row(cls, name, a):
+    m = markup(a)
+    return (f'<tr class="{cls}"><td>{_esc(name)}</td><td>{_q(a["qty"])}</td><td>{_r(a["base"])}</td>'
+            f'<td>{_r(a["cost"])}</td><td>{_r(a["cost"] - a["base_priced"])}</td>'
+            f'<td{_neg(m)}>{_pc(m)}</td><td>{a["below"] or "—"}</td></tr>')
 
 
 def _doc_html(it) -> str:
     doc, t = it["doc"], it["total"]
     cp = str(doc.counterparty or "—").split(" (ИНН:")[0]
     mk = markup(t)
-    qty = t["qty"] or Decimal(1)
-    seg = "".join(
-        f'<td class="{c}" style="width:{float(t["ch"][c] / qty * 100):.2f}%">'
-        f'{CH[c] if t["ch"][c] / qty > Decimal("0.12") else ""} {float(t["ch"][c] / qty * 100):.0f}%</td>'
+    contract = getattr(doc, "contract", None)
+
+    ch_rows = "".join(
+        f'<tr><td>{CH[c]}</td><td>{_q(t["ch"][c])}</td><td>{_share(t["ch"][c], t["qty"])}</td></tr>'
         for c in CH_ORDER if t["ch"].get(c))
-    legend = "".join(f'<i class="{c}"></i>{CH[c]} — {_q(t["ch"][c])} шт'
-                     for c in CH_ORDER if t["ch"].get(c))
-    alerts = []
+
+    notes = []
     if t["below"]:
-        alerts.append(f'<div class="warn"><b>Себестоимость ниже закупочной в {t["below"]} строках.</b> '
-                      'Управленческая себестоимость обычно не ниже цены УПД — проверить распределение расходов.</div>')
-    if t["no_cost"]:
-        alerts.append(f'<div class="info">Себестоимость не заполнена в {t["no_cost"]} строках — '
-                      'наценка посчитана по заполненным.</div>')
+        notes.append(f"Управленческая себестоимость ниже закупочной цены в {t['below']} строках из {t['rows']}. "
+                     "Требуется проверка распределения дополнительных расходов по позициям.")
     if t["ch"].get("none"):
-        alerts.append(f'<div class="info">Канал не распределён: {_q(t["ch"]["none"])} шт — '
-                      'на склад WB не попадают, пока не отмечены «ВБ».</div>')
-    gaps = [f"без карточки WB — {t['no_nm']}" if t["no_nm"] else "",
-            f"без размера WB — {t['no_chrt']}" if t["no_chrt"] else ""]
-    gaps = [g for g in gaps if g]
-    if gaps:
-        alerts.append(f'<div class="info">Разметка строк: {", ".join(gaps)}.</div>')
+        notes.append(f"Канал продаж не определён для {_q(t['ch']['none'])} шт. "
+                     "Позиции не включаются в складской учёт WB до определения канала.")
+    if t["no_cost"]:
+        notes.append(f"Управленческая себестоимость не указана в {t['no_cost']} строках; "
+                     "наценка рассчитана по строкам с заполненной себестоимостью.")
+    if t["no_nm"] or t["no_chrt"]:
+        parts = [f"без карточки WB — {t['no_nm']}" if t["no_nm"] else "",
+                 f"без размера WB — {t['no_chrt']}" if t["no_chrt"] else ""]
+        notes.append("Не завершено сопоставление с номенклатурой WB: " + ", ".join(p for p in parts if p) + " строк.")
+    notes_html = ("<ol class='notes'>" + "".join(f"<li>{n}</li>" for n in notes) + "</ol>"
+                  if notes else "<div>Замечаний нет.</div>")
 
     rows = []
     for b, a in sorted(it["brands"].items(), key=lambda x: -x[1]["base"]):
-        m = markup(a)
-        rows.append(
-            f'<tr class="brand"><td>{_esc(b)}</td><td>{_q(a["qty"])}</td><td>{_r(a["base"])}</td>'
-            f'<td>{_r(a["cost"])}</td><td class="{_cls(m)}">{_p(m)}</td>'
-            f'<td>{a["below"] or ""}</td><td>{a["no_cost"] or ""}</td></tr>')
+        rows.append(_row("b", b, a))
         for c in CH_ORDER:
-            x = it["cross"].get((b, c))
-            if not x:
-                continue
-            m = markup(x)
-            rows.append(
-                f'<tr class="ch"><td>{CH[c]}</td><td>{_q(x["qty"])}</td><td>{_r(x["base"])}</td>'
-                f'<td>{_r(x["cost"])}</td><td class="{_cls(m)}">{_p(m)}</td>'
-                f'<td>{x["below"] or ""}</td><td>{x["no_cost"] or ""}</td></tr>')
-    rows.append(
-        f'<tr class="total"><td>Итого</td><td>{_q(t["qty"])}</td><td>{_r(t["base"])}</td>'
-        f'<td>{_r(t["cost"])}</td><td class="{_cls(mk)}">{_p(mk)}</td>'
-        f'<td>{t["below"] or ""}</td><td>{t["no_cost"] or ""}</td></tr>')
+            if (b, c) in it["cross"]:
+                rows.append(_row("c", CH[c], it["cross"][(b, c)]))
+    rows.append(_row("k", "Итого", t))
 
     return f"""
 <div class="doc">
-  <div class="head"><b>УПД № {_esc(doc.number)} от {doc.date:%d.%m.%Y}</b><span>{_esc(cp)}</span></div>
-  <table class="kpi"><tr>
-    <td><div class="l">Закупочная без НДС</div><div class="v">{_r(t["base"])}</div>
-        <div class="n">точно: {_m(t["base"])}</div></td>
-    <td><div class="l">Упр. себестоимость</div><div class="v">{_r(t["cost"])}</div>
-        <div class="n">точно: {_m(t["cost"])}</div></td>
-    <td><div class="l">Наценка к закупочной</div><div class="v {_cls(mk)}">{_p(mk)}</div>
-        <div class="n">{_r(t["cost"] - t["base_priced"])}</div></td>
-    <td><div class="l">Количество</div><div class="v">{_q(t["qty"])} шт</div>
-        <div class="n">ниже закупочной: {t["below"]} строк</div></td>
-  </tr></table>
-  <table class="bar"><tr>{seg}</tr></table>
-  <div class="legend">{legend}</div>
-  {''.join(alerts)}
+  <h2>УПД № {_esc(doc.number)} от {doc.date:%d.%m.%Y}</h2>
+  <table class="req">
+    <tr><td class="k">Поставщик</td><td>{_esc(cp)}</td></tr>
+    {f'<tr><td class="k">Договор</td><td>{_esc(contract)}</td></tr>' if contract else ''}
+    <tr><td class="k">Количество позиций</td><td>{t["rows"]}</td></tr>
+  </table>
+
+  <h3>1. Основные показатели</h3>
+  <table class="sum">
+    <tr><th>Показатель</th><th>Значение</th></tr>
+    <tr><td>Количество, шт.</td><td>{_q(t["qty"])}</td></tr>
+    <tr><td>Закупочная стоимость без НДС, руб.</td><td>{_r(t["base"])}</td></tr>
+    <tr><td>Управленческая себестоимость, руб.</td><td>{_r(t["cost"])}</td></tr>
+    <tr><td>Отклонение от закупочной стоимости, руб.</td><td>{_r(t["cost"] - t["base_priced"])}</td></tr>
+    <tr class="k"><td>Наценка к закупочной стоимости</td><td{_neg(mk)}>{_pc(mk)}</td></tr>
+  </table>
+
+  <h3>2. Распределение по каналам продаж</h3>
+  <table class="sum">
+    <tr><th>Канал</th><th>Количество, шт.</th><th>Доля</th></tr>
+    {ch_rows}
+  </table>
+
+  <h3>3. Себестоимость в разрезе брендов и каналов, руб.</h3>
   <table class="t">
-    <tr><th>Бренд / канал</th><th>Штук</th><th>Закупочная</th><th>Себестоимость</th>
-        <th>Наценка</th><th>Ниже закуп., строк</th><th>Без с/с, строк</th></tr>
+    <tr><th>Бренд / канал</th><th>Кол-во, шт.</th><th>Закупочная</th><th>Себестоимость</th>
+        <th>Отклонение</th><th>Наценка</th><th>Ниже закуп., строк</th></tr>
     {''.join(rows)}
   </table>
+
+  <h3>4. Замечания</h3>
+  {notes_html}
 </div>"""
 
 
@@ -259,11 +279,18 @@ def build_html(docs) -> str:
     items = collect(docs)
     body = "".join(_doc_html(it) for it in items)
     return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><style>{CSS}</style></head>
-<body><h1>Справка по себестоимости УПД</h1>
-<div class="sub">Сформировано {datetime.now():%d.%m.%Y %H:%M} · УПД: {len(items)} ·
-наценка = упр. себестоимость / закупочная без НДС − 1 · на склад WB идут только строки «ВБ»</div>
+<body>
+<div class="top">
+  <div class="org">ООО «Трендсеттер» · управленческий учёт</div>
+  <h1>Справка по управленческой себестоимости поступлений</h1>
+  <div class="meta">Дата формирования: {datetime.now():%d.%m.%Y %H:%M} · Документов: {len(items)}</div>
+</div>
 {body}
-<div class="foot">Себестоимость округлена до копеек за единицу — как в базе и в карточке УПД.</div>
+<p class="muted" style="margin-top:6mm">Методика: наценка = управленческая себестоимость / закупочная стоимость
+без НДС − 1, по строкам с заполненной себестоимостью. Себестоимость единицы округляется до копеек.
+В складской учёт WB включаются только позиции канала «ВБ».</p>
+<table class="sign"><tr><td style="width:45mm">Подготовил(а)</td><td class="line"></td>
+<td style="width:10mm"></td><td style="width:20mm">Дата</td><td class="line" style="width:35mm"></td></tr></table>
 </body></html>"""
 
 
