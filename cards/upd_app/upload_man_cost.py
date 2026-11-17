@@ -42,11 +42,9 @@ def _to_decimal(value) -> Decimal | None:
 
 
 def _channel(v):
-    """Канал из шаблона: ВБ или Розница. Пусто и «Не распределено» — не менять,
-    чтобы старый шаблон не затёр разметку, пришедшую позже."""
+    """Канал из шаблона: ВБ / Розница / Не распределено. Пустая ячейка — не менять."""
     from .parse_upd import channel_of
-    ch = channel_of(v) if _norm(v) else None
-    return ch if ch in ("wb", "retail") else None
+    return channel_of(v) if _norm(v) else None
 
 
 def _norm(v) -> str:
