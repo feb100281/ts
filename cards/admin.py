@@ -331,14 +331,13 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     @admin.action(description='📝 Справка по себестоимости (бренды, каналы, наценка)')
     def cost_note(self, request, queryset):
         from urllib.parse import quote
-        from .exports.cost_note import build_workbook
+        from .exports.cost_note import build_pdf
         from .exports.single_upd_exporter import SingleUpdExporter
         docs = list(queryset.select_related('counterparty').order_by('date', 'number'))
-        name = (SingleUpdExporter.filename(docs[0]).replace('.xlsx', ' справка.xlsx') if len(docs) == 1
-                else f"Справка по себестоимости, УПД {len(docs)} шт.xlsx")
-        resp = HttpResponse(build_workbook(docs),
-                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        resp['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(name)}"
+        name = (SingleUpdExporter.filename(docs[0]).replace('.xlsx', ' справка.pdf') if len(docs) == 1
+                else f"Справка по себестоимости, УПД {len(docs)} шт.pdf")
+        resp = HttpResponse(build_pdf(docs), content_type='application/pdf')
+        resp['Content-Disposition'] = f"inline; filename*=UTF-8''{quote(name)}"
         return resp
 
     @admin.action(description='📁 Выгрузить УПД отдельными файлами (Excel)')
