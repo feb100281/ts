@@ -157,12 +157,16 @@ def read_1c(p: Path) -> Info | None:
                 min(st) if st else None, max(en) if en else None, "1С")
 
 
-def dates(text: str) -> tuple[date | None, date | None]:
+def dates(text: str, wide: bool = False) -> tuple[date | None, date | None]:
+    """Явный период «с … по …»; иначе разброс дат в тексте — для PDF только если он не больше 45 дней
+    (в PDF встречаются даты открытия счёта, печати и т. п.)."""
     m = PERIOD.search(text)
     if m:
         return mk(*reversed(m.groups()[:3])), mk(*reversed(m.groups()[3:]))
     ds = sorted(x for x in (mk(*reversed(g)) for g in re.findall(D, text)) if x and 2015 <= x.year <= 2035)
-    return (ds[0], ds[-1]) if ds else (None, None)
+    if ds and (wide or (ds[-1] - ds[0]).days <= 45):
+        return ds[0], ds[-1]
+    return None, None
 
 
 def name_dates(name: str) -> tuple[date | None, date | None]:
@@ -228,8 +232,8 @@ def identify(p: Path, rel: Path, accs: dict) -> Info:
         if OUR.match(p.name):
             i.d1, i.d2, i.how = n1, n2, "имя"
         elif text:
-            i.d1, i.d2 = dates(text)
-            i.how = "содержимое"
+            i.d1, i.d2 = dates(text, wide=p.suffix.lower() != ".pdf")
+            i.how = "содержимое" if i.d1 else ""
         i.bank = bank_of(text[:600])
         if not i.d1:
             i.d1, i.d2 = n1, n2
@@ -330,9 +334,10 @@ def sort_folder(root: Path, apply: bool, log=print) -> Counter:
     for p in files:
         by_stem[stem_key(p)].append(p)
     for p, i in infos.items():
-        if i.account and i.d1 and i.how not in ("имя файла",):
+        if i.how == "1С":
             continue
-        twin = next((q for q in by_stem[stem_key(p)] if q != p and infos[q].how == "1С" and infos[q].account), None)
+        twin = next((q for q in by_stem[stem_key(p)] if q != p and infos[q].how == "1С" and infos[q].account
+                     and (not i.account or i.account == infos[q].account)), None)   # счёт в файле важнее пары
         if twin:
             t = infos[twin]
             infos[p] = Info(t.bank, t.account, t.cur, t.d1, t.d2, "пара txt")
