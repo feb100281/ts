@@ -1,0 +1,88 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Реестры зарплаты{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block content %}
+<style>
+  .pr-wrap{max-width:1200px}
+  .pr-note{color:#64748b;font-size:13px;margin:4px 0 14px}
+  .pr-tbl{width:100%;border-collapse:collapse;margin:6px 0 16px;font-size:13px}
+  .pr-tbl th{background:#1e293b;color:#fff;text-align:left;padding:6px 8px;font-weight:600}
+  .pr-tbl td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  .pr-num{text-align:right;white-space:nowrap}
+  .pr-card{border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;margin-bottom:14px}
+  .pr-card h3{margin:0 0 6px;font-size:15px}
+  .pr-ok{color:#15803d;font-weight:700}
+  .pr-bad{color:#b91c1c;font-weight:700}
+  .pr-new{background:#fff4cc}
+  .pr-warn{background:#fff8e1;border-left:4px solid #b8860b;padding:8px 12px;margin:8px 0;font-size:13px}
+  .pr-btn{padding:8px 16px;border-radius:4px;border:1px solid #1f5e4e;background:#e7f1ed;color:#1f5e4e;
+          font-weight:700;cursor:pointer}
+  .pr-btn-main{background:#1f5e4e;color:#fff}
+  .tb-back{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;padding:7px 14px;border-radius:4px;
+           border:1px solid #c9ddd5;background:#e7f1ed;color:#1f5e4e;font-weight:700;font-size:13px;text-decoration:none}
+  .tb-back:hover{background:#d5e8e0;color:#1f5e4e}
+</style>
+<div class="pr-wrap">
+  <a href="{% url 'admin:treasury_bankstatements_changelist' %}" class="tb-back">← К выпискам</a>
+  <h1>Реестры зарплаты</h1>
+
+  {% if result %}
+    <div class="pr-card">
+      <h3 class="pr-ok">Разнесено реестров: {{ result.registries }}, строк сотрудников: {{ result.splits }}</h3>
+      {% if result.new_staff %}
+        <div class="pr-warn"><b>Заведены новые сотрудники ({{ result.new_staff|length }}):</b> {{ result.new_staff|join:", " }}.
+          Для каждого создан трудовой договор по образцу — проверьте карточки.</div>
+      {% endif %}
+      {% if result.new_contracts %}
+        <div class="pr-warn"><b>Созданы трудовые договоры для существующих контрагентов:</b> {{ result.new_contracts|join:", " }}.</div>
+      {% endif %}
+      <p class="pr-note">Чтобы изменения попали в главную книгу и пакет — запустите шестерёнку.</p>
+    </div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <p class="pr-note">PDF «Список перечисляемой в банк зарплаты» из 1С — можно сразу несколько.
+      Система найдёт оплаты «СОТРУДНИК (РЕЕСТР)» с суммой реестра (дата реестра + {{ lookahead }} дн.)
+      и разложит их по сотрудникам. Сначала показывается план — в базе ничего не меняется до «Разнести».</p>
+    <input type="file" name="files" accept=".pdf" multiple required>
+    <button class="pr-btn" type="submit" name="preview" value="1">Проверить</button>
+  </form>
+
+  {% if items %}
+  <h2 style="font-size:16px;margin:20px 0 8px">План</h2>
+  {% for it in items %}
+  <div class="pr-card">
+    <h3>Реестр № {{ it.reg.number|default:"?" }} от {{ it.reg.date|date:"d.m.Y" }} · {{ it.reg.total|floatformat:2 }} ₽
+      <span class="pr-note">({{ it.reg.name }})</span></h3>
+    {% if it.error %}
+      <p class="pr-bad">Не разносится: {{ it.error }}</p>
+    {% else %}
+      <p class="pr-ok">Оплаты найдены: {% for p in it.payments %}{{ p.date|date:"d.m.Y" }} · {{ p.cr|floatformat:2 }} ₽{% if not forloop.last %} + {% endif %}{% endfor %}
+        = {{ it.reg.total|floatformat:2 }} ₽</p>
+      {% if it.new_count %}<div class="pr-warn"><b>Будут заведены новые сотрудники: {{ it.new_count }}</b> — выделены жёлтым.
+        Создаются только те, кого нет ни по лицевому счёту, ни по ФИО.</div>{% endif %}
+    {% endif %}
+    {% if it.staff %}
+    <table class="pr-tbl">
+      <tr><th>Сотрудник</th><th>Лицевой счёт</th><th class="pr-num">Сумма</th><th>Договор</th><th>Найден</th></tr>
+      {% for s in it.staff %}
+      <tr class="{% if s.how == 'новый' or not s.contract %}pr-new{% endif %}">
+        <td>{{ s.name }}</td><td>{{ s.acc }}</td><td class="pr-num">{{ s.amount|floatformat:2 }}</td>
+        <td>{% if s.contract %}{{ s.contract }}{% else %}будет создан по образцу{% endif %}</td>
+        <td>{{ s.how }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% if ready %}
+  <form method="post">
+    {% csrf_token %}
+    <button class="pr-btn pr-btn-main" type="submit" name="apply" value="1">Разнести ({{ ready }} реестр.)</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

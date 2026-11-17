@@ -255,6 +255,11 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 name="treasury_bankstatements_clarify",
             ),
             path(
+                "payroll/",
+                self.admin_site.admin_view(self.payroll_view),
+                name="treasury_bankstatements_payroll",
+            ),
+            path(
                 "coverage/",
                 self.admin_site.admin_view(self.coverage_view),
                 name="treasury_bankstatements_coverage",
@@ -302,6 +307,37 @@ class BankStatementsAdmin(admin.ModelAdmin):
                "date_to": date_to.isoformat() if date_to else "",
                "text": request_text(owner, groups) if owner and groups else ""}
         return TemplateResponse(request, "admin/treasury/bankstatements/clarify.html", ctx)
+
+    def payroll_view(self, request):
+        """Реестры зарплаты из PDF → сплиты оплат «СОТРУДНИК (РЕЕСТР)» по сотрудникам."""
+        from datetime import date as _date
+        from django.template.response import TemplateResponse
+        from treasury import payroll
+
+        def pack(regs):
+            return [{"name": r.name, "number": r.number, "date": r.date.isoformat() if r.date else None,
+                     "total": str(r.total), "rows": [[a, n, str(v)] for a, n, v in r.rows], "error": r.error}
+                    for r in regs]
+
+        def unpack(data):
+            return [payroll.Registry(d["name"], d["number"], _date.fromisoformat(d["date"]) if d["date"] else None,
+                                     Decimal(d["total"]), [(a, n, Decimal(v)) for a, n, v in d["rows"]], d["error"])
+                    for d in data]
+
+        ctx = {**self.admin_site.each_context(request), "title": "Реестры зарплаты",
+               "lookahead": payroll.LOOKAHEAD}
+        if request.method == "POST" and request.POST.get("apply"):
+            regs = unpack(request.session.get("payroll_regs", []))
+            ctx["result"] = payroll.apply(payroll.plan(regs))
+            request.session.pop("payroll_regs", None)
+        elif request.method == "POST":
+            regs = [payroll.parse(f.name, f.read()) for f in request.FILES.getlist("files")]
+            request.session["payroll_regs"] = pack(regs)
+            items = payroll.plan(regs)
+            for it in items:
+                it["new_count"] = sum(1 for s in it["staff"] if s["how"] == "новый")
+            ctx.update(items=items, ready=sum(1 for it in items if not it["error"]))
+        return TemplateResponse(request, "admin/treasury/bankstatements/payroll.html", ctx)
 
     def coverage_view(self, request):
         """Полнота выписок по компании и текст запроса недостающего."""
