@@ -61,7 +61,28 @@ def insert_normizized(conn):
             ROUND(t.dt * 100, 0)::bigint AS base_dt,
             ROUND(t.cr * 100, 0)::bigint AS base_cr,
             t.temp AS description
-        FROM public.treasury_cfdata t
+        FROM (
+            -- сплиты вместо операции, если их сумма равна операции до копейки
+            -- (реестры зарплаты — по сотрудникам); иначе операция целиком
+            WITH ok AS (
+                SELECT s.transaction_id
+                FROM public.treasury_cfsplits s
+                JOIN public.treasury_cfdata d ON d.id = s.transaction_id
+                GROUP BY s.transaction_id, d.dt, d.cr
+                HAVING COALESCE(SUM(s.dt), 0) = COALESCE(d.dt, 0)
+                   AND COALESCE(SUM(s.cr), 0) = COALESCE(d.cr, 0)
+            )
+            SELECT d.date, d.ba_id, d.contract_id, d.cfitem_id, d.dt, d.cr, d.temp
+            FROM public.treasury_cfdata d
+            WHERE d.id NOT IN (SELECT transaction_id FROM ok)
+            UNION ALL
+            SELECT d.date, d.ba_id,
+                   COALESCE(s.contract_id, d.contract_id), COALESCE(s.cfitem_id, d.cfitem_id),
+                   s.dt, s.cr, COALESCE(s.temp, d.temp)
+            FROM public.treasury_cfsplits s
+            JOIN public.treasury_cfdata d ON d.id = s.transaction_id
+            WHERE s.transaction_id IN (SELECT transaction_id FROM ok)
+        ) t
         JOIN public.corporate_bankaccount b
         ON t.ba_id = b.id
         LEFT JOIN LATERAL (
