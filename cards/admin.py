@@ -100,7 +100,7 @@ class UpdProblemFilter(admin.SimpleListFilter):
 class UpdDocumentAdmin(admin.ModelAdmin):
     change_list_template = "admin/cards/upddocument/change_list.html"
     date_hierarchy = "date"
-    actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf', 'export_upd_separate_files']
+    actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf', 'export_upd_separate_files', 'cost_note']
 
     list_display = (
         'counterparty_short',
@@ -328,6 +328,19 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         return generate_registry_response(upd_ids, format_type='pdf')
     
     
+    @admin.action(description='📝 Справка по себестоимости (бренды, каналы, наценка)')
+    def cost_note(self, request, queryset):
+        from urllib.parse import quote
+        from .exports.cost_note import build_workbook
+        from .exports.single_upd_exporter import SingleUpdExporter
+        docs = list(queryset.select_related('counterparty').order_by('date', 'number'))
+        name = (SingleUpdExporter.filename(docs[0]).replace('.xlsx', ' справка.xlsx') if len(docs) == 1
+                else f"Справка по себестоимости, УПД {len(docs)} шт.xlsx")
+        resp = HttpResponse(build_workbook(docs),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(name)}"
+        return resp
+
     @admin.action(description='📁 Выгрузить УПД отдельными файлами (Excel)')
     def export_upd_separate_files(self, request, queryset):
         """
