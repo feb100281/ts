@@ -78,7 +78,7 @@ def insert_normizized(conn):
             UNION ALL
             SELECT d.date, d.ba_id,
                    COALESCE(s.contract_id, d.contract_id), COALESCE(s.cfitem_id, d.cfitem_id),
-                   s.dt, s.cr, COALESCE(s.temp, d.temp)
+                   COALESCE(s.dt, 0), COALESCE(s.cr, 0), COALESCE(s.temp, d.temp)
             FROM public.treasury_cfsplits s
             JOIN public.treasury_cfdata d ON d.id = s.transaction_id
             WHERE s.transaction_id IN (SELECT transaction_id FROM ok)
