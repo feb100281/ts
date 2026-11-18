@@ -360,7 +360,9 @@ def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statem
     for r in rows[header_at + 1:]:
         cells = [c for c in r if c]
         if cells and cells[0].startswith("Վերջնական մնացորդ") and len(cells) > 2:
-            tail_eb = money(cells[-1].split()[0])            # «Текущий остаток | дата | 864,719.40 AMD»
+            # «Текущий остаток | дата | 84.85 USD | 30,589.30 AMD | Курс 360.51» — первая сумма с валютой
+            amounts = [c for c in cells[1:] if re.fullmatch(r"[-\d,.]+\s+[A-Z]{3}", c)]
+            tail_eb = money((amounts[0] if amounts else cells[-1]).split()[0])
     for r in head:
         first = r[0] if r else ""
         m = re.search(r"(\d{2}/\d{2}/\d{2,4})\s*-\s*(\d{2}/\d{2}/\d{2,4})", first)
