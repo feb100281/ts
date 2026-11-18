@@ -51,8 +51,6 @@ def check(owner, today: date | None = None) -> dict:
     start = owner.activity_start
     accounts = list(BankAccount.objects.filter(corporate=owner).select_related("bank", "bs_acc")
                     .order_by("bank__name", "currency", "account"))
-    turns = {r["bs"]: r for r in CfData.objects.filter(owner=owner).values("bs")
-             .annotate(dt=Sum("dt"), cr=Sum("cr"))}
 
     rows, ask, refetch = [], defaultdict(list), defaultdict(list)
     for ba in accounts:
@@ -78,8 +76,11 @@ def check(owner, today: date | None = None) -> dict:
                     issues.append(("в файле нет остатков", per))
                     refetch[_bank(ba)].append((ba, s, "нет входящего или исходящего остатка"))
                 else:
-                    t = turns.get(s.pk)
-                    if t:
+                    # обороты счёта за период выписки — все операции, а не только загруженные из этого файла
+                    # (при перекрытии выписок общие операции загружаются один раз)
+                    t = CfData.objects.filter(ba=ba, date__range=(s.start, s.finish)).aggregate(
+                        dt=Sum("dt"), cr=Sum("cr"))
+                    if t["dt"] is not None or t["cr"] is not None:
                         diff = (s.bb + (t["dt"] or 0) - (t["cr"] or 0)) - s.eb
                         if abs(diff) > Decimal("0.01"):
                             issues.append(("обороты не сходятся с остатками", f"{per}: разница {diff:,.2f}"))
