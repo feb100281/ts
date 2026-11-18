@@ -28,8 +28,13 @@ class Command(BaseCommand):
         parser.add_argument("paths", nargs="+")
         parser.add_argument("--dry-run", action="store_true", help="разобрать и проверить, в базу не писать")
         parser.add_argument("--force", action="store_true", help="перечитать и уже загруженные файлы")
+        parser.add_argument("--lock", help="файл блокировки: параллельные запуски ждут очереди")
 
     def handle(self, *args, paths, dry_run, force=False, **options):
+        if options.get("lock"):
+            import fcntl
+            self._lock = open(options["lock"], "a")
+            fcntl.flock(self._lock, fcntl.LOCK_EX)   # снимается при выходе из процесса
         files = []
         for p in map(Path, paths):
             if p.is_dir():

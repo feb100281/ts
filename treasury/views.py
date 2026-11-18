@@ -51,9 +51,9 @@ def am_upload(request):
         with log_path.open("a", encoding="utf-8") as lf:
             lf.write(f"\n=== {rel}\n")
             lf.flush()
-            # по одному: flock ставит файлы в очередь
-            subprocess.Popen(["flock", str(folder.parent / ".load.lock"), sys.executable,
-                              str(Path(settings.BASE_DIR) / "manage.py"), "am_load", str(target)],
+            # по одному: --lock ставит файлы в очередь
+            subprocess.Popen([sys.executable, str(Path(settings.BASE_DIR) / "manage.py"), "am_load",
+                              str(target), "--lock", str(folder.parent / ".load.lock")],
                              cwd=settings.BASE_DIR, stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
         return JsonResponse({"ok": True, "file": rel, "queued": True,
                              "message": "большой файл — загружается в фоне, итог в am_inbox/load.log"})
