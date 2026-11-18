@@ -328,7 +328,35 @@ def read_sales(path: Path) -> Info | None:
     return Info("sales", d1=min(days), d2=max(days), note=note)
 
 
+def by_parser(path: Path) -> Info | None:
+    """Русские версии выписок и прочие форматы — через общий разборщик загрузки."""
+    try:
+        import importlib.util
+        src = Path(__file__).resolve().parents[2] / "utils" / "bsparsers" / "am" / "parser.py"
+        spec = importlib.util.spec_from_file_location("am_parser", src)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault("am_parser", mod)
+        spec.loader.exec_module(mod)
+        st = mod.parse_statement(path)
+    except Exception:
+        return None
+    if not st.account or not st.start:
+        return None
+    return Info("statement", bank=st.bank, account=st.account, currency=(st.currency or "").upper() or None,
+                d1=st.start, d2=st.finish)
+
+
 def identify(path: Path, kind: str) -> Info | None:
+    info = _identify(path, kind)
+    if info is not None and info.kind == "statement" and not info.currency:
+        alt = by_parser(path)
+        info.currency = alt.currency if alt else None
+    if info is None and kind != "sales" and path.suffix.lower() in (".xlsx", ".xlsm", ".xls", ".xml"):
+        info = by_parser(path)
+    return info
+
+
+def _identify(path: Path, kind: str) -> Info | None:
     ext = path.suffix.lower()
     if kind == "sales":
         return read_sales(path) if ext in (".xlsx", ".xlsm") else None

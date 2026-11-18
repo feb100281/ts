@@ -1,9 +1,10 @@
 """
 Разбор банковских выписок Армении.
 
-Форматы:
-  * AccountStatement.xlsx (Америабанк, Армбизнесбанк) — лист AccountStatementReport;
-  * «Տեղեկանք» из системы «Банк-клиент» (АйДи, Ардшин, ВТБ-Армения) — XML Spreadsheet 2003 (.xls).
+Форматы (армянская и русская версии банка):
+  * AccountStatement.xlsx (Америабанк, Амио) — лист AccountStatementReport;
+  * «Տեղեկանք» / «Справка», «Выписка» из системы «Банк-клиент» (АйДи, Ардшин, ВТБ-Армения) —
+    XML Spreadsheet 2003 (.xls) или пересохранённый .xlsx.
 
 Результат — Statement: шапка (счёт, валюта, период, остатки) и операции.
 Приход — dt, расход — cr (как в выписках РФ). Django не нужен.
@@ -156,6 +157,24 @@ def make_keys(account: str, rows: list[Row]) -> None:
 # Формат 1: AccountStatement.xlsx
 # ============================================================
 
+RU_AMERIA = {
+    "Начала периода": "Ժամանակահատվածի սկիզբ", "Начало периода": "Ժամանակահատվածի սկիզբ",
+    "Конец периода": "Ժամանակահատվածի վերջ", "Счет №": "Հաշիվ N", "Счёт №": "Հաշիվ N",
+    "Валюта": "Արժույթ", "ИНН": "ՀՎՀՀ",
+    "Оборот по дебету": "Ընդհանուր շարժ դեբետով", "Оборот по кредиту": "Ընդհանուր շարժ կրեդիտով",
+    "Дата": "Ամսաթիվ", "Док.№": "Փաստ.N", "Тип": "ԳՏ", "Счет": "Հաշիվ", "Детали": "Նպատակ",
+    "Кредит": "Մուտք", "Дебет": "Ելք", "Плательщик/Получатель": "Վճարող/Շահառու",
+}
+
+
+def _ru_balance(first: str) -> str:
+    if first.startswith("Начальный остаток"):
+        return "Սկզբնական մնացորդ"
+    if first.startswith("Конечный остаток"):
+        return "Վերջնական մնացորդ"
+    return first
+
+
 def parse_ameria(path: Path) -> Statement:
     import openpyxl
 
@@ -167,8 +186,10 @@ def parse_ameria(path: Path) -> Statement:
     for row in ws.iter_rows(values_only=True):
         cells = list(row)
         first = clean(cells[0]) if cells else ""
+        first = _ru_balance(RU_AMERIA.get(first, first))
         if header_idx is None:
             if first == "Ամսաթիվ":
+                cells = [RU_AMERIA.get(clean(c), c) for c in cells]
                 header_idx = [clean(c) for c in cells]
                 continue
             if first:
@@ -224,11 +245,16 @@ def parse_ameria(path: Path) -> Statement:
 # ============================================================
 
 def _spreadsheetml(path: Path) -> list[list[str]]:
+    import io
     from xml.etree import ElementTree as ET
 
+    raw = path.read_bytes()
+    # АйДи Банк: русский текст в cp1251 при объявленной ISO-8859-1
+    if re.search(rb'encoding="ISO-8859-1"', raw[:200], re.I) and re.search(rb"\xc1\xe0\xed\xea|\xc4\xe0\xf2\xe0", raw):
+        raw = re.sub(rb'encoding="ISO-8859-1"', b'encoding="windows-1251"', raw, count=1, flags=re.I)
     ns = "{urn:schemas-microsoft-com:office:spreadsheet}"
     rows = []
-    for _, el in ET.iterparse(path):
+    for _, el in ET.iterparse(io.BytesIO(raw)):
         if el.tag != f"{ns}Row":
             continue
         cells, pos = [], 0
@@ -263,8 +289,62 @@ def _xlsx_rows(path: Path) -> list[list[str]]:
     return rows
 
 
+RU_BC_HEAD = {"Номер документа": "Փաստաթղթի համար", "Номер": "Համար", "Дата": "Ամսաթիվ",
+              "Дебет": "Դեբետ", "Кредит": "Կրեդիտ", "Наиминование": "Շահառու/վճարող",
+              "Наименование": "Շահառու/վճարող", "Причина": "Նպատակը", "Назначение": "Նպատակը",
+              "Тип": "Տիպ"}
+RU_BC_LINE = [("Банк:", "Բանկ:"), ("Клиент:", "Հաճախորդ:"), ("Номер счета:", "Հաշվի համարը:"),
+              ("Начальный остаток", "Սկզբնական մնացորդ"), ("Текущий остаток", "Վերջնական մնացորդ"),
+              ("Конечный остаток", "Վերջնական մնացորդ")]
+
+
+def _bank_client_ru(rows: list[list[str]]) -> list[list[str]]:
+    """Русская версия «Банк-клиента» → армянские подписи (дальше общий разбор)."""
+    out, header_done, currency = [], False, ""
+    for r in rows:
+        r = list(r)
+        nonempty = [c for c in r if c]
+        if not header_done and "Номер документа" in r:
+            hdr, seen_acc = [], False
+            for c in r:
+                if c == "Номер счета":
+                    hdr.append("" if seen_acc else "Շահառուի/վճարողի հաշիվ")
+                    seen_acc = True
+                elif c in ("AMD",) or (re.fullmatch(r"[A-Z]{3}", c or "") and hdr and hdr[-1] in ("Դեբետ", "Կրեդիտ")):
+                    hdr.append("Համարժեք")
+                else:
+                    hdr.append(RU_BC_HEAD.get(c, c))
+            out.append(hdr)
+            header_done = True
+            continue
+        if not header_done and nonempty:
+            first = nonempty[0]
+            for ru, hy in RU_BC_LINE:
+                if first.startswith(ru):
+                    i = r.index(first)
+                    r[i] = hy + first[len(ru):]
+                    if ru == "Начальный остаток" and len(nonempty) > 1:
+                        m = re.search(r"\b([A-Z]{3})\b", nonempty[1])
+                        currency = m.group(1) if m else ""
+                    if ru == "Номер счета:" and currency == "":
+                        pass
+                    break
+        elif header_done and nonempty and nonempty[0] in ("Текущий остаток", "Конечный остаток"):
+            r[r.index(nonempty[0])] = "Վերջնական մնացորդ"
+        out.append(r)
+    # валюта счёта — из строки начального остатка («0.00  KZT»)
+    if currency:
+        for r in out:
+            for i, c in enumerate(r):
+                if c.startswith("Հաշվի համարը:") and not re.search(r"[A-Z]{3}\s*$", c):
+                    r[i] = f"{c} {currency}"
+    return out
+
+
 def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statement:
     rows = rows if rows is not None else _spreadsheetml(path)
+    if any("Номер документа" in r for r in rows[:40]):
+        rows = _bank_client_ru(rows)
     header_at = next((i for i, r in enumerate(rows) if "Փաստաթղթի համար" in r), None)
     if header_at is None:
         raise StatementError("не найдена строка заголовков операций")
@@ -276,6 +356,11 @@ def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statem
     start = finish = None
     bb = eb = None
     owner = ""
+    tail_eb = None
+    for r in rows[header_at + 1:]:
+        cells = [c for c in r if c]
+        if cells and cells[0].startswith("Վերջնական մնացորդ") and len(cells) > 2:
+            tail_eb = money(cells[-1].split()[0])            # «Текущий остаток | дата | 864,719.40 AMD»
     for r in head:
         first = r[0] if r else ""
         m = re.search(r"(\d{2}/\d{2}/\d{2,4})\s*-\s*(\d{2}/\d{2}/\d{2,4})", first)
@@ -291,8 +376,12 @@ def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statem
                 account, currency = m.group(1), m.group(2) or ""
         if first.startswith("Սկզբնական մնացորդ") and len(r) > 1:
             bb = money(r[1].split()[0])
+            m = re.search(r"\b([A-Z]{3})\b", r[1])
+            currency = currency or (m.group(1) if m else "")
         if first.startswith("Վերջնական մնացորդ") and len(r) > 1:
             eb = money(r[1].split()[0])
+    if eb is None:
+        eb = tail_eb
     if not account or start is None or bb is None or eb is None:
         raise StatementError("в шапке нет счёта, периода или остатков")
 
@@ -318,6 +407,8 @@ def parse_bank_client(path: Path, rows: list[list[str]] | None = None) -> Statem
     for r in rows[header_at + 1:]:
         if not r or to_date(g(r, "Ամսաթիվ")) is None or r[0].startswith("("):
             continue
+        if g(r, "Դեբետ").startswith("(") or g(r, "Կրեդիտ").startswith("("):
+            continue                                   # итог дня: «(1)3,000.00»
         dt, cr = money(g(r, "Կրեդիտ")), money(g(r, "Դեբետ"))
         st.rows.append(Row(
             date=to_date(g(r, "Ամսաթիվ")),
@@ -358,7 +449,8 @@ def parse_statement(path: str | Path) -> Statement:
     head = path.read_bytes()[:2000]
     if path.suffix.lower() in (".xlsx", ".xlsm"):
         rows = _xlsx_rows(path)
-        if any("Տեղեկանք" in c for r in rows[:5] for c in r):
+        if any("Տեղեկանք" in c or "Справка" in c or "Выписка" in c or "Быписка" in c
+               for r in rows[:5] for c in r) or any("Номер документа" in r for r in rows[:40]):
             st = parse_bank_client(path, rows)
         else:
             st = parse_ameria(path)
@@ -366,5 +458,6 @@ def parse_statement(path: str | Path) -> Statement:
         st = parse_bank_client(path)
     else:
         raise StatementError("неизвестный формат выписки")
+    st.currency = {"RUR": "RUB"}.get(st.currency, st.currency)     # старый код рубля в банк-клиенте
     make_keys(st.account, st.rows)
     return st

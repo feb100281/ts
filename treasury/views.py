@@ -13,6 +13,7 @@ from utils.bsparsers.am.loader import load_statement, sniff
 
 KINDS = {"statement", "sales"}
 MAX_SIZE = 50 * 1024 * 1024
+BACKGROUND_SIZE = 3 * 1024 * 1024
 
 
 def _authorized(request) -> bool:
@@ -40,6 +41,22 @@ def am_upload(request):
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / f"{digest[:12]}_{Path(upload.name).name}"
     target.write_bytes(data)
+
+    if upload.size > BACKGROUND_SIZE:            # большой файл — загрузка в фоне, без таймаута веб-запроса
+        if kind != "sales" and not sniff(target):
+            return JsonResponse({"ok": False, "file": rel, "error": "не похоже на армянскую выписку"}, status=400)
+        import subprocess
+        import sys
+        log_path = folder.parent / "load.log"
+        with log_path.open("a", encoding="utf-8") as lf:
+            lf.write(f"\n=== {rel}\n")
+            lf.flush()
+            # по одному: flock ставит файлы в очередь
+            subprocess.Popen(["flock", str(folder.parent / ".load.lock"), sys.executable,
+                              str(Path(settings.BASE_DIR) / "manage.py"), "am_load", str(target)],
+                             cwd=settings.BASE_DIR, stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
+        return JsonResponse({"ok": True, "file": rel, "queued": True,
+                             "message": "большой файл — загружается в фоне, итог в am_inbox/load.log"})
 
     if kind == "sales":
         from utils.bsparsers.am.sales_loader import load_sales

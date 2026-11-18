@@ -40,6 +40,8 @@ def sniff(path) -> bool:
     marks = ["Տեղեկանք".encode(), "Ժամանակահատված".encode(), b"AccountStatementReport",
              "î»Õ»Ï³Ýù".encode(),                       # Տեղեկանք в ArmSCII-8, сохранённый как текст
              b"\xee\xbb\xd5\xbb\xcf\xb3\xdd\xf9"]          # то же в однобайтовой кодировке
+    for ru in ("Начала периода", "Номер документа", "Банк-Клиент"):      # русские версии банков
+        marks += [ru.encode(), ru.encode("cp1251")]
     try:
         if path.suffix.lower() in (".xlsx", ".xlsm"):
             with zipfile.ZipFile(path) as z:            # текст внутри xlsx сжат — читаем части книги
@@ -362,6 +364,24 @@ def load_statement(path, log=print, bs: BankStatements | None = None, force: boo
         keys = [r.key for r in st.rows]
         have = set(CfData.objects.filter(ba=ba, row_key__in=keys).values_list("row_key", flat=True))
         new_rows = [r for r in st.rows if r.key not in have]
+        # та же операция в другой версии выписки (русская/армянская, транслит назначения) —
+        # совпадение по дате, сумме и номеру документа считается уже загруженной
+        loose = Counter(
+            (d, dt or 0, cr or 0, (doc or "").split("/")[0].lstrip("0"))
+            for d, dt, cr, doc in CfData.objects.filter(ba=ba, date__gte=st.start, date__lte=st.finish)
+            .values_list("date", "dt", "cr", "doc_numner"))
+        for r in st.rows:                                   # уже совпавшие по ключу из счёта не вычитать дважды
+            if r.key in have:
+                loose[(r.date, r.dt, r.cr, r.doc_number.lstrip("0"))] -= 1
+        kept = []
+        for r in new_rows:
+            k = (r.date, r.dt, r.cr, r.doc_number.lstrip("0"))
+            if loose[k] > 0:
+                loose[k] -= 1
+                have.add(r.key)
+                continue
+            kept.append(r)
+        new_rows = kept
 
         ours = set(BankAccount.objects.values_list("account", flat=True))
         cp_map = dict(CounterpartyAccount.objects.filter(
