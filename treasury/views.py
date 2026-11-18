@@ -100,13 +100,12 @@ def am_staff(request):
             new.append(line.strip())
 
     try:
+        for main, *dups in staff_duplicates():
+            note(f"дубли {main.name}: {len(dups)} — объединение")
+            for d in dups:
+                merge_staff(None, main, d, note)
         for owner in Owners.objects.exclude(country="RU").exclude(country__isnull=True):
             note(f"{owner}")
-            groups = staff_duplicates(owner.id)
-            for main, *dups in groups:
-                note(f"  дубли {main.name}: {len(dups)} — объединение")
-                for d in dups:
-                    merge_staff(owner.id, main, d, note)
             people = find_staff(owner.id)
             if not people:
                 note("  новых счетов получателей зарплаты нет")

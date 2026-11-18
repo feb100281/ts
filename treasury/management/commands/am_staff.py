@@ -55,14 +55,13 @@ class Command(BaseCommand):
             self.stdout.write("Проверка без записи. Для создания добавьте --apply.")
 
     def _merge(self, apply):
-        for owner in Owners.objects.exclude(country="RU").exclude(country__isnull=True):
-            groups = staff_duplicates(owner.id)
-            self.stdout.write(f"{owner}: групп дублей {len(groups)}")
-            for main, *dups in groups:
-                self.stdout.write(f"  основная: {main.name} (id {main.pk}); дубли: "
-                                  + "; ".join(f"{d.name} (id {d.pk})" for d in dups))
-                if apply:
-                    for d in dups:
-                        merge_staff(owner.id, main, d, self.stdout.write)
+        groups = staff_duplicates()
+        self.stdout.write(f"Групп дублей сотрудников (все компании): {len(groups)}")
+        for main, *dups in groups:
+            self.stdout.write(f"  основная: {main} (id {main.pk}); дубли: "
+                              + "; ".join(f"{d} (id {d.pk})" for d in dups))
+            if apply:
+                for d in dups:
+                    merge_staff(None, main, d, self.stdout.write)
         if not apply:
             self.stdout.write("Проверка без записи. Для объединения добавьте --apply.")

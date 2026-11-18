@@ -3,6 +3,7 @@ import re
 from collections import Counter, defaultdict
 
 from django.db import transaction
+from django.db.models import Q
 
 from contracts.models import CfItemAuto, Contracts
 from corporate.models import BankAccount
@@ -18,22 +19,27 @@ def _name(names: Counter) -> str:
 
 
 def _tokens(name: str) -> list[str]:
-    return [w for w in re.findall(r"[A-ZА-ЯЁ]+", (name or "").upper()) if w not in ("ИП", "ООО")][:2]
+    return [w for w in re.findall(r"[A-ZА-ЯЁ]+", (name or "").upper()) if w not in ("ИП", "ООО")][:3]
 
 
 def same_person(a: str, b: str) -> bool:
-    """Фамилия и имя совпадают по первым 4 буквам, в любом порядке (МОЛЕВАН ЮЛИЯ = МОЛЕВА ЮЛИЯ)."""
+    """Фамилия и имя совпадают по первым 4 буквам, в любом порядке (МОЛЕВАН ЮЛИЯ = МОЛЕВА ЮЛИЯ);
+    отчество, если есть у обоих, — тоже (ДМИТРИЕВИЧ = ДМИТРИИ)."""
     x, y = _tokens(a), _tokens(b)
     if len(x) < 2 or len(y) < 2:
         return False
     eq = lambda p, q: p[:4] == q[:4]
+    if len(x) > 2 and len(y) > 2 and not eq(x[2], y[2]):
+        return False
     return (eq(x[0], y[0]) and eq(x[1], y[1])) or (eq(x[0], y[1]) and eq(x[1], y[0]))
 
 
-def existing_staff(owner_id: int) -> list:
-    """Контрагенты с трудовым договором компании."""
-    return list(Counterparty.objects.filter(contracts__owner_id=owner_id,
-                                            contracts__title__title__icontains="трудов").distinct())
+STAFF_TITLES = Q(contracts__title__title__icontains="трудов") | Q(contracts__title__title__icontains="подотч")
+
+
+def existing_staff(owner_id: int | None = None) -> list:
+    """Сотрудники всех компаний группы (трудовой договор или подотчёт): один человек — одна карточка."""
+    return list(Counterparty.objects.filter(STAFF_TITLES).distinct())
 
 
 def match_staff(name: str, staff: list) -> list:
@@ -76,15 +82,16 @@ def create_staff(tpl: Contracts, people: dict, log=print) -> int:
             if len(found) > 1:                           # несколько карточек — решает пользователь
                 log(f"  пропуск {acc}: похожих сотрудников несколько — " + "; ".join(c.name for c in found))
                 continue
-            if found:                                    # тот же сотрудник с новым счётом
-                CounterpartyAccount.objects.get_or_create(account=acc, defaults={"cp": found[0], "comment": "зарплата"})
-                log(f"  счёт {acc} → существующий сотрудник {found[0].name}")
-                ids += p["ids"]
-                continue
-            cp, _ = Counterparty.objects.get_or_create(
-                tax_id=f"AM-{acc}", defaults={"name": _name(p["names"]), "country": "AM"})
+            if found:                                    # тот же человек (в т. ч. сотрудник другой компании группы)
+                cp = found[0]
+                log(f"  счёт {acc} → существующий сотрудник {cp.name}")
+            else:
+                cp, _ = Counterparty.objects.get_or_create(
+                    tax_id=f"AM-{acc}", defaults={"name": _name(p["names"]), "country": "AM"})
+                staff.append(cp)
+                log(f"  новый сотрудник: {cp.name} | {acc}")
             CounterpartyAccount.objects.get_or_create(account=acc, defaults={"cp": cp, "comment": "зарплата"})
-            if not Contracts.objects.filter(owner=owner, cp=cp).exists():
+            if not Contracts.objects.filter(owner=owner, cp=cp, title_id=tpl.title_id).exists():
                 c = Contracts.objects.get(pk=tpl.pk)
                 c.pk = c.id = None
                 c.cp = cp
@@ -94,8 +101,8 @@ def create_staff(tpl: Contracts, people: dict, log=print) -> int:
                                                            defaultcfdt=a.defaultcfdt,
                                                            defaultcfcr=a.defaultcfcr) for a in autos])
                 made += 1
-                staff.append(cp)
-                log(f"  новый сотрудник: {cp.name} | {acc}")
+                if found:
+                    log(f"  трудовой договор в {owner} для {cp.name}")
             ids += p["ids"]
         auto_assign(ids, owner.id, lambda *_: None)
     return made
@@ -117,9 +124,12 @@ def auto_staff(owner_id: int, log=print) -> int:
 # Дубли сотрудников
 # ============================================================
 
-def staff_duplicates(owner_id: int) -> list[list]:
-    """Группы карточек одного сотрудника; первая — основная (больше операций, затем меньший id)."""
-    staff = existing_staff(owner_id)
+def staff_duplicates(owner_id: int | None = None) -> list[list]:
+    """Группы карточек одного сотрудника, где есть сотрудник зарубежной компании.
+    Основная — с настоящим ИНН (не «AM-…»), затем с большим числом операций."""
+    foreign = set(Counterparty.objects.filter(contracts__owner__country__isnull=False)
+                  .exclude(contracts__owner__country="RU").values_list("pk", flat=True))
+    staff = existing_staff()
     groups: list[list] = []
     for c in staff:
         g = next((g for g in groups if any(same_person(c.name, x.name) for x in g)), None)
@@ -128,7 +138,8 @@ def staff_duplicates(owner_id: int) -> list[list]:
         else:
             g.append(c)
     ops = lambda c: CfData.objects.filter(cp_final=c).count()
-    return [sorted(g, key=lambda c: (-ops(c), c.pk)) for g in groups if len(g) > 1]
+    return [sorted(g, key=lambda c: ((c.tax_id or "").startswith("AM-"), -ops(c), c.pk))
+            for g in groups if len(g) > 1 and any(c.pk in foreign for c in g)]
 
 
 def _relink(obj, target, skip: tuple) -> int:
@@ -148,13 +159,15 @@ def _refs(obj, skip: tuple) -> int:
                if rel.related_model not in skip and (rel.one_to_many or rel.one_to_one))
 
 
-def merge_staff(owner_id: int, main: Counterparty, dup: Counterparty, log=print) -> None:
-    """Счета, операции и договоры дубля — на основную карточку; пустой дубль удаляется."""
+def merge_staff(owner_id, main: Counterparty, dup: Counterparty, log=print) -> None:
+    """Счета, операции и договоры дубля — на основную карточку; пустой дубль удаляется.
+    Договор дубля сливается с таким же договором основной карточки в той же компании, иначе переходит к ней."""
     from contracts.models import ContractItems
-    main_c = staff_template_of(owner_id, main)
     with transaction.atomic():
-        for c in Contracts.objects.filter(cp=dup):
-            if main_c is not None and c.owner_id == owner_id and "трудов" in c.title.title.lower():
+        for c in Contracts.objects.filter(cp=dup).select_related("title"):
+            main_c = (Contracts.objects.filter(owner_id=c.owner_id, cp=main, title_id=c.title_id)
+                      .order_by("id").first())
+            if main_c is not None:
                 n = _relink(c, main_c, (CfItemAuto, ContractItems))
                 log(f"    договор {c.pk} → {main_c.pk}: ссылок {n}")
             else:
