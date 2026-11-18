@@ -26,8 +26,14 @@ def fetch_cbr_rates_for_date(date: datetime.date) -> dict:
     Возвращает словарь: { 'USD': Decimal('92.5000'), 'EUR': ... }
     """
     # ЦБ ожидает дату в формате dd/mm/yyyy
+    import time
     params = {"date_req": date.strftime("%d/%m/%Y")}
-    resp = requests.get(CBR_DAILY_URL, params=params, timeout=10)
+    # ЦБ ограничивает частоту запросов (429): пауза между днями и повтор с нарастающим ожиданием
+    for attempt in range(6):
+        time.sleep(0.7 if attempt == 0 else 5 * 2 ** (attempt - 1))
+        resp = requests.get(CBR_DAILY_URL, params=params, timeout=15)
+        if resp.status_code != 429:
+            break
     resp.raise_for_status()
 
     result = {}
