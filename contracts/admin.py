@@ -914,7 +914,7 @@ class ContractsAdmin(admin.ModelAdmin):
             cp.tax_id,
         )
 
-    @admin.display(description="Собственник", ordering="owner__name")
+    @admin.display(description="Компания", ordering="owner__name")
     def owner_name(self, obj):
         return obj.owner.name if obj.owner_id else "—"
 
