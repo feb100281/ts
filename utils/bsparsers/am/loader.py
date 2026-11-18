@@ -66,7 +66,14 @@ def get_owner(st: Statement, log) -> Owners:
     if owner:
         return owner
     if not st.owner_tax_id:
-        raise StatementError("в выписке нет ИНН (ՀՎՀՀ) владельца счёта")
+        # русская версия «Банк-клиента» без ИНН: компания по этому счёту или по счетам того же клиента банка
+        ba = BankAccount.objects.filter(account=st.account).select_related("corporate").first()
+        if ba is None and len(st.account) > 10:
+            ba = (BankAccount.objects.filter(account__startswith=st.account[:-2])
+                  .exclude(corporate__country="RU").select_related("corporate").first())
+        if ba is not None:
+            return ba.corporate
+        raise StatementError("в выписке нет ИНН (ՀՎՀՀ) владельца счёта, и счёт не найден среди счетов компаний")
     owner = Owners.objects.create(name=f"{cp_name_ru(st.owner_name) or 'КОМПАНИЯ'} (АРМЕНИЯ)", inn=st.owner_tax_id, **NEW_OWNER)
     log(f"  + новая компания: {owner.name}, ИНН {owner.inn} — проверьте карточку")
     return owner
