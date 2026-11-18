@@ -161,7 +161,7 @@ def collect(start=None, end=None, cat_list=None, brand_list=None,
         for sn, si in zip(a["status_name"], a["status_id"])
     ]
     a["box"] = [
-        bn if isinstance(bn, str) and bn else WB_BOX_TYPE.get(bi, "" if pd.isna(bi) else str(int(bi)))
+        bn if isinstance(bn, str) and bn else WB_BOX_TYPE.get(bi, "" if pd.isna(bi) or bi == 0 else str(int(bi)))
         for bn, bi in zip(a["box_name"], a["box_id"])
     ]
     a["d"] = pd.to_datetime(a["d"])
