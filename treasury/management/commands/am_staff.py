@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from contracts.models import Contracts
 from corporate.models import Owners
-from utils.bsparsers.am.staff import _name, create_staff, find_staff, staff_template
+from utils.bsparsers.am.staff import _name, create_staff, existing_staff, find_staff, match_staff, staff_template
 
 
 class Command(BaseCommand):
@@ -33,8 +33,14 @@ class Command(BaseCommand):
                 self.stdout.write(f"{owner}: нет трудового договора-образца, получателей {len(people)}.")
                 continue
             self.stdout.write(f"{owner}; образец: {tpl} (id {tpl.pk})")
+            staff = existing_staff(owner.id)
+            new = 0
             for acc, p in sorted(people.items(), key=lambda x: _name(x[1]["names"])):
-                self.stdout.write(f"  {_name(p['names'])} | {acc} | операций {len(p['ids'])}")
+                known = match_staff(_name(p["names"]), staff)
+                mark = f"→ уже есть: {known.name}" if known else "НОВЫЙ"
+                new += known is None
+                self.stdout.write(f"  {_name(p['names'])} | {acc} | операций {len(p['ids'])} | {mark}")
+            self.stdout.write(f"  итого счетов: {len(people)}, из них новых сотрудников: {new}")
             if apply:
                 made = create_staff(tpl, people, lambda *_: None)
                 self.stdout.write(f"  новых договоров: {made}, операции разнесены")

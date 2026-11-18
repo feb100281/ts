@@ -9,12 +9,37 @@ from corporate.models import BankAccount
 from counterparties.models import Counterparty
 from treasury.models import CfData, CounterpartyAccount
 
-SALARY = re.compile(r"աշխատավարձ|արձակուրդ|պարգև", re.I)
+SALARY = re.compile(r"աշխատավարձ|արձակուրդ|պարգև|վերահաշվարկ", re.I)
 
 
 def _name(names: Counter) -> str:
     n = names.most_common(1)[0][0] if names else ""
     return " ".join(n.upper().split())
+
+
+def _tokens(name: str) -> list[str]:
+    return [w for w in re.findall(r"[A-ZА-ЯЁ]+", (name or "").upper()) if w not in ("ИП", "ООО")][:2]
+
+
+def same_person(a: str, b: str) -> bool:
+    """Фамилия и имя совпадают по первым 4 буквам, в любом порядке (МОЛЕВАН ЮЛИЯ = МОЛЕВА ЮЛИЯ)."""
+    x, y = _tokens(a), _tokens(b)
+    if len(x) < 2 or len(y) < 2:
+        return False
+    eq = lambda p, q: p[:4] == q[:4]
+    return (eq(x[0], y[0]) and eq(x[1], y[1])) or (eq(x[0], y[1]) and eq(x[1], y[0]))
+
+
+def existing_staff(owner_id: int) -> list:
+    """Контрагенты с трудовым договором компании."""
+    return list(Counterparty.objects.filter(contracts__owner_id=owner_id,
+                                            contracts__title__title__icontains="трудов").distinct())
+
+
+def match_staff(name: str, staff: list):
+    """Существующий сотрудник с тем же именем; None — нет или неоднозначно."""
+    found = [c for c in staff if same_person(name, c.name)]
+    return found[0] if len(found) == 1 else None
 
 
 def staff_template(owner_id: int):
@@ -44,9 +69,16 @@ def create_staff(tpl: Contracts, people: dict, log=print) -> int:
 
     owner = tpl.owner
     autos = list(CfItemAuto.objects.filter(contract=tpl))
+    staff = existing_staff(owner.id)
     made, ids = 0, []
     with transaction.atomic():
         for acc, p in people.items():
+            known = match_staff(_name(p["names"]), staff)
+            if known is not None:                        # тот же сотрудник с новым счётом
+                CounterpartyAccount.objects.get_or_create(account=acc, defaults={"cp": known, "comment": "зарплата"})
+                log(f"  счёт {acc} → существующий сотрудник {known.name}")
+                ids += p["ids"]
+                continue
             cp, _ = Counterparty.objects.get_or_create(
                 tax_id=f"AM-{acc}", defaults={"name": _name(p["names"]), "country": "AM"})
             CounterpartyAccount.objects.get_or_create(account=acc, defaults={"cp": cp, "comment": "зарплата"})
@@ -60,6 +92,7 @@ def create_staff(tpl: Contracts, people: dict, log=print) -> int:
                                                            defaultcfdt=a.defaultcfdt,
                                                            defaultcfcr=a.defaultcfcr) for a in autos])
                 made += 1
+                staff.append(cp)
                 log(f"  новый сотрудник: {cp.name} | {acc}")
             ids += p["ids"]
         auto_assign(ids, owner.id, lambda *_: None)
