@@ -230,7 +230,10 @@ def identify(p: Path, rel: Path, accs: dict) -> Info:
         if not found or not n1:
             text = body(p)
             head = re.search(r"выписка\s+(?:по|из)\s+(?:лицевого\s+)?сч[её]т[ау]?\s*(?:№\s*)?(40[5-8]\d{17})", text, re.I)
-            found = found or ([head.group(1)] if head else ACC.findall(text))
+            if not head:                                   # «Счёт: 40702 810 8 02430 004523» (Альфа)
+                head = re.search(r"сч[её]т:\s*(40[5-8](?:\s?\d){17})(?!\d)", text, re.I)
+            own = re.sub(r"\s", "", head.group(1)) if head else None
+            found = found or ([own] if own else ACC.findall(text))
         i.account = pick(found, accs, bank_of(folders) or bank_of(p.name) or bank_of(text[:600]))
         if OUR.match(p.name):
             i.d1, i.d2, i.how = n1, n2, "имя"
