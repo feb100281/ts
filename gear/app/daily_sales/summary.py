@@ -82,6 +82,11 @@ WB_EXPENSES_TOOLTIP = (
     "логистику и прочие дополнительные расходы и удержания."
 )
 
+WB_REALIZED_TOOLTIP = (
+    "Сумма, по которой WB продал товар покупателю (цена после СПП). "
+    "НДС — фактический, с этой суммы."
+)
+
 DATA_CONTROL_TOOLTIP = (
     "Показывает количество проданных единиц, по которым "
     "не удалось определить себестоимость, остаток или приход."
@@ -1380,6 +1385,7 @@ def get_sales_summary(
                 "WB реализовал с НДС", _money(retail_amount),
                 (f"без НДС {_money(retail_amount - vat_after)} · НДС {_money(vat_after)}"
                  if vat_after is not None else f"в среднем в день {_money(avg_daily_amount)}"),
+                tooltip=WB_REALIZED_TOOLTIP,
             ),
             _kpi_compact(
                 "Скидка WB", _pct(wb_discount_percent),
