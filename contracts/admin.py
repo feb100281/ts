@@ -620,6 +620,7 @@ class ContractsAdmin(admin.ModelAdmin):
     list_display = (
         "cp_logo",
         "cp_with_inn",
+        "owner_name",
         "title",
         "number_with_id",
         "date_short",
@@ -912,6 +913,10 @@ class ContractsAdmin(admin.ModelAdmin):
             cp.name,
             cp.tax_id,
         )
+
+    @admin.display(description="Компания", ordering="owner__name")
+    def owner_name(self, obj):
+        return obj.owner.name if obj.owner_id else "—"
 
     @admin.display(description="Дата", ordering="date")
     def date_short(self, obj):
