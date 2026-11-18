@@ -89,8 +89,10 @@ def mk(y, m, d) -> date | None:
 
 
 def bank_of(text: str) -> str | None:
+    """Банк, упомянутый в тексте первым (в шапке выписки — банк счёта, ниже — банки контрагентов)."""
     t = nfc(text or "")
-    return next((s for rx, s in BANKS if rx.search(t)), None)
+    hits = [(m.start(), s) for rx, s in BANKS for m in [rx.search(t)] if m]
+    return min(hits)[1] if hits else None
 
 
 def cur_of(text: str) -> str | None:
@@ -227,7 +229,8 @@ def identify(p: Path, rel: Path, accs: dict) -> Info:
         text = ""
         if not found or not n1:
             text = body(p)
-            found = found or ACC.findall(text)
+            head = re.search(r"выписка\s+(?:по|из)\s+(?:лицевого\s+)?сч[её]т[ау]?\s*(?:№\s*)?(40[5-8]\d{17})", text, re.I)
+            found = found or ([head.group(1)] if head else ACC.findall(text))
         i.account = pick(found, accs, bank_of(folders) or bank_of(p.name) or bank_of(text[:600]))
         if OUR.match(p.name):
             i.d1, i.d2, i.how = n1, n2, "имя"
