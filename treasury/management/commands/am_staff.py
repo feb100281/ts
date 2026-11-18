@@ -3,7 +3,8 @@ from django.core.management.base import BaseCommand, CommandError
 
 from contracts.models import Contracts
 from corporate.models import Owners
-from utils.bsparsers.am.staff import _name, create_staff, existing_staff, find_staff, match_staff, staff_template
+from utils.bsparsers.am.staff import (_name, create_staff, existing_staff, find_staff, match_staff, merge_staff,
+                                      staff_duplicates, staff_template)
 
 
 class Command(BaseCommand):
@@ -12,8 +13,11 @@ class Command(BaseCommand):
     def add_arguments(self, p):
         p.add_argument("--template", type=int, help="id договора-образца; по умолчанию — последний трудовой")
         p.add_argument("--apply", action="store_true", help="записать в базу")
+        p.add_argument("--merge", action="store_true", help="объединить дубли сотрудников (с --apply — записать)")
 
-    def handle(self, template, apply, **_):
+    def handle(self, template, apply, merge=False, **_):
+        if merge:
+            return self._merge(apply)
         if template:
             tpl = Contracts.objects.select_related("owner").filter(pk=template).first()
             if tpl is None:
@@ -49,3 +53,16 @@ class Command(BaseCommand):
                 self.stdout.write(f"  новых договоров: {made}, операции разнесены")
         if not apply:
             self.stdout.write("Проверка без записи. Для создания добавьте --apply.")
+
+    def _merge(self, apply):
+        for owner in Owners.objects.exclude(country="RU").exclude(country__isnull=True):
+            groups = staff_duplicates(owner.id)
+            self.stdout.write(f"{owner}: групп дублей {len(groups)}")
+            for main, *dups in groups:
+                self.stdout.write(f"  основная: {main.name} (id {main.pk}); дубли: "
+                                  + "; ".join(f"{d.name} (id {d.pk})" for d in dups))
+                if apply:
+                    for d in dups:
+                        merge_staff(owner.id, main, d, self.stdout.write)
+        if not apply:
+            self.stdout.write("Проверка без записи. Для объединения добавьте --apply.")

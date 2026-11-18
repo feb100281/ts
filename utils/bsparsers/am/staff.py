@@ -111,3 +111,66 @@ def auto_staff(owner_id: int, log=print) -> int:
         log(f"  получателей зарплаты без договора: {len(people)} — нет трудового договора-образца")
         return 0
     return create_staff(tpl, people, log)
+
+
+# ============================================================
+# Дубли сотрудников
+# ============================================================
+
+def staff_duplicates(owner_id: int) -> list[list]:
+    """Группы карточек одного сотрудника; первая — основная (больше операций, затем меньший id)."""
+    staff = existing_staff(owner_id)
+    groups: list[list] = []
+    for c in staff:
+        g = next((g for g in groups if any(same_person(c.name, x.name) for x in g)), None)
+        if g is None:
+            groups.append([c])
+        else:
+            g.append(c)
+    ops = lambda c: CfData.objects.filter(cp_final=c).count()
+    return [sorted(g, key=lambda c: (-ops(c), c.pk)) for g in groups if len(g) > 1]
+
+
+def _relink(obj, target, skip: tuple) -> int:
+    """Все ссылки на obj (кроме моделей skip) — на target."""
+    n = 0
+    for rel in obj._meta.related_objects:
+        if rel.related_model in skip or not (rel.one_to_many or rel.one_to_one):
+            continue
+        n += rel.related_model.objects.filter(**{rel.field.name: obj}).update(**{rel.field.name: target})
+    return n
+
+
+def _refs(obj, skip: tuple) -> int:
+    """Сколько объектов ссылается на obj (без моделей skip)."""
+    return sum(rel.related_model.objects.filter(**{rel.field.name: obj}).count()
+               for rel in obj._meta.related_objects
+               if rel.related_model not in skip and (rel.one_to_many or rel.one_to_one))
+
+
+def merge_staff(owner_id: int, main: Counterparty, dup: Counterparty, log=print) -> None:
+    """Счета, операции и договоры дубля — на основную карточку; пустой дубль удаляется."""
+    from contracts.models import ContractItems
+    main_c = staff_template_of(owner_id, main)
+    with transaction.atomic():
+        for c in Contracts.objects.filter(cp=dup):
+            if main_c is not None and c.owner_id == owner_id and "трудов" in c.title.title.lower():
+                n = _relink(c, main_c, (CfItemAuto, ContractItems))
+                log(f"    договор {c.pk} → {main_c.pk}: ссылок {n}")
+            else:
+                c.cp = main
+                c.save(update_fields=["cp"])
+                log(f"    договор {c.pk} перенесён на {main.name}")
+        n = _relink(dup, main, (Contracts,))
+        left = [c for c in Contracts.objects.filter(cp=dup) if _refs(c, (CfItemAuto, ContractItems))]
+        if _refs(dup, (Contracts,)) or left:             # что-то не перенеслось — не удаляем
+            log(f"    карточка {dup.pk}: ссылок перенесено {n}, остались связи — не удалена")
+            return
+        name = dup.name
+        dup.delete()                                     # пустая карточка с её пустым договором
+        log(f"    {name} (id {dup.pk}): ссылок перенесено {n}, дубль удалён")
+
+
+def staff_template_of(owner_id: int, cp):
+    return (Contracts.objects.filter(owner_id=owner_id, cp=cp, title__title__icontains="трудов")
+            .order_by("id").first())
