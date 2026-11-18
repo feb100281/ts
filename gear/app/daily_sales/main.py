@@ -56,6 +56,12 @@ from .commercial_review import (
     commercial_review_controls,
     register_commercial_review_callbacks,
 )
+from .supplies_cost import (
+    SUPPLIES_EXPORT_DOWNLOAD_ID,
+    SUPPLIES_TAB_VALUE,
+    register_supplies_callbacks,
+    supplies_layout,
+)
 from .fbs_orders import (
     FBS_EXPORT_DOWNLOAD_ID,
     FBS_TAB_VALUE,
@@ -161,6 +167,7 @@ class MainWindow:
                                 {"label": tab_label("solar:widget-4-linear", "Данные"), "value": "2"},
                                 {"label": tab_label("solar:box-linear", "Остатки"), "value": "3"},
                                 {"label": tab_label("solar:delivery-linear", "Заказы FBS"), "value": FBS_TAB_VALUE},
+                                {"label": tab_label("solar:box-minimalistic-linear", "Поставки WB"), "value": SUPPLIES_TAB_VALUE},
                             ],
                             fullWidth=True,
                             radius=0,
@@ -307,6 +314,10 @@ class MainWindow:
                 dcc.Download(
                     id=FBS_EXPORT_DOWNLOAD_ID,
                 ),
+
+                dcc.Download(
+                    id=SUPPLIES_EXPORT_DOWNLOAD_ID,
+                ),
             ],
         )
 
@@ -377,6 +388,15 @@ class MainWindow:
                     brand_list=brand_list,
                     gender_list=gender_list,
                     period_selected=period_selected,
+                )
+
+            if tab_value == SUPPLIES_TAB_VALUE:
+                return supplies_layout(
+                    start=start if period_selected else None,
+                    end=end if period_selected else None,
+                    cat_list=cat_list,
+                    brand_list=brand_list,
+                    gender_list=gender_list,
                 )
 
             if tab_value == "3":
@@ -629,6 +649,13 @@ class MainWindow:
             gender_multy_id=FILTERS.gender_multy_id,
         )
         register_fbs_search_callback(app)
+        register_supplies_callbacks(
+            app,
+            date_picker_id=FILTERS.date_picker_id,
+            cat_multy_id=FILTERS.cat_multy_id,
+            brand_multy_id=FILTERS.brand_multy_id,
+            gender_multy_id=FILTERS.gender_multy_id,
+        )
         # register_pricing_strategy_callbacks(app)
 
 
