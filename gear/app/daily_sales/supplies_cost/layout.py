@@ -175,6 +175,8 @@ def _grid(df, columns, grid_id, height="440px", totals_field=None,
     }
     if pinned:
         opts["pinnedBottomRowData"] = pinned
+    if clickable:
+        opts["rowSelection"] = "single"
     grid = dag.AgGrid(
         id={"type": GRID_TYPE, "index": grid_id},
         rowData=_for_grid(df[[c["field"] for c in columns if c["field"] in df.columns]]),
@@ -187,7 +189,6 @@ def _grid(df, columns, grid_id, height="440px", totals_field=None,
             "cellStyle": {"fontSize": "13px", "lineHeight": "1.3"},
         },
         dashGridOptions=opts,
-        getRowId="params.data.sid != null ? String(params.data.sid) : 'total'" if clickable else None,
         getRowStyle={"styleConditions": [{
             "condition": "params.node.rowPinned === 'bottom'",
             "style": {"backgroundColor": "#F1F4F8", "fontWeight": "700"},
@@ -278,9 +279,9 @@ def supplies_layout(start=None, end=None, cat_list=None, brand_list=None, gender
     )
 
     return html.Div([
-        dmc.Modal(id=MODAL_ID, opened=False, size="95%", centered=True, title="", children=[
-            dcc.Store(id=MODAL_SID_STORE),
-            dcc.Download(id=MODAL_EXPORT_DOWNLOAD_ID),
+        dcc.Store(id=MODAL_SID_STORE),
+        dcc.Download(id=MODAL_EXPORT_DOWNLOAD_ID),
+        dmc.Modal(id=MODAL_ID, opened=False, size="95%", centered=True, title="Поставка", children=[
             dmc.Group(justify="flex-end", mb=4, children=[
                 excel_action_icon(button_id=MODAL_EXPORT_BTN_ID,
                                   tooltip="Скачать поставку в Excel"),

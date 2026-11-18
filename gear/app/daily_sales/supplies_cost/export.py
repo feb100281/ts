@@ -240,16 +240,18 @@ def register_supplies_callbacks(app, date_picker_id, cat_multy_id, brand_multy_i
         Output(MODAL_ID, "title"),
         Output(MODAL_BODY_ID, "children"),
         Output(MODAL_SID_STORE, "data"),
-        Input({"type": GRID_TYPE, "index": GRID_SUPPLIES}, "cellClicked"),
+        Output({"type": GRID_TYPE, "index": GRID_SUPPLIES}, "selectedRows"),
+        Input({"type": GRID_TYPE, "index": GRID_SUPPLIES}, "selectedRows"),
         prevent_initial_call=True,
     )
-    def open_supply(cell):
+    def open_supply(rows):
         from .layout import supply_modal
-        sid = (cell or {}).get("rowId")
+        sid = (rows or [{}])[0].get("sid")
         if not sid or not str(sid).isdigit():
-            return no_update, no_update, no_update, no_update
+            return no_update, no_update, no_update, no_update, no_update
         title, body = supply_modal(int(sid))
-        return True, title, body, int(sid)
+        # снимаем выделение, чтобы повторный клик по той же строке снова открывал окно
+        return True, title, body, int(sid), []
 
     @app.callback(
         Output(MODAL_EXPORT_DOWNLOAD_ID, "data"),
