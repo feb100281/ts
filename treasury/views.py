@@ -82,3 +82,40 @@ def am_upload(request):
             log.append(f"  сотрудники не заведены: {exc}")
     return JsonResponse({"ok": True, "file": rel, "new": res["new"], "existing": res["existing"],
                          "warnings": res["warnings"], "log": log})
+
+
+@csrf_exempt
+@require_POST
+def am_staff(request):
+    """Сотрудники зарубежных компаний: объединить дубли, привязать новые счета, завести действительно новых."""
+    if not _authorized(request):
+        return JsonResponse({"ok": False, "error": "нет доступа"}, status=403)
+    from corporate.models import Owners
+    from utils.bsparsers.am.staff import create_staff, find_staff, merge_staff, staff_duplicates, staff_template
+    log, new = [], []
+
+    def note(line):
+        log.append(line)
+        if "новый сотрудник" in line:
+            new.append(line.strip())
+
+    try:
+        for owner in Owners.objects.exclude(country="RU").exclude(country__isnull=True):
+            note(f"{owner}")
+            groups = staff_duplicates(owner.id)
+            for main, *dups in groups:
+                note(f"  дубли {main.name}: {len(dups)} — объединение")
+                for d in dups:
+                    merge_staff(owner.id, main, d, note)
+            people = find_staff(owner.id)
+            if not people:
+                note("  новых счетов получателей зарплаты нет")
+                continue
+            tpl = staff_template(owner.id)
+            if tpl is None:
+                note(f"  получателей без договора: {len(people)} — нет трудового договора-образца")
+                continue
+            create_staff(tpl, people, note)
+    except Exception as exc:
+        return JsonResponse({"ok": False, "error": str(exc), "log": log}, status=500)
+    return JsonResponse({"ok": True, "log": log, "new": new})
