@@ -298,14 +298,6 @@ def supplies_layout(start=None, end=None, cat_list=None, brand_list=None, gender
                   search_placeholder="Номер поставки, бренд", clickable=True),
         ),
         _section(
-            "Артикулы в поставках",
-            "Количество по УПД с ценой закрывает поставки артикула от старых к новым; "
-            "что не закрыто — без себестоимости",
-            _grid(data["articles"], ARTICLE_COLUMNS_ALL, GRID_ARTICLES, height="520px",
-                  totals_field="sid",
-                  search_placeholder="Поставка, артикул, бренд, наименование"),
-        ),
-        _section(
             "По брендам",
             "Сколько поставлено и какая часть без себестоимости",
             _grid(data["brands"], BRAND_COLUMNS, GRID_BRANDS, height="380px",
