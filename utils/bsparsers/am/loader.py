@@ -273,6 +273,11 @@ def retranslate(log=print) -> None:
                 .values_list("id", "temp", "temp_ru", "cp_bs_name", "cp_name_ru"))
     with transaction.atomic():
         TextTranslation.objects.update(hits=0)
+        empty = [x for x in TextTranslation.objects.filter(is_checked=False, translation__isnull=True)
+                 if x.source in seed()]                       # пустые шаблоны — из начального словаря
+        for x in empty:
+            x.translation = seed()[x.source]
+        TextTranslation.objects.bulk_update(empty, ["translation"], batch_size=500)
         tr = translations([t for _, t, _, _, _ in rows if t])
         counts = Counter(n for _, _, _, n, _ in rows if n)
         cps = list(CpName.objects.all())
