@@ -167,6 +167,9 @@ class CfData(models.Model):
                 name="uniq_cfdata_bs_row",
             )
         ]
+        indexes = [   # поиск операции по договору и дате (gl.mv_accurals)
+            models.Index(fields=["contract", "date"], name="cfdata_contract_date"),
+        ]
 
     def __str__(self):
         return f"{self.doc_type} № {self.doc_numner} от {self.doc_date} (на сумму {self.dt - self.cr})"
