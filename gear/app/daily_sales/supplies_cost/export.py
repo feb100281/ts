@@ -8,15 +8,19 @@ from io import BytesIO
 import pandas as pd
 from dash import Input, Output, State, dcc, no_update
 
-from ..fbs_orders.layout import GRID_TYPE, SEARCH_TYPE
+from ..fbs_orders.layout import GRID_TYPE
 from .config import (
-    GRID_ARTICLES,
     GRID_SUPPLIES,
+    MODAL_BODY_ID,
+    MODAL_EXPORT_BTN_ID,
+    MODAL_EXPORT_DOWNLOAD_ID,
+    MODAL_ID,
+    MODAL_SID_STORE,
     SUPPLIES_EXPORT_BTN_ID,
     SUPPLIES_EXPORT_DOWNLOAD_ID,
     SUPPLIES_EXPORT_LOADING_ID,
 )
-from .data import collect
+from .data import collect, supply_articles
 
 NOTES = [
     ("Источник поставок", "Поставки FBW из кабинета WB (API «Поставки»), обновляются ежедневно в 06:40 МСК."),
@@ -153,6 +157,63 @@ def build_supplies_excel(date_range=None, cat_list=None, brand_list=None,
     return buf.getvalue(), f"wb_supplies_cost_{date.today():%Y-%m-%d}.xlsx"
 
 
+def build_supply_excel(sid) -> tuple[bytes, str] | None:
+    """Одна поставка: шапка и полный состав по артикулам."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from gear.management.commands import mp
+    from ..assistant.excel import _write_table
+
+    a = supply_articles(sid)
+    if a.empty:
+        return None
+    r = a.iloc[0]
+    fd = lambda v: f"{pd.Timestamp(v):%d.%m.%Y}" if v is not None and pd.notna(v) else "—"
+    qty, no_cost = a["qty"].sum(), a["no_cost_qty"].sum()
+    n = a["nm"].nunique()
+    n_gap = a.loc[a["cost_status"] != "✅ есть", "nm"].nunique()
+    sub = (f"Создана {fd(r['created'])} · план {fd(r['planned'])} · принята {fd(r['fact'])}"
+           f" · {r['status']}" + (f" · {r['box']}" if r["box"] else ""))
+    extra = (f"Артикулов {n}, без полной с/с {n_gap} · единиц {qty:,.0f}, "
+             f"без с/с {no_cost:,.0f}").replace(",", " ")
+
+    cols = [("nm", "Артикул WB"), ("sa", "Артикул продавца"), ("brand", "Бренд"),
+            ("category", "Категория"), ("title", "Наименование"),
+            ("plan_qty", "План, шт"), ("acc_qty", "Принято, шт"), ("qty", "В поставке, шт"),
+            ("cost_status", "Себестоимость"), ("no_cost_qty", "Без с/с, шт"),
+            ("upd_qty", "По УПД с ценой всего, шт"),
+            ("cum_qty", "Отгружено на WB нарастающим, шт"),
+            ("upd_last_date", "Последний УПД"), ("upd_last_number", "№ УПД"),
+            ("upd_last_price", "Цена по УПД без НДС, ₽")]
+    idx = [c for c, _ in cols].index
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Поставка {sid}"[:31]
+    _write_table(ws, mp, f"Поставка {sid}", sub, extra,
+                 [t for _, t in cols], _rows(a, cols), totals=True,
+                 freeze_cols=2, header_max=14,
+                 col_formats={idx("nm"): "0", idx("upd_qty"): "#,##0",
+                              idx("cum_qty"): "#,##0",
+                              idx("upd_last_price"): mp.FMT_MONEY_DEC})
+
+    ws = wb.create_sheet("Как читать")
+    mp.sheet_setup(ws, landscape=False)
+    mp.title_band(ws, "Как читать", f"Поставка {sid}", 4, show_back=False)
+    ws.column_dimensions["A"].width = 2
+    ws.column_dimensions["B"].width = 24
+    ws.column_dimensions["C"].width = 100
+    for i, (t, v) in enumerate(NOTES):
+        mp.write(ws, 7 + i, 2, t, font=Font(name=mp.FONT, size=9, bold=True, color=mp.NAVY_3),
+                 align="left", border=mp.B_BOTTOM)
+        mp.write(ws, 7 + i, 3, v, font=Font(name=mp.FONT, size=9, color=mp.TEXT),
+                 align="left", wrap=True, border=mp.B_BOTTOM)
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue(), f"wb_supply_{sid}.xlsx"
+
+
 def register_supplies_callbacks(app, date_picker_id, cat_multy_id, brand_multy_id,
                                 gender_multy_id):
     @app.callback(
@@ -175,11 +236,32 @@ def register_supplies_callbacks(app, date_picker_id, cat_multy_id, brand_multy_i
         return dcc.send_bytes(content, filename=name), ""
 
     @app.callback(
-        Output({"type": SEARCH_TYPE, "index": GRID_ARTICLES}, "value"),
-        Input({"type": GRID_TYPE, "index": GRID_SUPPLIES}, "selectedRows"),
+        Output(MODAL_ID, "opened"),
+        Output(MODAL_ID, "title"),
+        Output(MODAL_BODY_ID, "children"),
+        Output(MODAL_SID_STORE, "data"),
+        Input({"type": GRID_TYPE, "index": GRID_SUPPLIES}, "cellClicked"),
         prevent_initial_call=True,
     )
-    def show_supply(rows):
-        if not rows:
-            return ""
-        return str(rows[0].get("sid") or "")
+    def open_supply(cell):
+        from .layout import supply_modal
+        sid = (cell or {}).get("rowId")
+        if not sid or not str(sid).isdigit():
+            return no_update, no_update, no_update, no_update
+        title, body = supply_modal(int(sid))
+        return True, title, body, int(sid)
+
+    @app.callback(
+        Output(MODAL_EXPORT_DOWNLOAD_ID, "data"),
+        Input(MODAL_EXPORT_BTN_ID, "n_clicks"),
+        State(MODAL_SID_STORE, "data"),
+        prevent_initial_call=True,
+    )
+    def export_supply(n_clicks, sid):
+        if not n_clicks or not sid:
+            return no_update
+        res = build_supply_excel(sid)
+        if res is None:
+            return no_update
+        content, name = res
+        return dcc.send_bytes(content, filename=name)

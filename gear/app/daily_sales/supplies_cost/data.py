@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import time
 from datetime import date
 
 import numpy as np
@@ -135,17 +136,34 @@ def _cost_status(r):
     return COST_PART
 
 
-def collect(start=None, end=None, cat_list=None, brand_list=None,
-            gender_list=None) -> dict:
-    """Строки «поставка × артикул», агрегаты по поставкам и брендам."""
+CACHE_TTL = 10 * 60
+_cache: dict = {}
+
+
+def _base() -> pd.DataFrame:
+    """Все строки «поставка × артикул» со статусом себестоимости; кэш 10 минут."""
+    hit = _cache.get("base")
+    if hit and time.time() - hit[0] < CACHE_TTL:
+        return hit[1]
     with get_duckdb_conn_with_opt(ro=True) as con:
         rows = con.execute(ROWS_SQL).df()
         upd = con.execute(UPD_SQL).df()
         prod = con.execute(PRODUCT_SQL).df()
+    a = _enrich(rows, upd, prod) if not rows.empty else rows
+    _cache["base"] = (time.time(), a)
+    return a
 
-    if rows.empty:
-        return {"empty": True}
 
+def supply_articles(sid) -> pd.DataFrame:
+    """Состав одной поставки."""
+    a = _base()
+    if a.empty:
+        return a
+    return a[a["sid"] == int(sid)].sort_values(["cost_status", "brand", "nm"],
+                                               ascending=[False, True, True])
+
+
+def _enrich(rows, upd, prod) -> pd.DataFrame:
     # Покрытие считаем по всей истории, фильтры — после
     a = rows.merge(upd, on="nm", how="left").merge(prod, on="nm", how="left")
     a["upd_rows"] = a["upd_rows"].fillna(0)
@@ -165,6 +183,15 @@ def collect(start=None, end=None, cat_list=None, brand_list=None,
         for bn, bi in zip(a["box_name"], a["box_id"])
     ]
     a["d"] = pd.to_datetime(a["d"])
+    return a
+
+
+def collect(start=None, end=None, cat_list=None, brand_list=None,
+            gender_list=None) -> dict:
+    """Строки «поставка × артикул», агрегаты по поставкам и брендам."""
+    a = _base()
+    if a.empty:
+        return {"empty": True}
 
     if start is not None and end is not None:
         a = a[(a["d"] >= pd.Timestamp(start)) & (a["d"] <= pd.Timestamp(end))]

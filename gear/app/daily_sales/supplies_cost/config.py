@@ -33,3 +33,10 @@ WB_BOX_TYPE = {
     5: "Монопаллеты",
     6: "Суперсейф",
 }
+
+MODAL_ID = "wbs-supply-modal"
+MODAL_BODY_ID = "wbs-supply-modal-body"
+
+MODAL_SID_STORE = "wbs-supply-modal-sid"
+MODAL_EXPORT_BTN_ID = "wbs-supply-modal-export"
+MODAL_EXPORT_DOWNLOAD_ID = "wbs-supply-modal-download"
