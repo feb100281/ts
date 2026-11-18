@@ -59,7 +59,10 @@ def check(owner, today: date | None = None) -> dict:
         issues = []
         first = st[0].start if st else None
         frm = start or first
-        last_eb = st[-1].eb if st else None
+        if st and st[0].bb == 0 and frm and frm < first:   # нулевой вход — счёт открыт с первой выписки
+            frm = first
+        last = max(st, key=lambda s: (s.finish, -s.start.toordinal())) if st else None
+        last_eb = last.eb if last else None
         if not st:
             issues.append(("нет выписок", f"с {fmt(frm)} по {fmt(end)}" if frm else "за весь период работы"))
             ask[_bank(ba)].append((ba, [(frm, end)] if frm else None))
@@ -85,18 +88,17 @@ def check(owner, today: date | None = None) -> dict:
                         if abs(diff) > Decimal("0.01"):
                             issues.append(("обороты не сходятся с остатками", f"{per}: разница {diff:,.2f}"))
                             refetch[_bank(ba)].append((ba, s, f"обороты не сходятся с остатками на {diff:,.2f}"))
+                if prev and s.finish <= prev.finish:             # выписка внутри более длинной — не замечание
+                    continue
                 if prev:
-                    if s.start <= prev.finish:
-                        issues.append(("периоды выписок перекрываются",
-                                       f"{fmt(prev.start)}–{fmt(prev.finish)} и {per}"))
-                    elif s.start == prev.finish + DAY and None not in (prev.eb, s.bb) and prev.eb != s.bb:
+                    if s.start == prev.finish + DAY and None not in (prev.eb, s.bb) and prev.eb != s.bb:
                         issues.append(("остатки не стыкуются",
                                        f"исход {fmt(prev.finish)} {prev.eb:,.2f} ≠ вход {fmt(s.start)} {s.bb:,.2f}"))
                 prev = s
         if ba.is_active is False and last_eb not in (None, 0):
             issues.append(("счёт закрыт, но остаток не нулевой", f"{last_eb:,.2f} — нужна выписка до закрытия"))
         rows.append({"ba": ba, "bank": _bank(ba), "count": len(st),
-                     "first": first, "last": st[-1].finish if st else None,
+                     "first": first, "last": last.finish if last else None,
                      "eb": last_eb, "issues": issues})
 
     unknown = _unknown_accounts(owner, {a.account for a in BankAccount.objects.all()})
