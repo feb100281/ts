@@ -404,6 +404,23 @@ def is_junk(path: Path) -> bool:
     return n.startswith(".") or n.startswith("~$") or n.startswith(".~lock") or n == JOURNAL
 
 
+def remove_empty(root: Path) -> int:
+    """Опустевшие после раскладки папки (кроме служебных «_…»). Файлы не удаляются."""
+    n = 0
+    dirs = [d for d in root.rglob("*") if d.is_dir() and not is_service(d.relative_to(root) / "x")]
+    for d in sorted(dirs, key=lambda x: len(x.parts), reverse=True):
+        try:
+            if any(c.name != ".DS_Store" for c in d.iterdir()):
+                continue
+            for c in d.iterdir():
+                c.unlink()
+            d.rmdir()
+            n += 1
+        except OSError:
+            pass
+    return n
+
+
 def free_name(path: Path) -> Path:
     if not path.exists():
         return path
@@ -492,6 +509,8 @@ class Sorter:
             planned[key] = dst if self.apply else path
             self.stats["разложено"] += 1
 
+        if self.apply:
+            self.stats["пустых папок убрано"] = remove_empty(self.root)
         if self.apply and self.journal:
             jpath = self.root / JOURNAL
             new = not jpath.exists()
