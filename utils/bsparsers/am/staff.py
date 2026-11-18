@@ -166,9 +166,9 @@ def merge_staff(owner_id: int, main: Counterparty, dup: Counterparty, log=print)
         if _refs(dup, (Contracts,)) or left:             # что-то не перенеслось — не удаляем
             log(f"    карточка {dup.pk}: ссылок перенесено {n}, остались связи — не удалена")
             return
-        name = dup.name
+        name, pk = dup.name, dup.pk
         dup.delete()                                     # пустая карточка с её пустым договором
-        log(f"    {name} (id {dup.pk}): ссылок перенесено {n}, дубль удалён")
+        log(f"    {name} (id {pk}): ссылок перенесено {n}, дубль удалён")
 
 
 def staff_template_of(owner_id: int, cp):
