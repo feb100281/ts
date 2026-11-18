@@ -36,9 +36,12 @@ class Command(BaseCommand):
             staff = existing_staff(owner.id)
             new = 0
             for acc, p in sorted(people.items(), key=lambda x: _name(x[1]["names"])):
-                known = match_staff(_name(p["names"]), staff)
-                mark = f"→ уже есть: {known.name}" if known else "НОВЫЙ"
-                new += known is None
+                found = match_staff(_name(p["names"]), staff)
+                if len(found) > 1:
+                    mark = "пропуск, похожих несколько: " + "; ".join(f"{c.name} (id {c.pk})" for c in found)
+                else:
+                    mark = f"→ уже есть: {found[0].name}" if found else "НОВЫЙ"
+                new += not found
                 self.stdout.write(f"  {_name(p['names'])} | {acc} | операций {len(p['ids'])} | {mark}")
             self.stdout.write(f"  итого счетов: {len(people)}, из них новых сотрудников: {new}")
             if apply:

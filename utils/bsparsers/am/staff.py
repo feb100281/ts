@@ -36,10 +36,9 @@ def existing_staff(owner_id: int) -> list:
                                             contracts__title__title__icontains="трудов").distinct())
 
 
-def match_staff(name: str, staff: list):
-    """Существующий сотрудник с тем же именем; None — нет или неоднозначно."""
-    found = [c for c in staff if same_person(name, c.name)]
-    return found[0] if len(found) == 1 else None
+def match_staff(name: str, staff: list) -> list:
+    """Существующие сотрудники с тем же именем (больше одного — неоднозначно)."""
+    return [c for c in staff if same_person(name, c.name)]
 
 
 def staff_template(owner_id: int):
@@ -73,10 +72,13 @@ def create_staff(tpl: Contracts, people: dict, log=print) -> int:
     made, ids = 0, []
     with transaction.atomic():
         for acc, p in people.items():
-            known = match_staff(_name(p["names"]), staff)
-            if known is not None:                        # тот же сотрудник с новым счётом
-                CounterpartyAccount.objects.get_or_create(account=acc, defaults={"cp": known, "comment": "зарплата"})
-                log(f"  счёт {acc} → существующий сотрудник {known.name}")
+            found = match_staff(_name(p["names"]), staff)
+            if len(found) > 1:                           # несколько карточек — решает пользователь
+                log(f"  пропуск {acc}: похожих сотрудников несколько — " + "; ".join(c.name for c in found))
+                continue
+            if found:                                    # тот же сотрудник с новым счётом
+                CounterpartyAccount.objects.get_or_create(account=acc, defaults={"cp": found[0], "comment": "зарплата"})
+                log(f"  счёт {acc} → существующий сотрудник {found[0].name}")
                 ids += p["ids"]
                 continue
             cp, _ = Counterparty.objects.get_or_create(
