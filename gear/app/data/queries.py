@@ -1833,6 +1833,11 @@ sales_by_day AS (
         SUM(t.cr_rev) AS amount,
         SUM(t.retail_amount) AS retail_amount,
 
+        -- НДС с цены покупателя (после СПП), как строка Н.2 мэн пака
+        SUM(
+            t.retail_amount * t.vat_rate / (100 + t.vat_rate)
+        ) AS vat_after_spp,
+
         SUM(t.cr_rev)
         -
         SUM(
@@ -1923,6 +1928,11 @@ SELECT
         s.retail_amount / 100.00,
         2
     ) AS retail_amount,
+
+    ROUND(
+        s.vat_after_spp / 100.00,
+        2
+    ) AS vat_after_spp,
 
     ROUND(
         CASE

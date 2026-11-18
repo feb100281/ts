@@ -1190,6 +1190,8 @@ def get_sales_summary(
 
     amount = df["amount"].sum()
     retail_amount = df["retail_amount"].sum()
+    vat_after = (df["vat_after_spp"].sum()
+                 if "vat_after_spp" in df.columns else None)
     vat_amount = df["vat_amount"].sum()
     amount_vatless = df["amount_vatless"].sum()
 
@@ -1376,7 +1378,8 @@ def get_sales_summary(
             ),
             _kpi_compact(
                 "WB реализовал с НДС", _money(retail_amount),
-                f"в среднем в день {_money(avg_daily_amount)}",
+                (f"без НДС {_money(retail_amount - vat_after)} · НДС {_money(vat_after)}"
+                 if vat_after is not None else f"в среднем в день {_money(avg_daily_amount)}"),
             ),
             _kpi_compact(
                 "Скидка WB", _pct(wb_discount_percent),
