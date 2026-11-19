@@ -28,10 +28,12 @@ from ..fbs_orders.layout import (
     _section,
     _totals_row,
 )
+from ..column_picker import column_picker
 from ..ui import excel_action_icon, loading_placeholder
 from .config import (
     GRID_ARTICLES,
     GRID_BRANDS,
+    GRID_VENDORS,
     GRID_SUPPLIES,
     MODAL_BODY_ID,
     MODAL_EXPORT_BTN_ID,
@@ -110,6 +112,7 @@ def supply_columns(has_wh, has_box):
         cols.append(_col("box", "Упаковка", 125))
     cols += [
         _col("brands", "Бренды", 230),
+        _col("suppliers", "Поставщики", 230),
         _col("plan_qty", "План, шт", 110, _INT_FMT, aggregate="sum"),
         _col("acc_qty", "Принято, шт", 125, _INT_FMT, aggregate="sum"),
         _col("arts", "Артикулов", 115, _INT_FMT, aggregate="sum"),
@@ -127,6 +130,7 @@ ARTICLE_COLUMNS = [
     _col("nm", "Артикул WB", 125, pinned="left"),
     _col("sa", "Артикул продавца", 170),
     _col("brand", "Бренд", 140),
+    _col("suppliers", "Поставщик", 200),
     _col("category", "Категория", 160),
     _col("title", "Наименование", 240),
     _col("qty", "В поставке, шт", 140, _INT_FMT, aggregate="sum"),
@@ -150,6 +154,10 @@ BRAND_COLUMNS = [
     _col("no_cost_qty", "Без с/с, шт", 125, _INT_FMT, aggregate="sum"),
     _col("no_cost_qty_pct", "Без с/с, % шт", 135, _PCT1_FMT, style=_PCT_STYLE),
 ]
+
+
+VENDOR_COLUMNS = [dict(BRAND_COLUMNS[0], field="supplier", headerName="Поставщик", width=260)] \
+    + BRAND_COLUMNS[1:]
 
 
 def _for_grid(df):
@@ -202,17 +210,15 @@ def _grid(df, columns, grid_id, height="440px", totals_field=None,
                "overflow": "hidden", "backgroundColor": SURFACE},
         children=grid,
     )
-    if not search_placeholder:
-        return box
-    return html.Div([
-        dmc.TextInput(
-            id={"type": SEARCH_TYPE, "index": grid_id},
-            placeholder=search_placeholder, size="sm", radius="sm", mb=8, w=360,
-            debounce=250,
-            leftSection=DashIconify(icon="solar:magnifer-linear", width=15, height=15),
-        ),
-        box,
-    ])
+    search = (dmc.TextInput(
+        id={"type": SEARCH_TYPE, "index": grid_id},
+        placeholder=search_placeholder, size="sm", radius="sm", w=360,
+        debounce=250,
+        leftSection=DashIconify(icon="solar:magnifer-linear", width=15, height=15),
+    ) if search_placeholder else html.Div())
+    bar = dmc.Group(justify="space-between", align="center", mb=8,
+                    children=[search, column_picker(grid_id, columns, GRID_TYPE)])
+    return html.Div([bar, box])
 
 
 def _stat(title, value, note, accent=INK_PRIMARY):
@@ -300,6 +306,13 @@ def supplies_layout(start=None, end=None, cat_list=None, brand_list=None, gender
                   search_placeholder="Номер поставки, бренд", clickable=True),
         ),
         _section(
+            "По поставщикам",
+            "Поставщик — из приходных УПД USK (основной — по количеству). "
+            "«Нет УПД» — артикулы без приходных УПД",
+            _grid(data["vendors"], VENDOR_COLUMNS, GRID_VENDORS, height="380px",
+                  totals_field="supplier", search_placeholder="Поставщик"),
+        ),
+        _section(
             "По брендам",
             "Сколько поставлено и какая часть без себестоимости",
             _grid(data["brands"], BRAND_COLUMNS, GRID_BRANDS, height="380px",
@@ -338,7 +351,7 @@ def supply_modal(sid):
                  f"единиц {_num(qty)}, без с/с {_num(no_cost)} ({_pct(no_cost, qty)})",
                  size="13px", fw=600, c=STATUS_CRITICAL if n_gap else STATUS_GOOD),
     ])
-    body = html.Div([head, _grid(a, ARTICLE_COLUMNS, f"wbs-modal-{sid}", height="60vh",
+    body = html.Div([head, _grid(a, ARTICLE_COLUMNS, "wbs-modal", height="60vh",
                                  totals_field="nm",
                                  search_placeholder="Артикул, бренд, наименование")])
     return f"Поставка {sid}", body

@@ -113,6 +113,20 @@ WHERE ui.nm_id IS NOT NULL
 GROUP BY 1
 """
 
+SUPPLIER_SQL = """
+SELECT
+    TRY_CAST(ui.nm_id AS BIGINT) AS usk,
+    COALESCE(NULLIF(TRIM(cp.name), ''), 'Поставщик не указан в УПД') AS supplier,
+    SUM(COALESCE(ui.upd_qty, 0)) AS qty
+FROM inventories.upd_income ui
+LEFT JOIN inventories.upd_documents ud ON ud.id = ui.upd_document_id
+LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = ud.counterparty_id
+WHERE ui.nm_id IS NOT NULL
+GROUP BY 1, 2
+"""
+
+NO_SUPPLIER = "Нет УПД"
+
 PRODUCT_SQL = """
 SELECT
     card_id AS nm,
@@ -158,7 +172,8 @@ def _base() -> pd.DataFrame:
         rows = con.execute(ROWS_SQL).df()
         upd = con.execute(UPD_SQL).df()
         prod = con.execute(PRODUCT_SQL).df()
-    a = _enrich(rows, upd, prod) if not rows.empty else rows
+        sup = con.execute(SUPPLIER_SQL).df()
+    a = _enrich(rows, upd, prod, sup) if not rows.empty else rows
     _cache["base"] = (time.time(), a)
     return a
 
@@ -172,9 +187,22 @@ def supply_articles(sid) -> pd.DataFrame:
                                                ascending=[False, True, True])
 
 
-def _enrich(rows, upd, prod) -> pd.DataFrame:
+def _suppliers(sup: pd.DataFrame) -> pd.DataFrame:
+    """По USK: основной поставщик (больше всего штук по УПД) и все поставщики."""
+    if sup.empty:
+        return pd.DataFrame(columns=["usk", "supplier", "suppliers"])
+    sup = sup.sort_values(["usk", "qty"], ascending=[True, False])
+    main = sup.groupby("usk")["supplier"].first()
+    allv = sup.groupby("usk")["supplier"].apply(lambda s: ", ".join(s))
+    return pd.DataFrame({"supplier": main, "suppliers": allv}).reset_index()
+
+
+def _enrich(rows, upd, prod, sup) -> pd.DataFrame:
     # Покрытие считаем по всей истории, фильтры — после
-    a = rows.merge(upd, on="usk", how="left").merge(prod, on="nm", how="left")
+    a = (rows.merge(upd, on="usk", how="left").merge(prod, on="nm", how="left")
+         .merge(_suppliers(sup), on="usk", how="left"))
+    a["supplier"] = a["supplier"].fillna(NO_SUPPLIER)
+    a["suppliers"] = a["suppliers"].fillna(NO_SUPPLIER)
     a["upd_rows"] = a["upd_rows"].fillna(0)
     a["upd_qty"] = a["upd_qty"].fillna(0)
     a["no_cost_qty"] = np.clip(a["cum_qty"] - a["upd_qty"], 0, a["qty"])
@@ -233,6 +261,11 @@ def collect(start=None, end=None, cat_list=None, brand_list=None,
                     .groupby("sid")["brand"].apply(lambda s: ", ".join(s.head(3))
                                                    + (f" +{len(s) - 3}" if len(s) > 3 else "")))
     sup["brands"] = sup["sid"].map(brand_by_sup)
+    sup_by_sup = (a.groupby(["sid", "supplier"])["qty"].sum().reset_index()
+                  .sort_values(["sid", "qty"], ascending=[True, False])
+                  .groupby("sid")["supplier"].apply(lambda s: ", ".join(s.head(3))
+                                                    + (f" +{len(s) - 3}" if len(s) > 3 else "")))
+    sup["suppliers"] = sup["sid"].map(sup_by_sup)
     sup["no_cost_arts_pct"] = 100.0 * (sup["part"] + sup["bad"]) / sup["arts"]
     sup["no_cost_qty_pct"] = 100.0 * sup["no_cost_qty"] / sup["qty"]
     sup = sup.sort_values(["d", "sid"], ascending=[False, False])
@@ -246,6 +279,16 @@ def collect(start=None, end=None, cat_list=None, brand_list=None,
     br["no_cost_arts_pct"] = 100.0 * br["no_cost_arts"] / br["arts"]
     br["no_cost_qty_pct"] = 100.0 * br["no_cost_qty"] / br["qty"]
     br = br.sort_values("qty", ascending=False)
+
+    vd = a.groupby("supplier").agg(
+        supplies=("sid", "nunique"), arts=("nm", "nunique"), qty=("qty", "sum"),
+        no_cost_qty=("no_cost_qty", "sum"),
+    ).reset_index()
+    bad_v = a[~a["is_ok"]].groupby("supplier")["nm"].nunique()
+    vd["no_cost_arts"] = vd["supplier"].map(bad_v).fillna(0)
+    vd["no_cost_arts_pct"] = 100.0 * vd["no_cost_arts"] / vd["arts"]
+    vd["no_cost_qty_pct"] = 100.0 * vd["no_cost_qty"] / vd["qty"]
+    vd = vd.sort_values("qty", ascending=False)
 
     arts = a.sort_values(["d", "sid", "cost_status", "brand", "nm"],
                          ascending=[False, False, False, True, True])
@@ -262,5 +305,5 @@ def collect(start=None, end=None, cat_list=None, brand_list=None,
         "d_max": a["d"].max(),
     }
     return {"empty": False, "kpi": kpi, "supplies": sup, "articles": arts,
-            "brands": br, "has_warehouse": bool(sup["warehouse"].notna().any()),
+            "brands": br, "vendors": vd, "has_warehouse": bool(sup["warehouse"].notna().any()),
             "has_box": bool((sup["box"] != "").any())}

@@ -34,6 +34,8 @@ NOTES = [
     ("⚠️ частично", "УПД есть, но их количества хватило только на часть поставки или только на прошлые поставки."),
     ("🔴 нет УПД", "По артикулу нет ни одного приходного УПД."),
     ("🔴 УПД без цены", "УПД есть, но цена в них не заполнена."),
+    ("Поставщик", "Контрагент приходных УПД по USK. Если поставщиков несколько, основной — "
+                  "с наибольшим количеством по УПД. «Нет УПД» — по артикулу приходов нет."),
     ("Ограничение", "УПД закрывают и продажи FBS, а поставки вне кабинета WB здесь не видны, "
                     "поэтому оценка покрытия мягкая: реальный пробел может быть больше."),
 ]
@@ -92,14 +94,15 @@ def build_supplies_excel(date_range=None, cat_list=None, brand_list=None,
         s_cols.append(("warehouse", "Склад"))
     if data["has_box"]:
         s_cols.append(("box", "Упаковка"))
-    s_cols += [("brands", "Бренды"), ("plan_qty", "План, шт"), ("acc_qty", "Принято, шт"),
+    s_cols += [("brands", "Бренды"), ("suppliers", "Поставщики"), ("plan_qty", "План, шт"), ("acc_qty", "Принято, шт"),
                ("arts", "Артикулов, шт"), ("ok", "✅ с/с есть, артикулов"),
                ("part", "⚠️ частично, артикулов"), ("bad", "🔴 нет с/с, артикулов"),
                ("no_cost_arts_pct", "Артикулов без полной с/с, %"),
                ("no_cost_qty", "Единиц без с/с, шт"), ("no_cost_qty_pct", "Единиц без с/с, %")]
 
     a_cols = [("sid", "Поставка"), ("d", "Дата поставки"), ("nm", "Артикул WB"),
-              ("sa", "Артикул продавца"), ("brand", "Бренд"), ("category", "Категория"),
+              ("sa", "Артикул продавца"), ("brand", "Бренд"), ("suppliers", "Поставщик"),
+              ("category", "Категория"),
               ("title", "Наименование"), ("qty", "В поставке, шт"),
               ("cost_status", "Себестоимость"), ("no_cost_qty", "Без с/с, шт"),
               ("usk", "USK"), ("upd_qty", "По УПД с ценой на USK, шт"),
@@ -134,6 +137,15 @@ def build_supplies_excel(date_range=None, cat_list=None, brand_list=None,
                               idx(a_cols, "upd_qty"): "#,##0",
                               idx(a_cols, "cum_qty"): "#,##0",
                               idx(a_cols, "upd_last_price"): mp.FMT_MONEY_DEC})
+
+    v_cols = [("supplier", "Поставщик")] + b_cols[1:]
+    ws = wb.create_sheet("По поставщикам")
+    _write_table(ws, mp, "По поставщикам", sub,
+                 "Основной поставщик USK по приходным УПД; «Нет УПД» — без приходов",
+                 [n for _, n in v_cols], _rows(data["vendors"], v_cols), totals=True,
+                 freeze_cols=1, header_max=14,
+                 col_formats={idx(v_cols, "no_cost_arts_pct"): pct,
+                              idx(v_cols, "no_cost_qty_pct"): pct})
 
     ws = wb.create_sheet("По брендам")
     _write_table(ws, mp, "По брендам", sub, "Поставлено и без себестоимости",
@@ -180,6 +192,7 @@ def build_supply_excel(sid) -> tuple[bytes, str] | None:
              f"без с/с {no_cost:,.0f}").replace(",", " ")
 
     cols = [("nm", "Артикул WB"), ("sa", "Артикул продавца"), ("brand", "Бренд"),
+            ("suppliers", "Поставщик"),
             ("category", "Категория"), ("title", "Наименование"),
             ("plan_qty", "План, шт"), ("acc_qty", "Принято, шт"), ("qty", "В поставке, шт"),
             ("cost_status", "Себестоимость"), ("no_cost_qty", "Без с/с, шт"),
@@ -218,6 +231,9 @@ def build_supply_excel(sid) -> tuple[bytes, str] | None:
 
 def register_supplies_callbacks(app, date_picker_id, cat_multy_id, brand_multy_id,
                                 gender_multy_id):
+    from ..column_picker import register_column_picker_callbacks
+    register_column_picker_callbacks(app, GRID_TYPE)
+
     @app.callback(
         Output(SUPPLIES_EXPORT_DOWNLOAD_ID, "data"),
         Output(SUPPLIES_EXPORT_LOADING_ID, "children"),
