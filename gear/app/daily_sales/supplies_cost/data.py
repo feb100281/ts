@@ -4,8 +4,9 @@
 Поставки и состав — wb_raw.wb_supplies / wb_supply_goods (команда wb_supplies).
 УПД — inventories.upd_income → inventories.upd_documents.
 
-Покрытие считается по артикулу по принципу FIFO: количество с ценой по всем
-УПД артикула закрывает поставки от старых к новым. Что не закрыто — единицы
+УПД привязаны к USK (inventories.usk: одна USK на несколько карточек WB),
+поэтому покрытие считается по USK по принципу FIFO: количество с ценой по всем
+УПД USK закрывает поставки всех её карточек от старых к новым. Что не закрыто — единицы
 без себестоимости в конкретной поставке.
 """
 from __future__ import annotations
@@ -71,18 +72,26 @@ g AS (
     WHERE nm IS NOT NULL
     GROUP BY 1, 2
 ),
+u AS (   -- карточка WB → USK (общая карточка, к которой привязаны УПД)
+    SELECT TRY_CAST(card_id AS BIGINT) AS nm, MAX(TRY_CAST(usk AS BIGINT)) AS usk
+    FROM inventories.usk
+    WHERE card_id IS NOT NULL AND usk IS NOT NULL
+    GROUP BY 1
+),
 x AS (
     SELECT
         g.*, s.* EXCLUDE (sid),
+        COALESCE(u.usk, g.nm) AS usk,
         COALESCE(s.fact, s.planned, s.created) AS d,
         CASE WHEN g.acc_qty > 0 THEN g.acc_qty ELSE g.plan_qty END AS qty
     FROM g JOIN s USING (sid)
+    LEFT JOIN u ON u.nm = g.nm
 )
 SELECT
     x.*,
     SUM(qty) OVER (
-        PARTITION BY nm
-        ORDER BY d NULLS LAST, sid
+        PARTITION BY usk
+        ORDER BY d NULLS LAST, sid, nm
         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     ) AS cum_qty
 FROM x
@@ -91,7 +100,7 @@ WHERE qty > 0
 
 UPD_SQL = """
 SELECT
-    ui.nm_id AS nm,
+    TRY_CAST(ui.nm_id AS BIGINT) AS usk,
     COUNT(*) AS upd_rows,
     COALESCE(SUM(ui.upd_qty) FILTER (WHERE ui.upd_price_vatless > 0), 0) AS upd_qty,
     MAX(ud.date)::DATE AS upd_last_date,
@@ -165,7 +174,7 @@ def supply_articles(sid) -> pd.DataFrame:
 
 def _enrich(rows, upd, prod) -> pd.DataFrame:
     # Покрытие считаем по всей истории, фильтры — после
-    a = rows.merge(upd, on="nm", how="left").merge(prod, on="nm", how="left")
+    a = rows.merge(upd, on="usk", how="left").merge(prod, on="nm", how="left")
     a["upd_rows"] = a["upd_rows"].fillna(0)
     a["upd_qty"] = a["upd_qty"].fillna(0)
     a["no_cost_qty"] = np.clip(a["cum_qty"] - a["upd_qty"], 0, a["qty"])

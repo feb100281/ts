@@ -27,8 +27,9 @@ NOTES = [
     ("Дата поставки", "Фактическая дата приёмки; если поставка ещё не принята — плановая, затем дата создания. "
                       "Фильтр периода применяется к этой дате."),
     ("Количество", "«Принято» — сколько WB принял; пока приёмки нет — плановое количество."),
-    ("Себестоимость", "По приходным УПД, где указана цена без НДС. Количество по всем УПД артикула "
-                      "закрывает его поставки от старых к новым (FIFO)."),
+    ("Себестоимость", "По приходным УПД, где указана цена без НДС. УПД привязаны к USK — общей "
+                      "карточке для нескольких артикулов WB. Количество по всем УПД USK закрывает "
+                      "поставки всех её артикулов от старых к новым (FIFO)."),
     ("✅ есть", "Количества по УПД хватает на эту поставку и все более ранние."),
     ("⚠️ частично", "УПД есть, но их количества хватило только на часть поставки или только на прошлые поставки."),
     ("🔴 нет УПД", "По артикулу нет ни одного приходного УПД."),
@@ -101,8 +102,8 @@ def build_supplies_excel(date_range=None, cat_list=None, brand_list=None,
               ("sa", "Артикул продавца"), ("brand", "Бренд"), ("category", "Категория"),
               ("title", "Наименование"), ("qty", "В поставке, шт"),
               ("cost_status", "Себестоимость"), ("no_cost_qty", "Без с/с, шт"),
-              ("upd_qty", "По УПД с ценой всего, шт"),
-              ("cum_qty", "Отгружено на WB нарастающим, шт"),
+              ("usk", "USK"), ("upd_qty", "По УПД с ценой на USK, шт"),
+              ("cum_qty", "Отгружено на WB по USK нарастающим, шт"),
               ("upd_last_date", "Последний УПД"), ("upd_last_number", "№ УПД"),
               ("upd_last_price", "Цена по УПД без НДС, ₽")]
 
@@ -129,6 +130,7 @@ def build_supplies_excel(date_range=None, cat_list=None, brand_list=None,
                  [n for _, n in a_cols], _rows(data["articles"], a_cols), totals=True,
                  freeze_cols=idx(a_cols, "nm") + 1, header_max=14,
                  col_formats={idx(a_cols, "sid"): "0", idx(a_cols, "nm"): "0",
+                              idx(a_cols, "usk"): "0",
                               idx(a_cols, "upd_qty"): "#,##0",
                               idx(a_cols, "cum_qty"): "#,##0",
                               idx(a_cols, "upd_last_price"): mp.FMT_MONEY_DEC})
@@ -181,8 +183,8 @@ def build_supply_excel(sid) -> tuple[bytes, str] | None:
             ("category", "Категория"), ("title", "Наименование"),
             ("plan_qty", "План, шт"), ("acc_qty", "Принято, шт"), ("qty", "В поставке, шт"),
             ("cost_status", "Себестоимость"), ("no_cost_qty", "Без с/с, шт"),
-            ("upd_qty", "По УПД с ценой всего, шт"),
-            ("cum_qty", "Отгружено на WB нарастающим, шт"),
+            ("usk", "USK"), ("upd_qty", "По УПД с ценой на USK, шт"),
+            ("cum_qty", "Отгружено на WB по USK нарастающим, шт"),
             ("upd_last_date", "Последний УПД"), ("upd_last_number", "№ УПД"),
             ("upd_last_price", "Цена по УПД без НДС, ₽")]
     idx = [c for c, _ in cols].index
@@ -193,7 +195,7 @@ def build_supply_excel(sid) -> tuple[bytes, str] | None:
     _write_table(ws, mp, f"Поставка {sid}", sub, extra,
                  [t for _, t in cols], _rows(a, cols), totals=True,
                  freeze_cols=2, header_max=14,
-                 col_formats={idx("nm"): "0", idx("upd_qty"): "#,##0",
+                 col_formats={idx("nm"): "0", idx("usk"): "0", idx("upd_qty"): "#,##0",
                               idx("cum_qty"): "#,##0",
                               idx("upd_last_price"): mp.FMT_MONEY_DEC})
 
