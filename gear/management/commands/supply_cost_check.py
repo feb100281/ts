@@ -54,15 +54,52 @@ class Command(BaseCommand):
                 GROUP BY 1, 2, 3""", [f"%{n}%"]).df().to_string(index=False))
             print(f"\n== Строки УПД {n} по артикулам поставки (DuckDB)")
             print(con.execute(f"""
-                SELECT ui.nm_id, ui.upd_qty, ui.upd_price_vatless
+                SELECT ui.nm_id, COUNT(*) AS lines, SUM(ui.upd_qty) AS qty,
+                       MIN(ui.upd_price_vatless) AS price_min, MAX(ui.upd_price_vatless) AS price_max
                 FROM inventories.upd_income ui
                 JOIN inventories.upd_documents ud ON ud.id = ui.upd_document_id
-                WHERE CAST(ud.number AS VARCHAR) ILIKE ? AND ui.nm_id IN ({ph})""",
+                WHERE CAST(ud.number AS VARCHAR) ILIKE ? AND ui.nm_id IN ({ph})
+                GROUP BY 1 ORDER BY 1""",
                 [f"%{n}%", *nms]).df().to_string(index=False))
+            red = arts[arts["cost_status"].str.startswith("🔴")]
+            if len(red):
+                self._by_sa(con, red)
             try:
                 self._pg(con, n, o["brand"])
             except Exception as e:
                 print(f"\nPostgres-сверка не выполнена: {e}")
+
+    def _by_sa(self, con, red):
+        """Ищем красные артикулы во всех УПД по артикулу продавца."""
+        sas = [str(x) for x in red["sa"].unique() if x]
+        if not sas:
+            return
+        ph = ",".join("?" * len(sas))
+        print("\n== Красные артикулы: есть ли такой артикул продавца в каких-либо УПД (Postgres)")
+        df = con.execute(f"""
+            SELECT l.upd_sa_name AS sa, d.number AS upd, d.date,
+                   COUNT(*) AS lines, SUM(l.upd_qty) AS qty,
+                   STRING_AGG(DISTINCT CAST(l.nm_id AS VARCHAR), ', ') AS linked_nm
+            FROM pg.public.upd_income_lines l
+            JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+            WHERE l.upd_sa_name IN ({ph})
+            GROUP BY 1, 2, 3 ORDER BY 1, 3""", sas).df()
+        found = set(df["sa"]) if len(df) else set()
+        print(df.to_string(index=False) if len(df) else "ни одной строки")
+        miss = [x for x in sas if x not in found]
+        print(f"\nНе найдено ни в одном УПД: {len(miss)} из {len(sas)}")
+        if miss:
+            # та же модель (первые две части артикула) в других цветах/размерах
+            models = sorted({"-".join(x.split("-")[:2]) for x in miss})
+            cond = " OR ".join(["l.upd_sa_name LIKE ?"] * len(models))
+            mm = con.execute(f"""
+                SELECT SPLIT_PART(l.upd_sa_name, '-', 1) || '-' || SPLIT_PART(l.upd_sa_name, '-', 2) AS model,
+                       STRING_AGG(DISTINCT l.upd_sa_name, ', ') AS sa_in_upd
+                FROM pg.public.upd_income_lines l
+                WHERE {cond}
+                GROUP BY 1 ORDER BY 1""", [m + "-%" for m in models]).df()
+            print("\n== Та же модель в УПД, но другие цвета (для ненайденных)")
+            print(mm.to_string(index=False) if len(mm) else "моделей нет в УПД")
 
     def _pg(self, con, n, brand):
         if True:
