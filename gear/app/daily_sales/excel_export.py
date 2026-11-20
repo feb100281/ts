@@ -224,7 +224,8 @@ def _flatten_columns(column_defs):
 
         field = column.get("field")
 
-        if not field:
+        # скрытые кнопкой «Столбцы» колонки в Excel не выгружаем
+        if not field or column.get("hide"):
             continue
 
         result.append(

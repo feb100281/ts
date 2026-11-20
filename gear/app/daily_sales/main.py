@@ -649,6 +649,8 @@ class MainWindow:
             gender_multy_id=FILTERS.gender_multy_id,
         )
         register_fbs_search_callback(app)
+        from .column_picker import register_column_picker_callbacks
+        register_column_picker_callbacks(app, "dates_grid")
         register_supplies_callbacks(
             app,
             date_picker_id=FILTERS.date_picker_id,

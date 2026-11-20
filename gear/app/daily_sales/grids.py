@@ -1189,6 +1189,20 @@ import pandas as pd
 
 from ..data.base import DashboardData
 from ..misc.baners import empty_df_banner
+from dash import html
+import dash_mantine_components as dmc
+from .column_picker import column_picker
+
+DATES_GRID_TYPE = "dates_grid"
+
+
+def _with_picker(grid):
+    """Таблица с кнопкой «Столбцы» над ней."""
+    return html.Div([
+        dmc.Group(justify="flex-end", mb=6,
+                  children=[column_picker(grid.id["index"], grid.columnDefs, DATES_GRID_TYPE)]),
+        grid,
+    ])
 
 
 MONEY_FORMATTER = {
@@ -2122,7 +2136,7 @@ def grid_date(
         }
     )
 
-    return grid
+    return _with_picker(grid)
 
 
 def day_details(
@@ -2148,7 +2162,7 @@ def day_details(
         orient="records"
     )
 
-    return _base_grid(
+    return _with_picker(_base_grid(
         row_data=row_data,
         column_defs=_day_details_columns(),
         grid_id={
@@ -2158,7 +2172,7 @@ def day_details(
         file_name=(
             f"daily_details_{date}.csv"
         ),
-    )
+    ))
 
 
 def period_details(
@@ -2196,7 +2210,7 @@ def period_details(
         .strftime("%Y-%m-%d")
     )
 
-    return _base_grid(
+    return _with_picker(_base_grid(
         row_data=row_data,
         column_defs=_period_details_columns(),
         grid_id={
@@ -2208,5 +2222,5 @@ def period_details(
             f"{start_name}_"
             f"{end_name}.csv"
         ),
-    )
+    ))
     
