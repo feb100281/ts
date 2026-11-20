@@ -18,7 +18,7 @@ def _money(x):
 def pending(owner, date_from=None, date_to=None):
     """Операции без договора или без статьи, сгруппированные по счёту и названию контрагента."""
     qs = (CfData.objects.filter(owner=owner).filter(Q(contract__isnull=True) | Q(cfitem__isnull=True))
-          .select_related("ba", "ba__bank", "contract", "contract__cp").order_by("date", "id"))
+          .select_related("ba", "ba__bank", "cp", "contract", "contract__cp").order_by("date", "id"))
     if date_from:
         qs = qs.filter(date__gte=date_from)
     if date_to:
@@ -26,9 +26,10 @@ def pending(owner, date_from=None, date_to=None):
     groups = defaultdict(lambda: {"ops": [], "dt": 0, "cr": 0, "cur": set()})
     for o in qs:
         acc = (o.payer_account if (o.dt or 0) > 0 else o.reciver_account) or ""
-        name = o.cp_name_ru or o.cp_bs_name or ""
+        stmt = o.cp_name_ru or o.cp_bs_name or ""
+        name = o.cp.name if o.cp_id else stmt          # контрагент из справочника, иначе название из выписки
         g = groups[(acc, name)]
-        g.update(account=acc, name=name, name_src=o.cp_bs_name or "")
+        g.update(account=acc, name=name, name_src=stmt)
         g["ops"].append(o)
         g["dt"] += o.dt or 0
         g["cr"] += o.cr or 0
