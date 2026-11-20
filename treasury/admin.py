@@ -2125,6 +2125,29 @@ class CounterpartyAccountAdmin(admin.ModelAdmin):
     list_select_related = ("cp",)
     ordering = ("cp__name", "account")
 
+    def save_model(self, request, obj, form, change):
+        """После привязки счёта — авторазноска уже загруженных операций зарубежных компаний по этому счёту."""
+        super().save_model(request, obj, form, change)
+        from django.db import transaction
+        from django.db.models import Q
+        from utils.bsparsers.am.loader import auto_assign
+        rows = (CfData.objects.exclude(owner__country="RU").exclude(owner__isnull=True)
+                .filter(Q(dt__gt=0, payer_account=obj.account) | Q(cr__gt=0, reciver_account=obj.account))
+                .filter(Q(contract__isnull=True) | Q(cfitem__isnull=True) | Q(cp__isnull=True))
+                .values_list("owner_id", "id"))
+        by_owner = {}
+        for owner_id, pk in rows:
+            by_owner.setdefault(owner_id, []).append(pk)
+        if not by_owner:
+            return
+        lines = []
+        with transaction.atomic():
+            for owner_id, ids in by_owner.items():
+                auto_assign(ids, owner_id, lines.append)
+        total = sum(len(v) for v in by_owner.values())
+        self.message_user(request, f"Операций по счёту {obj.account}: {total}, переразнесены. "
+                                   + "; ".join(x.strip() for x in lines if not x.strip().endswith(": 0")))
+
 
 
 
