@@ -440,3 +440,34 @@ def load_statement(path, log=print, bs: BankStatements | None = None, force: boo
     log(f"  новых операций: {len(objs)}, уже были: {len(have)}, без перевода: {no_tr}")
     return {"bs_id": bs.pk, "owner_id": owner.id, "new": len(objs), "existing": len(have), "warnings": warns,
             "account": st.account, "period": (st.start, st.finish)}
+
+
+def regroup_contract(contract, log=print) -> int:
+    """Операции контрагента, подходящие под RegEx договора, — на этот договор.
+
+    Переносятся только операции без договора или стоящие на договоре этого контрагента без RegEx
+    (подставленном как единственный); выбранные по своему RegEx и сплиты не трогаются.
+    Статья — заново, по автоматизации договора.
+    """
+    rx = (contract.regex or "").strip()
+    owner = getattr(contract, "owner", None)
+    if not rx or owner is None or (owner.country or "RU") == "RU":
+        return 0
+    with transaction.atomic(), connection.cursor() as cur:
+        cur.execute("""
+            UPDATE treasury_cfdata d
+            SET contract_id = %(c)s, cfitem_id = NULL, cp_final_id = %(cp)s
+            WHERE d.owner_id = %(owner)s
+              AND (d.cp_id = %(cp)s OR d.cp_final_id = %(cp)s)
+              AND (d.temp ~* %(rx)s OR coalesce(d.temp_ru, '') ~* %(rx)s)
+              AND d.contract_id IS DISTINCT FROM %(c)s
+              AND (d.contract_id IS NULL OR EXISTS (
+                    SELECT 1 FROM contracts_contracts o
+                    WHERE o.id = d.contract_id AND o.cp_id = %(cp)s AND coalesce(o.regex, '') = ''))
+              AND NOT EXISTS (SELECT 1 FROM treasury_cfsplits s WHERE s.transaction_id = d.id)
+            RETURNING d.id
+        """, {"c": contract.pk, "cp": contract.cp_id, "owner": owner.pk, "rx": rx})
+        ids = [r[0] for r in cur.fetchall()]
+        if ids:
+            auto_assign(ids, owner.pk, log)
+    return len(ids)

@@ -914,6 +914,19 @@ class ContractsAdmin(admin.ModelAdmin):
             cp.tax_id,
         )
 
+    def save_related(self, request, form, formsets, change):
+        """После сохранения договора с RegEx — перенос на него подходящих операций контрагента."""
+        super().save_related(request, form, formsets, change)
+        from django.db import DatabaseError
+        from utils.bsparsers.am.loader import regroup_contract
+        try:
+            n = regroup_contract(form.instance, lambda *_: None)
+        except DatabaseError as exc:
+            self.message_user(request, f"RegEx договора не разобран базой: {exc}", level="error")
+            return
+        if n:
+            self.message_user(request, f"На договор перенесено операций по RegEx: {n}; статьи — по автоматизации.")
+
     @admin.display(description="Компания", ordering="owner__name")
     def owner_name(self, obj):
         return obj.owner.name if obj.owner_id else "—"
