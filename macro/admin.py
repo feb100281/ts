@@ -1,3 +1,4 @@
+# macro/admin.py
 from __future__ import annotations
 from django.contrib import admin, messages
 from django.contrib.auth.admin import (
@@ -200,8 +201,18 @@ def column_user_groups(obj: User):
         format_html(names_html),
         count,
     )
-
-
+    
+    
+    
+    
+@admin.display(description="Печать")
+def column_user_print_access(obj: User):
+    url = reverse("admin:auth_user_print_analytics_access", args=[obj.pk])
+    return format_html(
+        '<a href="{}" title="Карточка доступа к аналитической платформе" '
+        'style="text-decoration:none;font-size:14px;">🖨</a>',
+        url,
+    )
 
 class UserAdmin(DjangoUserAdmin):
     """
@@ -215,6 +226,7 @@ class UserAdmin(DjangoUserAdmin):
         column_user_groups,
         "last_login",
         "date_joined",
+         column_user_print_access,
     )
     list_display_links = (column_user_avatar_and_name,)
     search_fields = ("username", "first_name", "last_name", "email")
@@ -225,6 +237,43 @@ class UserAdmin(DjangoUserAdmin):
         qs = super().get_queryset(request)
         # чтобы не плодить запросы к groups
         return qs.annotate(groups_count=Count("groups"))
+    
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path(
+                "<int:pk>/print-analytics-access/",
+                self.admin_site.admin_view(self.print_analytics_access),
+                name="auth_user_print_analytics_access",
+            ),
+        ]
+        return my_urls + urls
+
+
+    def print_analytics_access(self, request, pk):
+        user = get_object_or_404(User, pk=pk)
+
+        try:
+            login_url = request.build_absolute_uri(reverse("login"))
+        except Exception:
+            login_url = request.build_absolute_uri("/login/")
+
+        context = {
+            "user": user,
+            "login_url": login_url,
+            "company_name": 'ООО «ТРЕНДСЕТТЕР»',
+            "platform_name": "Аналитическая платформа",
+            "title": "Карточка доступа к аналитической платформе",
+        }
+
+        return TemplateResponse(
+            request,
+            "admin/auth/user/analytics_access_print.html",
+            context,
+        )
+    
+    
     
     
     class Media:
@@ -484,6 +533,7 @@ class GroupAdmin(DjangoGroupAdmin):
 class KeyRateAdmin(admin.ModelAdmin):
     list_display = ("date", "key_rate", "print_link")
     exclude = ('comment',)
+    date_hierarchy = ('date')
 
     # ------- Кнопка "Печать" в списке -------
     def print_link(self, obj):
@@ -699,6 +749,7 @@ class InflationAdmin(admin.ModelAdmin):
     exclude = ('comment',)
     
     list_per_page = 25
+    date_hierarchy = ('date')
     
     
     # ----- колонка "Печать" -----
@@ -1066,9 +1117,14 @@ class TaxRatesInline(admin.TabularInline):
     show_change_link = True
     verbose_name = "Ставка налога"
     verbose_name_plural = "Ставки налога"
-    fields = ("date", "rate", )
+    fields = ("date", "income_limit", "rate", )
     ordering = ("-date",)
-
+    verbose_name_plural = mark_safe(
+        "💯 <b>История ставок</b><br>"
+    )
+    
+    
+    
 
 @admin.display(description="Текущая ставка")
 def column_current_rate(obj: TaxesList):
@@ -1123,6 +1179,17 @@ class TaxesListAdmin(admin.ModelAdmin):
     ordering = ("tax_name",)
     exclude = ("description", )
     inlines = [TaxRatesInline]
+    
+    
+    fieldsets = (
+        (
+            mark_safe("📄 <b>Налог</b>"),
+            {
+                "fields": ("tax_name",),
+            },
+        ),
+        
+    )
 
     def changelist_view(self, request, extra_context=None):
         qs = self.get_queryset(request)
@@ -1147,7 +1214,6 @@ class TaxesListAdmin(admin.ModelAdmin):
     class Media:
         css = {
             "all": (
-                "fonts/glyphs.css",
                 "css/admin_overrides.css", 
             )
         }
@@ -1172,6 +1238,7 @@ class CurrencyRateAdmin(admin.ModelAdmin):
     ordering = ("-date", "currency")
     
     list_per_page = 25
+    date_hierarchy = ('date')
 
     # ─────────────────────
     #   отображение валюты

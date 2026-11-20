@@ -1,0 +1,470 @@
+{% extends "admin/change_list.html" %}
+{% load admin_urls humanize %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block title %}УПД — Управление документами{% endblock %}
+
+{% block object-tools %}
+<div class="upd-object-tools">
+    <a href="{% url 'admin:cards_upddocument_analyze_articles' %}" class="upd-analyze-button" target="_blank">
+        📊 Анализ по артиклям
+    </a>
+    <a href="{% url 'admin:cards_upddocument_reconcile' %}" class="upd-reconcile-button" target="_blank">
+        🔄 Сверка с 1С
+    </a>
+    {% if has_add_permission %}
+        <a href="{% url cl.opts|admin_urlname:'add' %}" class="upd-add-button">
+            + Добавить УПД
+        </a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content_title %}
+  <div class="upd-page-header">
+    <div class="upd-title-wrap">
+      <div class="upd-logo">УПД</div>
+      <div>
+        <div class="upd-eyebrow">Документы</div>
+        <div class="upd-title">Управление УПД</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="upd-breadcrumb-row">
+    <nav>
+      <a href="{% url 'admin:index' %}">Главная</a>
+      <span>/</span>
+      <a href="{% url 'admin:cards_upddocument_changelist' %}">УПД</a>
+      <span>/</span>
+      <strong>Документы</strong>
+    </nav>
+    <div>{{ cl.result_count }} записей</div>
+  </div>
+
+  <div class="upd-summary-grid">
+    <div class="upd-card upd-card-main">
+      <div class="upd-card-label">Сумма с НДС</div>
+      <div class="upd-card-value">{{ total_stats.amount_vatadd|default:"0"|floatformat:0|intcomma }} ₽</div>
+      <div class="upd-card-note">по выбранным УПД</div>
+    </div>
+
+    <div class="upd-card">
+      <div class="upd-card-label">Сумма без НДС</div>
+      <div class="upd-card-value">{{ total_stats.amount_vatless|default:"0"|floatformat:0|intcomma }} ₽</div>
+      <div class="upd-card-note">по выбранным УПД</div>
+    </div>
+
+    <div class="upd-card">
+      <div class="upd-card-label">Упр. с/сть</div>
+      <div class="upd-card-value">{{ total_stats.man_cost|default:"0"|floatformat:0|intcomma }} ₽</div>
+      <div class="upd-card-note">man_cost_per_unit × количество</div>
+    </div>
+
+
+
+    <div class="upd-card">
+        <div class="upd-card-label">Разница с/сти</div>
+
+        <div class="upd-card-value"
+            style="color:{% if total_stats.cost_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};">
+            {{ total_stats.cost_diff_abs|floatformat:0|intcomma }} ₽
+        </div>
+
+        <div class="upd-card-note"
+            style="color:{% if total_stats.cost_diff > 0 %}#dc2626{% else %}#16a34a{% endif %}; font-weight:600;">
+            {{ total_stats.cost_diff_percent_abs }}% к сумме без НДС
+        </div>
+    </div>
+
+    
+
+    <div class="upd-card">
+      <div class="upd-card-label">Количество товаров</div>
+      <div class="upd-card-value">{{ total_stats.qty|default:"0"|floatformat:2|intcomma }}</div>
+      <div class="upd-card-note">суммарное количество</div>
+    </div>
+
+    <div class="upd-card">
+      <div class="upd-card-label">Строк УПД</div>
+      <div class="upd-card-value">{{ total_stats.lines_count|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">позиций в документах</div>
+    </div>
+
+    <div class="upd-card upd-card-danger">
+      <div class="upd-card-label">Нет nm_id</div>
+      <div class="upd-card-value">{{ total_stats.nm_missing|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">позиций без карточки WB</div>
+      <div class="upd-card-amount">
+        {{ total_stats.nm_missing_amount|default:"0"|floatformat:0|intcomma }} ₽
+        <span class="upd-card-percent">({{ total_stats.nm_missing_percent|default:"0" }}%)</span>
+      </div>
+    </div>
+
+    <div class="upd-card upd-card-danger">
+      <div class="upd-card-label">Нет chrt_id</div>
+      <div class="upd-card-value">{{ total_stats.chrt_missing|default:"0"|intcomma }}</div>
+      <div class="upd-card-note">позиций без размера</div>
+      <div class="upd-card-amount">
+        {{ total_stats.chrt_missing_amount|default:"0"|floatformat:0|intcomma }} ₽
+        <span class="upd-card-percent">({{ total_stats.chrt_missing_percent|default:"0" }}%)</span>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block filters %}
+  {{ block.super }}
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+
+  <style>
+    .upd-page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding-bottom: 8px;
+    }
+
+    .upd-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .upd-logo {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #0f172a, #334155);
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+    }
+
+    .upd-eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .upd-title {
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .upd-object-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-bottom: 15px;
+    }
+
+    .upd-analyze-button,
+    .upd-reconcile-button,
+    .upd-add-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 7px 14px;
+      color: #ffffff !important;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none !important;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .upd-analyze-button {
+      background: #8b5cf6;
+      border: 1px solid #7c3aed;
+    }
+
+    .upd-analyze-button:hover {
+      background: #7c3aed;
+      transform: translateY(-1px);
+    }
+
+    .upd-reconcile-button {
+      background: #22c55e;
+      border: 1px solid #16a34a;
+    }
+
+    .upd-reconcile-button:hover {
+      background: #16a34a;
+      transform: translateY(-1px);
+    }
+
+    .upd-add-button {
+      background: #0f172a;
+      border: 1px solid #0f172a;
+    }
+
+    .upd-add-button:hover {
+      background: #1e293b;
+      transform: translateY(-1px);
+    }
+
+    .upd-breadcrumb-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+      padding: 10px 0 12px;
+      border-bottom: 1px solid #e2e8f0;
+      color: #64748b;
+      font-size: 12px;
+    }
+
+    .upd-breadcrumb-row a {
+      color: #64748b;
+      text-decoration: none;
+    }
+
+    .upd-breadcrumb-row a:hover {
+      color: #0f172a;
+      text-decoration: underline;
+    }
+
+    .upd-breadcrumb-row span {
+      color: #cbd5e1;
+      margin: 0 6px;
+    }
+
+    .upd-breadcrumb-row strong {
+      color: #0f172a;
+      font-weight: 600;
+    }
+
+    .upd-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(190px, 1fr));
+      gap: 14px;
+      margin-top: 24px;
+      margin-bottom: 22px;
+    }
+
+    .upd-card {
+      position: relative;
+      overflow: hidden;
+      min-height: 112px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      padding: 16px 15px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      border-radius: 6px;
+    }
+
+    .upd-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 4px;
+      height: 100%;
+      background: #cbd5e1;
+    }
+
+    .upd-card-main::before {
+      background: #0f172a;
+    }
+
+    .upd-card-danger::before {
+      background: #dc2626;
+    }
+
+    .upd-card-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.55px;
+      color: #64748b;
+      margin-bottom: 9px;
+      white-space: nowrap;
+    }
+
+    .upd-card-value {
+      font-size: 25px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.15;
+      word-break: break-word;
+    }
+
+    .upd-card-danger .upd-card-value {
+      color: #991b1b;
+    }
+
+    .upd-card-note {
+      font-size: 11.5px;
+      color: #94a3b8;
+      margin-top: 9px;
+      line-height: 1.3;
+    }
+
+    .upd-card-amount {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #f1f5f9;
+      font-size: 15px;
+      font-weight: 700;
+      color: #dc2626;
+    }
+
+    .upd-card-percent {
+      font-size: 12px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-left: 6px;
+    }
+
+    #changelist .date-hierarchy {
+      background: #f8fafc;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      border: 1px solid #e2e8f0;
+      color: #64748b;
+    }
+
+    #changelist .date-hierarchy a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    #changelist .date-hierarchy a:hover {
+      text-decoration: underline;
+    }
+
+    #result_list {
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+    }
+
+    #result_list thead th {
+      background: #f8fafc;
+      font-weight: 700;
+      color: #475569;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    #result_list tbody tr:hover {
+      background: #f8fafc;
+    }
+
+    #result_list td,
+    #result_list th {
+      vertical-align: middle;
+    }
+
+    .upd-problem-cell {
+      display: block;
+      min-width: 42px;
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 6px 10px;
+      font-weight: 700;
+      text-align: center;
+      border-radius: 4px;
+    }
+
+    .upd-ok-cell {
+      display: block;
+      min-width: 42px;
+      background: #f8fafc;
+      color: #94a3b8;
+      padding: 6px 10px;
+      text-align: center;
+      border-radius: 4px;
+    }
+
+    .button {
+      transition: all 0.2s ease;
+    }
+
+    .button:hover {
+      background: #e2e8f0 !important;
+    }
+
+    #result_list th.column-upd_link,
+    #result_list td.field-upd_link {
+      width: 135px !important;
+      min-width: 135px !important;
+      max-width: 135px !important;
+    }
+
+    .upd-number-cell {
+      width: 120px;
+      line-height: 1.2;
+    }
+
+    .upd-number-main {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .upd-number-meta,
+    .upd-number-date {
+      margin-top: 3px;
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    #result_list td.field-total_amount_vatadd_display,
+    #result_list td.field-total_amount_vatless_display,
+    #result_list td.field-total_man_cost_display,
+    #result_list td.field-cost_diff_display,
+    #result_list td.field-cost_diff_percent_display {
+      white-space: nowrap;
+    }
+
+    @media (max-width: 1600px) {
+      .upd-summary-grid {
+        grid-template-columns: repeat(4, minmax(180px, 1fr));
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .upd-summary-grid {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+      }
+    }
+
+    @media (max-width: 700px) {
+      .upd-summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .upd-breadcrumb-row {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .upd-object-tools {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+{% endblock %}

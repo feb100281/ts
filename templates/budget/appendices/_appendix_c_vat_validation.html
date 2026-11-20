@@ -1,0 +1,149 @@
+<div id="appendix-c-vat-validation"></div>
+
+<!-- Приложение В: Контроль корректности ставок НДС -->
+<div class="appendix-page">
+    <div class="section-header">
+        <span class="section-number">В.</span>
+        <div class="section-title-with-num">Контроль корректности ставок НДС</div>
+    </div>
+
+    <div class="small-note">
+        Период анализа: последние 3 года по состоянию на {{ vat_context.as_of_date|date:"d.m.Y" }}
+    </div>
+
+    {% if vat_context.vat_validation and vat_context.vat_validation.total_items > 0 %}
+        <div class="insight-box" style="background: {% if vat_context.vat_validation.has_issues %}#FFF8E8{% else %}#F0F7F0{% endif %}; margin-bottom: 15px;">
+            <strong>Результаты проверки:</strong><br>
+            {{ vat_context.vat_validation.summary }}
+        </div>
+
+        {% if vat_context.vat_validation.issue_items %}
+            <div style="margin-top: 15px;">
+                {% for item in vat_context.vat_validation.issue_items %}
+                    <div style="
+                        margin-bottom: 15px;
+                        padding: 12px;
+                        border: 1px solid #D9C27A;
+                        background: #FFFDF7;
+                        page-break-inside: avoid;
+                        display: flex;
+                        gap: 15px;
+                    ">
+                        <!-- Фото товара с аккуратным оформлением -->
+                        {% if item.photo_url %}
+                            <div style="
+                                flex-shrink: 0;
+                                width: 70px;
+                                height: 70px;
+                                background: #FAFAFA;
+                                border: 1px solid #E8E0C8;
+                                border-radius: 6px;
+                                overflow: hidden;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            ">
+                                <img src="{{ item.photo_url }}" 
+                                     alt="{{ item.title|default:'Фото' }}"
+                                     style="
+                                        width: 100%;
+                                        height: 100%;
+                                        object-fit: contain;
+                                        object-position: center;
+                                     ">
+                            </div>
+                        {% else %}
+                            <div style="
+                                flex-shrink: 0;
+                                width: 70px;
+                                height: 70px;
+                                background: #F5F5F5;
+                                border: 1px solid #E8E0C8;
+                                border-radius: 6px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                color: #BBB;
+                                font-size: 8px;
+                                text-align: center;
+                            ">
+                                нет фото
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Информация о товаре -->
+                        <div style="flex: 1;">
+                            <div style="font-size: 11px; font-weight: 700; margin-bottom: 6px; color: #333;">
+                                {{ forloop.counter }}. {{ item.title|default:"Без названия" }}
+                                {% if item.brand %} <span style="font-weight: normal; color: #666;">({{ item.brand }})</span>{% endif %}
+                            </div>
+
+                            <div style="font-size: 9px; color: #555; margin-bottom: 6px;">
+                                nm_id: {{ item.nm_id|stringformat:"d" }}
+                                {% if item.tnved_code %} | ТН ВЭД: {{ item.tnved_code }}{% endif %}
+                                | Текущая ставка: {{ item.current_rate_fmt }}
+                            </div>
+
+                            {% if item.message_short %}
+                                <div style="font-size: 9px; color: #8A5A00; margin-bottom: 6px;">
+                                    {{ item.message_short }}
+                                </div>
+                            {% endif %}
+
+                            {% if item.sales_lines %}
+                                <div style="font-size: 9px; margin-bottom: 6px;">
+                                    <strong>Продажи:</strong>
+                                    {% for sale in item.sales_lines %}
+                                        {{ sale.year|stringformat:"d" }} — 
+                                        <strong>{{ sale.amount_fmt }}</strong>
+                                        {% if sale.quantity_fmt %}· {{ sale.quantity_fmt }} шт.{% endif %}
+                                        {% if not forloop.last %}; {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            {% if item.vat_delta_lines %}
+                                <div style="font-size: 9px; margin-bottom: 6px;">
+                                    <strong>Эффект по НДС:</strong>
+                                    {% for delta in item.vat_delta_lines %}
+                                        {{ delta.year|stringformat:"d" }} ({{ delta.actual_rate_fmt }}→10%) — 
+                                        <span class="result {{ delta.delta_class }}" style="font-weight: 600;">
+                                            {{ delta.amount_fmt }}
+                                        </span>
+                                        {% if not forloop.last %}; {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            {% if item.total_vat_delta != 0 %}
+                                <div style="font-size: 9px; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #E0D5B5;">
+                                    <strong>Общий эффект за 3 года:</strong>
+                                    <span class="result {{ item.total_delta_class }}" style="font-weight: 700;">
+                                        {{ item.total_vat_delta_fmt }}
+                                    </span>
+                                </div>
+                            {% endif %}
+
+                            {% if item.last_sale_date_fmt %}
+                                <div style="font-size: 8px; color: #666; margin-top: 4px;">
+                                    📅 Последняя продажа: {{ item.last_sale_date_fmt }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="small-note" style="margin-top: 8px;">
+                * Проверка основана на анализе кодов ТН ВЭД и характеристики "Пол". Показаны только проблемные товары.<br>
+                Продажи выводятся за последние 3 года от даты отчета; годы с нулевыми продажами не отображаются.<br>
+                Для расчета эффекта по НДС используется фактическая ставка из карточки (или основная 20%/22% если не указана) и ожидаемая льготная ставка 10%.<br>
+                <span class="result negative">Красным</span> выделена переплата НДС, <span class="result positive">зеленым</span> — недоплата.
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="insight-box" style="background: #F0F7F0;">
+            ✅ Нарушений по ставкам НДС для товаров с льготным ТН ВЭД и детским полом не обнаружено.
+        </div>
+    {% endif %}
+</div>

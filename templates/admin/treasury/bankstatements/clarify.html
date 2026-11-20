@@ -1,0 +1,70 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Уточнить платежи{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block content %}
+<style>
+  .cl-wrap{max-width:1250px}
+  .cl-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .cl-head select,.cl-head input{padding:6px 10px;border:1px solid #cbd5e1;border-radius:4px}
+  .cl-note{color:#64748b;font-size:13px}
+  .cl-tbl{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:13px}
+  .cl-tbl th{background:#1e293b;color:#fff;text-align:left;padding:7px 8px;font-weight:600}
+  .cl-tbl td{padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  .cl-grp td{background:#f1f5f9;font-weight:700}
+  .cl-num{text-align:right;white-space:nowrap}
+  .cl-in{color:#15803d}.cl-out{color:#b91c1c}
+  .cl-ru{color:#475569}
+  .cl-text{width:100%;min-height:340px;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+           padding:10px;border:1px solid #cbd5e1;border-radius:4px}
+  .cl-btn{padding:7px 14px;border-radius:4px;border:1px solid #1d4ed8;background:#eff6ff;color:#1d4ed8;
+          font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+  h2.cl-h{font-size:16px;margin:18px 0 8px}
+  .tb-back{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;padding:7px 14px;border-radius:4px;
+           border:1px solid #c9ddd5;background:#e7f1ed;color:#1f5e4e;font-weight:700;font-size:13px;
+           text-decoration:none;transition:background .15s ease}
+  .tb-back:hover{background:#d5e8e0;color:#1f5e4e}
+</style>
+<div class="cl-wrap">
+  <a href="{% url 'admin:treasury_bankstatements_changelist' %}" class="tb-back">← К выпискам</a>
+  <h1>Уточнить платежи</h1>
+  <form method="get" class="cl-head">
+    <select name="owner">
+      {% for o in owners %}<option value="{{ o.pk }}" {% if o.pk == owner.pk %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+    </select>
+    <label class="cl-note">с <input type="date" name="from" value="{{ date_from|default:'' }}"></label>
+    <label class="cl-note">по <input type="date" name="to" value="{{ date_to|default:'' }}"></label>
+    <button type="submit" class="cl-btn">Показать</button>
+    <a class="cl-btn" href="?owner={{ owner.pk }}&from={{ date_from|default:'' }}&to={{ date_to|default:'' }}&xlsx=1">Скачать Excel</a>
+  </form>
+  <p class="cl-note">Операции без договора или без статьи: {{ total }} в {{ groups|length }} группах.
+    Группа — один счёт и название контрагента из выписки.</p>
+
+  {% if groups %}
+  <table class="cl-tbl">
+    <tr><th>Дата</th><th>Наш счёт</th><th class="cl-num">Сумма</th><th>Назначение / перевод</th><th>Сейчас</th></tr>
+    {% for g in groups %}
+    <tr class="cl-grp"><td colspan="5">{{ forloop.counter }}. {{ g.name|default:"Контрагент не указан" }}
+      {% if g.name_src and g.name_src != g.name %}<span class="cl-ru">({{ g.name_src }})</span>{% endif %}
+      {% if g.account %} · счёт {{ g.account }}{% endif %} · операций {{ g.ops|length }}</td></tr>
+    {% for o in g.ops %}
+    <tr>
+      <td>{{ o.date|date:"d.m.Y" }}</td>
+      <td>{{ o.ba.bank.name }} {{ o.ba.account }}</td>
+      <td class="cl-num">{% if o.dt %}<span class="cl-in">+{{ o.dt|floatformat:2 }}</span>{% else %}<span class="cl-out">−{{ o.cr|floatformat:2 }}</span>{% endif %} {{ o.ba.currency }}</td>
+      <td>{{ o.temp }}{% if o.temp_ru and o.temp_ru != o.temp %}<br><span class="cl-ru">{{ o.temp_ru }}</span>{% endif %}</td>
+      <td>{% if o.contract %}договор есть, нет статьи{% else %}нет договора{% endif %}</td>
+    </tr>
+    {% endfor %}
+    {% endfor %}
+  </table>
+
+  <h2 class="cl-h">Текст запроса</h2>
+  <textarea id="cl-text" class="cl-text">{{ text }}</textarea>
+  <p><button type="button" class="cl-btn"
+      onclick="navigator.clipboard.writeText(document.getElementById('cl-text').value);this.textContent='Скопировано';">
+      Скопировать текст</button></p>
+  {% else %}
+  <p>Неразнесённых операций нет.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -284,6 +284,9 @@
     --color-system:          #9CA3AF;  /* серый: служебные / системные */
     --color-bot:             #0EA5E9;  /* cyan: Телеграм-бот и околоботовое */
     --color-treasury:        #1f9c95;
+    --color-sales:           #60A5FA;
+    --color-finance:         #4F46E5;  /* бухгалтерия / проводки */
+    --color-analytics: #0D9488;        /*дэшборды */
 
 
     /* Фон для active / hover */
@@ -373,9 +376,19 @@
     color: var(--color-realestate) !important;
 }
 
+
+
+
+/* 1. Бюджет*/
+.fa-layer-group,
+.fa-chart-pie {
+    color: var(--color-realestate) !important;
+}
+
 /* 2. Договоры аренды / сделки */
 .fa-handshake,
 .fa-list-ul,
+.fa-gears,
 .fa-file-signature {
     color: var(--color-deals) !important;
 }
@@ -398,7 +411,7 @@
 
 /* 4. Собственники (отдельный тёплый цвет) */
 .fa-building-user,
-
+.fa-globe,
 .fa-building-circle-check {
     color: var(--color-owners) !important;
 }
@@ -415,6 +428,7 @@
 .fa-money-bill-trend-up,
 .fa-coins,
 .fa-magnifying-glass-chart,
+.fa-calculator,
 .fa-file-invoice-dollar {
     color: var(--color-macro) !important;
 }
@@ -429,6 +443,40 @@
     color: var(--color-treasury) !important;
 }
 
+/* Главная книга */
+.fa-book,
+.fa-book-bookmark {
+    color: var(--color-finance) !important;
+}
+
+
+/*  Продажи */
+.fa-chart-column,
+.fa-calendar-day,
+.fa-shirt,
+.fa-box-open,
+.fa-file-invoice,
+.fa-boxes-stacked {
+    color: var(--color-sales) !important;
+}
+
+
+/*  дэшборды */
+.fa-chart-simple,
+.fa-layer-group,
+.fa-calendar-days,
+.fa-chart-area,
+.fa-display,
+.fa-screwdriver-wrench,
+.fa-scroll,
+.fa-magnifying-glass-dollar,
+.fa-hand-holding-dollar,
+.fa-square-poll-vertical
+
+ {
+    color: var(--color-analytics) !important;
+}
+
 
 
 
@@ -439,8 +487,8 @@
 .fa-gear,
 .fa-code-branch,
 .fa-gauge,
-.fa-folder-tree,
-.fa-file-lines {
+.fa-folder-tree
+ {
     color: var(--color-system) !important;
 }
 
@@ -743,12 +791,12 @@ table th {
    ============================ */
 
 /* Все фильтры и поиск в списках */
-.change-list .form-control,
+/* .change-list .form-control,
 .change-list select,
 .change-list input[type="text"],
 .change-list input[type="search"] {
     font-size: 11px !important;
-}
+} */
 
 /* Placeholder (подсказка в поиске) */
 .change-list input::placeholder {
@@ -756,13 +804,7 @@ table th {
     color: #9CA3AF;
 }
 
-/* Кнопка "Найти" */
-.change-list .btn,
-.change-list .button {
-    font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 6px; /* не pill */
-}
+
 
 
 /* ============================
@@ -874,7 +916,6 @@ table th {
 .content-header {
   padding-top: 18px !important;
 }
-
 
 
 

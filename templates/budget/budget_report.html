@@ -1,0 +1,38 @@
+{% comment %} templates/budget/budget_report.html {% endcomment %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+
+    {% include "budget/partials/_cover.html" %}
+
+    {% include "budget/partials/_toc.html" %}
+
+    {% if sales_block %}
+        <div class="page-break"></div>
+        {% include "budget/sections/sales/_index.html" %}
+    {% endif %}
+
+    {% comment %} <div class="page-break"></div>
+    {% include "budget/sections/_budget_summary_section.html" %} {% endcomment %}
+
+    <div class="page-break"></div>
+    {% include "budget/sections/_budget_ytd_section.html" %}
+
+
+    {% if certificate_risks %}
+        <div class="page-break"></div>
+        {% include "budget/appendices/_appendix_a_certificates.html" %}
+    {% endif %}
+
+    {% if vat_context.mtd_category_breakdown or vat_context.ytd_category_breakdown %}
+        <div class="page-break"></div>
+        {% include "budget/appendices/_appendix_b_vat_reduced_rate.html" %}
+    {% endif %}
+
+    {% if vat_context.vat_validation and vat_context.vat_validation.issue_items %}
+        <div class="page-break"></div>
+        {% include "budget/appendices/_appendix_c_vat_validation.html" %}
+    {% endif %}
+
+{% endblock %}

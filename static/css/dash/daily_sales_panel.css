@@ -1,0 +1,120 @@
+/* Панель действий дашборда «Продажи» */
+.panel-block > .mantine-Group-root { width: 100%; }
+.panel-block .panel-title { flex: 1 1 auto; padding-right: 12px; }
+
+/* Вкладки разделов: подчёркивание вместо заливки */
+.ds-tabs {
+  background: transparent; padding: 0; border-radius: 0;
+  border-bottom: 1px solid #E3E8E6;
+}
+.ds-tabs .mantine-SegmentedControl-control { border: 0 !important; }
+.ds-tabs .mantine-SegmentedControl-control::before { display: none; }
+.ds-tabs .mantine-SegmentedControl-label {
+  padding: 10px 12px 9px; color: #6B7280; transition: color .15s;
+}
+.ds-tabs .mantine-SegmentedControl-label:hover { color: #1F5E4E; }
+.ds-tabs .mantine-SegmentedControl-label[data-active],
+.ds-tabs .mantine-SegmentedControl-control[data-active] .mantine-SegmentedControl-label,
+.ds-tabs .mantine-SegmentedControl-label[data-active]:hover { color: #1F5E4E; }
+.ds-tabs .mantine-SegmentedControl-indicator {
+  background: transparent !important; box-shadow: inset 0 -2px 0 #2F6656;
+  border-radius: 0;
+}
+.ds-tab-text { font-size: 13.5px; font-weight: 500; letter-spacing: .01em; white-space: nowrap; }
+.ds-tabs [data-active] .ds-tab-text { font-weight: 600; }
+
+/* Кнопки в шапке страницы */
+.ds-head-btn { font-weight: 600; height: 34px; }
+.ds-head-btn:not(.primary) { color: #1F5E4E; border-color: #CFE0D9; background: #FFFFFF; }
+.ds-head-btn:not(.primary):hover { background: #F3F8F6; border-color: #2F6656; }
+.ds-head-btn .mantine-Button-section svg { color: #2F6656; }
+
+/* Кнопки-иконки панели действий: единый фирменный стиль */
+.panel-block .mantine-ActionIcon-root {
+  color: #2F6656 !important; background: #FFFFFF !important;
+  border: 1px solid #CFE0D9 !important; border-radius: 0 !important;
+  transition: background .15s, border-color .15s;
+}
+.panel-block .mantine-ActionIcon-root:hover { background: #F3F8F6 !important; border-color: #2F6656 !important; }
+.panel-block .mantine-ActionIcon-root svg { color: #2F6656 !important; }
+.panel-block .mantine-Input-input { border-radius: 0; }
+
+/* Ключевые показатели — компактный блок */
+.ks-root { position: relative; margin-bottom: 16px; background: #FFFFFF; border: 1px solid #E3E8E6; }
+.ks-head {
+  display: flex; align-items: baseline; gap: 8px; padding: 11px 56px 11px 14px;
+  cursor: pointer; list-style: none; user-select: none; border-bottom: 1px solid #EEF1F0;
+}
+.ks-head::-webkit-details-marker { display: none; }
+.ks-root:not([open]) .ks-head { border-bottom: 0; }
+.ks-chevron { color: #2F6656; transition: transform .2s; align-self: center; }
+.ks-root:not([open]) .ks-chevron { transform: rotate(-90deg); }
+.ks-head-title { font-size: 15px; font-weight: 700; color: #1F1F1F; }
+.ks-head-sub { font-size: 12px; color: #8A8A8A; }
+.ks-head-actions { position: absolute; top: 6px; right: 10px; }
+.ks-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.ks-body > div:first-child { margin-bottom: 0 !important; }
+
+.ks-kpis { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 0; border: 1px solid #E3E8E6; overflow-x: auto; }
+.ks-kpi { padding: 10px 14px; border-right: 1px solid #E3E8E6; min-width: 0; }
+.ks-kpi:last-child { border-right: 0; }
+.ks-kpi-head { display: flex; align-items: center; gap: 4px; }
+.ks-kpi-title { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #6B7280; white-space: nowrap; }
+.ks-kpi-value { font-size: 22px; font-weight: 700; color: #1F1F1F; line-height: 1.25; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ks-kpi-note { font-size: 11.5px; color: #8A8A8A; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ks-kpi.expense .ks-kpi-value { color: #A15C38; }
+
+.ks-table { width: 100%; border-collapse: collapse; border: 1px solid #E3E8E6; }
+.ks-table th {
+  text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: #FFFFFF; background: #2F6656; padding: 7px 14px;
+}
+.ks-table td { padding: 8px 14px; border-top: 1px solid #EEF1F0; vertical-align: middle; }
+.ks-table td:first-child { width: 22%; }
+.ks-row-name { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: #1F1F1F; }
+.ks-cell { width: 39%; }
+.ks-cell + .ks-cell { border-left: 1px solid #EEF1F0; }
+.ks-cell-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 5px; }
+.ks-num { font-size: 14px; font-weight: 700; color: #1F1F1F; font-variant-numeric: tabular-nums; }
+.ks-num.pos { color: #2F8F5B; }
+.ks-num.neg { color: #C0392B; }
+.ks-amount { font-size: 12.5px; color: #4A4A4A; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ks-bar { height: 4px; background: #EEF1F0; }
+.ks-bar-fill { height: 100%; }
+.ks-bar-fill.cost { background: #5B6770; }
+.ks-bar-fill.pos { background: #2F8F5B; }
+.ks-bar-fill.neg { background: #C0392B; }
+
+.ks-quality {
+  display: flex; align-items: center; gap: 18px; padding: 7px 8px 7px 14px;
+  border: 1px solid #E3E8E6; background: #FAFBFB; font-size: 12.5px; color: #4A4A4A;
+}
+.ks-quality.warn { background: #FBF5F1; border-color: #EAD9CF; }
+.ks-q-title { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #1F1F1F; white-space: nowrap; }
+.ks-quality.warn .ks-q-title svg { color: #A15C38; }
+.ks-quality:not(.warn) .ks-q-title svg { color: #2F8F5B; }
+.ks-q-items { display: flex; flex-wrap: wrap; gap: 4px 22px; flex: 1; }
+.ks-q-item { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ks-q-item.warn b { color: #A15C38; }
+.ks-q-share { color: #8A8A8A; }
+.ks-q-btn { border-radius: 0 !important; color: #2F6656 !important; border-color: #CFE0D9 !important; background: #FFFFFF !important; }
+.ks-q-btn:hover { background: #F3F8F6 !important; border-color: #2F6656 !important; }
+.ks-head-actions .mantine-ActionIcon-root { border-radius: 0 !important; color: #2F6656 !important; background: transparent !important; }
+.ks-head-actions .mantine-ActionIcon-root svg { color: #2F6656 !important; }
+
+/* Окно методологии */
+.mt-header { border-bottom: 1px solid #E3E8E6; }
+.mt-body { padding-top: 4px; }
+.mt-section { display: flex; gap: 14px; padding: 14px 2px; border-bottom: 1px solid #EEF1F0; }
+.mt-no {
+  flex: none; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #FFFFFF; background: #2F6656; font-variant-numeric: tabular-nums;
+}
+.mt-content { flex: 1; min-width: 0; }
+.mt-title { font-size: 14px; font-weight: 700; color: #1F5E4E; margin: 4px 0 6px; }
+.mt-content .mantine-Text-root { color: #3A3F44; line-height: 1.6; }
+.mt-content strong { color: #1F1F1F; font-weight: 600; }
+.mt-note {
+  margin-top: 14px; padding: 10px 14px; font-size: 13px; color: #4A4A4A;
+  background: #F3F8F6; border-left: 3px solid #2F6656;
+}
