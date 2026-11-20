@@ -2118,8 +2118,12 @@ class ContractsRexexAdmin(admin.ModelAdmin):
 @admin.register(CounterpartyAccount)
 class CounterpartyAccountAdmin(admin.ModelAdmin):
     list_display = ("account", "cp", "comment")
+    list_filter = (("cp", admin.RelatedOnlyFieldListFilter),)
     search_fields = ("account", "cp__name", "cp__tax_id", "comment")
+    search_help_text = "Поиск: счёт, контрагент, ИНН, комментарий"
     autocomplete_fields = ("cp",)
+    list_select_related = ("cp",)
+    ordering = ("cp__name", "account")
 
 
 
