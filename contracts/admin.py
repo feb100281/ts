@@ -673,7 +673,32 @@ class ContractsAdmin(admin.ModelAdmin):
     change_list_template = "admin/contracts/contracts/change_list.html"
     change_form_template = "admin/contracts/contracts/change_form.html"
 
-    actions = ("export_to_excel",)
+    actions = ("export_to_excel", "copy_contracts")
+
+    @admin.action(description="Скопировать договор (с автоматизацией и предметом)")
+    def copy_contracts(self, request, queryset):
+        """Копия договора: все поля, автоматизация и предмет; файлы и распределения не копируются."""
+        from django.db import transaction
+        from django.shortcuts import redirect
+        made = []
+        with transaction.atomic():
+            for src in queryset:
+                c = Contracts.objects.get(pk=src.pk)
+                c.pk = c.id = None
+                c.save()
+                for a in CfItemAuto.objects.filter(contract=src):
+                    a.pk = a.id = None
+                    a.contract = c
+                    a.save()
+                for it in ContractItems.objects.filter(contract=src):
+                    it.pk = it.id = None
+                    it.contract = c
+                    it.save()
+                made.append(c)
+        if len(made) == 1:                 # одна копия — сразу в её карточку
+            self.message_user(request, f"Создана копия договора id {made[0].pk}: проверьте компанию, номер и RegEx.")
+            return redirect(reverse("admin:contracts_contracts_change", args=[made[0].pk]))
+        self.message_user(request, f"Создано копий: {len(made)} (id {', '.join(str(c.pk) for c in made)}).")
 
     @admin.action(
         description="Выгрузить в Excel: контрагент, тип, номер, дата"

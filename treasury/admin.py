@@ -162,6 +162,30 @@ class ByInnBadgeFilter(SimpleListFilter):
 
         return queryset
 
+class InnCheckFilter(SimpleListFilter):
+    """ИНН в названии получателя (выписки зарубежных компаний) против контрагента операции."""
+    title = "Проверка ИНН"
+    parameter_name = "inn_check"
+    INN = r"(INN|ИНН)[ .:]*[0-9]{10,12}"
+
+    def lookups(self, request, model_admin):
+        return (("mismatch", "ИНН в названии ≠ ИНН контрагента"),
+                ("unknown", "ИНН в названии, контрагент не найден"))
+
+    def queryset(self, request, queryset):
+        v = self.value()
+        if not v:
+            return queryset
+        qs = (queryset.exclude(owner__country="RU").exclude(owner__isnull=True)
+              .filter(cp_bs_name__iregex=self.INN))
+        if v == "mismatch":
+            return (qs.filter(cp_final__isnull=False)
+                    .exclude(cp_bs_name__contains=F("cp_final__tax_id")))
+        if v == "unknown":
+            return qs.filter(cp_final__isnull=True, cp__isnull=True)
+        return queryset
+
+
 # ---------- BankStatements Admin ----------
 
 
@@ -1171,6 +1195,7 @@ class CfDataAdmin(admin.ModelAdmin):
 
     
     list_filter = ( 
+                   InnCheckFilter,
                 #    ByInnBadgeFilter, 
                    'cp', 
                    "intercompany", 
