@@ -16,7 +16,7 @@ from pathlib import Path
 from django.core.files import File
 from django.db import connection, transaction
 from django.db import models
-from django.db.models import F
+from django.db.models import F, Q
 
 from corporate.models import Bank, BankAccount, Owners
 from treasury.models import BankStatements, CfData, CounterpartyAccount, CpName, HintRule, TextTranslation
@@ -305,8 +305,9 @@ def retranslate(log=print) -> None:
                 .values_list("id", "temp", "temp_ru", "cp_bs_name", "cp_name_ru"))
     with transaction.atomic():
         TextTranslation.objects.update(hits=0)
-        empty = [x for x in TextTranslation.objects.filter(is_checked=False, translation__isnull=True)
-                 if x.source in seed()]                       # пустые шаблоны — из начального словаря
+        empty = [x for x in TextTranslation.objects.filter(is_checked=False)
+                 .filter(Q(translation__isnull=True) | Q(translation__contains="текст в выписке повреждён"))
+                 if x.source in seed() and x.translation != seed()[x.source]]   # пустые и прежние заглушки
         for x in empty:
             x.translation = seed()[x.source]
         TextTranslation.objects.bulk_update(empty, ["translation"], batch_size=500)
