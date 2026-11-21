@@ -23,6 +23,13 @@ REGEX = {("AM-VTB", "Комиссия эквайринг"): "POS"}
 BIND = {"AM-ARARAT-INKAS": {"2470032194060000": "799100"}}
 
 
+# проценты на остаток — к банку, который их платит: счёт → (ИНН-заглушка банка, название, если банка нет)
+INTEREST_SRC = "AM-BANK-INTEREST"
+INTEREST = {"33140620025325": ("AM-VTB", "ВТБ-АРМЕНИЯ"),
+            "33140620025358": ("AM-VTB", "ВТБ-АРМЕНИЯ"),
+            "1150005473033022": ("AM-AMIOBANK", "АМИО БАНК")}
+
+
 class Command(BaseCommand):
     help = "Объединить карточки эквайринга/инкассации с банком; без --apply только список"
 
@@ -82,5 +89,47 @@ class Command(BaseCommand):
                         if apply:
                             a.contract = c
                             a.save(update_fields=["contract"])
+            self._interest(apply)
         if not apply:
             self.stdout.write("\nПроверка без записи. Для объединения добавьте --apply.")
+
+    def _interest(self, apply):
+        """Проценты на остаток: договор — у каждого банка, счёт процентов привязан к нему, общая карточка удаляется."""
+        from contracts.models import CfItemAuto
+        from treasury.models import CfData
+        src = Counterparty.objects.filter(tax_id=INTEREST_SRC).first()
+        if not src:
+            return
+        tpl = Contracts.objects.filter(cp=src).first()
+        self.stdout.write(f"{src.name}: договор id {tpl.pk if tpl else '—'}")
+        made = {}
+        for acc, (tax, name) in INTEREST.items():
+            self.stdout.write(f"    счёт {acc} → {name}, договор «Проценты на остаток»")
+            if not apply or tpl is None:
+                continue
+            bank, _ = Counterparty.objects.get_or_create(tax_id=tax, defaults={"name": name, "country": "AM"})
+            c = made.get(tax)
+            if c is None:
+                c = Contracts.objects.filter(cp=bank, owner=tpl.owner, bs=tpl.bs, pl=tpl.pl).first()
+            if c is None:
+                c = Contracts.objects.get(pk=tpl.pk)
+                c.pk = c.id = None
+                c.cp, c.regex = bank, None
+                c.save()
+                for a in CfItemAuto.objects.filter(contract=tpl):
+                    a.pk = a.id = None
+                    a.contract = c
+                    a.save()
+            made[tax] = c
+            CounterpartyAccount.objects.update_or_create(account=acc, defaults={"cp": bank, "contract": c})
+            n = (CfData.objects.filter(Q(cp=src) | Q(cp_final=src))
+                 .filter(Q(payer_account=acc) | Q(reciver_account=acc))
+                 .update(cp=bank, cp_final=bank, contract=c))
+            self.stdout.write(f"      операций перенесено: {n}")
+        if apply and tpl is not None:
+            left = CfData.objects.filter(Q(cp=src) | Q(cp_final=src) | Q(contract=tpl)).count()
+            if left or CounterpartyAccount.objects.filter(cp=src).exists():
+                self.stdout.write(f"    {src.name}: остались операции ({left}) — карточка не удалена")
+            else:
+                src.delete()
+                self.stdout.write(f"    карточка {src.name} удалена")
