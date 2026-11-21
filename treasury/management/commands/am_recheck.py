@@ -8,7 +8,8 @@ from django.db.models import Count, Q
 
 from contracts.models import Contracts
 from corporate.models import Owners
-from utils.bsparsers.am.loader import reassign, regroup_contract
+from treasury.models import CfData, CounterpartyAccount
+from utils.bsparsers.am.loader import is_transit, reassign, regroup_contract
 
 MOVABLE = """
     SELECT count(*) FROM treasury_cfdata d
@@ -29,6 +30,7 @@ class Command(BaseCommand):
         p.add_argument("--apply", action="store_true", help="перенести операции и переразнести пустые")
 
     def handle(self, apply, **_):
+        self._transit(apply)
         for owner in Owners.objects.exclude(country="RU").exclude(country__isnull=True):
             self.stdout.write(f"\n{owner}")
             multi = (Contracts.objects.filter(owner=owner).values("cp_id")
@@ -61,3 +63,17 @@ class Command(BaseCommand):
                 reassign(owner.pk, log=lambda x: self.stdout.write("  " + x.strip()))
         if not apply:
             self.stdout.write("\nПроверка без записи. Для переноса добавьте --apply.")
+
+    def _transit(self, apply):
+        """Транзитные счета банков, привязанные к контрагенту: отвязать, их операции разнести заново (по ИНН)."""
+        links = [a for a in CounterpartyAccount.objects.select_related("cp") if is_transit(a.account)]
+        self.stdout.write(f"Транзитные счета банков, привязанные к контрагентам: {len(links)}")
+        foreign = CfData.objects.exclude(owner__country="RU").exclude(owner__isnull=True)
+        for a in links:
+            ops = (foreign.filter(Q(dt__gt=0, payer_account=a.account) | Q(cr__gt=0, reciver_account=a.account))
+                   .filter(Q(cp=a.cp) | Q(cp_final=a.cp)).exclude(splits__isnull=False))
+            self.stdout.write(f"  {a.account} → {a.cp.name}: операций по нему {ops.count()}"
+                              + (" — отвязан, операции переразносятся" if apply else ""))
+            if apply:
+                ops.update(cp=None, cp_final=None, contract=None, cfitem=None)
+                a.delete()

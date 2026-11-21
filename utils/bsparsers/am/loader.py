@@ -170,6 +170,17 @@ def translations(texts: list[str]) -> dict[str, str | None]:
 # Авторазноска новых строк
 # ============================================================
 
+# транзитные счета банков: рублёвые переводы в РФ идут через них, получатель — только в названии (ИНН)
+TRANSIT_ACCOUNTS = ("16000001146200",      # ВТБ-Армения
+                    "2470059669470000")    # Ардшинбанк
+TRANSIT_SQL = "(" + ", ".join(f"'{a}'" for a in TRANSIT_ACCOUNTS) + ")"
+
+
+def is_transit(account: str) -> bool:
+    import re as _re
+    return account in TRANSIT_ACCOUNTS or bool(_re.fullmatch(r"30[12]\d{17}", account or ""))
+
+
 # RegEx проверяется и по оригиналу назначения, и по переводу
 AUTO_SQL = [
     ("контрагенты по счёту", """
@@ -182,6 +193,14 @@ AUTO_SQL = [
           AND a.account = CASE WHEN (CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END) = b.account
                                THEN 'SELF:' || b.account
                                ELSE (CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END) END
+          -- транзитные и корр. счета банков — общие для многих получателей, контрагента не определяют
+          AND a.account NOT IN """ + TRANSIT_SQL + """ AND a.account !~ '^30[12][0-9]{17}$'
+    """),
+    ("контрагенты по ИНН в названии", """
+        UPDATE treasury_cfdata d SET cp_id = c.id
+        FROM counterparties_counterparty c
+        WHERE d.id = ANY(%(ids)s) AND d.cp_id IS NULL
+          AND c.tax_id = substring(d.cp_bs_name from '(?:INN|ИНН)[ .:]*([0-9]{10,12})')
     """),
     ("договоры по назначению", """
         WITH m AS (

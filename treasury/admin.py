@@ -2115,8 +2115,24 @@ class ContractsRexexAdmin(admin.ModelAdmin):
 
 # ---------- СЧЕТА КОНТРАГЕНТОВ И ПЕРЕВОДЫ ----------
 
+class CounterpartyAccountForm(forms.ModelForm):
+    class Meta:
+        model = CounterpartyAccount
+        fields = "__all__"
+
+    def clean_account(self):
+        from utils.bsparsers.am.loader import is_transit
+        acc = (self.cleaned_data.get("account") or "").strip()
+        if is_transit(acc):
+            raise forms.ValidationError("Это транзитный или корреспондентский счёт банка: через него платят "
+                                        "многим получателям, к одному контрагенту его привязывать нельзя. "
+                                        "Получатель определяется по ИНН в названии.")
+        return acc
+
+
 @admin.register(CounterpartyAccount)
 class CounterpartyAccountAdmin(admin.ModelAdmin):
+    form = CounterpartyAccountForm
     list_display = ("account", "cp", "comment")
     list_filter = (("cp", admin.RelatedOnlyFieldListFilter),)
     search_fields = ("account", "cp__name", "cp__tax_id", "comment")
