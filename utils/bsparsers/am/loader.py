@@ -203,19 +203,6 @@ AUTO_SQL = [
         WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL AND d.cp_id = r.cp_id
           AND c.owner_id = d.owner_id AND (d.temp ~* r.regex OR coalesce(d.temp_ru, '') ~* r.regex)
     """),
-    ("договор по умолчанию", """
-        -- у контрагента несколько договоров, из них ровно один без RegEx — он основной
-        WITH dflt AS (
-            SELECT owner_id, cp_id, min(id) FILTER (WHERE coalesce(regex, '') = '') AS contract_id
-            FROM contracts_contracts
-            GROUP BY owner_id, cp_id
-            HAVING count(*) > 1 AND count(*) FILTER (WHERE coalesce(regex, '') = '') = 1
-        )
-        UPDATE treasury_cfdata d SET contract_id = dflt.contract_id
-        FROM dflt
-        WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL
-          AND dflt.owner_id = d.owner_id AND dflt.cp_id = d.cp_id
-    """),
     ("единственный договор контрагента", """
         WITH one AS (
             SELECT owner_id, cp_id, min(id) AS contract_id
