@@ -2158,12 +2158,12 @@ class CounterpartyAccountForm(forms.ModelForm):
 @admin.register(CounterpartyAccount)
 class CounterpartyAccountAdmin(admin.ModelAdmin):
     form = CounterpartyAccountForm
-    list_display = ("account", "cp", "comment")
+    list_display = ("account", "cp", "contract", "comment")
     list_filter = (("cp", admin.RelatedOnlyFieldListFilter),)
     search_fields = ("account", "cp__name", "cp__tax_id", "comment")
     search_help_text = "Поиск: счёт, контрагент, ИНН, комментарий"
-    autocomplete_fields = ("cp",)
-    list_select_related = ("cp",)
+    autocomplete_fields = ("cp", "contract")
+    list_select_related = ("cp", "contract")
     ordering = ("cp__name", "account")
 
     def save_model(self, request, obj, form, change):

@@ -310,6 +310,11 @@ class CounterpartyAccount(models.Model):
     account = models.CharField("Счёт контрагента", max_length=50, unique=True)
     cp = models.ForeignKey(Counterparty, on_delete=models.CASCADE, verbose_name="Контрагент", related_name="bank_accounts")
     comment = models.CharField("Комментарий", max_length=255, null=True, blank=True)
+    contract = models.ForeignKey(
+        "contracts.Contracts", on_delete=models.SET_NULL, null=True, blank=True,
+        verbose_name="Договор для операций по счёту", related_name="bound_accounts",
+        help_text="Операции по этому счёту — сразу на этот договор (например, эквайринг банка). "
+                  "Такой договор по RegEx не подбирается.")
 
     class Meta:
         verbose_name = "Счёт контрагента"

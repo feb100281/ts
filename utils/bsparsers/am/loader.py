@@ -196,6 +196,16 @@ AUTO_SQL = [
           -- транзитные и корр. счета банков — общие для многих получателей, контрагента не определяют
           AND a.account NOT IN """ + TRANSIT_SQL + """ AND a.account !~ '^30[12][0-9]{17}$'
     """),
+    ("договоры по счёту", """
+        -- счёт привязан к конкретному договору (эквайринг, инкассация) — договор по счёту, до RegEx
+        UPDATE treasury_cfdata d SET contract_id = a.contract_id
+        FROM treasury_counterpartyaccount a, corporate_bankaccount b, contracts_contracts c
+        WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL AND b.id = d.ba_id
+          AND c.id = a.contract_id AND c.owner_id = d.owner_id
+          AND a.account = CASE WHEN (CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END) = b.account
+                               THEN 'SELF:' || b.account
+                               ELSE (CASE WHEN d.dt > 0 THEN d.payer_account ELSE d.reciver_account END) END
+    """),
     ("контрагенты по ИНН в названии", """
         UPDATE treasury_cfdata d SET cp_id = c.id
         FROM counterparties_counterparty c
@@ -209,6 +219,8 @@ AUTO_SQL = [
             JOIN contracts_contracts c
               ON c.owner_id = d.owner_id AND c.regex IS NOT NULL AND c.regex <> ''
               AND (d.temp ~* c.regex OR coalesce(d.temp_ru, '') ~* c.regex)
+              -- договор, привязанный к счетам, подбирается только по счёту
+              AND NOT EXISTS (SELECT 1 FROM treasury_counterpartyaccount ba WHERE ba.contract_id = c.id)
             WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL
               AND (d.cp_id IS NULL OR c.cp_id = d.cp_id)        -- контрагент известен: только его договоры
             ORDER BY d.id, length(c.regex) DESC, c.id
