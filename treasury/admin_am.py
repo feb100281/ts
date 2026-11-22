@@ -8,7 +8,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import AmMode, CfData, TransitAccount
+from .models import CfData, TransitAccount
 
 
 @admin.register(TransitAccount)
@@ -59,15 +59,3 @@ def unassigned_view(request):
                total=sum(g["n"] for g in groups.values()), groups=len(groups),
                owners=Owners.objects.exclude(country="RU").exclude(country__isnull=True), owner=owner)
     return TemplateResponse(request, "admin/treasury/cfdata/unassigned.html", ctx)
-
-
-@admin.register(AmMode)
-class AmModeAdmin(admin.ModelAdmin):
-    list_display = ("owner", "on", "switched_at")
-    readonly_fields = ("switched_at",)
-
-    def save_model(self, request, obj, form, change):
-        from django.utils import timezone
-        if "on" in form.changed_data:
-            obj.switched_at = timezone.now()
-        super().save_model(request, obj, form, change)
