@@ -1085,7 +1085,30 @@ class CfDataAdmin(admin.ModelAdmin):
     readonly_fields = ("source_dt", "source_cr")
     change_list_template = "admin/treasury/cfdata/change_list.html"
     action_form = CfDataActionForm
-    actions = ["copy_selected_rows", "create_storno_manual_entries", "reassign_foreign"]
+    actions = ["copy_selected_rows", "create_storno_manual_entries", "reassign_foreign", "mark_manual",
+               "unmark_manual"]
+
+    AM_KEYS = ("cp", "cp_final", "contract", "cfitem")
+
+    def save_model(self, request, obj, form, change):
+        """Правка контрагента, договора или статьи руками — операция «разнесена руками», автомат её не трогает."""
+        if change and any(k in form.changed_data for k in self.AM_KEYS) and "manual" not in form.changed_data:
+            obj.manual = True
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description="Отметить «разнесено руками» (автомат не трогает)")
+    def mark_manual(self, request, queryset):
+        n = queryset.update(manual=True)
+        self.message_user(request, f"Отмечено «разнесено руками»: {n}.")
+
+    @admin.action(description="Снять «разнесено руками» и переразнести по правилам")
+    def unmark_manual(self, request, queryset):
+        from utils.bsparsers.am.resolve import resolve_ids
+        ids = list(queryset.values_list("id", flat=True))
+        queryset.update(manual=False)
+        lines = []
+        resolve_ids(ids, lines.append)
+        self.message_user(request, f"Снята отметка: {len(ids)}. " + "; ".join(x.strip() for x in lines))
 
     @admin.action(description="Переразнести по правилам (зарубежные компании)")
     def reassign_foreign(self, request, queryset):
@@ -1206,6 +1229,7 @@ class CfDataAdmin(admin.ModelAdmin):
                    "contract", 
                    "hint",
                    "hint_auto",
+                   "manual",
                 #    "bs"
                    )
     date_hierarchy = "date"
@@ -1220,7 +1244,7 @@ class CfDataAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (mark_safe("🧾 <b>Основное</b>"), {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr", "source_dt", "source_cr")}),
-        (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
+        (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem", "manual")}),
         (mark_safe("🏦 <b>Детали</b>"), {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
     
@@ -2171,9 +2195,17 @@ class CounterpartyAccountAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         from django.db import transaction
         from django.db.models import Q
+        from treasury.models import AmMode
         from utils.bsparsers.am.loader import auto_assign
+        from utils.bsparsers.am.resolve import resolve
         by_acc = (CfData.objects.exclude(owner__country="RU").exclude(owner__isnull=True)
                   .filter(Q(dt__gt=0, payer_account=obj.account) | Q(cr__gt=0, reciver_account=obj.account)))
+        on = set(AmMode.objects.filter(on=True).values_list("owner_id", flat=True))
+        for owner_id in sorted(set(by_acc.filter(owner_id__in=on).values_list("owner_id", flat=True))):
+            lines = []
+            resolve(owner_id, log=lines.append)          # «Правила разноски»: пересборка компании
+            self.message_user(request, "; ".join(x.strip() for x in lines))
+        by_acc = by_acc.exclude(owner_id__in=on)
         moved = 0
         if obj.contract_id:                              # счёт привязан к договору — все его операции туда
             moved = (by_acc.filter(owner_id=obj.contract.owner_id).exclude(splits__isnull=False)
@@ -2289,3 +2321,6 @@ class CpNameAdmin(admin.ModelAdmin):
     search_fields = ("source", "name_ru")
     list_per_page = 50
     formfield_overrides = {models.CharField: {"widget": forms.TextInput()}}
+
+
+from . import admin_am  # noqa: E402,F401  «Правила разноски»

@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+{% load humanize %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Главная</a> ›
+<a href="{% url 'admin:treasury_amresolver_changelist' %}">Правила разноски</a> › Неразнесённые шаблоны</div>{% endblock %}
+{% block content %}
+<form method="get" style="margin-bottom:12px">
+  <select name="owner" onchange="this.form.submit()">
+    <option value="">Все компании</option>
+    {% for o in owners %}<option value="{{ o.pk }}" {% if owner == o.pk|stringformat:"s" %}selected{% endif %}>{{ o }}</option>{% endfor %}
+  </select>
+  <span style="margin-left:12px">Операций без договора: <b>{{ total }}</b>, групп: {{ groups }} (показаны крупнейшие 300)</span>
+</form>
+<p>Как разнести группу: «Правила» → добавить строку: в «Назначение содержит» — слово из шаблона, договор и статья.
+Сохранили — операции переразнеслись. Группа без контрагента: сначала привяжите счёт к контрагенту в «Счетах контрагентов».</p>
+<table style="width:100%">
+<thead><tr><th>Компания</th><th>Контрагент</th><th>Имя в выписке</th><th>Шаблон назначения</th><th>Перевод (пример)</th>
+<th></th><th style="text-align:right">Строк</th><th style="text-align:right">Сумма</th><th></th></tr></thead>
+<tbody>
+{% for r in rows %}
+<tr>
+<td>{{ r.owner }}</td>
+<td>{% if r.cp %}{{ r.cp }}{% else %}<span style="color:#b00">не найден</span>{% endif %}</td>
+<td>{{ r.bs_name }}</td>
+<td style="max-width:360px">{{ r.tpl }}</td>
+<td style="max-width:360px;color:#555">{{ r.ru|truncatechars:160 }}</td>
+<td>{% if r.incoming %}поступление{% else %}списание{% endif %}</td>
+<td style="text-align:right">{{ r.n }}</td>
+<td style="text-align:right;white-space:nowrap">{{ r.s|floatformat:2|intcomma }}</td>
+<td style="white-space:nowrap"><a href="{{ r.link }}">{% if r.has_rules %}Правила{% else %}Завести правила{% endif %}</a> ·
+<a href="{{ r.ops }}">операции</a></td>
+</tr>
+{% empty %}<tr><td colspan="9">Всё разнесено.</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

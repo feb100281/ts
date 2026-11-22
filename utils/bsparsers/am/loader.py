@@ -179,7 +179,9 @@ TRANSIT_SQL = "(" + ", ".join(f"'{a}'" for a in TRANSIT_ACCOUNTS) + ")"
 
 def is_transit(account: str) -> bool:
     import re as _re
-    return account in TRANSIT_ACCOUNTS or bool(_re.fullmatch(r"30[12]\d{17}", account or ""))
+    from treasury.models import TransitAccount
+    return (account in TRANSIT_ACCOUNTS or bool(_re.fullmatch(r"30[12]\d{17}", account or ""))
+            or TransitAccount.objects.filter(account=account).exists())
 
 
 # RegEx проверяется и по оригиналу назначения, и по переводу
@@ -300,8 +302,19 @@ AUTO_SQL = [
 ]
 
 
+HINT_STEP = "разметка по похожим операциям"
+
+
 def auto_assign(ids: list[int], owner_id: int, log):
     if not ids:
+        return
+    from treasury.models import am_rules_on
+    if am_rules_on(owner_id):                        # «Правила разноски»: контрагент, договор, статья
+        from .resolve import resolve
+        resolve(owner_id, ids, log=log)
+        with connection.cursor() as cur:
+            cur.execute(dict(AUTO_SQL)[HINT_STEP], {"ids": ids, "owner": owner_id})
+            log(f"  {HINT_STEP}: {cur.rowcount}")
         return
     with connection.cursor() as cur:
         for title, sql in AUTO_SQL:
@@ -346,6 +359,11 @@ def unassigned(qs):
 
 def reassign(owner_id: int, log=print) -> None:
     """Повторная авторазноска по всем операциям компании, где что-то не заполнено. Заполненное не меняется."""
+    from treasury.models import am_rules_on
+    if am_rules_on(owner_id):                        # пересборка всей разноски по правилам
+        from .resolve import resolve
+        resolve(owner_id, log=log)
+        return
     ids = list(CfData.objects.filter(owner_id=owner_id)
                .filter(models.Q(cfitem__isnull=True) | models.Q(contract__isnull=True) | models.Q(hint__isnull=True)
                        | models.Q(hint="") | models.Q(cp__isnull=True) | models.Q(cp_final__isnull=True))
@@ -491,6 +509,9 @@ def regroup_contract(contract, log=print) -> int:
     (подставленном как единственный); выбранные по своему RegEx и сплиты не трогаются.
     Статья — заново, по автоматизации договора.
     """
+    from treasury.models import am_rules_on
+    if am_rules_on(contract.owner_id):               # при «Правилах разноски» договор операции не собирает
+        return 0
     rx = (contract.regex or "").strip()
     owner = getattr(contract, "owner", None)
     if not rx or owner is None or (owner.country or "RU") == "RU":

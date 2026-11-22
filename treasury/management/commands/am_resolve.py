@@ -1,0 +1,179 @@
+"""
+Разноска зарубежных компаний по «Правилам разноски».
+
+    am_resolve --build            завести правила из текущих договоров (RegEx и автоматизация);
+                                  уже заведённые правила контрагента не трогаются
+    am_resolve                    сверка: что изменится, без записи (+ Excel «было/стало» в media/am_reports)
+    am_resolve --apply            пересобрать разноску и включить «Правила разноски» для компании
+    am_resolve --off              вернуть прежний механизм (правила и отметки «руками» остаются)
+
+При --apply операции, у которых сейчас есть договор, а по правилам договора нет,
+помечаются «разнесено руками» и остаются как есть — ничего не теряется.
+"""
+from collections import Counter
+from datetime import datetime
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management.base import BaseCommand
+from django.db import transaction
+
+from contracts.models import CfItemAuto, Contracts
+from corporate.models import CfItems, Owners
+from counterparties.models import Counterparty
+from treasury.models import AmResolver, AmRule, CfData, CounterpartyAccount
+from utils.bsparsers.am.resolve import resolve
+
+
+def _and(a: str, b: str) -> str:
+    """Оба условия: и RegEx договора, и RegEx автоматизации."""
+    a, b = (a or "").strip(), (b or "").strip()
+    if b in ("", "."):
+        return a
+    if a in ("", "."):
+        return b
+    return f"(?s)(?=.*(?:{a}))(?=.*(?:{b}))"
+
+
+class Command(BaseCommand):
+    help = "Разноска зарубежных компаний по правилам: --build, сверка, --apply"
+
+    def add_arguments(self, p):
+        p.add_argument("--build", action="store_true", help="завести правила из текущих договоров")
+        p.add_argument("--apply", action="store_true", help="пересобрать разноску")
+        p.add_argument("--off", action="store_true", help="вернуть прежний механизм")
+        p.add_argument("--owner", type=int, help="только эта компания (id)")
+
+    def handle(self, build, apply, off, owner=None, **_):
+        from django.utils import timezone
+        from treasury.models import AmMode
+        owners = Owners.objects.exclude(country="RU").exclude(country__isnull=True)
+        if owner:
+            owners = owners.filter(pk=owner)
+        if off:
+            for o in owners:
+                AmMode.objects.update_or_create(owner=o, defaults={"on": False, "switched_at": timezone.now()})
+                self.stdout.write(f"{o}: прежний механизм")
+            return
+        for owner in owners:
+            self.stdout.write(f"\n{owner}")
+            if build:
+                self._build(owner)
+                continue
+            res = resolve(owner.pk, dry=True, log=self.stdout.write)
+            self._report(owner, res["changes"])
+            if apply:
+                keep = [i for i, old, new, _ in res["changes"] if old[2] and not new[2]]
+                with transaction.atomic():
+                    CfData.objects.filter(id__in=keep).update(manual=True)
+                    resolve(owner.pk, log=self.stdout.write)
+                    AmMode.objects.update_or_create(owner=owner, defaults={"on": True, "switched_at": timezone.now()})
+                self.stdout.write("  включены «Правила разноски»")
+                self.stdout.write(f"  оставлено как было (договор есть, правила нет), помечено «руками»: {len(keep)}")
+        if not build and not apply:
+            self.stdout.write("\nСверка без записи. Для пересборки добавьте --apply.")
+
+    # ---------------- правила из договоров ----------------
+
+    def _build(self, owner):
+        bound = set(CounterpartyAccount.objects.exclude(contract__isnull=True).values_list("contract_id", flat=True))
+        made_r = made_rules = 0
+        contracts = list(Contracts.objects.filter(owner=owner).select_related("cp", "title"))
+        by_cp: dict = {}
+        for c in contracts:
+            by_cp.setdefault(c.cp_id, []).append(c)
+        autos: dict = {}
+        for a in CfItemAuto.objects.filter(contract__owner=owner).order_by("id"):
+            autos.setdefault(a.contract_id, []).append(a)
+        linked = set(CounterpartyAccount.objects.values_list("cp_id", flat=True))
+
+        def rules_of(c, rx):
+            out = []
+            items = sorted(autos.get(c.pk, []), key=lambda a: -len((a.regex or "").strip(". ")))
+            for a in items:
+                if a.defaultcfdt_id or a.defaultcfcr_id:
+                    out.append((_and(rx, a.regex), c, a.defaultcfdt_id, a.defaultcfcr_id))
+            return out
+
+        general = []
+        for cp_id, cs in by_cp.items():
+            free = [c for c in cs if c.pk not in bound]
+            if not free or cp_id is None:
+                continue
+            cp = cs[0].cp
+            # операции без контрагента по счёту/ИНН — RegEx договора контрагента без счетов (возвраты RL)
+            # и трудового договора (удержания по исполнительному листу)
+            for c in free:
+                if (c.regex or "").strip() and (cp_id not in linked or "трудов" in (c.title.title if c.title_id else "").lower()):
+                    general += rules_of(c, c.regex)
+            if AmResolver.objects.filter(owner=owner, cp_id=cp_id).exists():
+                continue
+            plan = []
+            with_rx = sorted([c for c in free if (c.regex or "").strip()], key=lambda c: -len(c.regex))
+            for c in with_rx:
+                plan += rules_of(c, c.regex)
+            no_rx = [c for c in free if not (c.regex or "").strip()]
+            if len(free) == 1 and no_rx:                 # единственный договор без RegEx — всё остальное
+                plan += rules_of(no_rx[0], "")
+            if not plan:
+                continue
+            r = AmResolver.objects.create(owner=owner, cp_id=cp_id)
+            made_r += 1
+            for n, (rx, c, d, k) in enumerate(plan, 1):
+                AmRule.objects.create(resolver=r, order=n * 10, text_regex=rx, contract=c, cf_item_dt_id=d,
+                                      cf_item_cr_id=k)
+                made_rules += 1
+        if general and not AmResolver.objects.filter(owner=owner, cp__isnull=True).exists():
+            r = AmResolver.objects.create(owner=owner, cp=None, comment="операции без контрагента")
+            for n, (rx, c, d, k) in enumerate(general, 1):
+                AmRule.objects.create(resolver=r, order=n * 10, text_regex=rx, contract=c, cf_item_dt_id=d,
+                                      cf_item_cr_id=k)
+                made_rules += 1
+            made_r += 1
+        self.stdout.write(f"  заведено контрагентов с правилами: {made_r}, правил: {made_rules}")
+        no_rules = [c for cs in by_cp.values() for c in cs if c.pk not in bound
+                    and not AmRule.objects.filter(contract=c).exists()]
+        if no_rules:
+            self.stdout.write(f"  договоров без правил (по ним автоматически ничего не встанет): {len(no_rules)}")
+            for c in no_rules[:40]:
+                self.stdout.write(f"    {c.cp.name} | {c.title} id {c.pk}")
+
+    # ---------------- сверка ----------------
+
+    def _report(self, owner, changes):
+        cps = dict(Counterparty.objects.values_list("id", "name"))
+        cts = {i: f"{t} id {i}" for i, t in Contracts.objects.values_list("id", "title__title")}
+        its = {i: f"{c} {n}" for i, c, n in CfItems.objects.values_list("id", "code", "name")}
+        pairs = Counter()
+        lost = 0
+        for _, old, new, _how in changes:
+            if old[2] and not new[2]:
+                lost += 1
+                continue
+            pairs[(cts.get(old[2], "—"), cts.get(new[2], "—"))] += 1
+        self.stdout.write(f"  изменится операций: {len(changes)}; останутся как есть (правила нет): {lost}")
+        for (a, b), n in pairs.most_common(40):
+            self.stdout.write(f"    {n:>6}  {a}  →  {b}")
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            return
+        ops = {o.id: o for o in CfData.objects.filter(id__in=[c[0] for c in changes]).select_related("ba")}
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Было-стало"
+        ws.append(["id", "Дата", "Поступление", "Списание", "Счёт", "Имя в выписке", "Назначение",
+                   "Контрагент было", "Договор было", "Статья было",
+                   "Контрагент стало", "Договор стало", "Статья стало", "Как определено"])
+        for i, old, new, how in changes:
+            o = ops.get(i)
+            if o is None:
+                continue
+            ws.append([i, o.date, o.dt, o.cr, o.ba.account if o.ba else "", o.cp_bs_name, o.temp_ru or o.temp,
+                       cps.get(old[1], ""), cts.get(old[2], ""), its.get(old[3], ""),
+                       cps.get(new[1], ""), cts.get(new[2], ""), its.get(new[3], ""), how])
+        folder = Path(settings.MEDIA_ROOT) / "am_reports"
+        folder.mkdir(parents=True, exist_ok=True)
+        name = f"resolve_{owner.pk}_{datetime.now():%Y%m%d_%H%M}.xlsx"
+        wb.save(folder / name)
+        self.stdout.write(f"  файл сверки: {settings.MEDIA_URL}am_reports/{name}")

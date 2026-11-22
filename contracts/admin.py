@@ -683,9 +683,10 @@ class ContractsAdmin(admin.ModelAdmin):
         from treasury.models import CfData, CounterpartyAccount
         from utils.bsparsers.am.loader import auto_assign
         total, notes = 0, []
+        from treasury.models import am_rules_on
         for c in queryset.select_related("owner"):
             rx = (c.regex or "").strip()
-            if not rx or c.owner is None or (c.owner.country or "RU") == "RU":
+            if not rx or c.owner is None or (c.owner.country or "RU") == "RU" or am_rules_on(c.owner_id):
                 continue
             if CounterpartyAccount.objects.filter(contract=c).exists():
                 continue
