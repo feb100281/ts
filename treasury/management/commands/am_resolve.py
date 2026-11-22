@@ -144,16 +144,26 @@ class Command(BaseCommand):
         cps = dict(Counterparty.objects.values_list("id", "name"))
         cts = {i: f"{t} id {i}" for i, t in Contracts.objects.values_list("id", "title__title")}
         its = {i: f"{c} {n}" for i, c, n in CfItems.objects.values_list("id", "code", "name")}
-        pairs = Counter()
-        lost = 0
-        for _, old, new, _how in changes:
+        pairs, lost = Counter(), Counter()
+        for _, old, new, how in changes:
             if old[2] and not new[2]:
-                lost += 1
+                if not new[0]:
+                    why = "контрагент по счёту/ИНН не найден"
+                elif new[0] != old[0]:
+                    why = f"по счёту/ИНН это {cps.get(new[0], new[0])}"
+                else:
+                    why = "нет подходящей строки в правилах"
+                lost[(cps.get(old[0], "—"), cts.get(old[2], "—"), why)] += 1
                 continue
             pairs[(cts.get(old[2], "—"), cts.get(new[2], "—"))] += 1
-        self.stdout.write(f"  изменится операций: {len(changes)}; останутся как есть (правила нет): {lost}")
+        self.stdout.write(f"  изменится операций: {len(changes) - sum(lost.values())}; "
+                          f"останутся как есть (правила нет): {sum(lost.values())}")
         for (a, b), n in pairs.most_common(40):
             self.stdout.write(f"    {n:>6}  {a}  →  {b}")
+        if lost:
+            self.stdout.write("  правило не повторяет разноску (было: контрагент | договор — причина):")
+            for (cp, c, why), n in lost.most_common(40):
+                self.stdout.write(f"    {n:>6}  {cp} | {c} — {why}")
         try:
             from openpyxl import Workbook
         except ImportError:
@@ -164,14 +174,15 @@ class Command(BaseCommand):
         ws.title = "Было-стало"
         ws.append(["id", "Дата", "Поступление", "Списание", "Счёт", "Имя в выписке", "Назначение",
                    "Контрагент было", "Договор было", "Статья было",
-                   "Контрагент стало", "Договор стало", "Статья стало", "Как определено"])
+                   "Контрагент стало", "Договор стало", "Статья стало", "Как определено", "Итог"])
         for i, old, new, how in changes:
             o = ops.get(i)
             if o is None:
                 continue
             ws.append([i, o.date, o.dt, o.cr, o.ba.account if o.ba else "", o.cp_bs_name, o.temp_ru or o.temp,
                        cps.get(old[1], ""), cts.get(old[2], ""), its.get(old[3], ""),
-                       cps.get(new[1], ""), cts.get(new[2], ""), its.get(new[3], ""), how])
+                       cps.get(new[1], ""), cts.get(new[2], ""), its.get(new[3], ""), how,
+                       "останется как было (руками)" if old[2] and not new[2] else "изменится"])
         folder = Path(settings.MEDIA_ROOT) / "am_reports"
         folder.mkdir(parents=True, exist_ok=True)
         name = f"resolve_{owner.pk}_{datetime.now():%Y%m%d_%H%M}.xlsx"
