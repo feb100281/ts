@@ -262,6 +262,8 @@ AUTO_SQL = [
              -- пустой RegEx автоматизации — статья для любого назначения; более точный RegEx важнее
              AND (coalesce(t.regex, '') = '' OR d.temp ~* t.regex OR coalesce(d.temp_ru, '') ~* t.regex)
             WHERE d.id = ANY(%(ids)s) AND d.cfitem_id IS NULL
+              -- только правила, где статья для этого направления заполнена
+              AND (CASE WHEN d.dt = 0 THEN t.defaultcfcr_id ELSE t.defaultcfdt_id END) IS NOT NULL
             ORDER BY d.id, length(coalesce(t.regex, '')) DESC, t.id
         )
         UPDATE treasury_cfdata d SET cfitem_id = m.cf_item FROM m WHERE d.id = m.cf_id AND m.cf_item IS NOT NULL
