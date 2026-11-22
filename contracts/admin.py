@@ -977,7 +977,19 @@ class ContractsAdmin(admin.ModelAdmin):
         """После сохранения договора с RegEx — перенос на него подходящих операций контрагента."""
         super().save_related(request, form, formsets, change)
         from django.db import DatabaseError
+        from treasury.models import am_rules_on
         from utils.bsparsers.am.loader import regroup_contract
+        c = form.instance
+        if c.owner_id and am_rules_on(c.owner_id):     # разноска по карточкам договоров — пересборка компании
+            from utils.bsparsers.am.resolve import resolve
+            lines = []
+            try:
+                resolve(c.owner_id, log=lines.append)
+            except Exception as exc:                     # ошибка в RegEx
+                self.message_user(request, f"Операции не переразнесены: {exc}", level="error")
+                return
+            self.message_user(request, "Переразнесено: " + "; ".join(x.strip() for x in lines))
+            return
         try:
             n = regroup_contract(form.instance, lambda *_: None)
         except DatabaseError as exc:

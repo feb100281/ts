@@ -45,7 +45,10 @@ class Rule:
         if not self.regex:
             return True
         if self._rx is None:
-            self._rx = re.compile(self.regex, re.I)
+            try:
+                self._rx = re.compile(self.regex, re.I)
+            except re.error:                             # RegEx с ошибкой — строка не срабатывает
+                self._rx = re.compile(r"(?!)")
         return bool(self._rx.search(text))
 
     def item(self, incoming: bool) -> int | None:
@@ -84,7 +87,7 @@ def resolve_one(op: dict, links: dict, inn_cps: dict, rules: dict, contracts: di
         cp, how = inn_cps[inn], "ИНН"
 
     if bound and contracts.get(bound, (None, None))[1] == owner:
-        for r in rules.get((owner, cp), []):
+        for r in rules.get((owner, ("bound", bound)), []):
             if r.contract == bound and r.item(incoming) and r.matches(text):
                 return Result(cp, contracts[bound][0], bound, r.item(incoming), r.id, how + ", договор по счёту")
         dt_item, cr_item = auto.get(bound, (None, None))
@@ -94,11 +97,11 @@ def resolve_one(op: dict, links: dict, inn_cps: dict, rules: dict, contracts: di
     if cp is not None:
         pool = rules.get((owner, cp), [])
     elif not inn:
-        pool, how = rules.get((owner, None), []), "общие правила"
+        pool, how = rules.get((owner, None), []), "без контрагента"
     else:
         pool = []                        # ИНН есть, контрагента с ним нет — заведите контрагента
     for r in pool:
         if r.item(incoming) and r.matches(text):
             return Result(cp, contracts.get(r.contract, (cp, None))[0], r.contract, r.item(incoming), r.id,
-                          how + ", правило")
+                          how + ", RegEx договора")
     return Result(cp, cp, None, None, None, how or "не найден")

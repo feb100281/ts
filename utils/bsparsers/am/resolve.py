@@ -1,5 +1,5 @@
 """
-Пересборка разноски зарубежной компании по резолверам («Правила разноски»).
+Пересборка разноски зарубежной компании по карточкам договоров (RegEx и автоматизация).
 
     resolve(owner_id)            — все операции компании, кроме разнесённых руками и со сплитами
     resolve(owner_id, ids=[…])   — только эти операции
@@ -18,21 +18,81 @@ from django.db import transaction
 from contracts.models import CfItemAuto, Contracts
 from corporate.models import CfItems
 from counterparties.models import Counterparty
-from treasury.models import AmResolver, AmRule, CfData, CounterpartyAccount, TransitAccount
+from treasury.models import CfData, CounterpartyAccount, TransitAccount
 
 from .resolve_core import Rule, resolve_one
 
 FIELDS = ("cp_id", "cp_final_id", "contract_id", "cfitem_id")
 
 
+CATCH_ALL = (".", ".*")
+
+
+def _and(a: str, b: str) -> str:
+    """И RegEx договора, и RegEx строки автоматизации."""
+    a, b = (a or "").strip(), (b or "").strip()
+    if b in ("",) + CATCH_ALL:
+        return "" if a in CATCH_ALL else a
+    if a in ("",) + CATCH_ALL:
+        return b
+    return f"(?s)(?=.*(?:{a}))(?=.*(?:{b}))"
+
+
+def contract_rules(owner_id: int, bound: set) -> dict:
+    """Правила из карточек договоров: RegEx договора + строки автоматизации (статья Дт / Кт).
+
+    У контрагента: договоры с RegEx — длинный RegEx первым; RegEx «.» — всё остальное, последним.
+    Единственный договор контрагента без RegEx и единственный трудовой — тоже всё остальное.
+    Без контрагента (не найден по счёту и ИНН) — RegEx всех договоров компании, кроме «.».
+    Договоры, привязанные к счетам, ставятся только по счёту.
+    """
+    autos: dict = {}
+    for a in CfItemAuto.objects.filter(contract__owner_id=owner_id).order_by("id"):
+        if a.defaultcfdt_id or a.defaultcfcr_id:
+            autos.setdefault(a.contract_id, []).append(a)
+
+    def lines(c, rx):
+        items = sorted(autos.get(c.pk, []), key=lambda a: -len((a.regex or "").strip(". ")))
+        return [Rule(None, _and(rx, a.regex), c.pk, a.defaultcfdt_id, a.defaultcfcr_id) for a in items]
+
+    def rest(c):
+        items = sorted(autos.get(c.pk, []), key=lambda a: len((a.regex or "").strip(". ")))
+        d = next((a.defaultcfdt_id for a in items if a.defaultcfdt_id), None)
+        k = next((a.defaultcfcr_id for a in items if a.defaultcfcr_id), None)
+        return [Rule(None, "", c.pk, d, k)] if d or k else []
+
+    by_cp: dict = {}
+    for c in Contracts.objects.filter(owner_id=owner_id).exclude(pk__in=bound).select_related("title"):
+        if c.cp_id:
+            by_cp.setdefault(c.cp_id, []).append(c)
+    rules, general = {}, []
+    for cp_id, cs in by_cp.items():
+        rx = {c.pk: (c.regex or "").strip() for c in cs}
+        specific = sorted([c for c in cs if rx[c.pk] and rx[c.pk] not in CATCH_ALL], key=lambda c: -len(rx[c.pk]))
+        plan = [r for c in specific for r in lines(c, rx[c.pk])]
+        general += [(len(rx[c.pk]), r) for c in specific for r in lines(c, rx[c.pk])]
+        for c in cs:
+            if rx[c.pk] in CATCH_ALL:
+                plan += lines(c, "") + rest(c)
+        if len(cs) == 1:
+            c = cs[0]
+            labor = "трудов" in (c.title.title if c.title_id else "").lower()
+            if not rx[c.pk]:
+                plan += lines(c, "") + rest(c)
+            elif labor:
+                plan += rest(c)
+        rules[(owner_id, cp_id)] = plan
+    rules[(owner_id, None)] = [r for _, r in sorted(general, key=lambda t: -t[0])]
+    for c in Contracts.objects.filter(owner_id=owner_id, pk__in=bound):   # статьи по счёту — по автоматизации
+        rules[(owner_id, ("bound", c.pk))] = lines(c, "")
+    return rules
+
+
 def context(owner_id: int) -> dict:
     links = {a: (cp, c) for a, cp, c in CounterpartyAccount.objects.values_list("account", "cp_id", "contract_id")}
     inn_cps = {t: i for i, t in Counterparty.objects.values_list("id", "tax_id") if t and t.isdigit()}
-    rules: dict = {}
-    for r in (AmRule.objects.filter(resolver__owner_id=owner_id)
-              .select_related("resolver").order_by("resolver_id", "order", "id")):
-        rules.setdefault((owner_id, r.resolver.cp_id), []).append(
-            Rule(r.id, (r.text_regex or "").strip(), r.contract_id, r.cf_item_dt_id, r.cf_item_cr_id))
+    bound = {c for _, c in links.values() if c}
+    rules = contract_rules(owner_id, bound)
     contracts = {i: (cp, ow) for i, cp, ow in Contracts.objects.values_list("id", "cp_id", "owner_id")}
     auto = {}
     for a in CfItemAuto.objects.order_by("id"):
@@ -70,11 +130,6 @@ def resolve(owner_id: int, ids=None, dry: bool = False, log=print) -> dict:
         with transaction.atomic():
             CfData.objects.bulk_update(changed, ["cp", "cp_final", "contract", "cfitem", "intercompany"],
                                        batch_size=1000)
-            if ids is None:                              # счётчики правил — по полному прогону
-                rules = list(AmRule.objects.filter(resolver__owner_id=owner_id))
-                for x in rules:
-                    x.hits = hits.get(x.id, 0)
-                AmRule.objects.bulk_update(rules, ["hits"], batch_size=500)
     stats = dict(total=total, changed=len(changes), with_contract=with_contract, without=total - with_contract)
     log(f"  разноска: операций {total}, изменено {len(changes)}, с договором {with_contract}, "
         f"без договора {total - with_contract}")

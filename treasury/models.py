@@ -385,67 +385,6 @@ class CpName(models.Model):
 # Разноска зарубежных компаний: резолверы контрагентов
 # ============================================================
 
-class AmResolver(models.Model):
-    """Правила разноски одного контрагента. Без контрагента — общие правила компании
-    (для операций, где контрагент по счёту и ИНН не найден)."""
-    owner = models.ForeignKey(Owners, on_delete=models.CASCADE, verbose_name="Компания")
-    cp = models.ForeignKey(Counterparty, on_delete=models.CASCADE, null=True, blank=True,
-                           verbose_name="Контрагент", related_name="am_resolvers",
-                           help_text="Пусто — общие правила для операций без контрагента")
-    comment = models.CharField("Комментарий", max_length=255, null=True, blank=True)
-
-    class Meta:
-        verbose_name = "Правила разноски контрагента"
-        verbose_name_plural = "Правила разноски (зарубежные компании)"
-        constraints = [models.UniqueConstraint(fields=["owner", "cp"], name="uniq_am_resolver_owner_cp")]
-
-    def __str__(self):
-        return self.cp.name if self.cp_id else "Общие правила (контрагент не найден)"
-
-
-class AmRule(models.Model):
-    """«Назначение содержит …» → договор и статья. Проверяются сверху вниз, срабатывает первое.
-    Пустое «содержит» — всё остальное. Правило применяется только к тому направлению,
-    для которого указана статья."""
-    resolver = models.ForeignKey(AmResolver, on_delete=models.CASCADE, related_name="rules",
-                                 verbose_name="Контрагент")
-    order = models.PositiveSmallIntegerField("№", default=10)
-    text_regex = models.CharField("Назначение содержит", max_length=500, blank=True, default="",
-                                  help_text="Слова через | , регистр не важен. Пусто — всё остальное")
-    contract = models.ForeignKey(Contracts, on_delete=models.CASCADE, verbose_name="Договор",
-                                 related_name="am_rules")
-    cf_item_dt = models.ForeignKey(CfItems, on_delete=models.PROTECT, null=True, blank=True,
-                                   related_name="am_rules_dt", verbose_name="Статья для поступлений")
-    cf_item_cr = models.ForeignKey(CfItems, on_delete=models.PROTECT, null=True, blank=True,
-                                   related_name="am_rules_cr", verbose_name="Статья для списаний")
-    hits = models.PositiveIntegerField("Строк", default=0)
-
-    class Meta:
-        verbose_name = "Правило"
-        verbose_name_plural = "Правила"
-        ordering = ["order", "id"]
-
-    def __str__(self):
-        return f"«{self.text_regex or 'всё остальное'}» → {self.contract_id}"
-
-    def clean(self):
-        import re
-        if self.text_regex:
-            try:
-                re.compile(self.text_regex, re.I)
-            except re.error as exc:
-                raise ValidationError({"text_regex": f"Ошибка в шаблоне: {exc}"})
-        if not self.cf_item_dt_id and not self.cf_item_cr_id:
-            raise ValidationError("Укажите статью для поступлений, для списаний или обе.")
-        r = getattr(self, "resolver", None)
-        c = getattr(self, "contract", None)
-        if r is not None and c is not None:
-            if c.owner_id != r.owner_id:
-                raise ValidationError({"contract": "Договор другой компании."})
-            if r.cp_id and c.cp_id != r.cp_id:
-                raise ValidationError({"contract": "Договор другого контрагента."})
-
-
 class TransitAccount(models.Model):
     """Служебный счёт банка (транзит, SWIFT, корсчёт): через него платят многим получателям,
     поэтому по нему контрагент не определяется — только по ИНН в названии."""
@@ -461,9 +400,9 @@ class TransitAccount(models.Model):
 
 
 class AmMode(models.Model):
-    """Какой механизм разносит операции компании: «Правила разноски» или прежний (до переключения)."""
+    """Какой механизм разносит операции компании: новый (по карточкам договоров) или прежний."""
     owner = models.OneToOneField(Owners, on_delete=models.CASCADE, verbose_name="Компания", related_name="am_mode")
-    on = models.BooleanField("Разноска по «Правилам разноски»", default=False)
+    on = models.BooleanField("Новая разноска по карточкам договоров", default=False)
     switched_at = models.DateTimeField("Переключено", null=True, blank=True)
 
     class Meta:

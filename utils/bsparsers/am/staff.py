@@ -68,20 +68,6 @@ def find_staff(owner_id: int) -> dict:
     return dict(people)
 
 
-def _staff_rule(owner, cp, tpl, autos) -> None:
-    """«Правила разноски» сотрудника: всё остальное — на его трудовой договор (если правил ещё нет)."""
-    from treasury.models import AmResolver, AmRule
-    if AmResolver.objects.filter(owner=owner, cp=cp).exists():
-        return
-    c = Contracts.objects.filter(owner=owner, cp=cp, title_id=tpl.title_id).order_by("-id").first()
-    a = next((a for a in autos if a.defaultcfdt_id or a.defaultcfcr_id), None)
-    if c is None or a is None:
-        return
-    r = AmResolver.objects.create(owner=owner, cp=cp, comment="сотрудник")
-    AmRule.objects.create(resolver=r, order=10, text_regex="", contract=c,
-                          cf_item_dt_id=a.defaultcfdt_id, cf_item_cr_id=a.defaultcfcr_id)
-
-
 def create_staff(tpl: Contracts, people: dict, log=print) -> int:
     """Контрагент, счёт и копия договора-образца на каждого; затем авторазноска их операций."""
     from utils.bsparsers.am.loader import auto_assign
@@ -117,7 +103,6 @@ def create_staff(tpl: Contracts, people: dict, log=print) -> int:
                 made += 1
                 if found:
                     log(f"  трудовой договор в {owner} для {cp.name}")
-            _staff_rule(owner, cp, tpl, autos)
             ids += p["ids"]
         auto_assign(ids, owner.id, lambda *_: None)
     return made

@@ -90,6 +90,15 @@
           🤖 Автоматизация (RegEx)
         </a>
 
+        <a href="{% url 'admin:treasury_cfdata_unassigned' %}"
+           style="
+             font-size:11px;padding:5px 8px;border-radius:8px;text-decoration:none;
+             background:#f3f4f6;color:#4b5563;display:inline-flex;align-items:center;gap:8px;
+             border:1px solid rgba(148,163,184,.25);
+           ">
+          🧩 Неразнесённые шаблоны
+        </a>
+
         <a href="{% url 'admin:treasury_cfdata_export_csv' %}?{{ request.GET.urlencode }}"
            style="
              font-size:11px;padding:5px 8px;border-radius:8px;text-decoration:none;

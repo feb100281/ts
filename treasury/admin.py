@@ -1267,12 +1267,14 @@ class CfDataAdmin(admin.ModelAdmin):
 
     def get_urls(self):
             urls = super().get_urls()
+            from .admin_am import unassigned_view
             custom = [
                 path(
                     "export-csv/",
                     self.admin_site.admin_view(self.export_csv_view),
                     name="treasury_cfdata_export_csv",
-                )
+                ),
+                path("unassigned/", self.admin_site.admin_view(unassigned_view), name="treasury_cfdata_unassigned"),
             ]
             return custom + urls
         
@@ -2323,4 +2325,4 @@ class CpNameAdmin(admin.ModelAdmin):
     formfield_overrides = {models.CharField: {"widget": forms.TextInput()}}
 
 
-from . import admin_am  # noqa: E402,F401  «Правила разноски»
+from . import admin_am  # noqa: E402,F401  транзитные счета, режим разноски
