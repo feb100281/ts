@@ -264,6 +264,11 @@ AUTO_SQL = [
         )
         UPDATE treasury_cfdata d SET cfitem_id = m.cf_item FROM m WHERE d.id = m.cf_id AND m.cf_item IS NOT NULL
     """),
+    ("валютная конвертация — не внутригрупповая", """
+        UPDATE treasury_cfdata d SET intercompany = FALSE
+        FROM corporate_cfitems i
+        WHERE d.id = ANY(%(ids)s) AND d.intercompany AND i.id = d.cfitem_id AND i.code = '410201'
+    """),
     ("разметка по похожим операциям", """
         WITH stat AS (
             SELECT owner_id, op_type, (dt > 0) AS incoming, hint, count(*) AS n

@@ -311,6 +311,8 @@ class Command(BaseCommand):
             CfItemAuto.objects.filter(contract__owner=owner, contract__title__title="Трудовой договор",
                                       regex__in=STAFF_AUTO[0]).update(regex=STAFF_AUTO[1])
             synced = self._sync(owner, coa, items)
+            # валютная конвертация (410201) — не внутригрупповая операция
+            CfData.objects.filter(owner=owner, intercompany=True, cfitem__code="410201").update(intercompany=False)
             for d, amount, tax, st, cf in OP_FIX:
                 c = Contracts.objects.filter(owner=owner, cp__tax_id=tax, bs__code=st).first()
                 if c:
