@@ -23,7 +23,7 @@ from counterparties.models import Counterparty
 from treasury.models import CfData, CfSplits, CounterpartyAccount
 
 LOOKAHEAD = 5                     # дней после даты реестра, в которые ищем оплату
-ROW = re.compile(r"^\s*(\d{1,4})\s+(40817\d{15})\s*(.+?)\s+(\d{1,3}(?:[  ]\d{3})*,\d{2})\s*$")
+ROW = re.compile(r"^\s*(\d{1,4})\s+(408(?:17|20)\d{15})\s*(.+?)\s+(\d{1,3}(?:[  ]\d{3})*,\d{2})\s*$")
 HEAD = re.compile(r"№\s*(\S+)\s+от\s+(\d{2})\.(\d{2})\.(\d{4})")
 TOTAL = re.compile(r"^\s*Итого\s+(\d{1,3}(?:[  ]\d{3})*,\d{2})\s*$", re.M)
 
