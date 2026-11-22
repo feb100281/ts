@@ -285,24 +285,15 @@ class Command(BaseCommand):
         with transaction.atomic():
             for tax, old, new in REGEX_FIX_CP:                 # до создания — чтобы не задвоить договор
                 Contracts.objects.filter(owner=owner, cp__tax_id=tax, regex=old).update(regex=new)
+            # контрагенты и договоры команда больше не создаёт — их ведут вручную в админке
             for name, tax, accs, ks in PLAN:
-                cp, _ = Counterparty.objects.get_or_create(tax_id=tax, defaults={"name": name, "country": "AM"})
+                cp = Counterparty.objects.filter(tax_id=tax).first()
+                if cp is None:
+                    continue
                 for a in accs:
                     if a not in taken:
                         CounterpartyAccount.objects.create(account=a, cp=cp)
                         taken[a] = cp.name
-                for k in ks:
-                    if Contracts.objects.filter(owner=owner, cp=cp, regex=k["regex"], bs=coa[k["st"]]).exists():
-                        continue
-                    c = Contracts.objects.create(
-                        owner=owner, cp=cp, title=titles[k["title"]], currency=k["cur"], regex=k["regex"],
-                        bs=coa[k["st"]], st=coa.get(k["bs"]) if k["bs"] else None,
-                        subconto_bs=items.get(k["sbs"]) if k["sbs"] else None,
-                        pl=coa.get(k["pl"]) if k["pl"] else None,
-                        subconto_pl=items.get(k["spl"]) if k["spl"] else None)
-                    CfItemAuto.objects.create(contract=c, regex=".", defaultcfdt=items[k["cf"]],
-                                              defaultcfcr=items[k["cf"]])
-                    made += 1
             for cid, (old, new) in REGEX_FIX.items():
                 was = Q(regex__isnull=True) | Q(regex="") if old is None else Q(regex=old)
                 Contracts.objects.filter(was, pk=cid, owner=owner).update(regex=new)
@@ -312,7 +303,7 @@ class Command(BaseCommand):
                     CounterpartyAccount.objects.update_or_create(account=a, defaults={"cp": c.cp})
             CfItemAuto.objects.filter(contract__owner=owner, contract__title__title="Трудовой договор",
                                       regex__in=STAFF_AUTO[0]).update(regex=STAFF_AUTO[1])
-            synced = self._sync(owner, coa, items)
+            synced = 0   # настройки договоров не перезаписываются: их правят вручную
             # валютная конвертация (410201) — не внутригрупповая операция
             CfData.objects.filter(owner=owner, intercompany=True, cfitem__code="410201").update(intercompany=False)
             for d, amount, tax, st, cf in OP_FIX:
@@ -325,6 +316,6 @@ class Command(BaseCommand):
             auto_assign(ids, owner.id, lines.append)
         left = unassigned(CfData.objects.filter(owner=owner)).filter(contract__isnull=True).count()
         self.stdout.write(f"\nДоговоров с обновлёнными настройками: {synced}.")
-        self.stdout.write(f"Новых договоров: {made}. Проверено операций: {len(ids)}; без договора осталось: {left}")
+        self.stdout.write(f"Проверено операций: {len(ids)}; без договора осталось: {left}")
         for x in lines:
             self.stdout.write(x)
