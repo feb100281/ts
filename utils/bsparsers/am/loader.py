@@ -506,7 +506,9 @@ def regroup_contract(contract, log=print) -> int:
               AND d.contract_id IS DISTINCT FROM %(c)s
               AND (d.contract_id IS NULL OR EXISTS (
                     SELECT 1 FROM contracts_contracts o
-                    WHERE o.id = d.contract_id AND o.cp_id = %(cp)s AND coalesce(o.regex, '') = ''
+                    WHERE o.id = d.contract_id AND o.cp_id = %(cp)s
+                      -- без RegEx или с RegEx короче (менее точный): точный договор важнее, как при разноске
+                      AND (coalesce(o.regex, '') = '' OR length(o.regex) < length(%(rx)s))
                       -- договор, привязанный к счёту (эквайринг), выбран по счёту — не трогаем
                       AND NOT EXISTS (SELECT 1 FROM treasury_counterpartyaccount ba WHERE ba.contract_id = o.id)))
               AND NOT EXISTS (SELECT 1 FROM treasury_cfsplits s WHERE s.transaction_id = d.id)
