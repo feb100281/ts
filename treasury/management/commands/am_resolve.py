@@ -2,7 +2,7 @@
 Разноска зарубежных компаний по «Правилам разноски».
 
     am_resolve --build            завести правила из текущих договоров (RegEx и автоматизация);
-                                  уже заведённые правила контрагента не трогаются
+                                  повторный запуск только дописывает недостающие строки
     am_resolve                    сверка: что изменится, без записи (+ Excel «было/стало» в media/am_reports)
     am_resolve --apply            пересобрать разноску и включить «Правила разноски» для компании
     am_resolve --off              вернуть прежний механизм (правила и отметки «руками» остаются)
@@ -76,67 +76,76 @@ class Command(BaseCommand):
     # ---------------- правила из договоров ----------------
 
     def _build(self, owner):
+        """Правила из договоров. Повторный запуск только дописывает недостающие строки в конец —
+        строки, заведённые или исправленные руками, не меняются."""
         bound = set(CounterpartyAccount.objects.exclude(contract__isnull=True).values_list("contract_id", flat=True))
-        made_r = made_rules = 0
         contracts = list(Contracts.objects.filter(owner=owner).select_related("cp", "title"))
         by_cp: dict = {}
         for c in contracts:
             by_cp.setdefault(c.cp_id, []).append(c)
         autos: dict = {}
         for a in CfItemAuto.objects.filter(contract__owner=owner).order_by("id"):
-            autos.setdefault(a.contract_id, []).append(a)
-        linked = set(CounterpartyAccount.objects.values_list("cp_id", flat=True))
+            if a.defaultcfdt_id or a.defaultcfcr_id:
+                autos.setdefault(a.contract_id, []).append(a)
 
         def rules_of(c, rx):
-            out = []
             items = sorted(autos.get(c.pk, []), key=lambda a: -len((a.regex or "").strip(". ")))
-            for a in items:
-                if a.defaultcfdt_id or a.defaultcfcr_id:
-                    out.append((_and(rx, a.regex), c, a.defaultcfdt_id, a.defaultcfcr_id))
-            return out
+            return [(_and(rx, a.regex), c, a.defaultcfdt_id, a.defaultcfcr_id) for a in items]
+
+        def catch_all(c):
+            """Всё остальное — на договор; статьи из автоматизации (сначала строки без RegEx)."""
+            items = sorted(autos.get(c.pk, []), key=lambda a: len((a.regex or "").strip(". ")))
+            d = next((a.defaultcfdt_id for a in items if a.defaultcfdt_id), None)
+            k = next((a.defaultcfcr_id for a in items if a.defaultcfcr_id), None)
+            return [("", c, d, k)] if d or k else []
+
+        def is_labor(c):
+            return "трудов" in (c.title.title if c.title_id else "").lower()
+
+        made_r = made_rules = 0
+
+        def put(cp_id, plan, comment=""):
+            nonlocal made_r, made_rules
+            if not plan:
+                return
+            r, new = AmResolver.objects.get_or_create(owner=owner, cp_id=cp_id, defaults={"comment": comment})
+            made_r += new
+            have = set(r.rules.values_list("text_regex", "contract_id"))
+            order = max(r.rules.values_list("order", flat=True), default=0)
+            for rx, c, d, k in plan:
+                if (rx, c.pk) in have:
+                    continue
+                have.add((rx, c.pk))
+                order += 10
+                AmRule.objects.create(resolver=r, order=order, text_regex=rx, contract=c, cf_item_dt_id=d,
+                                      cf_item_cr_id=k)
+                made_rules += 1
 
         general = []
         for cp_id, cs in by_cp.items():
             free = [c for c in cs if c.pk not in bound]
             if not free or cp_id is None:
                 continue
-            cp = cs[0].cp
-            # операции без контрагента по счёту/ИНН — RegEx договора контрагента без счетов (возвраты RL)
-            # и трудового договора (удержания по исполнительному листу)
-            for c in free:
-                if (c.regex or "").strip() and (cp_id not in linked or "трудов" in (c.title.title if c.title_id else "").lower()):
-                    general += rules_of(c, c.regex)
-            if AmResolver.objects.filter(owner=owner, cp_id=cp_id).exists():
-                continue
-            plan = []
             with_rx = sorted([c for c in free if (c.regex or "").strip()], key=lambda c: -len(c.regex))
-            for c in with_rx:
-                plan += rules_of(c, c.regex)
-            no_rx = [c for c in free if not (c.regex or "").strip()]
-            if len(free) == 1 and no_rx:                 # единственный договор без RegEx — всё остальное
-                plan += rules_of(no_rx[0], "")
-            if not plan:
-                continue
-            r = AmResolver.objects.create(owner=owner, cp_id=cp_id)
-            made_r += 1
-            for n, (rx, c, d, k) in enumerate(plan, 1):
-                AmRule.objects.create(resolver=r, order=n * 10, text_regex=rx, contract=c, cf_item_dt_id=d,
-                                      cf_item_cr_id=k)
-                made_rules += 1
-        if general and not AmResolver.objects.filter(owner=owner, cp__isnull=True).exists():
-            r = AmResolver.objects.create(owner=owner, cp=None, comment="операции без контрагента")
-            for n, (rx, c, d, k) in enumerate(general, 1):
-                AmRule.objects.create(resolver=r, order=n * 10, text_regex=rx, contract=c, cf_item_dt_id=d,
-                                      cf_item_cr_id=k)
-                made_rules += 1
-            made_r += 1
-        self.stdout.write(f"  заведено контрагентов с правилами: {made_r}, правил: {made_rules}")
+            general += [(len(c.regex), x) for c in with_rx for x in rules_of(c, c.regex)]
+            plan = [x for c in with_rx for x in rules_of(c, c.regex)]
+            if len(free) == 1:                           # единственный договор: без RegEx или трудовой
+                c = free[0]
+                if not (c.regex or "").strip():
+                    plan += rules_of(c, "") + catch_all(c)
+                elif is_labor(c):
+                    plan += catch_all(c)
+            put(cp_id, plan)
+        # контрагент не найден по счёту и ИНН — договоры по RegEx назначения, длинные RegEx первыми
+        put(None, [x for _, x in sorted(general, key=lambda t: -t[0])], "операции без контрагента")
+
+        self.stdout.write(f"  новых контрагентов с правилами: {made_r}, добавлено правил: {made_rules}")
         no_rules = [c for cs in by_cp.values() for c in cs if c.pk not in bound
                     and not AmRule.objects.filter(contract=c).exists()]
         if no_rules:
             self.stdout.write(f"  договоров без правил (по ним автоматически ничего не встанет): {len(no_rules)}")
             for c in no_rules[:40]:
-                self.stdout.write(f"    {c.cp.name} | {c.title} id {c.pk}")
+                self.stdout.write(f"    {c.cp.name if c.cp_id else '—'} | {c.title} id {c.pk}")
 
     # ---------------- сверка ----------------
 
