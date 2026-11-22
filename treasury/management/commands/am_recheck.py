@@ -18,7 +18,8 @@ MOVABLE = """
       AND d.contract_id IS DISTINCT FROM %(c)s
       AND (d.contract_id IS NULL OR EXISTS (
             SELECT 1 FROM contracts_contracts o
-            WHERE o.id = d.contract_id AND o.cp_id = %(cp)s AND coalesce(o.regex, '') = ''))
+            WHERE o.id = d.contract_id AND o.cp_id = %(cp)s AND coalesce(o.regex, '') = ''
+              AND NOT EXISTS (SELECT 1 FROM treasury_counterpartyaccount ba WHERE ba.contract_id = o.id)))
       AND NOT EXISTS (SELECT 1 FROM treasury_cfsplits s WHERE s.transaction_id = d.id)
 """
 
@@ -34,8 +35,9 @@ class Command(BaseCommand):
         self._foreign_contract(apply)
         for owner in Owners.objects.exclude(country="RU").exclude(country__isnull=True):
             self.stdout.write(f"\n{owner}")
+            unbound = Q(bound_accounts__isnull=True) & (Q(regex__isnull=True) | Q(regex=""))
             multi = (Contracts.objects.filter(owner=owner).values("cp_id")
-                     .annotate(n=Count("id"), empty=Count("id", filter=Q(regex__isnull=True) | Q(regex="")))
+                     .annotate(n=Count("id", distinct=True), empty=Count("id", filter=unbound, distinct=True))
                      .filter(n__gt=1))
             bad = [m for m in multi if m["empty"] > 1]
             self.stdout.write(f"  контрагентов с несколькими договорами: {len(multi)}; "
@@ -44,8 +46,8 @@ class Command(BaseCommand):
                 for c in Contracts.objects.filter(owner=owner, cp_id=m["cp_id"]).select_related("cp", "title"):
                     self.stdout.write(f"    {c.cp.name} | {c.title} id {c.pk} | RegEx: {c.regex or '—'}")
             moves = 0
-            for c in (Contracts.objects.filter(owner=owner).exclude(regex__isnull=True).exclude(regex="")
-                      .select_related("cp", "owner")):
+            for c in (Contracts.objects.filter(owner=owner, bound_accounts__isnull=True)
+                      .exclude(regex__isnull=True).exclude(regex="").select_related("cp", "owner")):
                 try:
                     if apply:
                         n = regroup_contract(c, lambda *_: None)
@@ -82,9 +84,23 @@ class Command(BaseCommand):
     def _foreign_contract(self, apply):
         """Операции, где договор принадлежит другому контрагенту: договор и статью — сбросить и разнести заново."""
         from django.db.models import F
-        ops = (CfData.objects.exclude(owner__country="RU").exclude(owner__isnull=True)
-               .filter(cp__isnull=False, contract__isnull=False).exclude(contract__cp_id=F("cp_id"))
-               .exclude(splits__isnull=False))
+        base = (CfData.objects.exclude(owner__country="RU").exclude(owner__isnull=True)
+                .filter(cp__isnull=False, contract__isnull=False).exclude(contract__cp_id=F("cp_id"))
+                .exclude(splits__isnull=False))
+        # комиссии банка по чужим переводам: договор банка выбран по своему RegEx — это верно
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT d.id FROM treasury_cfdata d
+                JOIN contracts_contracts c ON c.id = d.contract_id
+                JOIN counterparties_counterparty k ON k.id = c.cp_id
+                WHERE d.id = ANY(%s) AND (
+                    (coalesce(d.cp_bs_name, '') ~* '(INN|ИНН)[ .:]*[0-9]{10}'
+                     AND position(k.tax_id IN coalesce(d.cp_bs_name, '')) = 0)
+                    OR coalesce(c.regex, '') = ''
+                    OR NOT (d.temp ~* c.regex OR coalesce(d.temp_ru, '') ~* c.regex))
+            """, [list(base.values_list("id", flat=True))])
+            bad = [r[0] for r in cur.fetchall()]
+        ops = CfData.objects.filter(id__in=bad)
         rows = list(ops.select_related("cp", "contract__cp").order_by("cp__name")[:30])
         self.stdout.write(f"Операций, где договор другого контрагента: {ops.count()}")
         for o in rows:

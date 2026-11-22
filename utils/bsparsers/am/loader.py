@@ -492,6 +492,8 @@ def regroup_contract(contract, log=print) -> int:
     owner = getattr(contract, "owner", None)
     if not rx or owner is None or (owner.country or "RU") == "RU":
         return 0
+    if CounterpartyAccount.objects.filter(contract=contract).exists():   # договор по счёту — RegEx не применяется
+        return 0
     with transaction.atomic(), connection.cursor() as cur:
         cur.execute("""
             UPDATE treasury_cfdata d
@@ -502,7 +504,9 @@ def regroup_contract(contract, log=print) -> int:
               AND d.contract_id IS DISTINCT FROM %(c)s
               AND (d.contract_id IS NULL OR EXISTS (
                     SELECT 1 FROM contracts_contracts o
-                    WHERE o.id = d.contract_id AND o.cp_id = %(cp)s AND coalesce(o.regex, '') = ''))
+                    WHERE o.id = d.contract_id AND o.cp_id = %(cp)s AND coalesce(o.regex, '') = ''
+                      -- договор, привязанный к счёту (эквайринг), выбран по счёту — не трогаем
+                      AND NOT EXISTS (SELECT 1 FROM treasury_counterpartyaccount ba WHERE ba.contract_id = o.id)))
               AND NOT EXISTS (SELECT 1 FROM treasury_cfsplits s WHERE s.transaction_id = d.id)
             RETURNING d.id
         """, {"c": contract.pk, "cp": contract.cp_id, "owner": owner.pk, "rx": rx})
