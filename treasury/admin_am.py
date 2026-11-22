@@ -13,6 +13,9 @@ from .models import AmMode, AmResolver, AmRule, CfData, TransitAccount
 
 def _rerun(owner_id, log=None):
     from utils.bsparsers.am.resolve import resolve
+    from .models import am_rules_on
+    if not am_rules_on(owner_id):                    # до переключения правила только сохраняются
+        return "правила сохранены; операции переразнесутся после переключения (am_resolve --apply)"
     lines = []
     resolve(owner_id, log=lines.append)
     return "; ".join(x.strip() for x in lines)
