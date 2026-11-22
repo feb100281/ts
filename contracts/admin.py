@@ -673,7 +673,40 @@ class ContractsAdmin(admin.ModelAdmin):
     change_list_template = "admin/contracts/contracts/change_list.html"
     change_form_template = "admin/contracts/contracts/change_form.html"
 
-    actions = ("export_to_excel", "copy_contracts")
+    actions = ("export_to_excel", "copy_contracts", "release_mismatched")
+
+    @admin.action(description="Снять с договора операции, не подходящие под его RegEx")
+    def release_mismatched(self, request, queryset):
+        """Операции зарубежных компаний, чьё назначение не подходит под RegEx договора: договор и статья
+        снимаются, затем авторазноска. Договоры без RegEx и привязанные к счетам не трогаются; сплиты тоже."""
+        from django.db import connection, transaction
+        from treasury.models import CfData, CounterpartyAccount
+        from utils.bsparsers.am.loader import auto_assign
+        total, notes = 0, []
+        for c in queryset.select_related("owner"):
+            rx = (c.regex or "").strip()
+            if not rx or c.owner is None or (c.owner.country or "RU") == "RU":
+                continue
+            if CounterpartyAccount.objects.filter(contract=c).exists():
+                continue
+            with transaction.atomic(), connection.cursor() as cur:
+                cur.execute("""
+                    UPDATE treasury_cfdata d SET contract_id = NULL, cfitem_id = NULL, cp_final_id = NULL
+                    WHERE d.contract_id = %s
+                      AND NOT (d.temp ~* %s OR coalesce(d.temp_ru, '') ~* %s)
+                      AND NOT EXISTS (SELECT 1 FROM treasury_cfsplits s WHERE s.transaction_id = d.id)
+                    RETURNING d.id
+                """, [c.pk, rx, rx])
+                ids = [r[0] for r in cur.fetchall()]
+                if ids:
+                    auto_assign(ids, c.owner_id, lambda *_: None)
+            if ids:
+                total += len(ids)
+                left = CfData.objects.filter(id__in=ids, contract__isnull=True).count()
+                notes.append(f"{c.cp.name} id {c.pk}: снято {len(ids)}, без договора осталось {left}")
+        self.message_user(request, f"Снято операций: {total}. " + "; ".join(notes)
+                          + (" Оставшиеся без договора — в «Уточнить платежи»." if total else ""))
+
 
     @admin.action(description="Скопировать договор (с автоматизацией и предметом)")
     def copy_contracts(self, request, queryset):
