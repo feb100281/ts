@@ -31,6 +31,7 @@ class Command(BaseCommand):
 
     def handle(self, apply, **_):
         self._transit(apply)
+        self._foreign_contract(apply)
         for owner in Owners.objects.exclude(country="RU").exclude(country__isnull=True):
             self.stdout.write(f"\n{owner}")
             multi = (Contracts.objects.filter(owner=owner).values("cp_id")
@@ -77,3 +78,17 @@ class Command(BaseCommand):
             if apply:
                 ops.update(cp=None, cp_final=None, contract=None, cfitem=None)
                 a.delete()
+
+    def _foreign_contract(self, apply):
+        """Операции, где договор принадлежит другому контрагенту: договор и статью — сбросить и разнести заново."""
+        from django.db.models import F
+        ops = (CfData.objects.exclude(owner__country="RU").exclude(owner__isnull=True)
+               .filter(cp__isnull=False, contract__isnull=False).exclude(contract__cp_id=F("cp_id"))
+               .exclude(splits__isnull=False))
+        rows = list(ops.select_related("cp", "contract__cp").order_by("cp__name")[:30])
+        self.stdout.write(f"Операций, где договор другого контрагента: {ops.count()}")
+        for o in rows:
+            self.stdout.write(f"  {o.date} {o.dt or o.cr} | контрагент {o.cp.name} | договор {o.contract.cp.name} id {o.contract_id}")
+        if apply:
+            n = ops.update(contract=None, cfitem=None, cp_final=None)
+            self.stdout.write(f"  сброшено: {n}, будут переразнесены")

@@ -223,6 +223,8 @@ AUTO_SQL = [
               AND NOT EXISTS (SELECT 1 FROM treasury_counterpartyaccount ba WHERE ba.contract_id = c.id)
             WHERE d.id = ANY(%(ids)s) AND d.contract_id IS NULL
               AND (d.cp_id IS NULL OR c.cp_id = d.cp_id)        -- контрагент известен: только его договоры
+              -- контрагент не найден, но в названии есть ИНН — чужой договор по RegEx не ставим
+              AND (d.cp_id IS NOT NULL OR coalesce(d.cp_bs_name, '') !~* '(INN|ИНН)[ .:]*[0-9]{10}')
             ORDER BY d.id, length(c.regex) DESC, c.id
         )
         UPDATE treasury_cfdata d SET contract_id = m.contract_id FROM m WHERE d.id = m.cf_id
