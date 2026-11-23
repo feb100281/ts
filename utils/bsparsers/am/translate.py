@@ -133,10 +133,12 @@ def cp_name_ru(name: str) -> str:
     for hy, ru in NAME_PHRASES:
         s = s.replace(hy, ru)
     form, words = "", []
-    for w in re.findall(r"[^\s«»\"']+", s):
+    for i, w in enumerate(re.findall(r"[^\s«»\"']+", s)):
         key = w.strip(".,").upper()
         if key in ORG_FORMS and not form:
             form = ORG_FORMS[key]
+            if i == 0:                                               # форма впереди: «AO NARODNYI BANK …»
+                continue
             break                                                    # после формы — адрес
         if key == "ՀՀ":
             w = "РА"
