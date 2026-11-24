@@ -265,6 +265,25 @@ AUTO_SQL = [
         FROM contracts_contracts c
         WHERE d.id = ANY(%(ids)s) AND d.contract_id = c.id AND d.cp_final_id IS NULL
     """),
+    ("покупки сотрудников по карте — продажи, не зарплата", """
+        -- оплата картой в магазине («Ք:»): счёт карты сотрудника даёт его трудовой договор —
+        -- такие поступления ставятся на договор, где стоят остальные карточные продажи по этому счёту
+        WITH best AS (
+            SELECT DISTINCT ON (x.ba_id) x.ba_id, x.contract_id, c.cp_id
+            FROM treasury_cfdata x
+            JOIN contracts_contracts c ON c.id = x.contract_id
+            JOIN contracts_contractstitle t ON t.id = c.title_id
+            WHERE x.owner_id = %(owner)s AND x.dt > 0 AND x.temp LIKE 'Ք:%%' AND t.title NOT ILIKE '%%трудов%%'
+            GROUP BY x.ba_id, x.contract_id, c.cp_id
+            ORDER BY x.ba_id, count(*) DESC
+        )
+        UPDATE treasury_cfdata d SET contract_id = b.contract_id, cp_id = b.cp_id, cp_final_id = b.cp_id,
+                                     cfitem_id = NULL
+        FROM best b, contracts_contracts c, contracts_contractstitle t
+        WHERE d.id = ANY(%(ids)s) AND NOT d.manual AND d.dt > 0 AND d.temp LIKE 'Ք:%%'
+          AND d.ba_id = b.ba_id AND c.id = d.contract_id AND t.id = c.title_id AND t.title ILIKE '%%трудов%%'
+          AND NOT EXISTS (SELECT 1 FROM treasury_cfsplits s WHERE s.transaction_id = d.id)
+    """),
     ("статьи", """
         WITH m AS (
             SELECT DISTINCT ON (d.id) d.id AS cf_id,
