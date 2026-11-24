@@ -279,9 +279,12 @@ AUTO_SQL = [
         )
         UPDATE treasury_cfdata d SET contract_id = b.contract_id, cp_id = b.cp_id, cp_final_id = b.cp_id,
                                      cfitem_id = NULL
-        FROM best b, contracts_contracts c, contracts_contractstitle t
+        FROM best b
         WHERE d.id = ANY(%(ids)s) AND NOT d.manual AND d.dt > 0 AND d.temp LIKE 'Ք:%%'
-          AND d.ba_id = b.ba_id AND c.id = d.contract_id AND t.id = c.title_id AND t.title ILIKE '%%трудов%%'
+          AND d.ba_id = b.ba_id AND d.contract_id IS DISTINCT FROM b.contract_id
+          -- контрагент по счёту карты — сотрудник (есть трудовой договор): договор пустой, трудовой или подотчёт
+          AND EXISTS (SELECT 1 FROM contracts_contracts c JOIN contracts_contractstitle t ON t.id = c.title_id
+                      WHERE c.cp_id = d.cp_id AND t.title ILIKE '%%трудов%%')
           AND NOT EXISTS (SELECT 1 FROM treasury_cfsplits s WHERE s.transaction_id = d.id)
     """),
     ("статьи", """
