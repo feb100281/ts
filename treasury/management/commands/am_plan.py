@@ -115,7 +115,7 @@ PLAN = [
     # оплаты покупателей через кошелёк Idram
     ("ИДРАМ ООО", "AM-IDRAM",
      ["1930028248480100", "1930028248480400", "1510024803180100", "1150005284850100"], [K("Эквайринг", **ACQ)]),
-    ("ТРЕНДСЕТТЕР ЗАО (АРМЕНИЯ) — СОБСТВЕННЫЕ СЧЕТА", "AM-OWN-" + OWNER_TAX, OWN,
+    ("ТРЕНДСЕТТЕР ЗАО (АРМЕНИЯ) — СОБСТВЕННЫЕ СЧЕТА", "9909062297", OWN,
      [K("Внутригрупповые расчеты", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/|собственных средс|կպՐպՉՏՊ|kpRpCHTP", st="790001", cf="410101"),
       K("Внутригрупповые расчеты", "փոխանակում|փոխարկում|pokhanakum|pokharkum|արժույթի|arjuyti|Currency Exchange|Obmen", st="790003", cf="410201")]),
     ("ГОСБЮДЖЕТ РА", "AM-STATE-BUDGET",
@@ -176,13 +176,13 @@ REGEX_FIX_CP = [("AM-ARDSHINBANK", "սպասարկման|միջնորդավճա�
                 ("AM-ARDSHINBANK", "Անկանխիկ վճարում", "Անկանխիկ վճարում|Ankankhik vcharum"),
                 ("AM-ARDSHINBANK", "Անկանխիկ վճարում|Ankankhik vcharum", "Անկանխիկ վճարում|Ankankhik v.?charum|Ankankh"),   # USD-карта: «Ankankhik vtcharum»
                 ("AM-ARDSHINBANK", "Անկանխիկ վճարում|Ankankhik v.?charum|Ankankh", "Անկանխիկ|Ankankh"),   # короткий — договоры карты по продавцу (длиннее) важнее
-                ("AM-OWN-" + OWNER_TAX, "տեղափոխ|միջև|Սեփական", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan"),
-                ("AM-OWN-" + OWNER_TAX, "փոխանակում|փոխարկում", "փոխանակում|փոխարկում|pokhanakum|pokharkum"),
+                ("9909062297", "տեղափոխ|միջև|Սեփական", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan"),
+                ("9909062297", "փոխանակում|փոխարկում", "փոխանակում|փոխարկում|pokhanakum|pokharkum"),
                 # обмен валюты и переводы между своими счетами без ключевых слов
-                ("AM-OWN-" + OWNER_TAX, "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/"),
-                ("AM-OWN-" + OWNER_TAX, "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/|собственных средс"),
-                ("AM-OWN-" + OWNER_TAX, "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/|собственных средс", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/|собственных средс|կպՐպՉՏՊ|kpRpCHTP"),   # «Перевод между моими счетами» в испорченной кодировке
-                ("AM-OWN-" + OWNER_TAX, "փոխանակում|փոխարկում|pokhanakum|pokharkum", "փոխանակում|փոխարկում|pokhanakum|pokharkum|արժույթի|arjuyti|Currency Exchange|Obmen")]
+                ("9909062297", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/"),
+                ("9909062297", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/|собственных средс"),
+                ("9909062297", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/|собственных средс", "տեղափոխ|միջև|Սեփական|teghapokh|mijev|sepakan|հանձնարարագիր|/RTN/|собственных средс|կպՐպՉՏՊ|kpRpCHTP"),   # «Перевод между моими счетами» в испорченной кодировке
+                ("9909062297", "փոխանակում|փոխարկում|pokhanakum|pokharkum", "փոխանակում|փոխարկում|pokhanakum|pokharkum|արժույթի|arjuyti|Currency Exchange|Obmen")]
 # правки RegEx существующих договоров: {id: (было, стало)}
 REGEX_FIX = {
     535: ("գործ|վերադարձ|վճարահաշվարկ", "գործ|վերադարձ|վճարահաշվարկ|POS անբավարար"),
