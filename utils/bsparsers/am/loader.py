@@ -215,6 +215,15 @@ AUTO_SQL = [
         WHERE d.id = ANY(%(ids)s) AND d.cp_id IS NULL
           AND c.tax_id = substring(d.cp_bs_name from '(?:INN|ИНН)[ .:]*([0-9]{10,12})')
     """),
+    ("контрагенты по счёту в назначении", """
+        -- платёж через банк-посредник (корсчёт, ИНН банка): счёт получателя указан в назначении
+        UPDATE treasury_cfdata d SET cp_id = a.cp_id
+        FROM treasury_counterpartyaccount a
+        WHERE d.id = ANY(%(ids)s) AND d.cp_id IS NULL AND d.contract_id IS NULL
+          AND length(a.account) >= 12 AND a.account !~ '^30[12][0-9]{17}$'
+          AND a.account NOT LIKE 'SELF:%%'
+          AND position(a.account IN upper(coalesce(d.temp, ''))) > 0
+    """),
     ("договоры по назначению", """
         WITH m AS (
             SELECT DISTINCT ON (d.id) d.id AS cf_id, c.id AS contract_id

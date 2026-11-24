@@ -82,6 +82,12 @@ def resolve_one(op: dict, links: dict, inn_cps: dict, rules: dict, contracts: di
     if key and not is_transit(key, transit) and key in links:
         cp, bound = links[key]
         how = "счёт"
+    if cp is None:                       # счёт получателя в назначении (платёж через банк-посредник)
+        up = (op.get("temp") or "").upper()
+        for a, (c, b) in links.items():
+            if len(a) >= 12 and not a.startswith("SELF:") and not is_transit(a, transit) and a in up:
+                cp, bound, how = c, b, "счёт в назначении"
+                break
     inn = inn_of(op.get("cp_bs_name"))
     if cp is None and inn and inn in inn_cps:
         cp, how = inn_cps[inn], "ИНН"
