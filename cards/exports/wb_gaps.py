@@ -102,7 +102,7 @@ def _file_name(docs, today):
     """Одна УПД: «номер дата поставщик»; несколько — их число и дата выгрузки."""
     if len(docs) == 1:
         d = next(iter(docs.values()))
-        name = f"{d.number} {d.date:%d.%m.%Y} {getattr(d.counterparty, 'name', '') or ''}".strip()
+        name = f"УПД № {d.number} от {d.date:%d.%m.%Y} {getattr(d.counterparty, 'name', '') or ''}".strip()
     else:
         name = f"Пробелы ВБ {len(docs)} УПД {today:%d.%m.%Y}"
     name = re.sub(r'[\\/:*?"<>|]+', '-', name)
