@@ -113,3 +113,10 @@ def update_size(row_id, chrt_id):
                 (int(chrt_id), int(row_id))
             )
         conn.commit()
+
+
+def size_label(chrt_id):
+    """Размер WB по коду размера — для строки таблицы после сохранения."""
+    from cards.models import WbSizes
+    return (WbSizes.objects.filter(chrt_id=int(chrt_id))
+            .values_list("tech_size", flat=True).first())

@@ -5,6 +5,7 @@ import dash_mantine_components as dmc
 import base64
 
 from .data import (
+    size_label,
     update_channel,
     update_size,
     get_grid_data,
@@ -60,103 +61,36 @@ def register_callbacks(app):
 
     @app.callback(
         Output("dummy", "children"),
-        Output(
-            "upd-grid",
-            "rowData",
-            allow_duplicate=True,
-        ),
-
-        Input(
-            "upd-grid",
-            "cellValueChanged"
-        ),
-
-        State(
-            "upd-id-store",
-            "data"
-        ),
-
+        Output("upd-grid", "rowTransaction"),
+        Input("upd-grid", "cellValueChanged"),
         prevent_initial_call=True,
     )
-    def save_grid_change(
-        change,
-        upd_id,
-    ):
-
-        if not change:
-            return (
-                no_update,
-                no_update
-            )
-
-        if isinstance(
-            change,
-            list,
-        ):
-            change = change[-1]
-
-        if change.get("colId") == "channel":
-            row_id = change.get("data", {}).get("id")
+    def save_grid_change(changes):
+        """Сохраняет все правки (размер, канал) и обновляет только эти строки, без перезагрузки таблицы."""
+        if not changes:
+            return no_update, no_update
+        if not isinstance(changes, list):
+            changes = [changes]
+        rows = []
+        for ch in changes:
+            row = dict(ch.get("data") or {})
+            row_id = row.get("id")
+            col = ch.get("colId")
+            value = ch.get("value")
             if row_id is None:
-                return no_update, no_update
-            update_channel(row_id, change.get("value"))
-            return "", get_grid_data(upd_id).to_dict("records")
-
-        if (
-            change.get(
-                "colId"
-            )
-            != "chrt_id"
-        ):
-            return (
-                no_update,
-                no_update
-            )
-
-        row = change.get(
-            "data",
-            {},
-        )
-
-        row_id = row.get(
-            "id"
-        )
-
-        raw_value = change.get(
-            "value"
-        )
-
-        if (
-            row_id is None
-            or raw_value
-            in [None, ""]
-        ):
-            return (
-                no_update,
-                no_update
-            )
-
-        chrt_id = (
-            str(raw_value)
-            .split("|")[0]
-            .strip()
-        )
-
-        update_size(
-            row_id,
-            chrt_id,
-        )
-
-        df = get_grid_data(
-            upd_id
-        )
-
-        return (
-            "",
-            df.to_dict(
-                "records"
-            ),
-        )
+                continue
+            if col == "channel":
+                update_channel(row_id, value)
+                rows.append(row)
+            elif col == "chrt_id" and value not in (None, ""):
+                chrt_id = str(value).split("|")[0].strip()
+                update_size(row_id, chrt_id)
+                row["chrt_id"] = int(chrt_id)
+                row["tech_size"] = size_label(chrt_id)
+                rows.append(row)
+        if not rows:
+            return no_update, no_update
+        return "", {"update": rows}
 
     @app.callback(
         Output(
