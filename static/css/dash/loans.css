@@ -1,0 +1,20 @@
+/* Дашборд «Займы и кредиты» */
+.ln-page { background: #fff; }
+.ln-page h1 { font-family: inherit; }
+
+/* показатели */
+.ln-kpi { padding: 12px 16px; border-right: 1px solid #E3E8E6; border-bottom: 1px solid #E3E8E6; margin: 0 -1px -1px 0; min-width: 0; background: #fff; }
+.ln-kpi-title { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ln-kpi-body { min-height: 52px; font-size: 23px; font-weight: 700; margin-top: 4px; }
+.ln-kpi-value { font-size: 23px; font-weight: 700; line-height: 1.3; white-space: nowrap; }
+.ln-kpi-foot { font-size: 12px; font-weight: 400; color: #8A8A8A; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ln-kpi-foot b { color: #1F5E4E; font-weight: 700; }
+.ln-kpi-cap { color: #A15C38; font-weight: 600; }
+
+/* таблицы */
+.ln-grid { --ag-border-radius: 0; --ag-wrapper-border-radius: 0; --ag-header-background-color: #2F6656; --ag-header-foreground-color: #fff; --ag-font-family: inherit; }
+.ln-grid .ag-header-cell-label { white-space: normal; }
+.ln-grid .ag-paging-panel { font-size: 12px; }
+
+/* поля и кнопки без скруглений */
+.ln-page .mantine-Input-input, .ln-page .mantine-Button-root, .ln-page .mantine-Badge-root { border-radius: 0; }

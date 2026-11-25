@@ -1,0 +1,95 @@
+/* Справочники: словарь переводов, названия контрагентов, разметка → статьи */
+
+body.model-texttranslation #result_list,
+body.model-cpname #result_list,
+body.model-hintrule #result_list {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #d6e2ef;
+  background: #fff;
+}
+
+body.model-texttranslation #result_list thead th,
+body.model-cpname #result_list thead th,
+body.model-hintrule #result_list thead th {
+  background: #eef4fb;
+  color: #2f7fb5;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 11px 14px;
+  border: 1px solid #d6e2ef;
+  white-space: nowrap;
+}
+
+body.model-texttranslation #result_list td,
+body.model-cpname #result_list td,
+body.model-hintrule #result_list td {
+  padding: 8px 14px;
+  border: 1px solid #e6edf5;
+  vertical-align: middle;
+  font-size: 14px;
+  color: #1f2937;
+}
+body.model-texttranslation #result_list tbody tr:nth-child(even) td,
+body.model-cpname #result_list tbody tr:nth-child(even) td,
+body.model-hintrule #result_list tbody tr:nth-child(even) td { background: #fafcfe; }
+body.model-texttranslation #result_list tbody tr:hover td,
+body.model-cpname #result_list tbody tr:hover td,
+body.model-hintrule #result_list tbody tr:hover td { background: #f3f8fd; }
+
+/* Оригинал */
+.am-src { color: #374151; line-height: 1.5; text-decoration: none !important; }
+a.am-src:hover { color: #2f7fb5; }
+.am-ph {
+  display: inline-block;
+  padding: 0 4px;
+  margin: 0 1px;
+  border: 1px solid #c7d7ea;
+  background: #f1f6fc;
+  color: #2f7fb5;
+  font: 600 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.am-ph.am-month { border-color: #e7d3a8; background: #fbf6ea; color: #9a6a12; }
+
+/* Поля ввода */
+body.model-texttranslation #result_list td.field-translation,
+body.model-cpname #result_list td.field-name_ru { width: 48%; }
+body.model-texttranslation #result_list td input[type=text],
+body.model-cpname #result_list td input[type=text],
+body.model-hintrule #result_list td input[type=text],
+body.model-hintrule #result_list td select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid #cfd9e5;
+  border-radius: 0;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  box-shadow: none;
+}
+body.model-texttranslation #result_list td input[type=text]:focus,
+body.model-cpname #result_list td input[type=text]:focus,
+body.model-hintrule #result_list td input[type=text]:focus,
+body.model-hintrule #result_list td select:focus {
+  outline: none;
+  border-color: #2f7fb5;
+  box-shadow: inset 0 0 0 1px #2f7fb5;
+}
+
+/* Количество */
+.am-hits { color: #4b5563; font-variant-numeric: tabular-nums; font-weight: 600; }
+.am-hits.am-hot { color: #111827; font-weight: 700; }
+body.model-texttranslation #result_list td.field-hits_badge,
+body.model-cpname #result_list td.field-hits_badge,
+body.model-hintrule #result_list td.field-rows_count,
+body.model-texttranslation #result_list th.column-hits_badge,
+body.model-cpname #result_list th.column-hits_badge,
+body.model-hintrule #result_list th.column-rows_count { width: 110px; text-align: right; }
+
+body.model-texttranslation #result_list .action-checkbox,
+body.model-cpname #result_list .action-checkbox,
+body.model-hintrule #result_list .action-checkbox,
+body.model-texttranslation #result_list .action-checkbox-column,
+body.model-cpname #result_list .action-checkbox-column,
+body.model-hintrule #result_list .action-checkbox-column { width: 40px; text-align: center; }

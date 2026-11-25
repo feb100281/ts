@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+</head>
+
+<body class="registry-body">
+
+  <header class="registry-header">
+    <div class="registry-brand">
+      <div class="registry-mark">
+        КЗ
+      </div>
+
+      <div>
+        <div class="registry-company">
+          {{ company }}
+        </div>
+
+        <div class="registry-document-type">
+          Внутренний управленческий документ
+        </div>
+      </div>
+    </div>
+
+    <div class="registry-header-meta">
+      <div class="registry-header-label">
+        Сформировано
+      </div>
+
+      <div class="registry-header-value">
+        {{ generated_at|date:"d.m.Y H:i" }}
+      </div>
+    </div>
+  </header>
+
+  <section class="registry-title-section">
+    <div>
+      <h1>
+        {{ title }}
+      </h1>
+
+      <p>
+        Сравнение расчётной задолженности до и после
+        применения ручных корректировок.
+      </p>
+    </div>
+
+    <div class="registry-count">
+      <strong>
+        {{ records_count }}
+      </strong>
+
+      <span>
+        корректировок
+      </span>
+    </div>
+  </section>
+
+  {% if rows_without_calculation %}
+    <div class="registry-warning">
+      Для {{ rows_without_calculation }} корректировок расчётное
+      состояние на выбранную дату не найдено. В таких строках
+      показатели «До» и «Изменение» отображаются прочерком.
+    </div>
+  {% endif %}
+
+  <table class="registry-table">
+    <thead>
+      <tr class="registry-head-main">
+        <th rowspan="2" class="col-document">
+          Документ
+        </th>
+
+        <th rowspan="2" class="col-date">
+          Дата
+        </th>
+
+        <th rowspan="2" class="col-contract">
+          Контрагент и договор
+        </th>
+
+        <th rowspan="2" class="col-reason">
+          Основание
+        </th>
+
+        <th colspan="3" class="group-principal">
+          Основной долг
+        </th>
+
+        <th colspan="3" class="group-interest">
+          Проценты
+        </th>
+
+        <th colspan="3" class="group-total">
+          Общая задолженность
+        </th>
+
+ 
+      </tr>
+
+      <tr class="registry-head-sub">
+        <th>До</th>
+        <th>После</th>
+        <th>Изм.</th>
+
+        <th>До</th>
+        <th>После</th>
+        <th>Изм.</th>
+
+        <th>До</th>
+        <th>После</th>
+        <th>Изм.</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td class="document-cell">
+            <strong>
+              {{ row.document_number }}
+            </strong>
+
+            {% comment %} <small>
+              исп. {{ row.author }}
+            </small> {% endcomment %}
+          </td>
+
+          <td class="date-cell">
+            {{ row.date|date:"d.m.Y" }}
+
+            <small>
+              на конец дня
+            </small>
+          </td>
+
+          <td class="contract-cell">
+            <strong>
+              {{ row.counterparty }}
+            </strong>
+
+            <small>
+              Договор № {{ row.contract_number }}
+
+              {% if row.contract_date %}
+                от {{ row.contract_date|date:"d.m.Y" }}
+              {% endif %}
+            </small>
+          </td>
+
+          <td class="reason-cell">
+            <strong>
+              {{ row.reason }}
+            </strong>
+
+            <small>
+              {{ row.comment }}
+            </small>
+          </td>
+
+          <!-- Основной долг -->
+
+          <td class="money-cell">
+            {{ row.principal_before_text }}
+          </td>
+
+          <td class="money-cell after-cell">
+            {{ row.principal_after_text }}
+          </td>
+
+          <td class="
+              money-cell
+              delta-cell
+              {% if row.principal_delta < 0 %}
+                delta-negative
+              {% elif row.principal_delta > 0 %}
+                delta-positive
+              {% else %}
+                delta-zero
+              {% endif %}
+          ">
+            {{ row.principal_delta_text }}
+          </td>
+
+          <!-- Проценты -->
+
+          <td class="money-cell">
+            {{ row.interest_before_text }}
+          </td>
+
+          <td class="money-cell after-cell">
+            {{ row.interest_after_text }}
+          </td>
+
+          <td class="
+              money-cell
+              delta-cell
+              {% if row.interest_delta < 0 %}
+                delta-negative
+              {% elif row.interest_delta > 0 %}
+                delta-positive
+              {% else %}
+                delta-zero
+              {% endif %}
+          ">
+            {{ row.interest_delta_text }}
+          </td>
+
+          <!-- Общая задолженность -->
+
+          <td class="money-cell total-cell">
+            {{ row.total_before_text }}
+          </td>
+
+          <td class="money-cell total-cell after-cell">
+            {{ row.total_after_text }}
+          </td>
+
+          <td class="
+              money-cell
+              total-cell
+              delta-cell
+              {% if row.total_delta < 0 %}
+                delta-negative
+              {% elif row.total_delta > 0 %}
+                delta-positive
+              {% else %}
+                delta-zero
+              {% endif %}
+          ">
+            {{ row.total_delta_text }}
+          </td>
+
+          
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="14" class="empty-row">
+            Корректировки не выбраны.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+
+    {% if rows %}
+      <tfoot>
+        <tr>
+          <td colspan="4" class="total-title">
+            Итого по выбранным корректировкам
+          </td>
+
+          <td class="money-cell">
+            {{ principal_before_total_text }}
+          </td>
+
+          <td class="money-cell">
+            {{ principal_after_total_text }}
+          </td>
+
+          <td class="
+              money-cell
+              {% if principal_delta_total < 0 %}
+                delta-negative
+              {% elif principal_delta_total > 0 %}
+                delta-positive
+              {% endif %}
+          ">
+            {{ principal_delta_total_text }}
+          </td>
+
+          <td class="money-cell">
+            {{ interest_before_total_text }}
+          </td>
+
+          <td class="money-cell">
+            {{ interest_after_total_text }}
+          </td>
+
+          <td class="
+              money-cell
+              {% if interest_delta_total < 0 %}
+                delta-negative
+              {% elif interest_delta_total > 0 %}
+                delta-positive
+              {% endif %}
+          ">
+            {{ interest_delta_total_text }}
+          </td>
+
+          <td class="money-cell">
+            {{ debt_before_total_text }}
+          </td>
+
+          <td class="money-cell">
+            {{ debt_after_total_text }}
+          </td>
+
+          <td class="
+              money-cell
+              {% if debt_delta_total < 0 %}
+                delta-negative
+              {% elif debt_delta_total > 0 %}
+                delta-positive
+              {% endif %}
+          ">
+            {{ debt_delta_total_text }}
+          </td>
+
+          <td></td>
+        </tr>
+      </tfoot>
+    {% endif %}
+  </table>
+
+  <section class="registry-note">
+    <strong>Пояснение.</strong>
+
+    Колонка «До» отражает расчётное состояние задолженности
+    на конец даты до применения ручной корректировки.
+
+    Колонка «После» отражает остаток, установленный корректировкой.
+
+    Колонка «Изм.» рассчитана как разница между состоянием после
+    и состоянием до корректировки. Отрицательное значение означает
+    уменьшение задолженности, положительное — увеличение.
+  </section>
+
+  <footer class="registry-footer">
+    Реестр корректировок займов ·
+    {{ company }} ·
+    сформировано {{ generated_at|date:"d.m.Y H:i" }}
+  </footer>
+
+</body>
+</html>

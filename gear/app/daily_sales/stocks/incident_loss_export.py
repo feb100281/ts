@@ -1,0 +1,3813 @@
+# # gear/app/daily_sales/stocks/incident_loss_export.py
+# """
+# Экспорт данных для оценки товарного ущерба по происшествиям на складах.
+
+# Модуль полностью самостоятельный: не зависит от Dash и от конкретной
+# реализации dashboard_data — на вход принимает уже собранные данные
+# о происшествиях (тот же список `events`, который строится в
+# dashboard_stock/incidents_panel.py::build_incidents_panel()).
+
+# Публичные функции:
+
+#     build_incident_loss_excel(events, ...)   -> (bytes, filename)
+#     build_incident_cover_letter_pdf(events, ...) -> (bytes, filename)
+
+# Формат одного элемента events (см. incidents_panel.py):
+
+#     {
+#         "date": "2026-07-22",                # дата происшествия
+#         "warehouse_name": "Краснодар",
+#         "incident": {
+#             "type": "fire",
+#             "title": "Пожар на складе",
+#             "status": "Происшествие",
+#             "description": "...",
+#         },
+#         "snapshot": {
+#             "effective_date": "2026-07-21",
+#             "on_hand": 1234,
+#             "nm_count": 87,
+#             "accounting_cost": 1500000.0,
+#             "management_cost": 1380000.0,
+#             "no_accounting_cost_qty": 0,
+#             "no_accounting_cost_nm_count": 0,
+#             "no_management_cost_qty": 0,
+#             "no_management_cost_nm_count": 0,
+#         },
+
+#         # Необязательно. Постатейная детализация остатка (если она
+#         # доступна) — список словарей или pd.DataFrame со столбцами:
+#         #   nm_id, name, brand, qty,
+#         #   accounting_unit_cost, management_unit_cost
+#         # Если не передана — в лист склада попадёт только сводная
+#         # часть (без построчной детализации по товарам).
+#         "items": None,
+#     }
+# """
+
+# from __future__ import annotations
+
+# import io
+# from datetime import datetime, date
+# from pathlib import Path
+
+# import pandas as pd
+
+# from openpyxl import Workbook
+# from openpyxl.styles import (
+#     Alignment,
+#     Border,
+#     Font,
+#     NamedStyle,
+#     PatternFill,
+#     Side,
+# )
+# from openpyxl.utils import get_column_letter
+# from openpyxl.worksheet.worksheet import Worksheet
+
+# from xml.sax.saxutils import escape as _xml_escape
+
+# from reportlab.lib import colors
+# from reportlab.lib.pagesizes import A4
+# from reportlab.lib.styles import ParagraphStyle
+# from reportlab.lib.units import mm
+# from reportlab.pdfbase import pdfmetrics
+# from reportlab.pdfbase.ttfonts import TTFont
+# from reportlab.platypus import (
+#     HRFlowable,
+#     KeepTogether,
+#     Paragraph,
+#     SimpleDocTemplate,
+#     Spacer,
+#     Table,
+#     TableStyle,
+# )
+
+
+# # =============================================================================
+# # ФИРМЕННАЯ ПАЛИТРА (единая для Excel и PDF, соответствует dashboard)
+# # =============================================================================
+
+# TEXT_DARK = "18352F"
+# MUTED = "60746D"
+# BORDER = "D6DFDB"
+
+# ACCENT_GREEN = "315E52"
+# ACCENT_RED = "A43E3E"
+
+# FILL_HEADER = "18352F"       # тёмная плашка заголовков таблиц
+# FILL_SUBHEADER = "F7F9F8"    # светлая подложка
+# FILL_STRIPE = "F7F9F8"       # чередование строк
+# FILL_INCIDENT = "FFF8F8"     # плашка происшествия (красноватая)
+# FILL_TOTAL = "EAF0ED"        # плашка итогов
+
+# FONT_NAME = "Helvetica Light"
+
+# # Палитра письма (PDF) — повторяет образец-шаблон пользователя:
+# # тёплый тёмный текст + бордовый акцент, отдельно от зелёной палитры
+# # дашборда/Excel выше (ACCENT_RED там тоже #A43E3E — специально
+# # оставлен тем же числом, чтобы акцентный цвет совпадал в Excel и PDF).
+# LETTER_ACCENT = "A43E3E"
+# LETTER_TEXT = "2A2020"
+# LETTER_MUTED = "7B6A6A"
+# LETTER_CARD_BG = "FDF6F6"
+# LETTER_BORDER = "E6D6D6"
+
+
+# # =============================================================================
+# # EXCEL: базовые стили
+# # =============================================================================
+
+# def _thin_border(color: str = BORDER) -> Border:
+#     side = Side(
+#         style="thin",
+#         color=color,
+#     )
+#     return Border(
+#         left=side,
+#         right=side,
+#         top=side,
+#         bottom=side,
+#     )
+
+
+# def _set_col_widths(
+#     ws: Worksheet,
+#     widths: dict[str, float],
+# ) -> None:
+#     for col, width in widths.items():
+#         ws.column_dimensions[col].width = width
+
+
+# def _write_title_block(
+#     ws: Worksheet,
+#     *,
+#     row: int,
+#     title: str,
+#     subtitle: str | None,
+#     ncols: int,
+# ) -> int:
+#     """Пишет заголовочный блок (название отчёта) и возвращает следующую строку."""
+
+#     ws.merge_cells(
+#         start_row=row,
+#         start_column=1,
+#         end_row=row,
+#         end_column=ncols,
+#     )
+#     cell = ws.cell(row=row, column=1, value=title)
+#     cell.font = Font(name=FONT_NAME, size=15, bold=True, color=TEXT_DARK)
+#     cell.alignment = Alignment(vertical="center")
+#     ws.row_dimensions[row].height = 26
+#     row += 1
+
+#     if subtitle:
+#         ws.merge_cells(
+#             start_row=row,
+#             start_column=1,
+#             end_row=row,
+#             end_column=ncols,
+#         )
+#         cell = ws.cell(row=row, column=1, value=subtitle)
+#         cell.font = Font(name=FONT_NAME, size=10, color=MUTED)
+#         row += 1
+
+#     return row + 1
+
+
+# def _write_table_header(
+#     ws: Worksheet,
+#     *,
+#     row: int,
+#     headers: list[str],
+#     start_col: int = 1,
+# ) -> None:
+#     for offset, header in enumerate(headers):
+#         col = start_col + offset
+#         cell = ws.cell(row=row, column=col, value=header)
+#         cell.font = Font(name=FONT_NAME, size=10, bold=True, color="FFFFFF")
+#         cell.fill = PatternFill(
+#             fill_type="solid",
+#             fgColor=FILL_HEADER,
+#         )
+#         cell.alignment = Alignment(
+#             vertical="center",
+#             horizontal="center",
+#             wrap_text=True,
+#         )
+#         cell.border = _thin_border()
+#     ws.row_dimensions[row].height = 30
+
+
+# def _sanitize_sheet_title(
+#     raw_name: str,
+#     used: set[str],
+# ) -> str:
+#     """
+#     Excel: максимум 31 символ, запрещены : \\ / ? * [ ].
+#     Гарантирует уникальность имени листа.
+#     """
+
+#     forbidden = set(':\\/?*[]')
+
+#     cleaned = "".join(
+#         ch if ch not in forbidden else " "
+#         for ch in str(raw_name or "Склад")
+#     ).strip()
+
+#     if not cleaned:
+#         cleaned = "Склад"
+
+#     base = cleaned[:31]
+
+#     candidate = base
+#     suffix = 2
+
+#     while candidate.lower() in used:
+#         tail = f" ({suffix})"
+#         candidate = base[: 31 - len(tail)] + tail
+#         suffix += 1
+
+#     used.add(candidate.lower())
+
+#     return candidate
+
+
+# def _fmt_ru_date(value) -> str:
+#     if not value:
+#         return "нет данных"
+#     try:
+#         return pd.to_datetime(value).strftime("%d.%m.%Y")
+#     except Exception:
+#         return str(value)
+
+
+# # =============================================================================
+# # EXCEL: лист "Сводка"
+# # =============================================================================
+
+# SUMMARY_HEADERS = [
+#     "№",
+#     "Склад",
+#     "Происшествие",
+#     "Дата происшествия",
+#     "Остатки на дату",
+#     "Физ. остаток, шт",
+#     "Товаров, NM ID",
+#     "Бухгалтерская с/с, ₽",
+#     "Управленческая с/с, ₽",
+#     "Без бух. с/с, шт",
+#     "Без упр. с/с, шт",
+# ]
+
+# SUMMARY_COL_WIDTHS = {
+#     "A": 5,
+#     "B": 30,
+#     "C": 20,
+#     "D": 16,
+#     "E": 16,
+#     "F": 16,
+#     "G": 14,
+#     "H": 20,
+#     "I": 20,
+#     "J": 14,
+#     "K": 14,
+# }
+
+
+# HYPERLINK_COLOR = "1155CC"
+
+
+# def _build_summary_sheet(
+#     wb: Workbook,
+#     sorted_events: list[dict],
+#     warehouse_refs: dict[int, dict],
+#     warehouse_sheet_titles: dict[int, str],
+#     *,
+#     generated_label: str,
+# ) -> None:
+#     ws = wb.create_sheet("Сводка", 0)
+
+#     ncols = len(SUMMARY_HEADERS)
+
+#     _set_col_widths(ws, SUMMARY_COL_WIDTHS)
+
+#     row = _write_title_block(
+#         ws,
+#         row=1,
+#         title="Отчёт по товарным остаткам для оценки ущерба",
+#         subtitle=(
+#             f"Сформировано: {generated_label}  ·  "
+#             f"Происшествий в отчёте: {len(sorted_events)}  ·  "
+#             "Оценка по физическому остатку на конец дня, "
+#             "предшествующего происшествию. Товары в пути не учтены."
+#         ),
+#         ncols=ncols,
+#     )
+
+#     header_row = row
+#     _write_table_header(ws, row=header_row, headers=SUMMARY_HEADERS)
+
+#     first_data_row = header_row + 1
+#     r = first_data_row
+
+#     for idx, item in enumerate(sorted_events, start=1):
+#         incident = item.get("incident") or {}
+#         snapshot = item.get("snapshot") or {}
+#         refs = warehouse_refs.get(id(item), {})
+
+#         warehouse_name = item.get("warehouse_name", "")
+#         sheet_title = warehouse_sheet_titles.get(id(item))
+
+#         ws.cell(row=r, column=1, value=idx)
+
+#         warehouse_cell = ws.cell(row=r, column=2, value=warehouse_name)
+
+#         # Кликабельный переход на лист склада. Внутренняя ссылка —
+#         # это просто адрес вида "#'Имя листа'!A1", Excel сам
+#         # прокручивает на нужный лист и ячейку.
+#         if sheet_title:
+#             warehouse_cell.hyperlink = f"#'{sheet_title}'!A1"
+#             warehouse_cell.font = Font(
+#                 name=FONT_NAME,
+#                 size=10,
+#                 color=HYPERLINK_COLOR,
+#                 underline="single",
+#             )
+
+#         ws.cell(
+#             row=r,
+#             column=3,
+#             value=incident.get("title", "Происшествие"),
+#         )
+#         ws.cell(
+#             row=r,
+#             column=4,
+#             value=_fmt_ru_date(item.get("date")),
+#         )
+#         ws.cell(
+#             row=r,
+#             column=5,
+#             value=_fmt_ru_date(snapshot.get("effective_date")),
+#         )
+
+#         # Числовые значения — формулой со ссылкой на лист склада,
+#         # если он был построен, иначе — прямым значением.
+#         def _num_cell(col: int, key: str, default=0):
+#             sheet_ref = refs.get(key)
+#             if sheet_ref:
+#                 ws.cell(row=r, column=col, value=f"={sheet_ref}")
+#             else:
+#                 ws.cell(row=r, column=col, value=snapshot.get(key, default) or default)
+
+#         _num_cell(6, "on_hand")
+#         _num_cell(7, "nm_count")
+#         _num_cell(8, "accounting_cost")
+#         _num_cell(9, "management_cost")
+#         _num_cell(10, "no_accounting_cost_qty")
+#         _num_cell(11, "no_management_cost_qty")
+
+#         stripe = (idx % 2 == 0)
+#         for col in range(1, ncols + 1):
+#             cell = ws.cell(row=r, column=col)
+#             cell.border = _thin_border()
+#             # Колонка 2 ("Склад") уже получила шрифт гиперссылки выше —
+#             # не перезаписываем его обычным цветом.
+#             if not (col == 2 and sheet_title):
+#                 cell.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+#             if stripe:
+#                 cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+#             if col == 1:
+#                 cell.alignment = Alignment(horizontal="center")
+#             if col in (6, 7, 8, 9, 10, 11):
+#                 cell.alignment = Alignment(horizontal="right")
+#                 cell.number_format = (
+#                     '#,##0" ₽";[Red]-#,##0" ₽";"–"'
+#                     if col in (8, 9)
+#                     else '#,##0;[Red]-#,##0;"–"'
+#                 )
+
+#         r += 1
+
+#     last_data_row = r - 1
+
+#     # ------------------------------------------------------------------ #
+#     # Итоговая строка
+#     # ------------------------------------------------------------------ #
+
+#     ws.cell(row=r, column=2, value="ИТОГО")
+#     ws.cell(row=r, column=2).font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+
+#     for col in (6, 7, 8, 9, 10, 11):
+#         col_letter = get_column_letter(col)
+#         cell = ws.cell(
+#             row=r,
+#             column=col,
+#             value=f"=SUM({col_letter}{first_data_row}:{col_letter}{last_data_row})",
+#         )
+#         cell.number_format = (
+#             '#,##0" ₽";[Red]-#,##0" ₽";"–"'
+#             if col in (8, 9)
+#             else '#,##0;[Red]-#,##0;"–"'
+#         )
+#         cell.alignment = Alignment(horizontal="right")
+
+#     for col in range(1, ncols + 1):
+#         cell = ws.cell(row=r, column=col)
+#         cell.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+#         cell.fill = PatternFill(fill_type="solid", fgColor=FILL_TOTAL)
+#         cell.border = _thin_border()
+
+#     ws.row_dimensions[r].height = 20
+
+#     # Замораживаем и строки-заголовки сверху, и колонки №/Склад слева —
+#     # при прокрутке длинной таблицы вправо/вниз название склада
+#     # и номер строки остаются на экране.
+#     ws.freeze_panes = ws.cell(row=first_data_row, column=3).coordinate
+#     ws.auto_filter.ref = (
+#         f"A{header_row}:{get_column_letter(ncols)}{last_data_row}"
+#     )
+#     ws.sheet_view.showGridLines = False
+
+
+# # =============================================================================
+# # EXCEL: лист склада
+# # =============================================================================
+
+# ITEMS_HEADERS = [
+#     "№",
+#     "Артикул WB (NM ID)",
+#     "Наименование",
+#     "Бренд",
+#     "Размер",
+#     "Кол-во, шт",
+#     "Цена, бух. с/с, ₽",
+#     "Сумма, бух. с/с, ₽",
+#     "Цена, упр. с/с, ₽",
+#     "Сумма, упр. с/с, ₽",
+# ]
+
+# ITEMS_COL_WIDTHS = {
+#     "A": 5,
+#     "B": 16,
+#     "C": 40,
+#     "D": 18,
+#     "E": 10,
+#     "F": 12,
+#     "G": 16,
+#     "H": 16,
+#     "I": 16,
+#     "J": 16,
+# }
+
+
+# def _normalize_items(items) -> pd.DataFrame | None:
+#     if items is None:
+#         return None
+
+#     if isinstance(items, pd.DataFrame):
+#         df = items.copy()
+#     else:
+#         df = pd.DataFrame(list(items))
+
+#     if df.empty:
+#         return None
+
+#     for col in (
+#         "nm_id",
+#         "name",
+#         "brand",
+#         "size",
+#         "qty",
+#         "accounting_unit_cost",
+#         "management_unit_cost",
+#     ):
+#         if col not in df.columns:
+#             df[col] = None
+
+#     return df
+
+
+# def _write_warehouse_sheet(
+#     wb: Workbook,
+#     item: dict,
+#     used_titles: set[str],
+# ) -> tuple[str, dict[str, str]]:
+#     """
+#     Строит лист склада.
+
+#     Возвращает (имя_листа, refs), где refs — адреса ключевых ячеек
+#     (для формул на листе "Сводка"), например:
+
+#         {"on_hand": "'Краснодар'!$D$8", ...}
+#     """
+
+#     warehouse_name = item.get("warehouse_name", "Склад")
+#     incident = item.get("incident") or {}
+#     snapshot = item.get("snapshot") or {}
+
+#     sheet_title = _sanitize_sheet_title(warehouse_name, used_titles)
+#     ws = wb.create_sheet(sheet_title)
+
+#     items_df = _normalize_items(item.get("items"))
+
+#     ncols = 10
+#     _set_col_widths(ws, ITEMS_COL_WIDTHS)
+#     ws.sheet_view.showGridLines = False
+
+#     # ------------------------------------------------------------------ #
+#     # Заголовок
+#     # ------------------------------------------------------------------ #
+
+#     row = _write_title_block(
+#         ws,
+#         row=1,
+#         title=warehouse_name,
+#         subtitle=None,
+#         ncols=ncols,
+#     )
+
+#     # Кликабельная ссылка назад на "Сводку" — правый край, отдельной
+#     # строкой над плашкой происшествия.
+#     back_cell = ws.cell(row=row, column=ncols, value="← Сводка")
+#     back_cell.hyperlink = "#'Сводка'!A1"
+#     back_cell.font = Font(
+#         name=FONT_NAME,
+#         size=9,
+#         color=HYPERLINK_COLOR,
+#         underline="single",
+#     )
+#     back_cell.alignment = Alignment(horizontal="right")
+#     row += 1
+
+#     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+#     badge = ws.cell(
+#         row=row,
+#         column=1,
+#         value=(
+#             f"{incident.get('title', 'Происшествие')}  ·  "
+#             f"{_fmt_ru_date(item.get('date'))}  ·  "
+#             f"{incident.get('status', 'Происшествие')}"
+#         ),
+#     )
+#     badge.font = Font(name=FONT_NAME, size=10, bold=True, color=ACCENT_RED)
+#     badge.fill = PatternFill(fill_type="solid", fgColor=FILL_INCIDENT)
+#     for c in range(1, ncols + 1):
+#         ws.cell(row=row, column=c).fill = PatternFill(fill_type="solid", fgColor=FILL_INCIDENT)
+#         ws.cell(row=row, column=c).border = _thin_border()
+#     ws.row_dimensions[row].height = 20
+#     row += 2
+
+#     description = incident.get("description", "")
+#     if description:
+#         ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+#         cell = ws.cell(row=row, column=1, value=description)
+#         cell.font = Font(name=FONT_NAME, size=9, italic=True, color=MUTED)
+#         cell.alignment = Alignment(wrap_text=True, vertical="top")
+#         ws.row_dimensions[row].height = 28
+#         row += 2
+
+#     # ------------------------------------------------------------------ #
+#     # Блок ключевых показателей (label / value)
+#     # ------------------------------------------------------------------ #
+
+#     kpi_rows = [
+#         ("on_hand", "Физический остаток на складе, шт", snapshot.get("on_hand", 0), '#,##0;[Red]-#,##0;"–"'),
+#         ("nm_count", "Количество товаров, NM ID", snapshot.get("nm_count", 0), '#,##0;[Red]-#,##0;"–"'),
+#         ("accounting_cost", "Бухгалтерская себестоимость, ₽", snapshot.get("accounting_cost", 0), '#,##0" ₽";[Red]-#,##0" ₽";"–"'),
+#         ("management_cost", "Управленческая себестоимость, ₽", snapshot.get("management_cost", 0), '#,##0" ₽";[Red]-#,##0" ₽";"–"'),
+#         ("no_accounting_cost_qty", "Без бухгалтерской с/с, шт", snapshot.get("no_accounting_cost_qty", 0), '#,##0;[Red]-#,##0;"–"'),
+#         ("no_management_cost_qty", "Без управленческой с/с, шт", snapshot.get("no_management_cost_qty", 0), '#,##0;[Red]-#,##0;"–"'),
+#     ]
+
+#     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+#     ws.cell(row=row, column=1, value="Дата снимка остатков:")
+#     ws.cell(row=row, column=1).font = Font(name=FONT_NAME, size=10, color=MUTED)
+#     ws.cell(row=row, column=4, value=_fmt_ru_date(snapshot.get("effective_date")))
+#     ws.cell(row=row, column=4).font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+#     row += 1
+
+#     refs: dict[str, str] = {}
+
+#     kpi_start_row = row
+
+#     for key, label, value, number_format in kpi_rows:
+#         ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+#         label_cell = ws.cell(row=row, column=1, value=label)
+#         label_cell.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+#         label_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_SUBHEADER)
+
+#         value_cell = ws.cell(row=row, column=4, value=value or 0)
+#         value_cell.font = Font(name=FONT_NAME, size=11, bold=True, color=TEXT_DARK)
+#         value_cell.number_format = number_format
+#         value_cell.alignment = Alignment(horizontal="right")
+#         value_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_SUBHEADER)
+
+#         for c in range(1, 5):
+#             ws.cell(row=row, column=c).border = _thin_border()
+
+#         refs[key] = f"'{sheet_title}'!${get_column_letter(4)}${row}"
+#         row += 1
+
+#     row += 1
+
+#     # ------------------------------------------------------------------ #
+#     # Постатейная детализация (если передана)
+#     # ------------------------------------------------------------------ #
+
+#     if items_df is not None and not items_df.empty:
+#         header_row = row
+#         _write_table_header(ws, row=header_row, headers=ITEMS_HEADERS)
+#         r = header_row + 1
+#         first_item_row = r
+
+#         for idx, (_, line) in enumerate(items_df.iterrows(), start=1):
+#             ws.cell(row=r, column=1, value=idx)
+#             ws.cell(row=r, column=2, value=line.get("nm_id"))
+#             ws.cell(row=r, column=3, value=line.get("name"))
+#             ws.cell(row=r, column=4, value=line.get("brand"))
+#             ws.cell(row=r, column=5, value=line.get("size"))
+
+#             qty = float(line.get("qty") or 0)
+#             acc_unit = float(line.get("accounting_unit_cost") or 0)
+#             mgmt_unit = float(line.get("management_unit_cost") or 0)
+
+#             ws.cell(row=r, column=6, value=qty)
+#             ws.cell(row=r, column=7, value=acc_unit)
+#             ws.cell(
+#                 row=r,
+#                 column=8,
+#                 value=f"=F{r}*G{r}",
+#             )
+#             ws.cell(row=r, column=9, value=mgmt_unit)
+#             ws.cell(
+#                 row=r,
+#                 column=10,
+#                 value=f"=F{r}*I{r}",
+#             )
+
+#             stripe = (idx % 2 == 0)
+#             for col in range(1, ncols + 1):
+#                 cell = ws.cell(row=r, column=col)
+#                 cell.border = _thin_border()
+#                 cell.font = Font(name=FONT_NAME, size=9, color=TEXT_DARK)
+#                 if stripe:
+#                     cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+#                 if col in (6,):
+#                     cell.number_format = '#,##0;[Red]-#,##0;"–"'
+#                     cell.alignment = Alignment(horizontal="right")
+#                 if col in (7, 8, 9, 10):
+#                     cell.number_format = '#,##0.00" ₽";[Red]-#,##0.00" ₽";"–"'
+#                     cell.alignment = Alignment(horizontal="right")
+
+#             r += 1
+
+#         last_item_row = r - 1
+
+#         ws.cell(row=r, column=5, value="ИТОГО:")
+#         ws.cell(row=r, column=5).font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+#         ws.cell(row=r, column=5).alignment = Alignment(horizontal="right")
+
+#         ws.cell(row=r, column=6, value=f"=SUM(F{first_item_row}:F{last_item_row})")
+#         ws.cell(row=r, column=8, value=f"=SUM(H{first_item_row}:H{last_item_row})")
+#         ws.cell(row=r, column=10, value=f"=SUM(J{first_item_row}:J{last_item_row})")
+
+#         for col in (6, 8, 10):
+#             fmt = '#,##0;"–"' if col == 6 else '#,##0.00" ₽";"–"'
+#             cell = ws.cell(row=r, column=col)
+#             cell.number_format = fmt
+#             cell.alignment = Alignment(horizontal="right")
+
+#         for col in range(1, ncols + 1):
+#             cell = ws.cell(row=r, column=col)
+#             cell.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+#             cell.fill = PatternFill(fill_type="solid", fgColor=FILL_TOTAL)
+#             cell.border = _thin_border()
+
+#         # Замораживаем строки-заголовки сверху И колонки №/NM ID/
+#         # Наименование слева — при прокрутке длинного списка товаров
+#         # вниз и вправо видно, к какой позиции относится строка.
+#         ws.freeze_panes = ws.cell(row=first_item_row, column=4).coordinate
+#         ws.auto_filter.ref = f"A{header_row}:{get_column_letter(ncols)}{last_item_row}"
+
+#         row = r + 2
+#     else:
+#         ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+#         note = ws.cell(
+#             row=row,
+#             column=1,
+#             value=(
+#                 "Постатейная детализация по товарам недоступна — "
+#                 "приведена только сводная оценка выше."
+#             ),
+#         )
+#         note.font = Font(name=FONT_NAME, size=9, italic=True, color=MUTED)
+#         row += 2
+
+#         # Без построчной детализации сам лист короткий, но заголовок
+#         # (название склада + плашка происшествия) всё равно закрепляем.
+#         ws.freeze_panes = "A4"
+
+#     # ------------------------------------------------------------------ #
+#     # Примечание по методологии
+#     # ------------------------------------------------------------------ #
+
+#     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+#     footnote = ws.cell(
+#         row=row,
+#         column=1,
+#         value=(
+#             "Оценка рассчитана по товару, физически находившемуся на складе "
+#             "на конец дня, предшествующего происшествию. Товары в пути в расчёт "
+#             "не включены. Позиции без определённой себестоимости не включены "
+#             "в соответствующую стоимостную оценку."
+#         ),
+#     )
+#     footnote.font = Font(name=FONT_NAME, size=8, italic=True, color=MUTED)
+#     footnote.alignment = Alignment(wrap_text=True, vertical="top")
+#     ws.row_dimensions[row].height = 26
+
+#     return sheet_title, refs
+
+
+# # =============================================================================
+# # EXCEL: точка входа
+# # =============================================================================
+
+# def build_incident_loss_excel(
+#     events: list[dict],
+#     *,
+#     generated_at: datetime | None = None,
+# ) -> tuple[bytes, str]:
+#     """
+#     Строит книгу Excel: лист "Сводка" + отдельный лист на каждый склад.
+
+#     events — см. docstring модуля.
+
+#     Возвращает (bytes, filename), готовые для dcc.send_bytes.
+#     """
+
+#     if not events:
+#         raise ValueError("Список происшествий пуст — нечего экспортировать.")
+
+#     generated_at = generated_at or datetime.now()
+
+#     sorted_events = sorted(
+#         events,
+#         key=lambda x: (x.get("date", ""), x.get("warehouse_name", "")),
+#         reverse=True,
+#     )
+
+#     wb = Workbook()
+#     wb.remove(wb.active)
+
+#     used_titles: set[str] = set()
+#     warehouse_refs: dict[int, dict] = {}
+#     warehouse_sheet_titles: dict[int, str] = {}
+
+#     for item in sorted_events:
+#         sheet_title, refs = _write_warehouse_sheet(wb, item, used_titles)
+#         warehouse_refs[id(item)] = refs
+#         warehouse_sheet_titles[id(item)] = sheet_title
+
+#     _build_summary_sheet(
+#         wb,
+#         sorted_events,
+#         warehouse_refs,
+#         warehouse_sheet_titles,
+#         generated_label=generated_at.strftime("%d.%m.%Y %H:%M"),
+#     )
+
+#     # "Сводка" должна остаться первым (активным) листом
+#     wb.active = 0
+
+#     buffer = io.BytesIO()
+#     wb.save(buffer)
+#     buffer.seek(0)
+
+#     filename = (
+#         f"Оценка_ущерба_склады_{generated_at.strftime('%Y-%m-%d')}.xlsx"
+#     )
+
+#     return buffer.getvalue(), filename
+
+
+# # =============================================================================
+# # PDF: сопроводительное письмо
+# # =============================================================================
+
+# _FONTS_REGISTERED = False
+
+# # Стандартные 14 шрифтов reportlab (Helvetica/Times/Courier) физически
+# # не содержат кириллицу — это ограничение формата PDF, а не прихоть:
+# # base-14 шрифты включают только латиницу. Поэтому нужен настоящий TTF
+# # с кириллицей, и берём его из уже установленных в системе шрифтов —
+# # никаких дополнительных папок в репозитории не требуется.
+# #
+# # Для каждого начертания — список стандартных путей на разных ОС,
+# # пробуем по очереди и берём первый найденный:
+# #   1) Arial из macOS (стоит на любом Mac из коробки);
+# #   2) Arial из Windows;
+# #   3) Arial из пакета msttcorefonts (Linux, если ставили);
+# #   4) Liberation Sans — метрический аналог Arial, часто уже стоит
+# #      на серверных Linux-дистрибутивах;
+# #   5) DejaVu Sans — тоже часто предустановлен на Linux.
+
+# _FONT_CANDIDATES: dict[str, list[str]] = {
+#     "Arial": [
+#         "/System/Library/Fonts/Supplemental/Arial.ttf",
+#         "/Library/Fonts/Arial.ttf",
+#         "C:/Windows/Fonts/arial.ttf",
+#         "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+#         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+#         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+#     ],
+#     "Arial-Bold": [
+#         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+#         "/Library/Fonts/Arial Bold.ttf",
+#         "C:/Windows/Fonts/arialbd.ttf",
+#         "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+#         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+#         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+#     ],
+#     "Arial-Italic": [
+#         "/System/Library/Fonts/Supplemental/Arial Italic.ttf",
+#         "/Library/Fonts/Arial Italic.ttf",
+#         "C:/Windows/Fonts/ariali.ttf",
+#         "/usr/share/fonts/truetype/msttcorefonts/Arial_Italic.ttf",
+#         "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+#         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+#     ],
+#     "Arial-BoldItalic": [
+#         "/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf",
+#         "/Library/Fonts/Arial Bold Italic.ttf",
+#         "C:/Windows/Fonts/arialbi.ttf",
+#         "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold_Italic.ttf",
+#         "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf",
+#         "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
+#     ],
+# }
+
+
+# def _find_font_file(candidates: list[str]) -> str | None:
+#     for path_str in candidates:
+#         if Path(path_str).is_file():
+#             return path_str
+#     return None
+
+
+# def _register_pdf_fonts() -> None:
+#     """
+#     Регистрирует первый найденный в системе шрифт с кириллицей под
+#     именами Arial/Arial-Bold/... — чтобы весь остальной код мог просто
+#     использовать fontName="Arial".
+
+#     Если ни один стандартный путь не подошёл — кидает понятную ошибку
+#     с инструкцией, что установить, а не глухой TTFError из недр
+#     reportlab.
+#     """
+
+#     global _FONTS_REGISTERED
+
+#     if _FONTS_REGISTERED:
+#         return
+
+#     missing = []
+
+#     for font_name, candidates in _FONT_CANDIDATES.items():
+#         path = _find_font_file(candidates)
+
+#         if path is None:
+#             missing.append(font_name)
+#             continue
+
+#         pdfmetrics.registerFont(TTFont(font_name, path))
+
+#     if missing:
+#         raise RuntimeError(
+#             "Не найден шрифт с кириллицей для PDF (начертания: "
+#             + ", ".join(sorted(set(missing)))
+#             + "). На Mac он должен быть по умолчанию "
+#             "(/System/Library/Fonts/Supplemental/Arial*.ttf) — "
+#             "проверьте, что файл существует. На Linux-сервере "
+#             "поставьте пакет с Arial или Liberation Sans, например: "
+#             "apt-get install ttf-mscorefonts-installer "
+#             "(или fonts-liberation)."
+#         )
+
+#     _FONTS_REGISTERED = True
+
+
+# def _pdf_styles() -> dict[str, ParagraphStyle]:
+#     text = colors.HexColor(f"#{LETTER_TEXT}")
+#     muted = colors.HexColor(f"#{LETTER_MUTED}")
+#     accent = colors.HexColor(f"#{LETTER_ACCENT}")
+
+#     return {
+#         "eyebrow": ParagraphStyle(
+#             "eyebrow",
+#             fontName="Arial-Bold",
+#             fontSize=8.5,
+#             textColor=accent,
+#             leading=11,
+#             spaceAfter=3,
+#         ),
+#         "title": ParagraphStyle(
+#             "title",
+#             fontName="Arial-Bold",
+#             fontSize=19,
+#             textColor=text,
+#             leading=23,
+#             spaceAfter=5,
+#         ),
+#         "subtitle": ParagraphStyle(
+#             "subtitle",
+#             fontName="Arial",
+#             fontSize=9.5,
+#             textColor=muted,
+#             leading=13,
+#         ),
+#         "meta_right": ParagraphStyle(
+#             "meta_right",
+#             fontName="Arial",
+#             fontSize=9.5,
+#             textColor=text,
+#             leading=13,
+#             alignment=2,  # right
+#         ),
+#         "salutation": ParagraphStyle(
+#             "salutation",
+#             fontName="Arial-Bold",
+#             fontSize=11,
+#             textColor=text,
+#             spaceBefore=4,
+#             spaceAfter=10,
+#         ),
+#         "body": ParagraphStyle(
+#             "body",
+#             fontName="Arial",
+#             fontSize=10,
+#             textColor=text,
+#             leading=15,
+#             spaceAfter=10,
+#             alignment=4,  # justify
+#         ),
+#         "section": ParagraphStyle(
+#             "section",
+#             fontName="Arial-Bold",
+#             fontSize=9.5,
+#             textColor=accent,
+#             leading=13,
+#             spaceBefore=16,
+#             spaceAfter=8,
+#         ),
+#         "kpi_label": ParagraphStyle(
+#             "kpi_label",
+#             fontName="Arial-Bold",
+#             fontSize=7.5,
+#             textColor=muted,
+#             leading=10,
+#         ),
+#         "kpi_value": ParagraphStyle(
+#             "kpi_value",
+#             fontName="Arial-Bold",
+#             fontSize=15,
+#             textColor=accent,
+#             leading=19,
+#             spaceBefore=3,
+#         ),
+#         "bullet_body": ParagraphStyle(
+#             "bullet_body",
+#             fontName="Arial",
+#             fontSize=10,
+#             textColor=text,
+#             leading=14.5,
+#             leftIndent=14,
+#             firstLineIndent=-14,
+#             spaceAfter=8,
+#         ),
+#         "closing": ParagraphStyle(
+#             "closing",
+#             fontName="Arial",
+#             fontSize=10,
+#             textColor=text,
+#             leading=15,
+#             spaceBefore=8,
+#             alignment=4,
+#         ),
+#         "sign_name": ParagraphStyle(
+#             "sign_name",
+#             fontName="Arial-Bold",
+#             fontSize=11,
+#             textColor=text,
+#             spaceBefore=2,
+#         ),
+#         "sign_email": ParagraphStyle(
+#             "sign_email",
+#             fontName="Arial",
+#             fontSize=9.5,
+#             textColor=muted,
+#             spaceBefore=3,
+#         ),
+#         "table_header": ParagraphStyle(
+#             "table_header",
+#             fontName="Arial-Bold",
+#             fontSize=8.5,
+#             textColor=colors.white,
+#             leading=11,
+#         ),
+#         "table_cell": ParagraphStyle(
+#             "table_cell",
+#             fontName="Arial",
+#             fontSize=9.5,
+#             textColor=text,
+#             leading=12,
+#         ),
+#         "table_cell_muted": ParagraphStyle(
+#             "table_cell_muted",
+#             fontName="Arial",
+#             fontSize=9.5,
+#             textColor=muted,
+#             leading=12,
+#         ),
+#     }
+
+
+# _RU_MONTHS = [
+#     "января", "февраля", "марта", "апреля", "мая", "июня",
+#     "июля", "августа", "сентября", "октября", "ноября", "декабря",
+# ]
+
+
+# def _fmt_ru_date_long(dt: datetime) -> str:
+#     return f"{dt.day} {_RU_MONTHS[dt.month - 1]} {dt.year} г."
+
+
+# def _fmt_ru_date_short(value) -> str:
+#     """08.06 без года — для компактной плашки периода."""
+#     if not value:
+#         return ""
+#     try:
+#         return pd.to_datetime(value).strftime("%d.%m")
+#     except Exception:
+#         return str(value)
+
+
+# def _file_word(count: int) -> str:
+#     """1 файл, 2 файла, 5 файлов, 21 файл, 23 файла, 27 файлов."""
+
+#     count = abs(int(count or 0))
+#     last_two = count % 100
+#     last_one = count % 10
+
+#     if 11 <= last_two <= 14:
+#         return "файлов"
+#     if last_one == 1:
+#         return "файл"
+#     if last_one in {2, 3, 4}:
+#         return "файла"
+#     return "файлов"
+
+
+# def _short_warehouse_label(warehouse_name: str) -> str:
+#     """
+#     Электросталь -> Электросталь
+#     Симферополь, Молодежненское -> Симферополь
+#     Красный Бор (Питер) WB -> Красный
+#     Санкт-Петербург Уткина Заводь -> Санкт-Петербург
+
+#     Правило: первое слово названия, без хвостовой пунктуации.
+#     """
+
+#     name = str(warehouse_name or "").strip()
+#     if not name:
+#         return "Склад"
+
+#     first_token = name.split()[0]
+
+#     return first_token.rstrip(",;:")
+
+
+# def build_incident_cover_letter_pdf(
+#     events: list[dict],
+#     *,
+#     letter_title: str = "Реестр пожаров на складах Wildberries",
+#     author_short_name: str = "Войтенко Д. В.",
+#     author_name: str = "Дарья Войтенко",
+#     author_email: str = "daria031288d@gmail.com",
+#     closing_text: str = (
+#         ""
+  
+#     ),
+#     generated_at: datetime | None = None,
+# ) -> tuple[bytes, str]:
+#     """
+#     Строит служебное письмо (PDF) — реестр происшествий по образцу
+#     пользовательского шаблона: эйбрау + заголовок, плашки-метрики,
+#     таблица реестра происшествий, методика оценки, подпись.
+
+#     Приложения (файлы/листы Excel) в письме не прикладываются —
+#     это только сам реестр; Excel-книга с остатками скачивается
+#     отдельной кнопкой (build_incident_loss_excel).
+#     """
+
+#     if not events:
+#         raise ValueError("Список происшествий пуст — нечего экспортировать.")
+
+#     _register_pdf_fonts()
+#     styles = _pdf_styles()
+
+#     generated_at = generated_at or datetime.now()
+
+#     # Реестр в письме идёт в ХРОНОЛОГИЧЕСКОМ порядке (старые сверху) —
+#     # так же, как в образце (№1 — самое раннее происшествие).
+#     chronological_events = sorted(
+#         events,
+#         key=lambda x: (x.get("date", ""), x.get("warehouse_name", "")),
+#     )
+
+#     warehouse_count = len(
+#         {e.get("warehouse_name", "") for e in events}
+#     )
+
+#     dates = [
+#         pd.to_datetime(e.get("date"))
+#         for e in events
+#         if e.get("date")
+#     ]
+
+#     period_short = ""
+#     period_full = ""
+
+#     if dates:
+#         min_date = min(dates)
+#         max_date = max(dates)
+#         period_short = (
+#             f"{min_date.strftime('%d.%m')} — {max_date.strftime('%d.%m')}"
+#         )
+#         period_full = (
+#             f"{min_date.strftime('%d.%m.%Y')} — "
+#             f"{max_date.strftime('%d.%m.%Y')}"
+#         )
+
+#     accent = colors.HexColor(f"#{LETTER_ACCENT}")
+#     card_bg = colors.HexColor(f"#{LETTER_CARD_BG}")
+#     border_c = colors.HexColor(f"#{LETTER_BORDER}")
+
+#     buffer = io.BytesIO()
+
+#     doc = SimpleDocTemplate(
+#         buffer,
+#         pagesize=A4,
+#         leftMargin=20 * mm,
+#         rightMargin=20 * mm,
+#         topMargin=18 * mm,
+#         bottomMargin=18 * mm,
+#         title=letter_title,
+#     )
+
+#     story = []
+
+#     # ------------------------------------------------------------------ #
+#     # Шапка: эйбрау + заголовок + подзаголовок (слева),
+#     # автор + дата (справа)
+#     # ------------------------------------------------------------------ #
+
+#     left_col = [
+#         Paragraph(_xml_escape(letter_title), styles["title"]),
+#         Paragraph(
+#             (
+#                 f"Период {period_full} · оценка товарного остатка "
+#                 "на конец дня, предшествующего происшествию"
+#             ),
+#             styles["subtitle"],
+#         ),
+#     ]
+
+#     right_col = [
+#         Paragraph(_xml_escape(author_short_name), styles["meta_right"]),
+#         Paragraph(_fmt_ru_date_long(generated_at), styles["meta_right"]),
+#     ]
+
+#     header_table = Table(
+#         [[left_col, right_col]],
+#         colWidths=[125 * mm, 45 * mm],
+#     )
+#     header_table.setStyle(
+#         TableStyle(
+#             [
+#                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
+#                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
+#                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+#                 ("TOPPADDING", (0, 0), (-1, -1), 0),
+#                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+#             ]
+#         )
+#     )
+#     story.append(header_table)
+
+#     story.append(Spacer(1, 5 * mm))
+#     story.append(
+#         HRFlowable(
+#             width="100%",
+#             thickness=1.2,
+#             color=accent,
+#             spaceAfter=12,
+#         )
+#     )
+
+#     # ------------------------------------------------------------------ #
+#     # Приветствие и вводный абзац
+#     # ------------------------------------------------------------------ #
+
+#     story.append(Paragraph("Добрый день!", styles["salutation"]))
+
+#     period_from = dates and min(dates).strftime("%d.%m.%Y") or ""
+#     period_to = dates and max(dates).strftime("%d.%m.%Y") or ""
+
+#     intro = (
+#         "Направляю сводный реестр пожаров на складах Wildberries, "
+#         f"зафиксированных в период с {period_from} по {period_to}. "
+#         f"Всего затронуто <font color=\"#{LETTER_ACCENT}\"><b>"
+#         f"{warehouse_count}</b></font> складов. "
+#         "Прилагаю выгрузки товарных остатков на "
+#         "конец дня, предшествующего дате пожара — "
+#         f"<font color=\"#{LETTER_ACCENT}\"><b>в расчёт включён только "
+#         "физический остаток на складе, товары в пути не "
+#         "учитывались.</b></font>"
+#     )
+
+#     story.append(Paragraph(intro, styles["body"]))
+
+#     # ------------------------------------------------------------------ #
+#     # Реестр происшествий
+#     # ------------------------------------------------------------------ #
+
+#     story.append(Paragraph("РЕЕСТР ПРОИСШЕСТВИЙ", styles["section"]))
+
+#     def _cell(text, style_name="table_cell"):
+#         return Paragraph(_xml_escape(str(text)), styles[style_name])
+
+#     header_row = [
+#         _cell("№", "table_header"),
+#         _cell("СКЛАД", "table_header"),
+#         _cell("ДАТА ПОЖАРА", "table_header"),
+#         _cell("ОСТАТКИ НА ДАТУ", "table_header"),
+#     ]
+
+#     reg_rows = [header_row]
+
+#     for idx, item in enumerate(chronological_events, start=1):
+#         snapshot = item.get("snapshot") or {}
+
+#         reg_rows.append(
+#             [
+#                 _cell(idx, "table_cell_muted"),
+#                 _cell(item.get("warehouse_name", "")),
+#                 _cell(_fmt_ru_date(item.get("date"))),
+#                 _cell(_fmt_ru_date(snapshot.get("effective_date"))),
+#             ]
+#         )
+
+#     col_widths = [10 * mm, 82 * mm, 36 * mm, 42 * mm]
+
+#     reg_table = Table(reg_rows, colWidths=col_widths, repeatRows=1)
+
+#     reg_style = [
+#         ("BACKGROUND", (0, 0), (-1, 0), accent),
+#         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+#         ("ALIGN", (0, 0), (0, -1), "CENTER"),
+#         ("TOPPADDING", (0, 0), (-1, -1), 8),
+#         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+#         ("LEFTPADDING", (0, 0), (-1, -1), 8),
+#         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+#         ("LINEBELOW", (0, 1), (-1, -1), 0.6, border_c),
+#     ]
+#     reg_table.setStyle(TableStyle(reg_style))
+
+#     story.append(reg_table)
+
+#     # ------------------------------------------------------------------ #
+#     # Методика оценки
+#     # ------------------------------------------------------------------ #
+
+#     story.append(Paragraph("МЕТОДИКА ОЦЕНКИ", styles["section"]))
+
+#     methodology_points = [
+#         (
+#             "В оценку включён только физический товарный остаток на "
+#             "складе (quantity). Товары в пути не учитываются."
+#         ),
+#         (
+#             "Используется снимок остатков на конец календарного дня, "
+#             "предшествующего дате происшествия."
+#         ),
+#         (
+#             "Позиции без определённой себестоимости в стоимостную "
+#             "оценку не включены."
+#         ),
+#     ]
+
+#     for point in methodology_points:
+#         story.append(
+#             Paragraph(
+#                 f'<font color="#{LETTER_ACCENT}">●</font>&nbsp;&nbsp;{point}',
+#                 styles["bullet_body"],
+#             )
+#         )
+
+#     # ------------------------------------------------------------------ #
+#     # Заключительный абзац
+#     # ------------------------------------------------------------------ #
+
+#     story.append(Paragraph(closing_text, styles["closing"]))
+
+#     story.append(Spacer(1, 10 * mm))
+
+#     # ------------------------------------------------------------------ #
+#     # Подпись
+#     # ------------------------------------------------------------------ #
+
+#     story.append(
+#         HRFlowable(
+#             width="100%",
+#             thickness=0.6,
+#             color=border_c,
+#             spaceAfter=8,
+#         )
+#     )
+#     story.append(Paragraph(_xml_escape(author_name), styles["sign_name"]))
+#     story.append(Paragraph(_xml_escape(author_email), styles["sign_email"]))
+
+#     doc.build(story)
+
+#     buffer.seek(0)
+
+#     filename = (
+#         f"Сопроводительное_письмо_{generated_at.strftime('%Y-%m-%d')}.pdf"
+#     )
+
+#     return buffer.getvalue(), filename
+
+
+# gear/app/daily_sales/stocks/incident_loss_export.py
+"""
+Экспорт данных для оценки товарного ущерба по происшествиям на складах.
+
+Модуль полностью самостоятельный: не зависит от Dash и от конкретной
+реализации dashboard_data — на вход принимает уже собранные данные
+о происшествиях (тот же список `events`, который строится в
+dashboard_stock/incidents_panel.py::build_incidents_panel()).
+
+Публичные функции:
+
+    build_incident_loss_excel(events, ...)   -> (bytes, filename)
+    build_incident_cover_letter_pdf(events, ...) -> (bytes, filename)
+
+Формат одного элемента events (см. incidents_panel.py):
+
+    {
+        "date": "2026-07-22",                # дата происшествия
+        "warehouse_name": "Краснодар",
+        "incident": {
+            "type": "fire",
+            "title": "Пожар на складе",
+            "status": "Происшествие",
+            "description": "...",
+        },
+        "snapshot": {
+            "effective_date": "2026-07-21",
+            "on_hand": 1234,
+            "nm_count": 87,
+            "accounting_cost": 1500000.0,
+            "management_cost": 1380000.0,
+            "no_accounting_cost_qty": 0,
+            "no_accounting_cost_nm_count": 0,
+            "no_management_cost_qty": 0,
+            "no_management_cost_nm_count": 0,
+        },
+
+        # Необязательно. Постатейная детализация остатка (если она
+        # доступна) — список словарей или pd.DataFrame со столбцами:
+        #   nm_id, name, brand, qty,
+        #   accounting_unit_cost, management_unit_cost
+        # Если не передана — в лист склада попадёт только сводная
+        # часть (без построчной детализации по товарам).
+        "items": None,
+    }
+"""
+
+from __future__ import annotations
+
+import io
+from datetime import datetime, date
+from pathlib import Path
+
+import pandas as pd
+
+from openpyxl import Workbook
+from openpyxl.styles import (
+    Alignment,
+    Border,
+    Font,
+    NamedStyle,
+    PatternFill,
+    Side,
+)
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
+
+from xml.sax.saxutils import escape as _xml_escape
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import (
+    HRFlowable,
+    KeepTogether,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
+
+# =============================================================================
+# ФИРМЕННАЯ ПАЛИТРА (единая для Excel и PDF, соответствует dashboard)
+# =============================================================================
+
+TEXT_DARK = "18352F"
+MUTED = "60746D"
+BORDER = "D6DFDB"
+
+ACCENT_GREEN = "315E52"
+ACCENT_RED = "A43E3E"
+
+FILL_HEADER = "18352F"       # тёмная плашка заголовков таблиц
+FILL_SUBHEADER = "F7F9F8"    # светлая подложка
+FILL_STRIPE = "F7F9F8"       # чередование строк
+FILL_INCIDENT = "FFF8F8"     # плашка происшествия (красноватая)
+FILL_TOTAL = "EAF0ED"        # плашка итогов
+FILL_WARNING = "FFF4D6"      # позиции без определённой себестоимости
+
+FONT_NAME = "Helvetica Light"
+
+# Палитра письма (PDF) — повторяет образец-шаблон пользователя:
+# тёплый тёмный текст + бордовый акцент, отдельно от зелёной палитры
+# дашборда/Excel выше (ACCENT_RED там тоже #A43E3E — специально
+# оставлен тем же числом, чтобы акцентный цвет совпадал в Excel и PDF).
+LETTER_ACCENT = "A43E3E"
+LETTER_TEXT = "2A2020"
+LETTER_MUTED = "7B6A6A"
+LETTER_CARD_BG = "FDF6F6"
+LETTER_BORDER = "E6D6D6"
+
+
+# =============================================================================
+# EXCEL: базовые стили
+# =============================================================================
+
+def _thin_border(color: str = BORDER) -> Border:
+    side = Side(
+        style="thin",
+        color=color,
+    )
+    return Border(
+        left=side,
+        right=side,
+        top=side,
+        bottom=side,
+    )
+
+
+def _set_col_widths(
+    ws: Worksheet,
+    widths: dict[str, float],
+) -> None:
+    for col, width in widths.items():
+        ws.column_dimensions[col].width = width
+
+
+def _write_title_block(
+    ws: Worksheet,
+    *,
+    row: int,
+    title: str,
+    subtitle: str | None,
+    ncols: int,
+) -> int:
+    """Пишет заголовочный блок (название отчёта) и возвращает следующую строку."""
+
+    ws.merge_cells(
+        start_row=row,
+        start_column=1,
+        end_row=row,
+        end_column=ncols,
+    )
+    cell = ws.cell(row=row, column=1, value=title)
+    cell.font = Font(name=FONT_NAME, size=15, bold=True, color=TEXT_DARK)
+    cell.alignment = Alignment(vertical="center")
+    ws.row_dimensions[row].height = 26
+    row += 1
+
+    if subtitle:
+        ws.merge_cells(
+            start_row=row,
+            start_column=1,
+            end_row=row,
+            end_column=ncols,
+        )
+        cell = ws.cell(row=row, column=1, value=subtitle)
+        cell.font = Font(name=FONT_NAME, size=10, color=MUTED)
+        row += 1
+
+    return row + 1
+
+
+def _write_table_header(
+    ws: Worksheet,
+    *,
+    row: int,
+    headers: list[str],
+    start_col: int = 1,
+) -> None:
+    for offset, header in enumerate(headers):
+        col = start_col + offset
+        cell = ws.cell(row=row, column=col, value=header)
+        cell.font = Font(name=FONT_NAME, size=10, bold=True, color="FFFFFF")
+        cell.fill = PatternFill(
+            fill_type="solid",
+            fgColor=FILL_HEADER,
+        )
+        cell.alignment = Alignment(
+            vertical="center",
+            horizontal="center",
+            wrap_text=True,
+        )
+        cell.border = _thin_border()
+    ws.row_dimensions[row].height = 30
+
+
+def _sanitize_sheet_title(
+    raw_name: str,
+    used: set[str],
+) -> str:
+    """
+    Excel: максимум 31 символ, запрещены : \\ / ? * [ ].
+    Гарантирует уникальность имени листа.
+    """
+
+    forbidden = set(':\\/?*[]')
+
+    cleaned = "".join(
+        ch if ch not in forbidden else " "
+        for ch in str(raw_name or "Склад")
+    ).strip()
+
+    if not cleaned:
+        cleaned = "Склад"
+
+    base = cleaned[:31]
+
+    candidate = base
+    suffix = 2
+
+    while candidate.lower() in used:
+        tail = f" ({suffix})"
+        candidate = base[: 31 - len(tail)] + tail
+        suffix += 1
+
+    used.add(candidate.lower())
+
+    return candidate
+
+
+def _fmt_ru_date(value) -> str:
+    if not value:
+        return "нет данных"
+    try:
+        return pd.to_datetime(value).strftime("%d.%m.%Y")
+    except Exception:
+        return str(value)
+
+
+# =============================================================================
+# EXCEL: лист "Сводка"
+# =============================================================================
+
+SUMMARY_HEADERS = [
+    "№",
+    "Склад",
+    "Происшествие",
+    "Дата происшествия",
+    "Остатки на дату",
+    "Физ. остаток, шт",
+    "Товаров, NM ID",
+    "Бухгалтерская с/с, ₽",
+    "Управленческая с/с, ₽",
+    "Без бух. с/с, шт",
+    "Без упр. с/с, шт",
+]
+
+SUMMARY_COL_WIDTHS = {
+    "A": 5,
+    "B": 30,
+    "C": 20,
+    "D": 16,
+    "E": 16,
+    "F": 16,
+    "G": 14,
+    "H": 20,
+    "I": 20,
+    "J": 14,
+    "K": 14,
+}
+
+
+HYPERLINK_COLOR = "1155CC"
+
+
+def _build_summary_sheet(
+    wb: Workbook,
+    sorted_events: list[dict],
+    warehouse_refs: dict[int, dict],
+    warehouse_sheet_titles: dict[int, str],
+    *,
+    generated_label: str,
+) -> None:
+    ws = wb.create_sheet("Сводка", 0)
+
+    ncols = len(SUMMARY_HEADERS)
+
+    _set_col_widths(ws, SUMMARY_COL_WIDTHS)
+
+    row = _write_title_block(
+        ws,
+        row=1,
+        title="Отчёт по товарным остаткам для оценки ущерба",
+        subtitle=(
+            f"Сформировано: {generated_label}  ·  "
+            f"Происшествий в отчёте: {len(sorted_events)}  ·  "
+            "Оценка по физическому остатку на конец дня, "
+            "предшествующего происшествию. Товары в пути не учтены."
+        ),
+        ncols=ncols,
+    )
+
+    header_row = row
+    _write_table_header(ws, row=header_row, headers=SUMMARY_HEADERS)
+
+    first_data_row = header_row + 1
+    r = first_data_row
+
+    for idx, item in enumerate(sorted_events, start=1):
+        incident = item.get("incident") or {}
+        snapshot = item.get("snapshot") or {}
+        refs = warehouse_refs.get(id(item), {})
+
+        warehouse_name = item.get("warehouse_name", "")
+        sheet_title = warehouse_sheet_titles.get(id(item))
+
+        ws.cell(row=r, column=1, value=idx)
+
+        warehouse_cell = ws.cell(row=r, column=2, value=warehouse_name)
+
+        # Кликабельный переход на лист склада. Внутренняя ссылка —
+        # это просто адрес вида "#'Имя листа'!A1", Excel сам
+        # прокручивает на нужный лист и ячейку.
+        if sheet_title:
+            warehouse_cell.hyperlink = f"#'{sheet_title}'!A1"
+            warehouse_cell.font = Font(
+                name=FONT_NAME,
+                size=10,
+                color=HYPERLINK_COLOR,
+                underline="single",
+            )
+
+        ws.cell(
+            row=r,
+            column=3,
+            value=incident.get("title", "Происшествие"),
+        )
+        ws.cell(
+            row=r,
+            column=4,
+            value=_fmt_ru_date(item.get("date")),
+        )
+        ws.cell(
+            row=r,
+            column=5,
+            value=_fmt_ru_date(snapshot.get("effective_date")),
+        )
+
+        # Числовые значения — формулой со ссылкой на лист склада,
+        # если он был построен, иначе — прямым значением.
+        def _num_cell(col: int, key: str, default=0):
+            sheet_ref = refs.get(key)
+            if sheet_ref:
+                ws.cell(row=r, column=col, value=f"={sheet_ref}")
+            else:
+                ws.cell(row=r, column=col, value=snapshot.get(key, default) or default)
+
+        _num_cell(6, "on_hand")
+        _num_cell(7, "nm_count")
+        _num_cell(8, "accounting_cost")
+        _num_cell(9, "management_cost")
+        _num_cell(10, "no_accounting_cost_qty")
+        _num_cell(11, "no_management_cost_qty")
+
+        stripe = (idx % 2 == 0)
+        for col in range(1, ncols + 1):
+            cell = ws.cell(row=r, column=col)
+            cell.border = _thin_border()
+            # Колонка 2 ("Склад") уже получила шрифт гиперссылки выше —
+            # не перезаписываем его обычным цветом.
+            if not (col == 2 and sheet_title):
+                cell.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+            if stripe:
+                cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+            if col == 1:
+                cell.alignment = Alignment(horizontal="center")
+            if col in (6, 7, 8, 9, 10, 11):
+                cell.alignment = Alignment(horizontal="right")
+                cell.number_format = (
+                    '#,##0" ₽";[Red]-#,##0" ₽";"–"'
+                    if col in (8, 9)
+                    else '#,##0;[Red]-#,##0;"–"'
+                )
+
+        r += 1
+
+    last_data_row = r - 1
+
+    # ------------------------------------------------------------------ #
+    # Итоговая строка
+    # ------------------------------------------------------------------ #
+
+    ws.cell(row=r, column=2, value="ИТОГО")
+    ws.cell(row=r, column=2).font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+
+    for col in (6, 7, 8, 9, 10, 11):
+        col_letter = get_column_letter(col)
+        cell = ws.cell(
+            row=r,
+            column=col,
+            value=f"=SUM({col_letter}{first_data_row}:{col_letter}{last_data_row})",
+        )
+        cell.number_format = (
+            '#,##0" ₽";[Red]-#,##0" ₽";"–"'
+            if col in (8, 9)
+            else '#,##0;[Red]-#,##0;"–"'
+        )
+        cell.alignment = Alignment(horizontal="right")
+
+    for col in range(1, ncols + 1):
+        cell = ws.cell(row=r, column=col)
+        cell.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+        cell.fill = PatternFill(fill_type="solid", fgColor=FILL_TOTAL)
+        cell.border = _thin_border()
+
+    ws.row_dimensions[r].height = 20
+
+    # Замораживаем и строки-заголовки сверху, и колонки №/Склад слева —
+    # при прокрутке длинной таблицы вправо/вниз название склада
+    # и номер строки остаются на экране.
+    ws.freeze_panes = ws.cell(row=first_data_row, column=3).coordinate
+    ws.auto_filter.ref = (
+        f"A{header_row}:{get_column_letter(ncols)}{last_data_row}"
+    )
+    ws.sheet_view.showGridLines = False
+
+
+# =============================================================================
+# EXCEL: лист склада
+# =============================================================================
+
+ITEMS_HEADERS = [
+    "№",
+    "Артикул WB (NM ID)",
+    "Наименование",
+    "Бренд",
+    "Размер",
+    "Кол-во, шт",
+    "Цена, бух. с/с, ₽",
+    "Сумма, бух. с/с, ₽",
+    "Цена, упр. с/с, ₽",
+    "Сумма, упр. с/с, ₽",
+    "Без с/с",
+]
+
+ITEMS_COL_WIDTHS = {
+    "A": 5,
+    "B": 16,
+    "C": 40,
+    "D": 18,
+    "E": 10,
+    "F": 12,
+    "G": 16,
+    "H": 16,
+    "I": 16,
+    "J": 16,
+    "K": 14,
+}
+
+
+def _normalize_items(items) -> pd.DataFrame | None:
+    if items is None:
+        return None
+
+    if isinstance(items, pd.DataFrame):
+        df = items.copy()
+    else:
+        df = pd.DataFrame(list(items))
+
+    if df.empty:
+        return None
+
+    for col in (
+        "nm_id",
+        "name",
+        "brand",
+        "size",
+        "qty",
+        "accounting_unit_cost",
+        "management_unit_cost",
+    ):
+        if col not in df.columns:
+            df[col] = None
+
+    return df
+
+
+def _write_warehouse_sheet(
+    wb: Workbook,
+    item: dict,
+    used_titles: set[str],
+) -> tuple[str, dict[str, str]]:
+    """
+    Строит лист склада.
+
+    Возвращает (имя_листа, refs), где refs — адреса ключевых ячеек
+    (для формул на листе "Сводка"), например:
+
+        {"on_hand": "'Краснодар'!$D$8", ...}
+    """
+
+    warehouse_name = item.get("warehouse_name", "Склад")
+    incident = item.get("incident") or {}
+    snapshot = item.get("snapshot") or {}
+
+    sheet_title = _sanitize_sheet_title(warehouse_name, used_titles)
+    ws = wb.create_sheet(sheet_title)
+
+    items_df = _normalize_items(item.get("items"))
+
+    ncols = 11
+    _set_col_widths(ws, ITEMS_COL_WIDTHS)
+    ws.sheet_view.showGridLines = False
+
+    # ------------------------------------------------------------------ #
+    # Заголовок
+    # ------------------------------------------------------------------ #
+
+    row = _write_title_block(
+        ws,
+        row=1,
+        title=warehouse_name,
+        subtitle=None,
+        ncols=ncols,
+    )
+
+    # Кликабельная ссылка назад на "Сводку" — правый край, отдельной
+    # строкой над плашкой происшествия.
+    back_cell = ws.cell(row=row, column=ncols, value="← Сводка")
+    back_cell.hyperlink = "#'Сводка'!A1"
+    back_cell.font = Font(
+        name=FONT_NAME,
+        size=9,
+        color=HYPERLINK_COLOR,
+        underline="single",
+    )
+    back_cell.alignment = Alignment(horizontal="right")
+    row += 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    badge = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            f"{incident.get('title', 'Происшествие')}  ·  "
+            f"{_fmt_ru_date(item.get('date'))}  ·  "
+            f"{incident.get('status', 'Происшествие')}"
+        ),
+    )
+    badge.font = Font(name=FONT_NAME, size=10, bold=True, color=ACCENT_RED)
+    badge.fill = PatternFill(fill_type="solid", fgColor=FILL_INCIDENT)
+    for c in range(1, ncols + 1):
+        ws.cell(row=row, column=c).fill = PatternFill(fill_type="solid", fgColor=FILL_INCIDENT)
+        ws.cell(row=row, column=c).border = _thin_border()
+    ws.row_dimensions[row].height = 20
+    row += 2
+
+    description = incident.get("description", "")
+    if description:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+        cell = ws.cell(row=row, column=1, value=description)
+        cell.font = Font(name=FONT_NAME, size=9, italic=True, color=MUTED)
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.row_dimensions[row].height = 28
+        row += 2
+
+    # ------------------------------------------------------------------ #
+    # Блок ключевых показателей (label / value)
+    # ------------------------------------------------------------------ #
+
+    kpi_rows = [
+        ("on_hand", "Физический остаток на складе, шт", snapshot.get("on_hand", 0), '#,##0;[Red]-#,##0;"–"'),
+        ("nm_count", "Количество товаров, NM ID", snapshot.get("nm_count", 0), '#,##0;[Red]-#,##0;"–"'),
+        ("accounting_cost", "Бухгалтерская себестоимость, ₽", snapshot.get("accounting_cost", 0), '#,##0" ₽";[Red]-#,##0" ₽";"–"'),
+        ("management_cost", "Управленческая себестоимость, ₽", snapshot.get("management_cost", 0), '#,##0" ₽";[Red]-#,##0" ₽";"–"'),
+        ("no_accounting_cost_qty", "Без бухгалтерской с/с, шт", snapshot.get("no_accounting_cost_qty", 0), '#,##0;[Red]-#,##0;"–"'),
+        ("no_management_cost_qty", "Без управленческой с/с, шт", snapshot.get("no_management_cost_qty", 0), '#,##0;[Red]-#,##0;"–"'),
+    ]
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+    ws.cell(row=row, column=1, value="Дата снимка остатков:")
+    ws.cell(row=row, column=1).font = Font(name=FONT_NAME, size=10, color=MUTED)
+    ws.cell(row=row, column=4, value=_fmt_ru_date(snapshot.get("effective_date")))
+    ws.cell(row=row, column=4).font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+    row += 1
+
+    refs: dict[str, str] = {}
+
+    kpi_start_row = row
+
+    for key, label, value, number_format in kpi_rows:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+        label_cell = ws.cell(row=row, column=1, value=label)
+        label_cell.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+        label_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_SUBHEADER)
+
+        value_cell = ws.cell(row=row, column=4, value=value or 0)
+        value_cell.font = Font(name=FONT_NAME, size=11, bold=True, color=TEXT_DARK)
+        value_cell.number_format = number_format
+        value_cell.alignment = Alignment(horizontal="right")
+        value_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_SUBHEADER)
+
+        for c in range(1, 5):
+            ws.cell(row=row, column=c).border = _thin_border()
+
+        refs[key] = f"'{sheet_title}'!${get_column_letter(4)}${row}"
+        row += 1
+
+    row += 1
+
+    # ------------------------------------------------------------------ #
+    # Постатейная детализация (если передана)
+    # ------------------------------------------------------------------ #
+
+    if items_df is not None and not items_df.empty:
+        header_row = row
+        _write_table_header(ws, row=header_row, headers=ITEMS_HEADERS)
+        r = header_row + 1
+        first_item_row = r
+
+        for idx, (_, line) in enumerate(items_df.iterrows(), start=1):
+            ws.cell(row=r, column=1, value=idx)
+            ws.cell(row=r, column=2, value=line.get("nm_id"))
+            ws.cell(row=r, column=3, value=line.get("name"))
+            ws.cell(row=r, column=4, value=line.get("brand"))
+            ws.cell(row=r, column=5, value=line.get("size"))
+
+            qty = float(line.get("qty") or 0)
+
+            # "Без с/с" ставится по факту нуля/отсутствия цены —
+            # бухгалтерская и управленческая проверяются НЕЗАВИСИМО
+            # друг от друга, флаг ставится даже если только одна
+            # из двух не определена.
+            acc_raw = line.get("accounting_unit_cost")
+            mgmt_raw = line.get("management_unit_cost")
+
+            acc_unit = 0.0 if pd.isna(acc_raw) else float(acc_raw)
+            mgmt_unit = 0.0 if pd.isna(mgmt_raw) else float(mgmt_raw)
+
+            missing_acc = acc_unit == 0
+            missing_mgmt = mgmt_unit == 0
+
+            ws.cell(row=r, column=6, value=qty)
+            ws.cell(row=r, column=7, value=acc_unit)
+            ws.cell(
+                row=r,
+                column=8,
+                value=f"=F{r}*G{r}",
+            )
+            ws.cell(row=r, column=9, value=mgmt_unit)
+            ws.cell(
+                row=r,
+                column=10,
+                value=f"=F{r}*I{r}",
+            )
+
+            missing_parts = []
+            if missing_acc:
+                missing_parts.append("Бух.")
+            if missing_mgmt:
+                missing_parts.append("Упр.")
+
+            no_cost_cell = ws.cell(
+                row=r,
+                column=11,
+                value=(", ".join(missing_parts) or None),
+            )
+            no_cost_cell.alignment = Alignment(horizontal="center")
+
+            has_warning = missing_acc or missing_mgmt
+
+            stripe = (idx % 2 == 0)
+            for col in range(1, ncols + 1):
+                cell = ws.cell(row=r, column=col)
+                cell.border = _thin_border()
+                cell.font = Font(
+                    name=FONT_NAME,
+                    size=9,
+                    color=ACCENT_RED if (has_warning and col == 11) else TEXT_DARK,
+                    bold=(has_warning and col == 11),
+                )
+                if has_warning:
+                    cell.fill = PatternFill(fill_type="solid", fgColor=FILL_WARNING)
+                elif stripe:
+                    cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+                if col in (6,):
+                    cell.number_format = '#,##0;[Red]-#,##0;"–"'
+                    cell.alignment = Alignment(horizontal="right")
+                if col in (7, 8, 9, 10):
+                    cell.number_format = '#,##0.00" ₽";[Red]-#,##0.00" ₽";"–"'
+                    cell.alignment = Alignment(horizontal="right")
+
+            r += 1
+
+        last_item_row = r - 1
+
+        ws.cell(row=r, column=5, value="ИТОГО:")
+        ws.cell(row=r, column=5).font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+        ws.cell(row=r, column=5).alignment = Alignment(horizontal="right")
+
+        ws.cell(row=r, column=6, value=f"=SUM(F{first_item_row}:F{last_item_row})")
+        ws.cell(row=r, column=8, value=f"=SUM(H{first_item_row}:H{last_item_row})")
+        ws.cell(row=r, column=10, value=f"=SUM(J{first_item_row}:J{last_item_row})")
+
+        for col in (6, 8, 10):
+            fmt = '#,##0;"–"' if col == 6 else '#,##0.00" ₽";"–"'
+            cell = ws.cell(row=r, column=col)
+            cell.number_format = fmt
+            cell.alignment = Alignment(horizontal="right")
+
+        for col in range(1, ncols + 1):
+            cell = ws.cell(row=r, column=col)
+            cell.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+            cell.fill = PatternFill(fill_type="solid", fgColor=FILL_TOTAL)
+            cell.border = _thin_border()
+
+        # Счётчик позиций без определённой себестоимости — сколько
+        # строк выше получили пометку в колонке "Без с/с". Пишем
+        # ПОСЛЕ общего цикла стилизации итоговой строки, иначе он
+        # перезаписал бы этот акцентный (красный) шрифт обычным.
+        no_cost_total = ws.cell(
+            row=r,
+            column=11,
+            value=(
+                f'=COUNTIF(K{first_item_row}:K{last_item_row},"<>")'
+                ' & " шт"'
+            ),
+        )
+        no_cost_total.alignment = Alignment(horizontal="center")
+        no_cost_total.font = Font(name=FONT_NAME, size=9, bold=True, color=ACCENT_RED)
+        no_cost_total.fill = PatternFill(fill_type="solid", fgColor=FILL_TOTAL)
+
+        # Замораживаем строки-заголовки сверху И колонки №/NM ID/
+        # Наименование слева — при прокрутке длинного списка товаров
+        # вниз и вправо видно, к какой позиции относится строка.
+        ws.freeze_panes = ws.cell(row=first_item_row, column=4).coordinate
+        ws.auto_filter.ref = f"A{header_row}:{get_column_letter(ncols)}{last_item_row}"
+
+        row = r + 2
+    else:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+        note = ws.cell(
+            row=row,
+            column=1,
+            value=(
+                "Постатейная детализация по товарам недоступна — "
+                "приведена только сводная оценка выше."
+            ),
+        )
+        note.font = Font(name=FONT_NAME, size=9, italic=True, color=MUTED)
+        row += 2
+
+        # Без построчной детализации сам лист короткий, но заголовок
+        # (название склада + плашка происшествия) всё равно закрепляем.
+        ws.freeze_panes = "A4"
+
+    # ------------------------------------------------------------------ #
+    # Примечание по методологии
+    # ------------------------------------------------------------------ #
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    footnote = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            "Оценка рассчитана по товару, физически находившемуся на складе "
+            "на конец дня, предшествующего происшествию. Товары в пути в расчёт "
+            "не включены. Позиции без определённой себестоимости не включены "
+            "в соответствующую стоимостную оценку."
+        ),
+    )
+    footnote.font = Font(name=FONT_NAME, size=8, italic=True, color=MUTED)
+    footnote.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[row].height = 26
+
+    return sheet_title, refs
+
+
+# =============================================================================
+# EXCEL: точка входа
+# =============================================================================
+
+def build_incident_loss_excel(
+    events: list[dict],
+    *,
+    generated_at: datetime | None = None,
+) -> tuple[bytes, str]:
+    """
+    Строит книгу Excel: лист "Сводка" + отдельный лист на каждый склад.
+
+    events — см. docstring модуля.
+
+    Возвращает (bytes, filename), готовые для dcc.send_bytes.
+    """
+
+    if not events:
+        raise ValueError("Список происшествий пуст — нечего экспортировать.")
+
+    generated_at = generated_at or datetime.now()
+
+    sorted_events = sorted(
+        events,
+        key=lambda x: (x.get("date", ""), x.get("warehouse_name", "")),
+        reverse=True,
+    )
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    used_titles: set[str] = set()
+    warehouse_refs: dict[int, dict] = {}
+    warehouse_sheet_titles: dict[int, str] = {}
+
+    for item in sorted_events:
+        sheet_title, refs = _write_warehouse_sheet(wb, item, used_titles)
+        warehouse_refs[id(item)] = refs
+        warehouse_sheet_titles[id(item)] = sheet_title
+
+    _build_summary_sheet(
+        wb,
+        sorted_events,
+        warehouse_refs,
+        warehouse_sheet_titles,
+        generated_label=generated_at.strftime("%d.%m.%Y %H:%M"),
+    )
+
+    # "Сводка" должна остаться первым (активным) листом
+    wb.active = 0
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = (
+        f"Оценка_ущерба_склады_{generated_at.strftime('%Y-%m-%d')}.xlsx"
+    )
+
+    return buffer.getvalue(), filename
+
+
+# =============================================================================
+# PDF: сопроводительное письмо
+# =============================================================================
+
+_FONTS_REGISTERED = False
+
+# Стандартные 14 шрифтов reportlab (Helvetica/Times/Courier) физически
+# не содержат кириллицу — это ограничение формата PDF, а не прихоть:
+# base-14 шрифты включают только латиницу. Поэтому нужен настоящий TTF
+# с кириллицей, и берём его из уже установленных в системе шрифтов —
+# никаких дополнительных папок в репозитории не требуется.
+#
+# Для каждого начертания — список стандартных путей на разных ОС,
+# пробуем по очереди и берём первый найденный:
+#   1) Arial из macOS (стоит на любом Mac из коробки);
+#   2) Arial из Windows;
+#   3) Arial из пакета msttcorefonts (Linux, если ставили);
+#   4) Liberation Sans — метрический аналог Arial, часто уже стоит
+#      на серверных Linux-дистрибутивах;
+#   5) DejaVu Sans — тоже часто предустановлен на Linux.
+
+_FONT_CANDIDATES: dict[str, list[str]] = {
+    "Arial": [
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ],
+    "Arial-Bold": [
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/Library/Fonts/Arial Bold.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ],
+    "Arial-Italic": [
+        "/System/Library/Fonts/Supplemental/Arial Italic.ttf",
+        "/Library/Fonts/Arial Italic.ttf",
+        "C:/Windows/Fonts/ariali.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/Arial_Italic.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+    ],
+    "Arial-BoldItalic": [
+        "/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf",
+        "/Library/Fonts/Arial Bold Italic.ttf",
+        "C:/Windows/Fonts/arialbi.ttf",
+        "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold_Italic.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
+    ],
+}
+
+
+def _find_font_file(candidates: list[str]) -> str | None:
+    for path_str in candidates:
+        if Path(path_str).is_file():
+            return path_str
+    return None
+
+
+def _register_pdf_fonts() -> None:
+    """
+    Регистрирует первый найденный в системе шрифт с кириллицей под
+    именами Arial/Arial-Bold/... — чтобы весь остальной код мог просто
+    использовать fontName="Arial".
+
+    Если ни один стандартный путь не подошёл — кидает понятную ошибку
+    с инструкцией, что установить, а не глухой TTFError из недр
+    reportlab.
+    """
+
+    global _FONTS_REGISTERED
+
+    if _FONTS_REGISTERED:
+        return
+
+    missing = []
+
+    for font_name, candidates in _FONT_CANDIDATES.items():
+        path = _find_font_file(candidates)
+
+        if path is None:
+            missing.append(font_name)
+            continue
+
+        pdfmetrics.registerFont(TTFont(font_name, path))
+
+    if missing:
+        raise RuntimeError(
+            "Не найден шрифт с кириллицей для PDF (начертания: "
+            + ", ".join(sorted(set(missing)))
+            + "). На Mac он должен быть по умолчанию "
+            "(/System/Library/Fonts/Supplemental/Arial*.ttf) — "
+            "проверьте, что файл существует. На Linux-сервере "
+            "поставьте пакет с Arial или Liberation Sans, например: "
+            "apt-get install ttf-mscorefonts-installer "
+            "(или fonts-liberation)."
+        )
+
+    _FONTS_REGISTERED = True
+
+
+def _pdf_styles() -> dict[str, ParagraphStyle]:
+    text = colors.HexColor(f"#{LETTER_TEXT}")
+    muted = colors.HexColor(f"#{LETTER_MUTED}")
+    accent = colors.HexColor(f"#{LETTER_ACCENT}")
+
+    return {
+        "eyebrow": ParagraphStyle(
+            "eyebrow",
+            fontName="Arial-Bold",
+            fontSize=8.5,
+            textColor=accent,
+            leading=11,
+            spaceAfter=3,
+        ),
+        "title": ParagraphStyle(
+            "title",
+            fontName="Arial-Bold",
+            fontSize=19,
+            textColor=text,
+            leading=23,
+            spaceAfter=5,
+        ),
+        "subtitle": ParagraphStyle(
+            "subtitle",
+            fontName="Arial",
+            fontSize=9.5,
+            textColor=muted,
+            leading=13,
+        ),
+        "meta_right": ParagraphStyle(
+            "meta_right",
+            fontName="Arial",
+            fontSize=9.5,
+            textColor=text,
+            leading=13,
+            alignment=2,  # right
+        ),
+        "salutation": ParagraphStyle(
+            "salutation",
+            fontName="Arial-Bold",
+            fontSize=11,
+            textColor=text,
+            spaceBefore=4,
+            spaceAfter=10,
+        ),
+        "body": ParagraphStyle(
+            "body",
+            fontName="Arial",
+            fontSize=10,
+            textColor=text,
+            leading=15,
+            spaceAfter=10,
+            alignment=4,  # justify
+        ),
+        "section": ParagraphStyle(
+            "section",
+            fontName="Arial-Bold",
+            fontSize=9.5,
+            textColor=accent,
+            leading=13,
+            spaceBefore=16,
+            spaceAfter=8,
+        ),
+        "kpi_label": ParagraphStyle(
+            "kpi_label",
+            fontName="Arial-Bold",
+            fontSize=7.5,
+            textColor=muted,
+            leading=10,
+        ),
+        "kpi_value": ParagraphStyle(
+            "kpi_value",
+            fontName="Arial-Bold",
+            fontSize=15,
+            textColor=accent,
+            leading=19,
+            spaceBefore=3,
+        ),
+        "bullet_body": ParagraphStyle(
+            "bullet_body",
+            fontName="Arial",
+            fontSize=10,
+            textColor=text,
+            leading=14.5,
+            leftIndent=14,
+            firstLineIndent=-14,
+            spaceAfter=8,
+        ),
+        "closing": ParagraphStyle(
+            "closing",
+            fontName="Arial",
+            fontSize=10,
+            textColor=text,
+            leading=15,
+            spaceBefore=8,
+            alignment=4,
+        ),
+        "sign_name": ParagraphStyle(
+            "sign_name",
+            fontName="Arial-Bold",
+            fontSize=11,
+            textColor=text,
+            spaceBefore=2,
+        ),
+        "sign_email": ParagraphStyle(
+            "sign_email",
+            fontName="Arial",
+            fontSize=9.5,
+            textColor=muted,
+            spaceBefore=3,
+        ),
+        "table_header": ParagraphStyle(
+            "table_header",
+            fontName="Arial-Bold",
+            fontSize=8.5,
+            textColor=colors.white,
+            leading=11,
+        ),
+        "table_cell": ParagraphStyle(
+            "table_cell",
+            fontName="Arial",
+            fontSize=9.5,
+            textColor=text,
+            leading=12,
+        ),
+        "table_cell_muted": ParagraphStyle(
+            "table_cell_muted",
+            fontName="Arial",
+            fontSize=9.5,
+            textColor=muted,
+            leading=12,
+        ),
+    }
+
+
+_RU_MONTHS = [
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+]
+
+
+def _fmt_ru_date_long(dt: datetime) -> str:
+    return f"{dt.day} {_RU_MONTHS[dt.month - 1]} {dt.year} г."
+
+
+def _fmt_ru_date_short(value) -> str:
+    """08.06 без года — для компактной плашки периода."""
+    if not value:
+        return ""
+    try:
+        return pd.to_datetime(value).strftime("%d.%m")
+    except Exception:
+        return str(value)
+
+
+def _file_word(count: int) -> str:
+    """1 файл, 2 файла, 5 файлов, 21 файл, 23 файла, 27 файлов."""
+
+    count = abs(int(count or 0))
+    last_two = count % 100
+    last_one = count % 10
+
+    if 11 <= last_two <= 14:
+        return "файлов"
+    if last_one == 1:
+        return "файл"
+    if last_one in {2, 3, 4}:
+        return "файла"
+    return "файлов"
+
+
+def _short_warehouse_label(warehouse_name: str) -> str:
+    """
+    Электросталь -> Электросталь
+    Симферополь, Молодежненское -> Симферополь
+    Красный Бор (Питер) WB -> Красный
+    Санкт-Петербург Уткина Заводь -> Санкт-Петербург
+
+    Правило: первое слово названия, без хвостовой пунктуации.
+    """
+
+    name = str(warehouse_name or "").strip()
+    if not name:
+        return "Склад"
+
+    first_token = name.split()[0]
+
+    return first_token.rstrip(",;:")
+
+
+def build_incident_cover_letter_pdf(
+    events: list[dict],
+    *,
+    letter_title: str = "Реестр пожаров на складах Wildberries",
+    author_short_name: str = "Войтенко Д. В.",
+    author_name: str = "Дарья Войтенко",
+    author_email: str = "daria031288d@gmail.com",
+    closing_text: str = (
+        ""
+  
+    ),
+    generated_at: datetime | None = None,
+) -> tuple[bytes, str]:
+    """
+    Строит служебное письмо (PDF) — реестр происшествий по образцу
+    пользовательского шаблона: эйбрау + заголовок, плашки-метрики,
+    таблица реестра происшествий, методика оценки, подпись.
+
+    Приложения (файлы/листы Excel) в письме не прикладываются —
+    это только сам реестр; Excel-книга с остатками скачивается
+    отдельной кнопкой (build_incident_loss_excel).
+    """
+
+    if not events:
+        raise ValueError("Список происшествий пуст — нечего экспортировать.")
+
+    _register_pdf_fonts()
+    styles = _pdf_styles()
+
+    generated_at = generated_at or datetime.now()
+
+    # Реестр в письме идёт в ХРОНОЛОГИЧЕСКОМ порядке (старые сверху) —
+    # так же, как в образце (№1 — самое раннее происшествие).
+    chronological_events = sorted(
+        events,
+        key=lambda x: (x.get("date", ""), x.get("warehouse_name", "")),
+    )
+
+    warehouse_count = len(
+        {e.get("warehouse_name", "") for e in events}
+    )
+
+    dates = [
+        pd.to_datetime(e.get("date"))
+        for e in events
+        if e.get("date")
+    ]
+
+    period_short = ""
+    period_full = ""
+
+    if dates:
+        min_date = min(dates)
+        max_date = max(dates)
+        period_short = (
+            f"{min_date.strftime('%d.%m')} — {max_date.strftime('%d.%m')}"
+        )
+        period_full = (
+            f"{min_date.strftime('%d.%m.%Y')} — "
+            f"{max_date.strftime('%d.%m.%Y')}"
+        )
+
+    accent = colors.HexColor(f"#{LETTER_ACCENT}")
+    card_bg = colors.HexColor(f"#{LETTER_CARD_BG}")
+    border_c = colors.HexColor(f"#{LETTER_BORDER}")
+
+    buffer = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        title=letter_title,
+    )
+
+    story = []
+
+    # ------------------------------------------------------------------ #
+    # Шапка: эйбрау + заголовок + подзаголовок (слева),
+    # автор + дата (справа)
+    # ------------------------------------------------------------------ #
+
+    left_col = [
+        Paragraph(_xml_escape(letter_title), styles["title"]),
+        Paragraph(
+            (
+                f"Период {period_full} · оценка товарного остатка "
+                "на конец дня, предшествующего происшествию"
+            ),
+            styles["subtitle"],
+        ),
+    ]
+
+    right_col = [
+        Paragraph(_xml_escape(author_short_name), styles["meta_right"]),
+        Paragraph(_fmt_ru_date_long(generated_at), styles["meta_right"]),
+    ]
+
+    header_table = Table(
+        [[left_col, right_col]],
+        colWidths=[125 * mm, 45 * mm],
+    )
+    header_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story.append(header_table)
+
+    story.append(Spacer(1, 5 * mm))
+    story.append(
+        HRFlowable(
+            width="100%",
+            thickness=1.2,
+            color=accent,
+            spaceAfter=12,
+        )
+    )
+
+    # ------------------------------------------------------------------ #
+    # Приветствие и вводный абзац
+    # ------------------------------------------------------------------ #
+
+    story.append(Paragraph("Добрый день!", styles["salutation"]))
+
+    period_from = dates and min(dates).strftime("%d.%m.%Y") or ""
+    period_to = dates and max(dates).strftime("%d.%m.%Y") or ""
+
+    intro = (
+        "Направляю сводный реестр пожаров на складах Wildberries, "
+        f"зафиксированных в период с {period_from} по {period_to}. "
+        f"Всего затронуто <font color=\"#{LETTER_ACCENT}\"><b>"
+        f"{warehouse_count}</b></font> складов. "
+        "Прилагаю выгрузки товарных остатков на "
+        "конец дня, предшествующего дате пожара — "
+        f"<font color=\"#{LETTER_ACCENT}\"><b>в расчёт включён только "
+        "физический остаток на складе, товары в пути не "
+        "учитывались.</b></font>"
+    )
+
+    story.append(Paragraph(intro, styles["body"]))
+
+    # ------------------------------------------------------------------ #
+    # Реестр происшествий
+    # ------------------------------------------------------------------ #
+
+    story.append(Paragraph("РЕЕСТР ПРОИСШЕСТВИЙ", styles["section"]))
+
+    def _cell(text, style_name="table_cell"):
+        return Paragraph(_xml_escape(str(text)), styles[style_name])
+
+    header_row = [
+        _cell("№", "table_header"),
+        _cell("СКЛАД", "table_header"),
+        _cell("ДАТА ПОЖАРА", "table_header"),
+        _cell("ОСТАТКИ НА ДАТУ", "table_header"),
+    ]
+
+    reg_rows = [header_row]
+
+    for idx, item in enumerate(chronological_events, start=1):
+        snapshot = item.get("snapshot") or {}
+
+        reg_rows.append(
+            [
+                _cell(idx, "table_cell_muted"),
+                _cell(item.get("warehouse_name", "")),
+                _cell(_fmt_ru_date(item.get("date"))),
+                _cell(_fmt_ru_date(snapshot.get("effective_date"))),
+            ]
+        )
+
+    col_widths = [10 * mm, 82 * mm, 36 * mm, 42 * mm]
+
+    reg_table = Table(reg_rows, colWidths=col_widths, repeatRows=1)
+
+    reg_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), accent),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.6, border_c),
+    ]
+    reg_table.setStyle(TableStyle(reg_style))
+
+    story.append(reg_table)
+
+    # ------------------------------------------------------------------ #
+    # Методика оценки
+    # ------------------------------------------------------------------ #
+
+    story.append(Paragraph("МЕТОДИКА ОЦЕНКИ", styles["section"]))
+
+    methodology_points = [
+        (
+            "В оценку включён только физический товарный остаток на "
+            "складе (quantity). Товары в пути не учитываются."
+        ),
+        (
+            "Используется снимок остатков на конец календарного дня, "
+            "предшествующего дате происшествия."
+        ),
+        (
+            "Позиции без определённой себестоимости в стоимостную "
+            "оценку не включены."
+        ),
+    ]
+
+    for point in methodology_points:
+        story.append(
+            Paragraph(
+                f'<font color="#{LETTER_ACCENT}">●</font>&nbsp;&nbsp;{point}',
+                styles["bullet_body"],
+            )
+        )
+
+    # ------------------------------------------------------------------ #
+    # Заключительный абзац
+    # ------------------------------------------------------------------ #
+
+    story.append(Paragraph(closing_text, styles["closing"]))
+
+    story.append(Spacer(1, 10 * mm))
+
+    # ------------------------------------------------------------------ #
+    # Подпись
+    # ------------------------------------------------------------------ #
+
+    story.append(
+        HRFlowable(
+            width="100%",
+            thickness=0.6,
+            color=border_c,
+            spaceAfter=8,
+        )
+    )
+    story.append(Paragraph(_xml_escape(author_name), styles["sign_name"]))
+    story.append(Paragraph(_xml_escape(author_email), styles["sign_email"]))
+
+    doc.build(story)
+
+    buffer.seek(0)
+
+    filename = (
+        f"Сопроводительное_письмо_{generated_at.strftime('%Y-%m-%d')}.pdf"
+    )
+
+    return buffer.getvalue(), filename
+
+# =============================================================================
+# EXCEL: "Калькулятор ущерба" по формуле п. 11.3.5-11.3.6 Оферты WB
+#
+# Расчёт компенсации по Постановлению Правительства РФ от 25.08.2026
+# N 1074 ("...в порядке, аналогичном порядку определения размера
+# компенсации, предусмотренному пунктами 11.3.5 и 11.3.6 оферты").
+#
+# В отличие от build_incident_loss_excel (оценка по себестоимости,
+# для внутреннего учёта), этот отчёт считает именно ту сумму,
+# которая имеет значение для порога 5% господдержки — Св по
+# формуле Оферты. Реквизиты (К%, НДС, Нац%) выводятся в жёлтые
+# редактируемые ячейки, формулы в соседних столбцах пересчитываются
+# в Excel "вживую" при правке — так же, как в присланном
+# пользователем шаблоне-образце.
+#
+# Входные данные по каждой позиции (events[i]["items"][j]) должны
+# быть ДОПОЛНИТЕЛЬНО обогащены до вызова этой функции (см.
+# get_incident_potential_prices в stocks/data.py и
+# lookup_subject_reference/compute_item_compensation в
+# stocks/incident_compensation.py) следующими ключами:
+#
+#     "subject_name"          — Предмет WB (уже есть в items из
+#                                get_warehouse_incident_stock_items)
+#     "potential_price"       — Ц, руб | None
+#     "commission_pct"        — К%, комиссия WB по Предмету | None
+#     "markup_pct"            — Нац%, наценка по категории | None
+#     "vat_rate_pct"          — ставка НДС товара, % | None
+#     "own_sales_count_365d"  — продаж САМОГО nm_id за 365 дней
+#     "price_source"          — "nm" | "subject" | None
+# =============================================================================
+
+COMPENSATION_HEADERS = [
+    "№",
+    "NM ID",
+    "Товар",
+    "Бренд",
+    "Предмет (категория WB)",
+    "Кол-во, шт",
+    "Продаж за 365 дн",
+    "Источник Ц",
+    "Цена продажи, Ц (руб.)",
+    "Комиссия WB, К%",
+    "Плательщик НДС?",
+    "Ставка НДС, %",
+    "Наценка, Нац%",
+    "НДС (руб.)",
+    "Комиссия К (руб.)",
+    "Ущерб на ед., Св (руб.)",
+    "Ущерб всего (руб.)",
+]
+
+COMPENSATION_COL_WIDTHS = {
+    "A": 5,
+    "B": 12,
+    "C": 34,
+    "D": 20,
+    "E": 22,
+    "F": 11,
+    "G": 13,
+    "H": 12,
+    "I": 16,
+    "J": 13,
+    "K": 13,
+    "L": 12,
+    "M": 12,
+    "N": 14,
+    "O": 16,
+    "P": 16,
+    "Q": 16,
+}
+
+# Жёлтая заливка — редактируемые вручную ячейки (как в образце
+# пользователя): цену можно скорректировать, если известна более
+# точная (например, с учётом ограничения "Максимальная цена по
+# Предмету" из п. 11.3.6, которое это приложение не считает), а
+# К%/НДС/Нац% — если автоматический справочник не нашёл значение
+# или продавец считает его неверным.
+FILL_EDITABLE = "FFF9D6"
+
+
+def _editable_fill() -> PatternFill:
+    return PatternFill(fill_type="solid", fgColor=FILL_EDITABLE)
+
+
+def _write_compensation_item_row(
+    ws: Worksheet,
+    *,
+    row: int,
+    idx: int,
+    item: dict,
+    is_vat_payer_default: bool,
+    stripe: bool,
+) -> None:
+    subject_name = item.get("subject_name") or "—"
+
+    qty = item.get("qty") or 0
+
+    own_sales = item.get("own_sales_count_365d")
+    price_source = item.get("price_source")
+
+    source_label = {
+        "nm": "свой NM ID",
+        "subject": "по Предмету (<10 продаж)",
+        None: "нет данных",
+    }.get(price_source, "нет данных")
+
+    values_plain = [
+        idx,
+        item.get("nm_id"),
+        item.get("name") or "",
+        item.get("brand") or "Бренд не указан",
+        subject_name,
+        qty,
+        own_sales if own_sales is not None else "",
+        source_label,
+    ]
+
+    for offset, value in enumerate(values_plain):
+        col = 1 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.alignment = Alignment(
+            vertical="center",
+            horizontal="center" if col != 3 else "left",
+            wrap_text=(col == 3),
+        )
+
+        if stripe:
+            cell.fill = PatternFill(
+                fill_type="solid", fgColor=FILL_STRIPE
+            )
+
+    # -- редактируемые (жёлтые) входные ячейки: I..M (9..13) ---------
+
+    editable_values = [
+        item.get("potential_price"),
+        item.get("commission_pct"),
+        ("Да" if is_vat_payer_default else "Нет"),
+        item.get("vat_rate_pct"),
+        item.get("markup_pct"),
+    ]
+
+    for offset, value in enumerate(editable_values):
+        col = 9 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.fill = _editable_fill()
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if col in (9, 14, 15, 16, 17):
+            cell.number_format = "#,##0.00"
+        elif col in (10, 12, 13):
+            cell.number_format = "0.00"
+
+    # -- формулы: N..Q (14..17), пересчитываются в Excel живьём -------
+
+    i_ = f"I{row}"
+    j_ = f"J{row}"
+    k_ = f"K{row}"
+    l_ = f"L{row}"
+    m_ = f"M{row}"
+    f_ = f"F{row}"
+
+    formulas = {
+        14: f'=IF({k_}="Да",{i_}*{l_}/(100+{l_}),0)',
+        15: f"={i_}*{j_}/100",
+        16: f"=MAX(({i_}-N{row}-O{row})*(1-{m_}/100),0)",
+        17: f"=P{row}*{f_}",
+    }
+
+    for col, formula in formulas.items():
+        cell = ws.cell(row=row, column=col, value=formula)
+        cell.font = Font(name=FONT_NAME, size=9.5, bold=(col == 17), color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.number_format = "#,##0.00"
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if stripe:
+            cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+
+
+def build_incident_compensation_excel(
+    events: list[dict],
+    *,
+    is_vat_payer: bool = True,
+    generated_at: datetime | None = None,
+) -> tuple[bytes, str]:
+    """
+    Строит книгу Excel "Калькулятор ущерба (Оферта WB п.11.3.5-11.3.6)"
+    по всем переданным событиям (по умолчанию вызывающая сторона
+    передаёт ВСЕ БПЛА-происшествия с июля 2026 — один сводный
+    расчёт, т.к. порог господдержки 5% считается по сумме ущерба
+    ПО ВСЕМ происшествиям, а не по одному складу).
+
+    events[i]["items"] должны быть обогащены заранее (см. docstring
+    блока выше). Позиции без Ц/К%/Нац% всё равно попадают в таблицу
+    (жёлтые ячейки — пустые, формулы дадут 0 до ручного заполнения),
+    чтобы ни одна позиция физического остатка не была молча
+    пропущена из расчёта.
+
+    "Доход за 2025 год" (для проверки порога 5% по Постановлению
+    N 1074 — доход, учитываемый при налогообложении, а НЕ просто
+    выручка на WB) оставлен пустой редактируемой ячейкой: это
+    сумма из налоговой декларации, её вносит продавец.
+
+    Возвращает (bytes, filename) — готово для dcc.send_bytes.
+    """
+
+    if generated_at is None:
+        generated_at = datetime.now()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Калькулятор ущерба"
+
+    ncols = len(COMPENSATION_HEADERS)
+
+    _set_col_widths(ws, COMPENSATION_COL_WIDTHS)
+
+    row = _write_title_block(
+        ws,
+        row=1,
+        title="Калькулятор ущерба продавца WB (атаки БПЛА на «РВБ»)",
+        subtitle=(
+            "Формула Св = Ц − НДС − К − (Ц − НДС − К) × Нац% "
+            "(Оферта WB п. 11.3.5-11.3.6; Постановление Правительства РФ "
+            f"от 25.08.2026 N 1074, п. 3). Сформировано {generated_at.strftime('%d.%m.%Y %H:%M')}."
+        ),
+        ncols=ncols,
+    )
+
+    row += 1
+
+    total_row_refs: list[int] = []
+    first_header_row: int | None = None
+
+    for event in events:
+        warehouse_name = event.get("warehouse_name") or "Склад не указан"
+        incident = event.get("incident") or {}
+        incident_title = incident.get("title") or "Происшествие"
+        incident_date = _fmt_ru_date(event.get("date"))
+
+        items = event.get("items") or []
+
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+        header_cell = ws.cell(
+            row=row,
+            column=1,
+            value=f"{warehouse_name} — {incident_title} ({incident_date})",
+        )
+        header_cell.font = Font(name=FONT_NAME, size=11, bold=True, color="FFFFFF")
+        header_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_HEADER)
+        header_cell.alignment = Alignment(vertical="center", horizontal="left")
+        ws.row_dimensions[row].height = 22
+        row += 1
+
+        _write_table_header(ws, row=row, headers=COMPENSATION_HEADERS)
+
+        if first_header_row is None:
+            first_header_row = row
+
+        row += 1
+
+        if not items:
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+            empty_cell = ws.cell(row=row, column=1, value="Нет позиций физического остатка")
+            empty_cell.font = Font(name=FONT_NAME, size=9.5, italic=True, color=MUTED)
+            empty_cell.alignment = Alignment(horizontal="center")
+            row += 1
+        else:
+            first_item_row = row
+
+            for idx, item in enumerate(items, start=1):
+                _write_compensation_item_row(
+                    ws,
+                    row=row,
+                    idx=idx,
+                    item=item,
+                    is_vat_payer_default=is_vat_payer,
+                    stripe=(idx % 2 == 0),
+                )
+                row += 1
+
+            last_item_row = row - 1
+
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
+            subtotal_label = ws.cell(
+                row=row, column=1, value=f"Итого по складу «{warehouse_name}»"
+            )
+            subtotal_label.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+            subtotal_label.alignment = Alignment(horizontal="right", vertical="center")
+
+            subtotal_cell = ws.cell(
+                row=row,
+                column=17,
+                value=f"=SUM(Q{first_item_row}:Q{last_item_row})",
+            )
+            subtotal_cell.font = Font(name=FONT_NAME, size=10, bold=True, color=TEXT_DARK)
+            subtotal_cell.number_format = "#,##0.00"
+            subtotal_cell.fill = PatternFill(fill_type="solid", fgColor=FILL_TOTAL)
+            subtotal_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            for col in range(1, ncols + 1):
+                ws.cell(row=row, column=col).border = _thin_border()
+                if col != 17:
+                    ws.cell(row=row, column=col).fill = PatternFill(
+                        fill_type="solid", fgColor=FILL_TOTAL
+                    )
+
+            total_row_refs.append(row)
+            row += 1
+
+        row += 1
+
+    # ------------------------------------------------------------------ #
+    # ИТОГО ПО ВСЕМ ПРОИСШЕСТВИЯМ
+    # ------------------------------------------------------------------ #
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
+    grand_label = ws.cell(
+        row=row, column=1, value="ИТОГО сумма ущерба к возмещению, руб."
+    )
+    grand_label.font = Font(name=FONT_NAME, size=12, bold=True, color=TEXT_DARK)
+    grand_label.alignment = Alignment(horizontal="right", vertical="center")
+
+    if total_row_refs:
+        grand_formula = "=" + "+".join(f"Q{r}" for r in total_row_refs)
+    else:
+        grand_formula = 0
+
+    grand_cell = ws.cell(row=row, column=17, value=grand_formula)
+    grand_cell.font = Font(name=FONT_NAME, size=12, bold=True, color="FFFFFF")
+    grand_cell.fill = PatternFill(fill_type="solid", fgColor=ACCENT_GREEN)
+    grand_cell.number_format = "#,##0.00"
+    grand_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[row].height = 24
+
+    grand_total_row = row
+    row += 2
+
+    # ------------------------------------------------------------------ #
+    # ПОРОГ ГОСПОДДЕРЖКИ 5% (Постановление N 1074, п. 3)
+    # ------------------------------------------------------------------ #
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
+    income_label = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            "Доход за 2025 год, учитываемый при налогообложении "
+            "(из декларации — внести вручную), руб."
+        ),
+    )
+    income_label.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+    income_label.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+
+    income_cell = ws.cell(row=row, column=17, value=None)
+    income_cell.fill = _editable_fill()
+    income_cell.number_format = "#,##0.00"
+    income_cell.border = _thin_border()
+    income_cell.alignment = Alignment(horizontal="center", vertical="center")
+    income_row = row
+    row += 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=16)
+    pct_label = ws.cell(row=row, column=1, value="5% от дохода за 2025 год, руб.")
+    pct_label.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+    pct_label.alignment = Alignment(horizontal="right", vertical="center")
+
+    pct_cell = ws.cell(row=row, column=17, value=f"=Q{income_row}*0.05")
+    pct_cell.font = Font(name=FONT_NAME, size=10, color=TEXT_DARK)
+    pct_cell.number_format = "#,##0.00"
+    pct_cell.border = _thin_border()
+    pct_cell.alignment = Alignment(horizontal="center", vertical="center")
+    pct_row = row
+    row += 2
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    verdict_cell = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            f'=IF(Q{income_row}=0,"Внесите доход за 2025 год выше, чтобы проверить порог 5%",'
+            f'IF(Q{grand_total_row}>=Q{pct_row},'
+            f'"Ущерб ≥ 5% от дохода за 2025 год — попадаем на господдержку по Постановлению N 1074 '
+            f'(продление налогов на 12 мес., рассрочка)",'
+            f'"Ущерб < 5% от дохода за 2025 год — по 1-й категории (действующие продавцы) на господдержку '
+            f'не попадаем. Проверьте цифры выше — это порог именно по совокупному ущербу с июля 2026 года"))'
+        ),
+    )
+    verdict_cell.font = Font(name=FONT_NAME, size=10.5, bold=True, color=ACCENT_RED)
+    verdict_cell.alignment = Alignment(wrap_text=True, vertical="center")
+    ws.row_dimensions[row].height = 34
+
+    # Заморозка: строки заголовка первого блока (дальше вниз, у
+    # следующих складов, свой заголовок уже не будет закреплён —
+    # ограничение "стопки" таблиц на одном листе) + первые 5
+    # столбцов (№, NM ID, Товар, Бренд, Предмет), чтобы они
+    # оставались видны при прокрутке вправо к цене/формулам.
+    if first_header_row is not None:
+        ws.freeze_panes = ws.cell(
+            row=first_header_row + 1, column=6
+        ).coordinate
+    else:
+        ws.freeze_panes = "F5"
+
+    combined_ws = _add_all_items_combined_sheet(
+        wb,
+        events,
+        is_vat_payer=is_vat_payer,
+        generated_at=generated_at,
+    )
+
+    # Сводный лист "Все товары" — первым (главный обзорный вид),
+    # детальный "Калькулятор ущерба" по складам — вторым.
+    wb.move_sheet(combined_ws.title, offset=-1)
+    wb.active = 0
+
+    # Лист с формальным описанием методологии — третьим (после
+    # обоих расчётных листов).
+    _add_methodology_sheet(wb, generated_at=generated_at)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = (
+        f"Калькулятор_ущерба_БПЛА_{generated_at.strftime('%Y-%m-%d')}.xlsx"
+    )
+
+    return buffer.getvalue(), filename
+
+
+# =============================================================================
+# EXCEL: сводный лист "Все товары" — те же позиции, что и на листе
+# "Калькулятор ущерба", но БЕЗ разбивки по складам: один nm_id,
+# потерянный сразу на нескольких складах, сведён в одну строку
+# (Кол-во суммируется, склады перечислены текстом). Полезно, чтобы
+# увидеть ущерб по конкретному товару в целом по компании, не
+# просматривая каждый склад отдельно.
+#
+# Формулы и жёлтые редактируемые ячейки — те же, что и в
+# build_incident_compensation_excel (Св = Ц − НДС − К −
+# (Ц − НДС − К) × Нац%), НО итоговая сумма ущерба по товару
+# (последняя колонка) на позициях с nm_id берётся не из формулы
+# этой строки, а прямым SUMIF по уже посчитанным суммам на листе
+# "Калькулятор ущерба" (там же, где сумма может отличаться по
+# датам, если один товар пострадал в нескольких происшествиях —
+# см. комментарий в _write_combined_item_row). Это сделано, чтобы
+# итог этого листа всегда точно совпадал с суммой по складам.
+# =============================================================================
+
+COMBINED_HEADERS = [
+    "№",
+    "NM ID",
+    "Товар",
+    "Бренд",
+    "Предмет (категория WB)",
+    "Склады",
+    "Кол-во, шт (всего)",
+    "Продаж за 365 дн",
+    "Источник Ц",
+    "Цена продажи, Ц (руб.)",
+    "Комиссия WB, К%",
+    "Плательщик НДС?",
+    "Ставка НДС, %",
+    "Наценка, Нац%",
+    "НДС (руб.)",
+    "Комиссия К (руб.)",
+    "Ущерб на ед., Св (руб.)",
+    "Ущерб всего (руб.)",
+]
+
+COMBINED_COL_WIDTHS = {
+    "A": 5,
+    "B": 12,
+    "C": 34,
+    "D": 20,
+    "E": 22,
+    "F": 26,
+    "G": 13,
+    "H": 13,
+    "I": 12,
+    "J": 16,
+    "K": 13,
+    "L": 13,
+    "M": 12,
+    "N": 12,
+    "O": 14,
+    "P": 16,
+    "Q": 16,
+    "R": 16,
+}
+
+
+def _combine_items_across_warehouses(events: list[dict]) -> list[dict]:
+    """
+    Сводит items всех events в один список без разбивки по складам.
+
+    Позиции с одинаковым nm_id (потерянные сразу на нескольких
+    складах) объединяются в одну строку: Кол-во суммируется,
+    список складов собирается текстом. Ц/К%/Нац%/ставка НДС не
+    зависят от склада, поэтому берутся из первой встреченной
+    позиции с этим nm_id (для полноты, если где-то не хватало
+    данных, а в другой строке того же nm_id они есть — подставляем
+    более полные).
+
+    Позиции без nm_id (такое в принципе не должно происходить, но
+    на случай пустых/битых данных) не объединяются — каждая идёт
+    отдельной строкой, чтобы ничего не потерялось молча.
+    """
+
+    combined: dict = {}
+    no_id_rows: list[dict] = []
+
+    for event in events:
+        warehouse_name = event.get("warehouse_name") or "Склад не указан"
+
+        for item in (event.get("items") or []):
+            nm_id = item.get("nm_id")
+
+            if nm_id is None:
+                row = dict(item)
+                row["_warehouses"] = {warehouse_name}
+                no_id_rows.append(row)
+                continue
+
+            key = int(nm_id)
+
+            if key not in combined:
+                row = dict(item)
+                row["qty"] = float(item.get("qty") or 0)
+                row["_warehouses"] = {warehouse_name}
+                combined[key] = row
+                continue
+
+            existing = combined[key]
+            existing["qty"] = (
+                float(existing.get("qty") or 0)
+                + float(item.get("qty") or 0)
+            )
+            existing["_warehouses"].add(warehouse_name)
+
+            # Подстраховка: если в первой встреченной строке
+            # чего-то не хватало (например, справочник не нашёл
+            # Ц/К%/Нац% для одной записи), а в другой — есть,
+            # используем то, что заполнено.
+            for field in (
+                "potential_price",
+                "commission_pct",
+                "markup_pct",
+                "vat_rate_pct",
+                "subject_name",
+                "price_source",
+                "own_sales_count_365d",
+            ):
+                if existing.get(field) is None and item.get(field) is not None:
+                    existing[field] = item.get(field)
+
+    result = list(combined.values()) + no_id_rows
+
+    for row in result:
+        row["warehouses_label"] = ", ".join(sorted(row.pop("_warehouses", [])))
+
+    # Сортировка: сначала позиции с наибольшим количеством —
+    # так самые заметные строки видно сразу сверху.
+    result.sort(key=lambda r: float(r.get("qty") or 0), reverse=True)
+
+    return result
+
+
+def _write_combined_item_row(
+    ws: Worksheet,
+    *,
+    row: int,
+    idx: int,
+    item: dict,
+    is_vat_payer_default: bool,
+    stripe: bool,
+) -> None:
+    subject_name = item.get("subject_name") or "—"
+    qty = item.get("qty") or 0
+
+    own_sales = item.get("own_sales_count_365d")
+    price_source = item.get("price_source")
+
+    source_label = {
+        "nm": "свой NM ID",
+        "subject": "по Предмету (<10 продаж)",
+        None: "нет данных",
+    }.get(price_source, "нет данных")
+
+    values_plain = [
+        idx,
+        item.get("nm_id"),
+        item.get("name") or "",
+        item.get("brand") or "Бренд не указан",
+        subject_name,
+        item.get("warehouses_label") or "",
+        qty,
+        own_sales if own_sales is not None else "",
+        source_label,
+    ]
+
+    for offset, value in enumerate(values_plain):
+        col = 1 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.alignment = Alignment(
+            vertical="center",
+            horizontal="center" if col not in (3, 6) else "left",
+            wrap_text=(col in (3, 6)),
+        )
+
+        if stripe:
+            cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+
+    # -- редактируемые (жёлтые) входные ячейки: J..N (10..14) --------
+
+    editable_values = [
+        item.get("potential_price"),
+        item.get("commission_pct"),
+        ("Да" if is_vat_payer_default else "Нет"),
+        item.get("vat_rate_pct"),
+        item.get("markup_pct"),
+    ]
+
+    for offset, value in enumerate(editable_values):
+        col = 10 + offset
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font = Font(name=FONT_NAME, size=9.5, color=TEXT_DARK)
+        cell.border = _thin_border()
+        cell.fill = _editable_fill()
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if col in (10, 15, 16, 17, 18):
+            cell.number_format = "#,##0.00"
+        elif col in (11, 13, 14):
+            cell.number_format = "0.00"
+
+    # -- формулы: O..R (15..18) ---------------------------------------
+
+    j_ = f"J{row}"
+    k_ = f"K{row}"
+    l_ = f"L{row}"
+    m_ = f"M{row}"
+    n_ = f"N{row}"
+    g_ = f"G{row}"
+
+    if item.get("nm_id") is not None:
+        # Точное совпадение с листом "Калькулятор ущерба": сумма
+        # ущерба берётся не из "своей" Ц этой строки (она может
+        # отличаться от Ц на детальном листе, если один и тот же
+        # товар пострадал в НЕСКОЛЬКИХ происшествиях на разные
+        # даты - у каждой даты может быть своя Ц), а прямым SUMIF
+        # по уже посчитанным суммам на детальном листе. Так итог
+        # этого листа гарантированно совпадает с суммой по складам.
+        total_formula = (
+            "=SUMIF('Калькулятор ущерба'!$B:$B,"
+            f"B{row},"
+            "'Калькулятор ущерба'!$Q:$Q)"
+        )
+    else:
+        # Позиции без nm_id не сводятся с детальным листом (не с
+        # чем сверять по NM ID) - считаем локально, как раньше.
+        total_formula = (
+            f"=MAX(({j_}-O{row}-P{row})*(1-{n_}/100),0)*{g_}"
+        )
+
+    formulas = {
+        15: f'=IF({l_}="Да",{j_}*{m_}/(100+{m_}),0)',
+        16: f"={j_}*{k_}/100",
+        17: f"=IFERROR(R{row}/{g_},0)",
+        18: total_formula,
+    }
+
+    for col, formula in formulas.items():
+        cell = ws.cell(row=row, column=col, value=formula)
+        cell.font = Font(
+            name=FONT_NAME, size=9.5, bold=(col == 18), color=TEXT_DARK
+        )
+        cell.border = _thin_border()
+        cell.number_format = "#,##0.00"
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+        if stripe:
+            cell.fill = PatternFill(fill_type="solid", fgColor=FILL_STRIPE)
+
+
+def _add_all_items_combined_sheet(
+    wb: Workbook,
+    events: list[dict],
+    *,
+    is_vat_payer: bool,
+    generated_at: datetime,
+) -> Worksheet:
+    """Добавляет в книгу лист "Все товары" (см. docstring блока выше)."""
+
+    ws = wb.create_sheet("Все товары")
+
+    ncols = len(COMBINED_HEADERS)
+
+    _set_col_widths(ws, COMBINED_COL_WIDTHS)
+
+    row = _write_title_block(
+        ws,
+        row=1,
+        title="Ущерб по товарам — все склады вместе",
+        subtitle=(
+            "Тот же расчёт, что и на листе «Калькулятор ущерба» "
+            "(Св = Ц − НДС − К − (Ц − НДС − К) × Нац%), но без разбивки "
+            "по складам: один товар, пострадавший сразу на нескольких "
+            f"складах, — одна строка. Сформировано {generated_at.strftime('%d.%m.%Y %H:%M')}."
+        ),
+        ncols=ncols,
+    )
+
+    row += 1
+
+    _write_table_header(ws, row=row, headers=COMBINED_HEADERS)
+
+    header_row = row
+
+    row += 1
+
+    combined_items = _combine_items_across_warehouses(events)
+
+    first_item_row = row
+
+    for idx, item in enumerate(combined_items, start=1):
+        _write_combined_item_row(
+            ws,
+            row=row,
+            idx=idx,
+            item=item,
+            is_vat_payer_default=is_vat_payer,
+            stripe=(idx % 2 == 0),
+        )
+        row += 1
+
+    last_item_row = row - 1
+
+    row += 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=17)
+    grand_label = ws.cell(
+        row=row, column=1, value="ИТОГО сумма ущерба к возмещению, руб."
+    )
+    grand_label.font = Font(name=FONT_NAME, size=12, bold=True, color=TEXT_DARK)
+    grand_label.alignment = Alignment(horizontal="right", vertical="center")
+
+    if combined_items:
+        grand_formula = f"=SUM(R{first_item_row}:R{last_item_row})"
+    else:
+        grand_formula = 0
+
+    grand_cell = ws.cell(row=row, column=18, value=grand_formula)
+    grand_cell.font = Font(name=FONT_NAME, size=12, bold=True, color="FFFFFF")
+    grand_cell.fill = PatternFill(fill_type="solid", fgColor=ACCENT_GREEN)
+    grand_cell.number_format = "#,##0.00"
+    grand_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[row].height = 24
+
+    # Заморозка заголовка таблицы (одна сплошная таблица на этом
+    # листе, без "стопки" по складам, поэтому заголовок остаётся
+    # закреплённым при прокрутке до самого низа) + первые 6
+    # столбцов (№, NM ID, Товар, Бренд, Предмет, Склады).
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=7).coordinate
+
+    return ws
+
+
+# =============================================================================
+# EXCEL: лист "Методология" — формальное описание порядка расчёта
+# ущерба для внешнего использования (например, для пояснений
+# налоговому органу), без ссылок на внутренние таблицы/названия
+# листов приложения — только нормативные основания и формула.
+# =============================================================================
+
+
+def _write_methodology_paragraph(
+    ws: Worksheet,
+    *,
+    row: int,
+    text: str,
+    bold: bool = False,
+    size: float = 10.5,
+    color: str = None,
+    indent: bool = False,
+) -> int:
+    """
+    Пишет один абзац в колонку A (объединённую по ширине листа),
+    с переносом строк, и возвращает следующую свободную строку.
+    Высота строки подбирается приблизительно по длине текста.
+    """
+
+    ncols = 10
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+    cell = ws.cell(row=row, column=1, value=text)
+    cell.font = Font(
+        name=FONT_NAME,
+        size=size,
+        bold=bold,
+        color=color or TEXT_DARK,
+    )
+    cell.alignment = Alignment(
+        vertical="top",
+        horizontal="left",
+        wrap_text=True,
+        indent=(2 if indent else 0),
+    )
+
+    chars_per_line = 118 if not indent else 112
+    lines = max(1, -(-len(text) // chars_per_line))
+    ws.row_dimensions[row].height = max(18, lines * 15 + 6)
+
+    return row + 1
+
+
+def _add_methodology_sheet(
+    wb: Workbook,
+    *,
+    generated_at: datetime,
+) -> Worksheet:
+    """
+    Добавляет лист "Методология" — формальное, самодостаточное
+    описание порядка расчёта суммы ущерба, без упоминания названий
+    внутренних листов/таблиц приложения (адресовано внешнему
+    читателю — например, налоговому органу).
+    """
+
+    ws = wb.create_sheet("Методология")
+
+    ws.sheet_view.showGridLines = False
+
+    for col, width in {
+        "A": 12,
+        "B": 12,
+        "C": 12,
+        "D": 12,
+        "E": 12,
+        "F": 12,
+        "G": 12,
+        "H": 12,
+        "I": 12,
+        "J": 12,
+    }.items():
+        ws.column_dimensions[col].width = width
+
+    row = 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=10)
+    title_cell = ws.cell(
+        row=row,
+        column=1,
+        value=(
+            "Методология расчёта ущерба, причинённого товару продавца "
+            "в результате атак беспилотных летательных аппаратов на "
+            "объекты хранения (склады) Wildberries"
+        ),
+    )
+    title_cell.font = Font(name=FONT_NAME, size=14.5, bold=True, color=TEXT_DARK)
+    title_cell.alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[row].height = 40
+    row += 2
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=10)
+    date_cell = ws.cell(
+        row=row,
+        column=1,
+        value=f"Составлено {generated_at.strftime('%d.%m.%Y')}",
+    )
+    date_cell.font = Font(name=FONT_NAME, size=10, italic=True, color=MUTED)
+    row += 2
+
+    sections = [
+        ("1. Нормативные основания", True, 12, None, False),
+        (
+            "1.1. Договор публичной оферты о реализации товаров на "
+            "маркетплейсе Wildberries (далее — Оферта), заключаемый "
+            "между продавцом и ООО «Вайлдберриз» / оператором фулфилмент-"
+            "центра ООО «РВБ», пункты 11.3.4–11.3.9 которого устанавливают "
+            "порядок определения и возмещения ущерба, причинённого товару "
+            "продавца вследствие его утраты либо повреждения на складе.",
+            False, 10.5, None, True,
+        ),
+        (
+            "1.2. Постановление Правительства Российской Федерации от "
+            "25.08.2026 № 1074, устанавливающее порядок предоставления "
+            "мер государственной поддержки (отсрочки/рассрочки уплаты "
+            "налогов) продавцам — участникам электронной торговли, товар "
+            "которых пострадал в результате атак беспилотных летательных "
+            "аппаратов на объекты хранения товаров на территории Российской "
+            "Федерации, при условии, что совокупный размер причинённого "
+            "ущерба превышает 5 процентов от учитываемого при "
+            "налогообложении дохода продавца за 2025 год (для продавцов, "
+            "зарегистрированных до 01.12.2025), либо возникает в любом "
+            "размере (для продавцов, зарегистрированных после 01.12.2025).",
+            False, 10.5, None, True,
+        ),
+        ("2. Формула расчёта суммы ущерба", True, 12, None, False),
+        (
+            "2.1. Сумма ущерба, подлежащая возмещению за единицу товара "
+            "(далее — Св), определяется в соответствии с п. 11.3.5 Оферты "
+            "по формуле:",
+            False, 10.5, None, False,
+        ),
+        (
+            "Св = Ц − НДС − К − (Ц − НДС − К) × Нац%",
+            True, 12, ACCENT_GREEN, True,
+        ),
+        (
+            "2.2. Итоговая сумма ущерба по каждой позиции товара "
+            "определяется как произведение Св на количество утраченных "
+            "либо повреждённых единиц данного товара. Совокупная сумма "
+            "ущерба по происшествию определяется как сумма ущерба по всем "
+            "позициям физического остатка товара, находившегося на складе "
+            "на момент происшествия.",
+            False, 10.5, None, True,
+        ),
+        ("3. Составляющие формулы", True, 12, None, False),
+        (
+            "3.1. Ц (потенциальная цена реализации товара, руб.) — цена, "
+            "по которой товар предлагался к продаже. Определяется в "
+            "соответствии с п. 11.3.6 Оферты (порядок определения приведён "
+            "в разделе 4 настоящего документа).",
+            False, 10.5, None, True,
+        ),
+        (
+            "3.2. НДС (руб.) — сумма налога на добавленную стоимость, "
+            "включённая в цену Ц, рассчитываемая по формуле "
+            "НДС = Ц × Ставка / (100 + Ставка), где Ставка — применяемая "
+            "продавцом ставка НДС по соответствующему товару "
+            "(в процентах). Если продавец не является плательщиком НДС, "
+            "показатель принимается равным нулю.",
+            False, 10.5, None, True,
+        ),
+        (
+            "3.3. К (руб.) — сумма комиссионного вознаграждения "
+            "Wildberries, рассчитываемая по формуле К = Ц × К%, где К% — "
+            "размер комиссии, установленный Wildberries для товарной "
+            "категории («Предмета»), к которой относится товар (тариф за "
+            "продажу со склада Wildberries).",
+            False, 10.5, None, True,
+        ),
+        (
+            "3.4. Нац% — размер наценки, установленный Wildberries для "
+            "соответствующей товарной категории («Предмета») в "
+            "опубликованной методике расчёта наценки.",
+            False, 10.5, None, True,
+        ),
+        ("4. Порядок определения потенциальной цены реализации (Ц)", True, 12, None, False),
+        (
+            "В соответствии с п. 11.3.6 Оферты, потенциальная цена "
+            "реализации товара определяется на дату, предшествующую дате "
+            "наступления ущерба, следующим образом:",
+            False, 10.5, None, False,
+        ),
+        (
+            "4.1. Если товар был реализован 10 (десять) и более раз в "
+            "течение 365 дней, предшествующих указанной дате, Ц "
+            "принимается равной среднеарифметическому значению цен, по "
+            "которым данный товар предлагался к продаже, за указанный "
+            "период.",
+            False, 10.5, None, True,
+        ),
+        (
+            "4.2. Если товар был реализован менее 10 (десяти) раз в "
+            "течение указанного периода (либо не реализовывался вовсе), Ц "
+            "принимается равной среднеарифметическому значению цен всех "
+            "товаров, относящихся к тому же «Предмету» (товарной "
+            "категории Wildberries), что и рассматриваемый товар, за тот "
+            "же период.",
+            False, 10.5, None, True,
+        ),
+        (
+            "4.3. Итоговое значение Ц дополнительно не может превышать "
+            "максимальную цену реализации по соответствующему «Предмету» "
+            "среди всех продавцов торговой площадки. Указанное ограничение "
+            "применяется Wildberries / ООО «РВБ» при итоговом определении "
+            "суммы возмещения, поскольку сведения о ценах иных продавцов "
+            "площадки не находятся в открытом доступе для отдельного "
+            "продавца и не могут быть применены им самостоятельно.",
+            False, 10.5, None, True,
+        ),
+        (
+            "4.4. Если товар не реализовывался ни разу за указанный период "
+            "ни им самим, ни какими-либо иными товарами того же «Предмета», "
+            "потенциальная цена реализации определяется продавцом "
+            "самостоятельно на основании имеющихся у него данных о "
+            "стоимости товара.",
+            False, 10.5, None, True,
+        ),
+        ("5. Дата, на которую производится расчёт", True, 12, None, False),
+        (
+            "5.1. Расчёт производится на дату, предшествующую дате "
+            "наступления происшествия — по данным о физическом остатке "
+            "товара на складе на конец предшествующего календарного дня.",
+            False, 10.5, None, True,
+        ),
+        (
+            "5.2. Период для определения потенциальной цены реализации "
+            "(365 дней) отсчитывается назад от указанной даты включительно.",
+            False, 10.5, None, True,
+        ),
+        ("6. Проверка права на меры государственной поддержки", True, 12, None, False),
+        (
+            "6.1. Совокупная сумма ущерба по всем происшествиям, связанным "
+            "с атаками беспилотных летательных аппаратов, сопоставляется с "
+            "величиной, равной 5 процентам от дохода продавца за 2025 год, "
+            "учитываемого при налогообложении.",
+            False, 10.5, None, True,
+        ),
+        (
+            "6.2. Для продавцов, зарегистрированных после 01.12.2025, "
+            "право на меры государственной поддержки возникает при любом "
+            "подтверждённом размере ущерба, без применения порогового "
+            "значения 5 процентов.",
+            False, 10.5, None, True,
+        ),
+        ("7. Заключительные положения", True, 12, None, False),
+        (
+            "7.1. Настоящий расчёт представляет собой оценку суммы ущерба, "
+            "произведённую продавцом самостоятельно на основании "
+            "собственных учётных данных и порядка, установленного Офертой.",
+            False, 10.5, None, True,
+        ),
+        (
+            "7.2. Окончательное определение суммы ущерба, а также решение "
+            "о применении мер государственной поддержки в соответствии с "
+            "Постановлением Правительства РФ от 25.08.2026 № 1074, "
+            "принимается Wildberries / ООО «РВБ» при формировании и "
+            "направлении соответствующих сведений в налоговые органы; "
+            "отдельное обращение продавца для этого не требуется.",
+            False, 10.5, None, True,
+        ),
+    ]
+
+    for text, bold, size, color, indent in sections:
+        row = _write_methodology_paragraph(
+            ws,
+            row=row,
+            text=text,
+            bold=bold,
+            size=size,
+            color=color,
+            indent=indent,
+        )
+        if bold:
+            row += 0
+        else:
+            row += 1
+
+    return ws

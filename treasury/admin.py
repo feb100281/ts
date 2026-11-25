@@ -1,11 +1,16 @@
+from django.utils.html import format_html_join
 # treasury/admin.py
 
 from django.http import JsonResponse
 from django.urls import path
+from django.db.models import F, Value, DecimalField, ExpressionWrapper
 import csv
+import re
+
+
 from django.http import HttpResponse
 from django.contrib import admin, messages
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Prefetch
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
@@ -16,11 +21,19 @@ from datetime import datetime
 from django.db.models import Q
 from django.contrib.admin import SimpleListFilter
 from django import forms
+from django.db import models
 from contracts.models import Contracts
-from .models import BankStatements, CfData, CfSplits,ContractsRexex
+from .models import BankStatements, CfData, CfSplits,ContractsRexex, CounterpartyAccount, TextTranslation, HintRule, CpName
 from utils.bsparsers.bsupdater import update_cf_data
-from decimal import Decimal
+from utils.bsparsers.am.loader import auto_assign, load_statement, sniff, unassigned
+from utils.bsparsers.am.staff import auto_staff
+from decimal import Decimal, InvalidOperation
 
+
+from django.contrib.admin.helpers import ActionForm
+from grossbook.models import Manual
+from corporate.models import COA
+from django.db import transaction
 
 
 
@@ -105,11 +118,10 @@ class CfDataInline(admin.TabularInline):
         return format_html('<a class="button" href="{}">↗</a>', url)
 
 
-
-class CfSplitsInline(admin.TabularInline):
+class CfSplitsInline(admin.StackedInline):
     model = CfSplits
     extra = 0
-    fields = ("flow", "amount", "cfitem", "contract", "vat_rate", "temp")
+    fields = ("flow", "amount", "cfitem", "dt","cr", "contract", "vat_rate", "temp")
     readonly_fields = ("flow", "amount")
     autocomplete_fields = ("cfitem", "contract")
 
@@ -149,6 +161,30 @@ class ByInnBadgeFilter(SimpleListFilter):
             return queryset.filter(Q(cp_final__isnull=False) | Q(cp__isnull=True))
 
         return queryset
+
+class InnCheckFilter(SimpleListFilter):
+    """ИНН в названии получателя (выписки зарубежных компаний) против контрагента операции."""
+    title = "Проверка ИНН"
+    parameter_name = "inn_check"
+    INN = r"(INN|ИНН)[ .:]*[0-9]{10,12}"
+
+    def lookups(self, request, model_admin):
+        return (("mismatch", "ИНН в названии ≠ ИНН контрагента"),
+                ("unknown", "ИНН в названии, контрагент не найден"))
+
+    def queryset(self, request, queryset):
+        v = self.value()
+        if not v:
+            return queryset
+        qs = (queryset.exclude(owner__country="RU").exclude(owner__isnull=True)
+              .filter(cp_bs_name__iregex=self.INN))
+        if v == "mismatch":
+            return (qs.filter(cp_final__isnull=False)
+                    .exclude(cp_bs_name__contains=F("cp_final__tax_id")))
+        if v == "unknown":
+            return qs.filter(cp_final__isnull=True, cp__isnull=True)
+        return queryset
+
 
 # ---------- BankStatements Admin ----------
 
@@ -192,16 +228,16 @@ class BankStatementsAdmin(admin.ModelAdmin):
     )
     list_display_links = ("period",)
     search_fields = ("owner__name", "ba__account", "ba__bank__name")
-    list_filter = ("owner", "ba", "uploaded_at", InPeriodDateFilter)
+    list_filter = ("owner", "ba",  InPeriodDateFilter)
     # date_hierarchy = "uploaded_at"
   
     ordering = ("-uploaded_at",)
     list_select_related = ("owner", "ba")
 
     fieldsets = (
-        ("📄 Файл выписки", {"fields": ("file",)}),
+        (mark_safe("📄 <b>Файл выписки</b>"), {"fields": ("file",)}),
         (
-        "🧾 Период и реквизиты",
+        mark_safe("🧾 <b>Период и реквизиты</b>"),
         {
             "fields": (
                 "owner",
@@ -211,8 +247,8 @@ class BankStatementsAdmin(admin.ModelAdmin):
         },
             ),
         
-        ("💰 Остатки", {"fields": ("bb", "eb")}), 
-        ("🕒 Система", {"fields": ("uploaded_at",)}),
+        (mark_safe("💰 <b>Остатки</b>"), {"fields": ("bb", "eb")}), 
+        (mark_safe("🕒 <b>Система</b>"), {"fields": ("uploaded_at",)}),
     )
     readonly_fields = ("uploaded_at", "owner", "ba", "start", "finish", "bb", "eb")
 
@@ -220,7 +256,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
         css = {
             "all": (
                 "css/admin_overrides.css",
-                "css/admin_treasury.css",
+                # "css/admin_treasury.css",
                 "fonts/glyphs.css", 
             )
         }
@@ -238,6 +274,21 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 name="treasury_bankstatements_process_selected",
             ),
             path(
+                "clarify/",
+                self.admin_site.admin_view(self.clarify_view),
+                name="treasury_bankstatements_clarify",
+            ),
+            path(
+                "payroll/",
+                self.admin_site.admin_view(self.payroll_view),
+                name="treasury_bankstatements_payroll",
+            ),
+            path(
+                "coverage/",
+                self.admin_site.admin_view(self.coverage_view),
+                name="treasury_bankstatements_coverage",
+            ),
+            path(
                 "export-eod-xlsx/",
                 self.admin_site.admin_view(export_eod_xlsx),
                 name="treasury_bankstatements_export_eod_xlsx",
@@ -250,6 +301,89 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
     
     
+    def clarify_view(self, request):
+        """Неразнесённые операции зарубежной компании и запрос на уточнение."""
+        from datetime import date
+        from django.http import HttpResponse
+        from django.template.response import TemplateResponse
+        from corporate.models import Owners
+        from treasury.clarify import pending, request_text, to_xlsx
+
+        owners = list(Owners.objects.exclude(country="RU").order_by("name"))
+        pick = request.GET.get("owner")
+        owner = next((o for o in owners if str(o.pk) == pick), owners[0] if owners else None)
+
+        def d(key):
+            try:
+                return date.fromisoformat(request.GET.get(key, ""))
+            except ValueError:
+                return None
+        date_from, date_to = d("from"), d("to")
+        groups = pending(owner, date_from, date_to) if owner else []
+        if owner and request.GET.get("xlsx"):
+            resp = HttpResponse(to_xlsx(owner, groups),
+                                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            resp["Content-Disposition"] = 'attachment; filename="clarify.xlsx"'
+            return resp
+        ctx = {**self.admin_site.each_context(request), "title": "Уточнить платежи", "owners": owners,
+               "owner": owner, "groups": groups, "total": sum(len(g["ops"]) for g in groups),
+               "date_from": date_from.isoformat() if date_from else "",
+               "date_to": date_to.isoformat() if date_to else "",
+               "text": request_text(owner, groups) if owner and groups else ""}
+        return TemplateResponse(request, "admin/treasury/bankstatements/clarify.html", ctx)
+
+    def payroll_view(self, request):
+        """Реестры зарплаты из PDF → сплиты оплат «СОТРУДНИК (РЕЕСТР)» по сотрудникам."""
+        from datetime import date as _date
+        from django.template.response import TemplateResponse
+        from treasury import payroll
+
+        def pack(regs):
+            return [{"name": r.name, "number": r.number, "date": r.date.isoformat() if r.date else None,
+                     "total": str(r.total), "rows": [[a, n, str(v)] for a, n, v in r.rows], "error": r.error}
+                    for r in regs]
+
+        def unpack(data):
+            return [payroll.Registry(d["name"], d["number"], _date.fromisoformat(d["date"]) if d["date"] else None,
+                                     Decimal(d["total"]), [(a, n, Decimal(v)) for a, n, v in d["rows"]], d["error"])
+                    for d in data]
+
+        ctx = {**self.admin_site.each_context(request), "title": "Реестры зарплаты",
+               "lookahead": payroll.LOOKAHEAD}
+        if request.method == "POST" and request.POST.get("apply"):
+            regs = unpack(request.session.get("payroll_regs", []))
+            ctx["result"] = payroll.apply(payroll.plan(regs))
+            request.session.pop("payroll_regs", None)
+        elif request.method == "POST":
+            regs = [payroll.parse(f.name, f.read()) for f in request.FILES.getlist("files")]
+            request.session["payroll_regs"] = pack(regs)
+            items = payroll.plan(regs)
+            for it in items:
+                it["new_count"] = sum(1 for s in it["staff"] if s["how"] == "новый")
+            ctx.update(items=items, ready=sum(1 for it in items if not it["error"]))
+        return TemplateResponse(request, "admin/treasury/bankstatements/payroll.html", ctx)
+
+    def coverage_view(self, request):
+        """Полнота выписок по компании и текст запроса недостающего."""
+        from django.template.response import TemplateResponse
+        from corporate.models import Owners
+        from treasury.coverage import check
+
+        owners = list(Owners.objects.exclude(country="RU").order_by("name")) or list(Owners.objects.order_by("name"))
+        pick = request.GET.get("owner")
+        owner = next((o for o in owners if str(o.pk) == pick), owners[0] if owners else None)
+        data = check(owner) if owner else None
+        if data and request.GET.get("xlsx"):
+            from django.http import HttpResponse
+            from treasury.coverage import to_xlsx
+            resp = HttpResponse(to_xlsx(data),
+                                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            resp["Content-Disposition"] = 'attachment; filename="statements_request.xlsx"'
+            return resp
+        ctx = {**self.admin_site.each_context(request), "title": "Контроль выписок",
+               "owners": owners, "data": data}
+        return TemplateResponse(request, "admin/treasury/bankstatements/coverage.html", ctx)
+
     def process_selected_view(self, request):
         """
         POST принимает ids выбранных выписок.
@@ -278,29 +412,39 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
         ok = 0
         bad = 0
+        notes = []
         for obj in qs:
             try:
                 if not obj.file:
                     bad += 1
                     continue
-                result = update_cf_data(obj.file.path, obj.pk)
-                # можно либо копить результаты, либо показывать кратко
+                if sniff(obj.file.path):                      # Армения — свой загрузчик, без удаления строк
+                    load_statement(obj.file.path, log=lambda *_: None, bs=obj)
+                    staff = []
+                    auto_staff(obj.owner_id, staff.append)          # новые сотрудники — договор по образцу
+                    notes += [f"{obj}:{x}" for x in staff]
+                    ids = list(unassigned(CfData.objects.filter(bs=obj)).values_list("id", flat=True))
+                    lines = []
+                    auto_assign(ids, obj.owner_id, lines.append)   # разноска и уже загруженных строк
+                    notes.append(f"{obj}: без разноски было {len(ids)}; " + ", ".join(x.strip() for x in lines))
+                else:
+                    result = update_cf_data(obj.file.path, obj.pk)
                 ok += 1
             except Exception as e:
                 bad += 1
+                notes.append(f"{obj}: ошибка — {e}")
 
         if ok:
             messages.success(request, f"Обработано выписок: {ok}")
         if bad:
             messages.error(request, f"Ошибок/пропусков: {bad} (нет файла или ошибка обработки).")
+        for n in notes:
+            messages.info(request, n)
 
         # вернуть обратно на changelist с теми же фильтрами
         return redirect(request.META.get("HTTP_REFERER", ".."))
 
 
-    
-    
-    
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -312,11 +456,179 @@ class BankStatementsAdmin(admin.ModelAdmin):
                   rows=Count("cfdata", distinct=True),
               )
         )
-        
-        
+    
+
+    
+    # def changelist_view(self, request, extra_context=None):
+    #     extra_context = extra_context or {}
+
+    #     # ✅ ВСЕГДА объявляем фильтры (иначе UnboundLocalError)
+    #     owner_id = request.GET.get("owner__id__exact")
+    #     ba_id = request.GET.get("ba__id__exact")
+
+    #     # ✅ Дата среза (может быть None)
+    #     selected_date = None
+    #     raw = request.GET.get("in_period_date")
+    #     if raw:
+    #         try:
+    #             selected_date = datetime.strptime(raw, "%Y-%m-%d").date()
+    #         except ValueError:
+    #             selected_date = None
+
+    #     extra_context["selected_date"] = selected_date
+
+    #     # =========================================================
+    #     # ✅ ГЛОБАЛЬНЫЙ КОНТРОЛЬ ВНУТРИГРУППОВЫХ (НЕ в разрезе выписки)
+    #     #    Показываем всегда на экране "Выписки"
+    #     #    (опционально учитываем текущие фильтры owner/ba и дату-срез)
+    #     # =========================================================
+    #     ic_qs = CfData.objects.filter(intercompany=True)
+
+    #     # если на странице выбран owner / ba — логично считать в том же контексте
+    #     if owner_id:
+    #         ic_qs = ic_qs.filter(owner_id=owner_id)
+    #     if ba_id:
+    #         ic_qs = ic_qs.filter(ba_id=ba_id)
+
+    #     # если выбрана дата — считаем "на дату" (до выбранной даты включительно)
+    #     if selected_date:
+    #         ic_qs = ic_qs.filter(date__lte=selected_date)
+
+    #     ic = ic_qs.aggregate(
+    #         dt=Coalesce(Sum("dt"), Decimal("0.00")),
+    #         cr=Coalesce(Sum("cr"), Decimal("0.00")),
+    #     )
+
+    #     ic_dt = ic["dt"] or Decimal("0.00")
+    #     ic_cr = ic["cr"] or Decimal("0.00")
+    #     ic_net = ic_dt - ic_cr
+
+    #     extra_context["ic_total_dt"] = ic_dt
+    #     extra_context["ic_total_cr"] = ic_cr
+    #     extra_context["ic_total_net"] = ic_net
+
+    #     # =========================================================
+    #     # ✅ ТВОЯ ТЕКУЩАЯ ЛОГИКА EOD (только если выбрана дата)
+    #     # =========================================================
+    #     if selected_date:
+    #         bss = (
+    #             BankStatements.objects
+    #             .filter(start__lte=selected_date, finish__gte=selected_date)
+    #             .select_related("owner", "ba", "ba__bank")
+    #         )
+
+    #         # ✅ используем уже прочитанные owner_id / ba_id (не читаем повторно)
+    #         if owner_id:
+    #             bss = bss.filter(owner_id=owner_id)
+    #         if ba_id:
+    #             bss = bss.filter(ba_id=ba_id)
+
+    #         blocks = []
+
+    #         # --- итоги по валютам ---
+    #         totals_by_ccy = {}  # code -> {"dt": Decimal, "cr": Decimal, "eod": Decimal, "cnt": int}
+
+    #         for bs in bss:
+    #             agg = (
+    #                 CfData.objects
+    #                 .filter(bs=bs, date__lte=selected_date)
+    #                 .aggregate(
+    #                     dt=Coalesce(Sum("dt"), Decimal("0.00")),
+    #                     cr=Coalesce(Sum("cr"), Decimal("0.00")),
+    #                 )
+    #             )
+
+    #             dt_sum = agg["dt"] or Decimal("0.00")
+    #             cr_sum = agg["cr"] or Decimal("0.00")
+
+    #             bb = bs.bb if bs.bb is not None else Decimal("0.00")
+    #             eod = bb + dt_sum - cr_sum
+
+    #             ba = bs.ba
+    #             bank = getattr(ba, "bank", None) if ba else None
+
+    #             bank_name = (getattr(bank, "name", None) or "").strip()
+    #             account = (getattr(ba, "account", None) or "").strip()
+    #             owner_name = str(bs.owner) if bs.owner else ""
+
+    #             # валюта счета
+    #             code = (getattr(ba, "currency", None) or "").upper() if ba else ""
+    #             sym = CURRENCY_SYMBOLS.get(code, "") if code else ""
+    #             flag = CURRENCY_FLAGS.get(code, "") if code else ""
+
+    #             blocks.append({
+    #                 "bs": bs,
+    #                 "dt_sum": dt_sum,
+    #                 "cr_sum": cr_sum,
+    #                 "eod": eod,
+
+    #                 "bank_name": bank_name,
+    #                 "account": account,
+    #                 "owner_name": owner_name,
+    #                 "open_url": reverse("admin:treasury_bankstatements_change", args=[bs.pk]),
+
+    #                 # валюта для строки
+    #                 "currency_code": code,
+    #                 "currency_symbol": sym,
+    #                 "currency_flag": flag,
+    #             })
+
+    #             # копим итоги по валюте (если валюта пустая — складываем в '—')
+    #             ccy_key = code or "—"
+    #             acc = totals_by_ccy.get(ccy_key)
+    #             if not acc:
+    #                 acc = {"dt": Decimal("0.00"), "cr": Decimal("0.00"), "eod": Decimal("0.00"), "cnt": 0}
+    #                 totals_by_ccy[ccy_key] = acc
+
+    #             acc["dt"] += dt_sum
+    #             acc["cr"] += cr_sum
+    #             acc["eod"] += eod
+    #             acc["cnt"] += 1
+
+    #         extra_context["day_blocks"] = blocks
+
+    #         # список для шаблона: сортировка (сначала нормальные валюты, потом '—')
+    #         totals_list = []
+    #         for code, a in totals_by_ccy.items():
+    #             totals_list.append({
+    #                 "currency_code": code,
+    #                 "currency_symbol": CURRENCY_SYMBOLS.get(code, "") if code != "—" else "",
+    #                 "currency_flag": CURRENCY_FLAGS.get(code, "") if code != "—" else "",
+    #                 "dt": a["dt"],
+    #                 "cr": a["cr"],
+    #                 "eod": a["eod"],
+    #                 "cnt": a["cnt"],
+    #             })
+
+    #         totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
+    #         extra_context["totals_by_ccy"] = totals_list
+
+    #         # для обратной совместимости: если валюта одна — оставим total_* как раньше
+    #         if len(totals_list) == 1:
+    #             only = totals_list[0]
+    #             extra_context["total_dt"] = only["dt"]
+    #             extra_context["total_cr"] = only["cr"]
+    #             extra_context["total_eod"] = only["eod"]
+    #             extra_context["total_currency_code"] = only["currency_code"]
+    #             extra_context["total_currency_symbol"] = only["currency_symbol"]
+    #             extra_context["total_currency_flag"] = only["currency_flag"]
+    #         else:
+    #             extra_context["total_dt"] = None
+    #             extra_context["total_cr"] = None
+    #             extra_context["total_eod"] = None
+
+    #     return super().changelist_view(request, extra_context=extra_context)
+    
+    
+    
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
 
+        # ✅ ВСЕГДА объявляем фильтры (иначе UnboundLocalError)
+        owner_id = request.GET.get("owner__id__exact")
+        ba_id = request.GET.get("ba__id__exact")
+
+        # ✅ Дата среза (может быть None)
         selected_date = None
         raw = request.GET.get("in_period_date")
         if raw:
@@ -327,6 +639,81 @@ class BankStatementsAdmin(admin.ModelAdmin):
 
         extra_context["selected_date"] = selected_date
 
+        # =========================================================
+        # ✅ ГЛОБАЛЬНЫЙ КОНТРОЛЬ ВНУТРИГРУППОВЫХ (НЕ в разрезе выписки)
+        #    Показываем всегда на экране "Выписки"
+        #    (опционально учитываем текущие фильтры owner/ba и дату-срез)
+        # =========================================================
+        ic_qs = CfData.objects.filter(intercompany=True)
+
+        # если на странице выбран owner / ba — логично считать в том же контексте
+        if owner_id:
+            ic_qs = ic_qs.filter(owner_id=owner_id)
+        if ba_id:
+            ic_qs = ic_qs.filter(ba_id=ba_id)
+
+        # если выбрана дата — считаем "на дату" (до выбранной даты включительно)
+        if selected_date:
+            ic_qs = ic_qs.filter(date__lte=selected_date)
+
+        # --- общий итог (как раньше) ---
+        ic = ic_qs.aggregate(
+            dt=Coalesce(Sum("dt"), Decimal("0.00")),
+            cr=Coalesce(Sum("cr"), Decimal("0.00")),
+        )
+
+        ic_dt = ic["dt"] or Decimal("0.00")
+        ic_cr = ic["cr"] or Decimal("0.00")
+        ic_net = ic_dt - ic_cr
+
+        extra_context["ic_total_dt"] = ic_dt
+        extra_context["ic_total_cr"] = ic_cr
+        extra_context["ic_total_net"] = ic_net
+
+        # =========================================================
+        # ✅ ВНУТРИГРУППОВЫЕ: итоги ПО ВАЛЮТАМ (НОВОЕ)
+        # =========================================================
+        ic_by_ccy = (
+            ic_qs
+            .values("ba__currency")
+            .annotate(
+                dt_sum=Coalesce(Sum("dt"), Decimal("0.00")),
+                cr_sum=Coalesce(Sum("cr"), Decimal("0.00")),
+            )
+            .annotate(
+                net=ExpressionWrapper(
+                    F("dt_sum") - F("cr_sum"),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            )
+            .order_by("ba__currency")
+        )
+
+        ic_totals_list = []
+        for row in ic_by_ccy:
+            code = (row["ba__currency"] or "—").upper()
+            ic_totals_list.append({
+                "currency_code": code,
+                "currency_symbol": CURRENCY_SYMBOLS.get(code, "") if code != "—" else "",
+                "currency_flag": CURRENCY_FLAGS.get(code, "") if code != "—" else "",
+                "dt": row["dt_sum"],
+                "cr": row["cr_sum"],
+                "net": row["net"],
+            })
+
+        ic_totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
+        extra_context["ic_totals_by_ccy"] = ic_totals_list
+
+        # (опционально) если валюта одна — можно отдать ещё и её в старые поля
+        if len(ic_totals_list) == 1:
+            only = ic_totals_list[0]
+            extra_context["ic_total_currency_code"] = only["currency_code"]
+            extra_context["ic_total_currency_symbol"] = only["currency_symbol"]
+            extra_context["ic_total_currency_flag"] = only["currency_flag"]
+
+        # =========================================================
+        # ✅ ТВОЯ ТЕКУЩАЯ ЛОГИКА EOD (только если выбрана дата)
+        # =========================================================
         if selected_date:
             bss = (
                 BankStatements.objects
@@ -334,8 +721,7 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 .select_related("owner", "ba", "ba__bank")
             )
 
-            owner_id = request.GET.get("owner__id__exact")
-            ba_id = request.GET.get("ba__id__exact")
+            # ✅ используем уже прочитанные owner_id / ba_id (не читаем повторно)
             if owner_id:
                 bss = bss.filter(owner_id=owner_id)
             if ba_id:
@@ -419,7 +805,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 })
 
             totals_list.sort(key=lambda x: (x["currency_code"] == "—", x["currency_code"]))
-
             extra_context["totals_by_ccy"] = totals_list
 
             # для обратной совместимости: если валюта одна — оставим total_* как раньше
@@ -437,6 +822,8 @@ class BankStatementsAdmin(admin.ModelAdmin):
                 extra_context["total_eod"] = None
 
         return super().changelist_view(request, extra_context=extra_context)
+
+
 
 
     @admin.display(description="Период", ordering="start")
@@ -614,11 +1001,6 @@ class BankStatementsAdmin(admin.ModelAdmin):
             return badge("Загружено", "green")
         return badge("Не обработано", "amber")
 
-    @admin.display(description="Файл")
-    def file_link(self, obj):
-        if not obj.file:
-            return "—"
-        return format_html('<a href="{}" target="_blank">файл</a>', obj.file.url)
     
     
     @admin.display(description="Дата загрузки", ordering="uploaded_at")
@@ -635,7 +1017,14 @@ class BankStatementsAdmin(admin.ModelAdmin):
         if request.method == "POST" and "apply_migration" in request.POST:
             obj = self.get_object(request, object_id)
 
-            if obj and obj.file:
+            if obj and obj.file and sniff(obj.file.path):     # Армения — свой загрузчик
+                lines = []
+                try:
+                    load_statement(obj.file.path, log=lines.append, bs=obj)
+                    messages.success(request, format_html_join(mark_safe("<br>"), "{}", ((x,) for x in lines)))
+                except Exception as exc:
+                    messages.error(request, f"Выписка не загружена: {exc}")
+            elif obj and obj.file:
                 result = update_cf_data(obj.file.path, obj.pk)
                 messages.success(request, mark_safe(result))
             else:
@@ -679,12 +1068,66 @@ class CfDataAdminForm(forms.ModelForm):
 
 
 
+
+class CfDataActionForm(ActionForm):
+    manual_acc = forms.ModelChoiceField(
+        queryset=COA.objects.all(),
+        required=False,
+        label="Счёт для сторно",
+    )
+
+
 @admin.register(CfData)
 class CfDataAdmin(admin.ModelAdmin):
     inlines = [CfSplitsInline]
     form = CfDataAdminForm
     list_per_page = 25
+    readonly_fields = ("source_dt", "source_cr")
     change_list_template = "admin/treasury/cfdata/change_list.html"
+    action_form = CfDataActionForm
+    actions = ["copy_selected_rows", "create_storno_manual_entries", "reassign_foreign", "mark_manual",
+               "unmark_manual"]
+
+    AM_KEYS = ("cp", "cp_final", "contract", "cfitem")
+
+    def save_model(self, request, obj, form, change):
+        """Правка контрагента, договора или статьи руками — операция «разнесена руками», автомат её не трогает."""
+        if change and any(k in form.changed_data for k in self.AM_KEYS) and "manual" not in form.changed_data:
+            obj.manual = True
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description="Отметить «разнесено руками» (автомат не трогает)")
+    def mark_manual(self, request, queryset):
+        n = queryset.update(manual=True)
+        self.message_user(request, f"Отмечено «разнесено руками»: {n}.")
+
+    @admin.action(description="Снять «разнесено руками» и переразнести по правилам")
+    def unmark_manual(self, request, queryset):
+        from utils.bsparsers.am.resolve import resolve_ids
+        ids = list(queryset.values_list("id", flat=True))
+        queryset.update(manual=False)
+        lines = []
+        resolve_ids(ids, lines.append)
+        self.message_user(request, f"Снята отметка: {len(ids)}. " + "; ".join(x.strip() for x in lines))
+
+    @admin.action(description="Переразнести по правилам (зарубежные компании)")
+    def reassign_foreign(self, request, queryset):
+        """Заполняет пустые контрагент, договор, статью и разметку по текущим правилам. Заполненное не меняется."""
+        from utils.bsparsers.am.loader import auto_assign
+        lines = []
+        rows = queryset.exclude(owner__country="RU").exclude(owner__isnull=True).values_list("owner_id", "id")
+        by_owner = {}
+        for owner_id, pk in rows:
+            by_owner.setdefault(owner_id, []).append(pk)
+        if not by_owner:
+            self.message_user(request, "Среди выбранных нет операций зарубежных компаний.", level="warning")
+            return
+        from django.db import transaction
+        with transaction.atomic():
+            for owner_id, ids in by_owner.items():
+                auto_assign(ids, owner_id, lines.append)
+        total = sum(len(v) for v in by_owner.values())
+        self.message_user(request, f"Проверено операций: {total}. " + "; ".join(x.strip() for x in lines))
 
     list_display = (
         "date_short",
@@ -693,34 +1136,127 @@ class CfDataAdmin(admin.ModelAdmin):
         "cp_short",
         "contract_block",
         "cfitem_block",
-        "vat_badge",
+        # "vat_badge",
         "temp_short",
-        "bs_link",
+        "splits_preview",
+
     )
-    list_display_links = ("date_short", "dt_amount", "cr_amount")
+    list_display_links = ("date_short", "dt_amount", "dt_amount")
 
     search_fields = (
         "temp",
+        "temp_ru",
+        "hint",
         "cp_bs_name",
+        "cp_name_ru",
         "tax_id",
         "payer_account",
         "reciver_account",
         "doc_numner",
         "cp_final__name",
         "contract__number",
+
     )
-    list_filter = ( ByInnBadgeFilter, 'cp', "intercompany", "owner", "ba", "cfitem", "contract", "bs")
+    
+    
+    def _get_copy_doc_number(self, original):
+        """
+        Формирует уникальный номер для копии.
+
+        Например:
+        12345
+        12345-копия
+        12345-копия-2
+        12345-копия-3
+        """
+
+        original_number = (original.doc_numner or "").strip()
+
+        if original_number:
+            base_number = f"{original_number}-копия"
+        else:
+            base_number = f"копия-{original.pk}"
+
+        candidate = base_number
+        counter = 2
+
+        while CfData.objects.filter(
+            bs=original.bs,
+            doc_numner=candidate,
+            date=original.date,
+            dt=original.dt,
+            cr=original.cr,
+        ).exists():
+            candidate = f"{base_number}-{counter}"
+            counter += 1
+
+        return candidate
+    
+    
+    def get_search_results(self, request, queryset, search_term):
+        raw = (search_term or "").strip()
+        if not raw:
+            return super().get_search_results(request, queryset, search_term)
+
+        # распознаём "сумму": цифры + пробелы + . , (без букв)
+        looks_money = re.fullmatch(r"[0-9\s\xa0.,]+", raw) is not None
+
+        if looks_money:
+            normalized = raw.replace(" ", "").replace("\xa0", "").replace(",", ".")
+            try:
+                amount = Decimal(normalized)
+            except InvalidOperation:
+                return super().get_search_results(request, queryset, search_term)
+
+            # ВАЖНО: ищем ТОЛЬКО по суммам (строгое совпадение)
+            qs = queryset.filter(Q(dt=amount) | Q(cr=amount)).distinct()
+            return qs, False
+
+        # иначе обычный поиск по текстам
+        return super().get_search_results(request, queryset, search_term)
+    
+
+    
+    list_filter = ( 
+                   InnCheckFilter,
+                #    ByInnBadgeFilter, 
+                   'cp', 
+                   "intercompany", 
+                   "owner", 
+                   "ba", 
+                
+                   "cfitem", 
+                   "contract", 
+                   "hint",
+                   "hint_auto",
+                   "manual",
+                #    "bs"
+                   )
     date_hierarchy = "date"
+    
+    
+    
+    
     ordering = ("-date", "-id")
 
     autocomplete_fields = ("cp", "cp_final", "cfitem", "bs", "ba")
     list_select_related = ("cp_final", "contract", "cfitem", "bs", "owner", "ba")
 
     fieldsets = (
-        ("🧾 Основное", {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr")}),
-        ("🔗 Связи", {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem")}),
-        ("🏦 Детали", {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
+        (mark_safe("🧾 <b>Основное</b>"), {"fields": ("bs", "doc_type", "doc_numner", "doc_date", "date",  "dt", "cr", "source_dt", "source_cr")}),
+        (mark_safe("🔗 <b>Связи</b>"), {"fields": ("cp_bs_name", "cp", "cp_final", "contract",  "temp", "cfitem", "manual")}),
+        (mark_safe("🏦 <b>Детали</b>"), {"fields": ("owner", "ba", "tax_id", "payer_account", "reciver_account", "vat_rate", "intercompany")}),
     )
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "cp_final", "contract", "cfitem", "bs", "owner", "ba"
+        )
+        # .prefetch_related(
+        #     "splits__cfitem",
+        #     "splits__contract",
+        # )
 
     # -------------------- Колонки списка --------------------
     def _currency_code(self, obj) -> str:
@@ -731,21 +1267,174 @@ class CfDataAdmin(admin.ModelAdmin):
 
     def get_urls(self):
             urls = super().get_urls()
+            from .admin_am import unassigned_view
             custom = [
                 path(
                     "export-csv/",
                     self.admin_site.admin_view(self.export_csv_view),
                     name="treasury_cfdata_export_csv",
-                )
+                ),
+                path("unassigned/", self.admin_site.admin_view(unassigned_view), name="treasury_cfdata_unassigned"),
             ]
             return custom + urls
         
 
     
+    # def export_csv_view(self, request):
+    #     cl = self.get_changelist_instance(request)
+    #     qs = cl.get_queryset(request).select_related(
+    #         "cp",            # <-- добавили
+    #         "cp_final",
+    #         "contract",
+    #         "cfitem",
+    #         "owner",
+    #         "ba",
+    #         "ba__bank",
+    #         "bs",
+    #     )
+
+    #     response = HttpResponse(content_type="text/csv; charset=utf-8")
+    #     response["Content-Disposition"] = 'attachment; filename="cf_data.csv"'
+    #     response.write("\ufeff")  # UTF-8 BOM для Excel
+
+    #     writer = csv.writer(
+    #         response,
+    #         delimiter="|",
+    #         quoting=csv.QUOTE_MINIMAL,
+    #     )
+
+    #     LEVELS = 4
+
+    #     header = [
+    #         "date", "dt", "cr", "amount",
+    #         "cp_inn_name",        
+    #         "cp_final_name",
+    #         "cp_final_match",     
+    #         "contract_number",
+    #         "cfitem_name",
+    #         "cfitem_path_names",
+    #     ]
+    #     for i in range(1, LEVELS + 1):
+    #         header += [f"cfitem_lvl{i}_name"]
+
+    #     header += [
+    #         "temp", "tax_id",
+    #         "owner_name",
+    #         "ba_currency",
+    #         "ba_bank_account",
+    #         "bs_start", "bs_finish",
+    #     ]
+
+    #     writer.writerow(header)
+
+    #     for obj in qs:
+    #         # --- даты операции (YYYY-MM-DD) ---
+    #         op_date_txt = obj.date.isoformat() if obj.date else ""
+    #         bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
+    #         bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
+
+    #         # --- dt/cr -> amount (+/-) ---
+    #         dt_val = obj.dt or Decimal("0")
+    #         cr_val = obj.cr or Decimal("0")
+
+    #         if dt_val > 0:
+    #             amount = dt_val
+    #         elif cr_val > 0:
+    #             amount = -cr_val
+    #         else:
+    #             amount = Decimal("0")
+
+    #         # --- договор: дата договора в формате DD.MM.YYYY ---
+    #         contract_txt = ""
+    #         if obj.contract:
+    #             title = getattr(getattr(obj.contract, "title", None), "title", "") or ""
+    #             num = (obj.contract.number or "").strip() or "б/н"
+
+    #             contract_date_part = ""
+    #             if obj.contract.date:
+    #                 contract_date_txt = obj.contract.date.strftime("%d.%m.%Y")
+    #                 contract_date_part = f" от {contract_date_txt}"
+
+    #             if title:
+    #                 contract_txt = f"{title} № {num}{contract_date_part}"
+    #             else:
+    #                 contract_txt = f"{num}{contract_date_part}"
+
+    #         # --- CF item и иерархия ---
+    #         it = obj.cfitem
+    #         if it:
+    #             ancestors = list(it.get_ancestors(include_self=True))  # [root, ..., self]
+    #             path_names = " / ".join(a.name for a in ancestors)
+    #             it_name = it.name
+    #         else:
+    #             ancestors = []
+    #             path_names = ""
+    #             it_name = ""
+
+    #         # --- банк / счет / валюта ---
+    #         ba_account = obj.ba.account if obj.ba else ""
+    #         ba_bank_name = obj.ba.bank.name if (obj.ba and obj.ba.bank) else ""
+    #         ba_currency = obj.ba.currency if obj.ba else ""
+    #         ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
+
+    #         # --- контрагент по ИНН (из выписки) / финальный / матч ---
+    #         cp_inn_name = obj.cp.name if getattr(obj, "cp", None) else ""
+    #         cp_final_name = obj.cp_final.name if getattr(obj, "cp_final", None) else ""
+
+    #         if obj.cp_final_id and obj.cp_id:
+    #             cp_final_match = "MATCH" if obj.cp_final_id == obj.cp_id else "MISMATCH"
+    #         elif obj.cp_final_id and not obj.cp_id:
+    #             cp_final_match = "NO_INN_CP"
+    #         elif obj.cp_id and not obj.cp_final_id:
+    #             cp_final_match = "NO_FINAL"
+    #         else:
+    #             cp_final_match = "EMPTY"
+
+    #         row = [
+    #             op_date_txt,  # <-- дата операции ISO
+    #             (str(dt_val) if dt_val else ""),
+    #             (str(cr_val) if cr_val else ""),
+    #             str(amount),
+
+    #             cp_inn_name,       # <-- НОВОЕ
+    #             cp_final_name,     # <-- финальный
+    #             cp_final_match,    # <-- НОВОЕ (рулевая)
+
+    #             contract_txt,
+    #             it_name,
+    #             path_names,
+    #         ]
+
+    #         # lvl1..lvlN: root -> ...
+    #         for idx in range(LEVELS):
+    #             if idx < len(ancestors):
+    #                 row += [ancestors[idx].name]
+    #             else:
+    #                 row += [""]
+
+    #         row += [
+    #             (obj.temp or "").replace("\n", " ").strip(),
+    #             obj.tax_id or "",
+    #             (obj.owner.name if obj.owner else ""),
+    #             ba_currency,
+    #             ba_bank_account,
+    #             bs_start,
+    #             bs_finish,
+    #         ]
+
+    #         writer.writerow(row)
+
+    #     return response
+    
+    
+    
+    from django.db.models import Prefetch
+    from decimal import Decimal
+
     def export_csv_view(self, request):
         cl = self.get_changelist_instance(request)
         qs = cl.get_queryset(request).select_related(
-            "cp",            # <-- добавили
+            "cp",
             "cp_final",
             "contract",
             "cfitem",
@@ -753,6 +1442,11 @@ class CfDataAdmin(admin.ModelAdmin):
             "ba",
             "ba__bank",
             "bs",
+        ).prefetch_related(
+            Prefetch(
+                "splits",
+                queryset=CfSplits.objects.select_related("contract", "cfitem").order_by("id")
+            )
         )
 
         response = HttpResponse(content_type="text/csv; charset=utf-8")
@@ -769,9 +1463,9 @@ class CfDataAdmin(admin.ModelAdmin):
 
         header = [
             "date", "dt", "cr", "amount",
-            "cp_inn_name",        # <-- НОВОЕ (перед финальным)
+            "cp_inn_name",
             "cp_final_name",
-            "cp_final_match",     # <-- НОВОЕ (рулевая колонка)
+            "cp_final_match",
             "contract_number",
             "cfitem_name",
             "cfitem_path_names",
@@ -789,41 +1483,24 @@ class CfDataAdmin(admin.ModelAdmin):
 
         writer.writerow(header)
 
-        for obj in qs:
-            # --- даты операции (YYYY-MM-DD) ---
-            op_date_txt = obj.date.isoformat() if obj.date else ""
-            bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
-            bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
-
-            # --- dt/cr -> amount (+/-) ---
-            dt_val = obj.dt or Decimal("0")
-            cr_val = obj.cr or Decimal("0")
-
-            if dt_val > 0:
-                amount = dt_val
-            elif cr_val > 0:
-                amount = -cr_val
-            else:
-                amount = Decimal("0")
-
-            # --- договор: дата договора в формате DD.MM.YYYY ---
+        def build_contract_txt(contract):
             contract_txt = ""
-            if obj.contract:
-                title = getattr(getattr(obj.contract, "title", None), "title", "") or ""
-                num = (obj.contract.number or "").strip() or "б/н"
+            if contract:
+                title = getattr(getattr(contract, "title", None), "title", "") or ""
+                num = (contract.number or "").strip() or "б/н"
 
                 contract_date_part = ""
-                if obj.contract.date:
-                    contract_date_txt = obj.contract.date.strftime("%d.%m.%Y")
+                if contract.date:
+                    contract_date_txt = contract.date.strftime("%d.%m.%Y")
                     contract_date_part = f" от {contract_date_txt}"
 
                 if title:
                     contract_txt = f"{title} № {num}{contract_date_part}"
                 else:
                     contract_txt = f"{num}{contract_date_part}"
+            return contract_txt
 
-            # --- CF item и иерархия ---
-            it = obj.cfitem
+        def build_cfitem_data(it):
             if it:
                 ancestors = list(it.get_ancestors(include_self=True))  # [root, ..., self]
                 path_names = " / ".join(a.name for a in ancestors)
@@ -832,14 +1509,29 @@ class CfDataAdmin(admin.ModelAdmin):
                 ancestors = []
                 path_names = ""
                 it_name = ""
+            return it_name, path_names, ancestors
 
-            # --- банк / счет / валюта ---
+        def calc_amount(dt_val, cr_val):
+            dt_val = dt_val or Decimal("0")
+            cr_val = cr_val or Decimal("0")
+
+            if dt_val > 0:
+                return dt_val
+            elif cr_val > 0:
+                return -cr_val
+            return Decimal("0")
+
+        for obj in qs:
+            # --- общие данные родительской операции ---
+            op_date_txt = obj.date.isoformat() if obj.date else ""
+            bs_start = obj.bs.start.isoformat() if obj.bs and obj.bs.start else ""
+            bs_finish = obj.bs.finish.isoformat() if obj.bs and obj.bs.finish else ""
+
             ba_account = obj.ba.account if obj.ba else ""
             ba_bank_name = obj.ba.bank.name if (obj.ba and obj.ba.bank) else ""
             ba_currency = obj.ba.currency if obj.ba else ""
             ba_bank_account = f"{ba_bank_name} | {ba_account}".strip(" |")
 
-            # --- контрагент по ИНН (из выписки) / финальный / матч ---
             cp_inn_name = obj.cp.name if getattr(obj, "cp", None) else ""
             cp_final_name = obj.cp_final.name if getattr(obj, "cp_final", None) else ""
 
@@ -852,22 +1544,31 @@ class CfDataAdmin(admin.ModelAdmin):
             else:
                 cp_final_match = "EMPTY"
 
+            # -----------------------------
+            # 1. Основная строка CfData
+            # -----------------------------
+            dt_val = obj.dt or Decimal("0")
+            cr_val = obj.cr or Decimal("0")
+            amount = calc_amount(dt_val, cr_val)
+
+            contract_txt = build_contract_txt(obj.contract)
+            it_name, path_names, ancestors = build_cfitem_data(obj.cfitem)
+
             row = [
-                op_date_txt,  # <-- дата операции ISO
+                op_date_txt,
                 (str(dt_val) if dt_val else ""),
                 (str(cr_val) if cr_val else ""),
                 str(amount),
 
-                cp_inn_name,       # <-- НОВОЕ
-                cp_final_name,     # <-- финальный
-                cp_final_match,    # <-- НОВОЕ (рулевая)
+                cp_inn_name,
+                cp_final_name,
+                cp_final_match,
 
                 contract_txt,
                 it_name,
                 path_names,
             ]
 
-            # lvl1..lvlN: root -> ...
             for idx in range(LEVELS):
                 if idx < len(ancestors):
                     row += [ancestors[idx].name]
@@ -885,6 +1586,50 @@ class CfDataAdmin(admin.ModelAdmin):
             ]
 
             writer.writerow(row)
+
+            # -----------------------------
+            # 2. Строки сплитов
+            # -----------------------------
+            for split in obj.splits.all():
+                split_dt = split.dt or Decimal("0")
+                split_cr = split.cr or Decimal("0")
+                split_amount = calc_amount(split_dt, split_cr)
+
+                split_contract_txt = build_contract_txt(split.contract)
+                split_it_name, split_path_names, split_ancestors = build_cfitem_data(split.cfitem)
+
+                split_row = [
+                    op_date_txt,
+                    (str(split_dt) if split_dt else ""),
+                    (str(split_cr) if split_cr else ""),
+                    str(split_amount),
+
+                    cp_inn_name,
+                    cp_final_name,
+                    cp_final_match,
+
+                    split_contract_txt,
+                    split_it_name,
+                    split_path_names,
+                ]
+
+                for idx in range(LEVELS):
+                    if idx < len(split_ancestors):
+                        split_row += [split_ancestors[idx].name]
+                    else:
+                        split_row += [""]
+
+                split_row += [
+                    (split.temp or "").replace("\n", " ").strip(),
+                    obj.tax_id or "",
+                    (obj.owner.name if obj.owner else ""),
+                    ba_currency,
+                    ba_bank_account,
+                    bs_start,
+                    bs_finish,
+                ]
+
+                writer.writerow(split_row)
 
         return response
 
@@ -973,7 +1718,15 @@ class CfDataAdmin(admin.ModelAdmin):
                 inn_tag
             )
 
-        # 3) только имя из выписки (не матчится на контрагента)
+        # 3) имя из выписки; для выписок вне РФ — по-русски, оригинал в подсказке
+        if obj.cp_name_ru:
+            return format_html(
+                '<div style="line-height:1.15;" title="{}"><div style="font-weight:900;">{}</div>'
+                '<span style="display:inline-flex;padding:2px 8px;border-radius:999px;'
+                'background:rgba(148,163,184,.16);border:1px solid rgba(148,163,184,.30);'
+                'color:#475569;font-weight:800;font-size:11px;margin-top:4px;">из выписки</span></div>',
+                obj.cp_bs_name or "", obj.cp_name_ru,
+            )
         if obj.cp_bs_name:
             bs_tag = format_html(
                 '<span style="display:inline-flex;align-items:center;gap:6px;'
@@ -996,6 +1749,185 @@ class CfDataAdmin(admin.ModelAdmin):
             )
 
         return "—"
+    
+    
+    
+    @admin.action(description="Скопировать выделенные строки")
+    def copy_selected_rows(self, request, queryset):
+        created_count = 0
+
+        # Подтягиваем сплиты заранее, чтобы не делать отдельный запрос
+        # для каждой выделенной строки.
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                "splits",
+                queryset=CfSplits.objects.select_related(
+                    "contract",
+                    "cfitem",
+                ).order_by("id"),
+            )
+        )
+
+        try:
+            with transaction.atomic():
+                for original in queryset:
+                    # -------------------------------------------------
+                    # Делаем номер документа уникальным.
+                    #
+                    # В модели есть UniqueConstraint:
+                    # bs + doc_numner + date + dt + cr
+                    #
+                    # Поэтому полностью одинаковую запись база данных
+                    # может не разрешить сохранить.
+                    # -------------------------------------------------
+                    new_doc_number = self._get_copy_doc_number(original)
+
+                    copied_row = CfData.objects.create(
+                        bs=original.bs,
+                        doc_type=original.doc_type,
+                        doc_numner=new_doc_number,
+                        doc_date=original.doc_date,
+                        date=original.date,
+
+                        dt=original.dt,
+                        cr=original.cr,
+
+                        source_dt=original.source_dt,
+                        source_cr=original.source_cr,
+
+                        tax_id=original.tax_id,
+                        temp=original.temp,
+                        cp_bs_name=original.cp_bs_name,
+                        intercompany=original.intercompany,
+                        payer_account=original.payer_account,
+                        reciver_account=original.reciver_account,
+                        vat_rate=original.vat_rate,
+
+                        cp=original.cp,
+                        cp_final=original.cp_final,
+                        owner=original.owner,
+                        contract=original.contract,
+                        cfitem=original.cfitem,
+                        ba=original.ba,
+                    )
+
+                    # Копируем сплиты, если они есть.
+                    #
+                    # Используем bulk_create, чтобы не запускать
+                    # CfSplits.save() и повторный recalc_from_splits().
+                    copied_splits = [
+                        CfSplits(
+                            transaction=copied_row,
+                            dt=split.dt,
+                            cr=split.cr,
+                            temp=split.temp,
+                            vat_rate=split.vat_rate,
+                            contract=split.contract,
+                            cfitem=split.cfitem,
+                        )
+                        for split in original.splits.all()
+                    ]
+
+                    if copied_splits:
+                        CfSplits.objects.bulk_create(copied_splits)
+
+                    created_count += 1
+
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Не удалось скопировать строки: {exc}",
+                level=messages.ERROR,
+            )
+            return
+
+        self.message_user(
+            request,
+            f"Скопировано строк: {created_count}",
+            level=messages.SUCCESS,
+        )
+    
+    
+    
+    @admin.action(description="Создать сторно в ручных проводках")
+    def create_storno_manual_entries(self, request, queryset):
+        acc = request.POST.get("manual_acc")
+
+        if not acc:
+            self.message_user(
+                request,
+                "Выберите счёт для сторно в выпадающем поле рядом с Actions.",
+                level=messages.ERROR
+            )
+            return
+
+        try:
+            acc_obj = COA.objects.get(pk=acc)
+        except COA.DoesNotExist:
+            self.message_user(
+                request,
+                "Выбранный счёт не найден.",
+                level=messages.ERROR
+            )
+            return
+
+        created_count = 0
+        skipped_count = 0
+
+        for obj in queryset.select_related("owner", "contract", "cfitem", "ba", "bs"):
+            owner = obj.owner or getattr(obj.bs, "owner", None)
+            contract = obj.contract
+            cfitem = obj.cfitem
+
+            # валюта берётся из bank account, если есть; иначе RUB
+            currency = (
+                getattr(obj.ba, "currency", None)
+                or getattr(getattr(obj, "bs", None), "ba", None) and getattr(obj.bs.ba, "currency", None)
+                or "RUB"
+            )
+
+            dt_value = obj.cr or Decimal("0.00")
+            cr_value = obj.dt or Decimal("0.00")
+
+            # если обе суммы пустые/нулевые — пропускаем
+            if dt_value <= 0 and cr_value <= 0:
+                skipped_count += 1
+                continue
+
+            comment = (
+                f"Сторно по CF документу #{obj.pk}. "
+                f"Документ: {obj.doc_type or ''} № {obj.doc_numner or ''} "
+                f"от {obj.doc_date or ''}. "
+                f"Назначение: {(obj.temp or '').strip()}"
+            ).strip()
+
+            Manual.objects.create(
+                pid=None,
+                date=obj.date,
+                owner=owner,
+                acc=acc_obj,
+                contract=contract,
+                dt=dt_value,
+                cr=cr_value,
+                currency=currency,
+                cfitem=cfitem,
+                temp=comment,
+            )
+            created_count += 1
+
+        if created_count:
+            self.message_user(
+                request,
+                f"Создано сторно-проводок: {created_count}",
+                level=messages.SUCCESS
+            )
+
+        if skipped_count:
+            self.message_user(
+                request,
+                f"Пропущено строк без суммы: {skipped_count}",
+                level=messages.WARNING
+            )
 
 
 
@@ -1072,6 +2004,37 @@ class CfDataAdmin(admin.ModelAdmin):
         )
 
 
+    @admin.display(description="Сплиты")
+    def splits_preview(self, obj):
+        splits = list(obj.splits.all())
+        if not splits:
+            return "—"
+
+        html = []
+        for s in splits[:3]:
+            flow = "Дт" if (s.dt or 0) > 0 else "Кт"
+            amount = s.dt if (s.dt or 0) > 0 else s.cr
+            html.append(
+                format_html(
+                    '<div style="margin-bottom:4px;">'
+                    '<b>{}</b> {}<br>'
+                    '<span style="font-size:11px;opacity:.7;">{} | {}</span>'
+                    '</div>',
+                    flow,
+                    money(amount),
+                    s.cfitem.name if s.cfitem else "без статьи",
+                    s.contract.number if s.contract else "без договора",
+                )
+            )
+
+        if len(splits) > 3:
+            html.append(format_html(
+                '<div style="font-size:11px;opacity:.7;">ещё {}</div>',
+                len(splits) - 3
+            ))
+
+        return mark_safe("".join(str(x) for x in html))
+
     # --------------------  --------------------
     @admin.display(description="НДС")
     def vat_badge(self, obj):
@@ -1085,17 +2048,13 @@ class CfDataAdmin(admin.ModelAdmin):
     def temp_short(self, obj):
         if not obj.temp:
             return "—"
-        s = obj.temp.strip().replace("\n", " ")
-        return (s[:90] + "…") if len(s) > 90 else s
+        s = (obj.temp_ru or obj.temp).strip().replace("\n", " ")
+        short = (s[:90] + "…") if len(s) > 90 else s
+        if obj.temp_ru:                                   # перевод; оригинал — во всплывающей подсказке
+            return format_html('<span title="{}">{}</span>', obj.temp, short)
+        return short
 
-    @admin.display(description="Выписка")
-    def bs_link(self, obj):
-        if not obj.bs_id:
-            return "—"
-        url = reverse("admin:treasury_bankstatements_change", args=[obj.bs_id])
-        start = obj.bs.start.strftime("%d.%m.%Y") if obj.bs.start else "—"
-        finish = obj.bs.finish.strftime("%d.%m.%Y") if obj.bs.finish else "—"
-        return format_html('<a href="{}">↗ {}–{}</a>', url, start, finish)
+
 
     class Media:
         css = {"all": ("css/admin_overrides.css", "css/admin_treasury.css", "fonts/glyphs.css")}
@@ -1119,18 +2078,27 @@ class ContractsRexexAdmin(admin.ModelAdmin):
 
 
 
-    
-    list_select_related = ("cp", "contract")
+    list_select_related = ("cp", "contract", "contract__title")
 
     # колонки
     list_display = (
         "cp_logo",
         "cp_link",
         "contract_id_col",
+        "contract_type_col",
         "contract_link",
         "regex_short",
     )
     list_display_links = ("cp_link", "contract_link", "regex_short")
+    
+    
+    @admin.display(description="Тип договора", ordering="contract__title__title")
+    def contract_type_col(self, obj):
+        # contract__title уже подтянут select_related, будет быстро
+        c = obj.contract
+        if not c or not getattr(c, "title_id", None):
+            return "—"
+        return c.title.title  # ContractsTitle.title
 
     # search_fields = (
     #     "cp__tax_id",
@@ -1193,3 +2161,168 @@ class ContractsRexexAdmin(admin.ModelAdmin):
         return (s[:80] + "…") if len(s) > 80 else (s or "—")
 
   
+
+
+
+# ---------- СЧЕТА КОНТРАГЕНТОВ И ПЕРЕВОДЫ ----------
+
+class CounterpartyAccountForm(forms.ModelForm):
+    class Meta:
+        model = CounterpartyAccount
+        fields = "__all__"
+
+    def clean_account(self):
+        from utils.bsparsers.am.loader import is_transit
+        acc = (self.cleaned_data.get("account") or "").strip()
+        if is_transit(acc):
+            raise forms.ValidationError("Это транзитный или корреспондентский счёт банка: через него платят "
+                                        "многим получателям, к одному контрагенту его привязывать нельзя. "
+                                        "Получатель определяется по ИНН в названии.")
+        return acc
+
+
+@admin.register(CounterpartyAccount)
+class CounterpartyAccountAdmin(admin.ModelAdmin):
+    form = CounterpartyAccountForm
+    list_display = ("account", "cp", "contract", "comment")
+    list_filter = (("cp", admin.RelatedOnlyFieldListFilter),)
+    search_fields = ("account", "cp__name", "cp__tax_id", "comment")
+    search_help_text = "Поиск: счёт, контрагент, ИНН, комментарий"
+    autocomplete_fields = ("cp", "contract")
+    list_select_related = ("cp", "contract")
+    ordering = ("cp__name", "account")
+
+    def save_model(self, request, obj, form, change):
+        """После привязки счёта — авторазноска уже загруженных операций зарубежных компаний по этому счёту."""
+        super().save_model(request, obj, form, change)
+        from django.db import transaction
+        from django.db.models import Q
+        from treasury.models import AmMode
+        from utils.bsparsers.am.loader import auto_assign
+        from utils.bsparsers.am.resolve import resolve
+        by_acc = (CfData.objects.exclude(owner__country="RU").exclude(owner__isnull=True)
+                  .filter(Q(dt__gt=0, payer_account=obj.account) | Q(cr__gt=0, reciver_account=obj.account)))
+        on = set(AmMode.objects.filter(on=True).values_list("owner_id", flat=True))
+        for owner_id in sorted(set(by_acc.filter(owner_id__in=on).values_list("owner_id", flat=True))):
+            lines = []
+            resolve(owner_id, log=lines.append)          # «Правила разноски»: пересборка компании
+            self.message_user(request, "; ".join(x.strip() for x in lines))
+        by_acc = by_acc.exclude(owner_id__in=on)
+        moved = 0
+        if obj.contract_id:                              # счёт привязан к договору — все его операции туда
+            moved = (by_acc.filter(owner_id=obj.contract.owner_id).exclude(splits__isnull=False)
+                     .exclude(contract_id=obj.contract_id)
+                     .update(cp=obj.cp, cp_final=obj.cp, contract=obj.contract, cfitem=None))
+        rows = (by_acc.filter(Q(contract__isnull=True) | Q(cfitem__isnull=True) | Q(cp__isnull=True))
+                .values_list("owner_id", "id"))
+        by_owner = {}
+        for owner_id, pk in rows:
+            by_owner.setdefault(owner_id, []).append(pk)
+        if not by_owner:
+            if moved:
+                self.message_user(request, f"На договор по счёту перенесено операций: {moved}.")
+            return
+        lines = []
+        with transaction.atomic():
+            for owner_id, ids in by_owner.items():
+                auto_assign(ids, owner_id, lines.append)
+        total = sum(len(v) for v in by_owner.values())
+        self.message_user(request, f"Операций по счёту {obj.account}: {total}, переразнесены"
+                                   + (f" (на договор по счёту перенесено {moved})" if moved else "") + ". "
+                                   + "; ".join(x.strip() for x in lines if not x.strip().endswith(": 0")))
+
+
+
+
+AM_CSS = {"all": ("css/admin_overrides.css", "css/am_dicts.css")}
+
+
+def am_source(text: str, url: str = ""):
+    """Оригинал шаблона: # и @ — цветными метками."""
+    parts = []
+    for ch in re.split(r"([#@])", text or ""):
+        if ch == "#":
+            parts.append(format_html('<span class="am-ph" title="число или код">#</span>'))
+        elif ch == "@":
+            parts.append(format_html('<span class="am-ph am-month" title="месяц">@</span>'))
+        elif ch:
+            parts.append(format_html("{}", ch))
+    body = format_html_join("", "{}", ((p,) for p in parts))
+    return format_html('<a class="am-src" href="{}">{}</a>', url, body) if url else format_html('<span class="am-src">{}</span>', body)
+
+
+def am_hits(n: int):
+    return format_html('<span class="am-hits{}">{}</span>', " am-hot" if n >= 100 else "", f"{n:,}".replace(",", "\u202f"))
+
+
+@admin.register(TextTranslation)
+class TextTranslationAdmin(admin.ModelAdmin):
+    list_display = ("source_html", "translation", "hits_badge")
+    list_display_links = None
+    list_editable = ("translation",)
+    formfield_overrides = {models.TextField: {"widget": forms.TextInput()}}
+
+    def save_model(self, request, obj, form, change):
+        if "translation" in form.changed_data:              # правка вручную — больше не перезаписывать
+            obj.is_checked = True
+        super().save_model(request, obj, form, change)
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="Оригинал", ordering="source")
+    def source_html(self, obj):
+        return am_source(obj.source, reverse("admin:treasury_texttranslation_change", args=[obj.pk]))
+
+    @admin.display(description="Строк", ordering="hits")
+    def hits_badge(self, obj):
+        return am_hits(obj.hits)
+    list_filter = (("translation", admin.EmptyFieldListFilter),)
+    search_fields = ("source", "translation")
+    readonly_fields = ("key", "hits", "created_at")
+    list_per_page = 50
+
+
+
+@admin.register(HintRule)
+class HintRuleAdmin(admin.ModelAdmin):
+    list_display = ("hint", "cfitem_dt", "cfitem_cr", "rows_count", "comment")
+    list_editable = ("cfitem_dt", "cfitem_cr", "comment")
+    search_fields = ("hint", "comment")
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="Операций")
+    def rows_count(self, obj):
+        return am_hits(CfData.objects.filter(hint=obj.hint).count())
+
+
+
+@admin.register(CpName)
+class CpNameAdmin(admin.ModelAdmin):
+    list_display = ("source_html", "name_ru", "hits_badge")
+    list_display_links = None
+
+    def save_model(self, request, obj, form, change):
+        if "name_ru" in form.changed_data:                  # правка вручную — больше не перезаписывать
+            obj.is_checked = True
+        super().save_model(request, obj, form, change)
+
+    class Media:
+        css = AM_CSS
+
+    @admin.display(description="В выписке", ordering="source")
+    def source_html(self, obj):
+        return am_source(obj.source, reverse("admin:treasury_cpname_change", args=[obj.pk]))
+
+    @admin.display(description="Операций", ordering="hits")
+    def hits_badge(self, obj):
+        return am_hits(obj.hits)
+    list_editable = ("name_ru",)
+    search_fields = ("source", "name_ru")
+    list_per_page = 50
+    formfield_overrides = {models.CharField: {"widget": forms.TextInput()}}
+
+
+from . import admin_am  # noqa: E402,F401  транзитные счета, режим разноски

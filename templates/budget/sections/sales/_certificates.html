@@ -1,0 +1,88 @@
+<div id="section-certificates"></div>
+<div class="page-break"></div>
+
+<!-- Раздел I.8: Риски по сертификатам и декларациям -->
+<div class="section-header">
+    <span class="section-number">I.8</span>
+    <div class="section-title-with-num">Риски по сертификатам и декларациям</div>
+</div>
+
+{% if certificate_risks %}
+<!-- Подраздел I.8.1: Общий комментарий по рискам -->
+<div class="subsection-header">
+    <span class="subsection-number">I.8.1</span>
+    <div class="subsection-title">Оценка сертификационных рисков</div>
+</div>
+
+{% if certificate_comment %}
+<div class="insight-box">
+    <strong>Комментарий по рискам сертификации:</strong><br>
+    {{ certificate_comment.comment }}
+
+    {% if certificate_comment.note %}
+    <div class="small-note" style="margin-top: 8px;">
+        {{ certificate_comment.note }}
+    </div>
+    {% endif %}
+
+    {% if certificate_comment.top_risk %}
+    <div style="margin-top: 12px;">
+        <strong>Ключевые позиции под риском:</strong>
+        <ul style="margin: 8px 0 0 18px; padding: 0;">
+            {% for row in certificate_comment.top_risk %}
+            <li style="margin-bottom: 4px;">
+                {{ row.product_name }} — {{ row.sales_amount_90d_fmt }} руб. 
+                ({{ row.sales_qty_90d_fmt }} шт.; {{ row.risk_level }})
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="small-note" style="margin-top: 12px;">
+        Подробная номенклатурная расшифровка приведена в <a href="#appendix-a-certificates">Приложении A</a>.
+    </div>
+</div>
+{% endif %}
+
+<!-- Подраздел I.8.2: Риски по SKU -->
+<div class="subsection-header">
+    <span class="subsection-number">I.8.2</span>
+    <div class="subsection-title">Приоритетные SKU с истекающими сертификатами</div>
+</div>
+
+{% if certificate_risk_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ certificate_risk_chart_base64 }}" alt="Риски по сертификатам">
+</div>
+<div class="small-note">
+    График показывает приоритетные SKU с риском истечения сертификатов, ранжированные по объему продаж за последние 90 дней.
+    В подписи к каждому SKU указаны продажи в рублях и количество продаж в штуках.
+</div>
+{% endif %}
+
+<div class="page-break"></div>
+
+<!-- Подраздел I.8.3: Риски по категориям -->
+<div class="subsection-header">
+    <span class="subsection-number">I.8.3</span>
+    <div class="subsection-title">Концентрация риска по категориям</div>
+</div>
+
+{% if certificate_category_comment %}
+<div class="insight-box">
+    <strong>Комментарий по категориям:</strong><br>
+    {{ certificate_category_comment.comment }}
+</div>
+{% endif %}
+
+{% if certificate_category_risk_chart_base64 %}
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ certificate_category_risk_chart_base64 }}" alt="Риски по категориям">
+</div>
+<div class="small-note">
+    График показывает концентрацию сертификационного риска по товарным категориям с учетом объема продаж за последние 90 дней.
+</div>
+{% endif %}
+
+{% endif %}

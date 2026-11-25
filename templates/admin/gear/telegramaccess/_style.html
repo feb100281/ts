@@ -1,0 +1,46 @@
+<style>
+  .tga { font-family: Inter, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1F1F1F; margin: 0 0 16px; }
+  .tga-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+  .tga-card { flex: 1 1 260px; background: #fff; border: 1px solid #E3E8E6; border-top: 3px solid #2F6656; padding: 14px 18px; }
+  .tga-card-kicker { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
+  .tga-card-title { font-size: 18px; font-weight: 800; margin: 2px 0 8px; }
+  .tga-card-nums { display: flex; gap: 22px; font-size: 12.5px; color: #6B7280; }
+  .tga-card-nums b { display: block; font-size: 22px; line-height: 1.1; color: #1F5E4E; }
+  .tga-card-nums .is-wait b { color: #B45309; }
+  .tga-card a { font-size: 12.5px; color: #1F5E4E; }
+  .tga-how { background: #F4F8F6; border-left: 3px solid #2F6656; padding: 10px 14px; margin-top: 12px; font-size: 13px; line-height: 1.5; color: #3A3F44; }
+  .tga-alert { background: #FFF7E6; border-left: 3px solid #D97706; padding: 9px 14px; margin-top: 12px; font-size: 13px; }
+  a.tga-print { display: inline-flex; align-items: center; height: 36px; padding: 0 18px; background: #2F6656; color: #fff !important; font-size: 13px; font-weight: 700; text-decoration: none; }
+  a.tga-print:hover { background: #1F5E4E; }
+  a.tga-ghost { background: #fff; color: #1F5E4E !important; border: 1px solid #2F6656; margin-right: 8px; }
+  a.tga-ghost:hover { background: #F4F8F6; }
+
+  .tga-page #result_list thead th { background: #2F6656; color: #fff; border-color: #2F6656; font-size: 12px; font-weight: 600; letter-spacing: .03em; }
+  .tga-page #result_list thead th a { color: #fff; }
+  .tga-page #result_list td, .tga-page #result_list th { vertical-align: middle; font-size: 13px; }
+  .tga-page #result_list tbody tr:hover { background: #F4F8F6; }
+  .tga-page #result_list input[type=text] { width: 100%; min-width: 220px; height: 32px; border: 1px solid #D5DCD9; border-radius: 0; padding: 0 8px; font-size: 13px; }
+  .tga-page #result_list input[type=text]:focus { border-color: #2F6656; outline: 0; box-shadow: none; }
+  .tga-page #result_list input[type=checkbox] { width: 18px; height: 18px; accent-color: #2F6656; }
+  /* крошки: одной строкой, без рамки */
+  .tga-page .content.border-bottom .breadcrumb { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; font-size: 12px !important; letter-spacing: .04em; text-transform: none !important; }
+  .tga-page .content.border-bottom .breadcrumb-item, .tga-page .content.border-bottom .breadcrumb-item.active { color: #8A8A8A !important; background: transparent !important; font-weight: 400 !important; }
+  .tga-page .content.border-bottom .breadcrumb-item a { color: #1F5E4E !important; text-decoration: none; }
+  .tga-page .content.border-bottom .breadcrumb-item a:hover { text-decoration: underline; }
+  .tga-page .content.border-bottom .breadcrumb-item + .breadcrumb-item::before { content: "›"; color: #C2C8C5; }
+
+  /* низ списка: счётчик слева, «Сохранить» — заметной кнопкой */
+  .tga-page .dataTables_info { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 0 !important; font-size: 0; }
+  .tga-page .dataTables_info::after { content: "Изменения в галочках и подписях применяются после сохранения"; font-size: 12.5px; color: #8A8A8A; }
+  .tga-page .dataTables_info input[name=_save] { order: -1; height: 40px; padding: 0 28px; background: #2F6656 !important; border: 0 !important; border-radius: 0 !important; color: #fff !important; font-size: 14px; font-weight: 700; box-shadow: none !important; }
+  .tga-page .dataTables_info input[name=_save]:hover { background: #1F5E4E !important; }
+  .tga-page #result_list td.field-comment { padding-right: 24px; }
+  .tga-page #result_list td.field-requests { font-variant-numeric: tabular-nums; }
+  .tga-name { font-weight: 600; color: #1F1F1F; }
+  .tga-nick { display: block; font-size: 12px; font-weight: 400; color: #8A8A8A; }
+  .tga-bot, .tga-st { display: inline-block; padding: 2px 9px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .tga-bot { border: 1px solid #2F6656; color: #1F5E4E; }
+  .tga-bot-finance { background: #2F6656; color: #fff; }
+  .tga-st-on { background: #E6F2EE; color: #1F5E4E; }
+  .tga-st-wait { background: #FFF1D6; color: #92400E; }
+</style>

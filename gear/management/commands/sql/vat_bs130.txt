@@ -1,0 +1,72 @@
+-- Закупки на баланс (счёт BS 130…): НДС по оплатам, не покрытый УПД.
+-- Подключается в vat_summary.txt и pivot_vat.txt строкой «-- @include vat_bs130.txt»
+-- сразу после WITH. Нужен параметр $date_from.
+--   НДС оплаты — из назначения платежа (выписки и сплиты): сумма из текста, если
+--   сходится со ставкой из назначения (±5%) или не больше 22/122 платежа; иначе —
+--   расчётно по ставке из назначения. Оплата поставщику — плюс, возврат — минус.
+--   По договору нарастающим итогом: max(НДС оплат − НДС УПД, 0); в месяц — прирост.
+--   Проводки НДС по этим договорам в отчёты не берутся (иначе задвоится).
+bs130 AS (
+    SELECT DISTINCT x.cid FROM (
+        SELECT c.contract_id AS cid, c.acc_bs_id AS acc FROM pg.public.contracts_conditions c
+        UNION ALL
+        SELECT k.id, k.st_id FROM pg.public.contracts_contracts k
+    ) x
+    JOIN pg.public.corporate_coa a ON a.id = x.acc
+    WHERE CAST(a.code AS VARCHAR) LIKE '130%' AND x.cid IS NOT NULL
+),
+bs130_pay AS (
+    SELECT t.date::DATE AS d, t.contract_id, t.temp, t.vat_rate,
+           COALESCE(t.cr, 0) - COALESCE(t.dt, 0) AS out_amt
+    FROM pg.public.treasury_cfdata t
+    UNION ALL
+    SELECT t.date::DATE, s.contract_id, COALESCE(s.temp, t.temp),
+           COALESCE(s.vat_rate, t.vat_rate), COALESCE(s.cr, 0) - COALESCE(s.dt, 0)
+    FROM pg.public.treasury_cfsplits s
+    JOIN pg.public.treasury_cfdata t ON t.id = s.transaction_id
+),
+bs130_rows AS (
+    SELECT p.d, p.contract_id, p.out_amt, p.vat_rate AS r,
+           TRY_CAST(REPLACE(REPLACE(REPLACE(REGEXP_EXTRACT(p.temp,
+               '(?i)ндс[^0-9]{0,20}(?:[0-9]{1,2}(?:[.,][0-9]+)?\s*%[^0-9]{0,15})?([0-9][0-9 ]{0,12}[.,-][0-9]{2})',
+               1), ' ', ''), ',', '.'), '-', '.') AS DOUBLE) AS vat_txt,
+           p.out_amt * COALESCE(p.vat_rate, 0) / (100 + COALESCE(p.vat_rate, 0)) AS vat_calc
+    FROM bs130_pay p
+    WHERE p.d <= $date_from AND p.out_amt <> 0
+      AND p.contract_id IN (SELECT cid FROM bs130)
+),
+bs130_cash AS (
+    SELECT d, contract_id,
+           CASE WHEN vat_txt > 0 AND r > 0 AND ABS(vat_txt - ABS(vat_calc)) <= 0.05 * ABS(vat_calc) + 1
+                    THEN SIGN(out_amt) * vat_txt
+                WHEN vat_txt > 0 AND r IS NULL AND vat_txt <= ABS(out_amt) * 22 / 122 * 1.01
+                    THEN SIGN(out_amt) * vat_txt
+                WHEN r > 0 THEN vat_calc
+                ELSE 0 END AS vat
+    FROM bs130_rows
+),
+bs130_m AS (
+    SELECT cid, me, SUM(cash) AS cash, SUM(upd) AS upd FROM (
+        SELECT contract_id AS cid, LAST_DAY(d)::DATE AS me, vat AS cash, 0.0 AS upd
+        FROM bs130_cash
+        UNION ALL
+        SELECT d.contract_id, LAST_DAY(d.date)::DATE, 0.0,
+               COALESCE(l.upd_vat_amount, l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100)
+        FROM pg.public.upd_income_lines l
+        JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+        WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+          AND d.contract_id IN (SELECT cid FROM bs130)
+    ) u
+    GROUP BY 1, 2
+),
+bs130_unc AS (
+    SELECT cid, me, cash, upd,
+           GREATEST(SUM(cash) OVER w - SUM(upd) OVER w, 0) AS unc_cum
+    FROM bs130_m
+    WINDOW w AS (PARTITION BY cid ORDER BY me ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+),
+bs130_vat AS (
+    SELECT cid, me, cash, upd, unc_cum,
+           unc_cum - COALESCE(LAG(unc_cum) OVER (PARTITION BY cid ORDER BY me), 0) AS vat
+    FROM bs130_unc
+),

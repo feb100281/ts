@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 CBR_DAILY_URL = settings.CBR_DAILY_URL
 
+# Валюты с мелким курсом к рублю: 4 знаков мало
+FINE_PRECISION = {"AMD"}
+FINE_STEP = Decimal("0.000001")
+
 
 def fetch_cbr_rates_for_date(date: datetime.date) -> dict:
     """
@@ -22,8 +26,14 @@ def fetch_cbr_rates_for_date(date: datetime.date) -> dict:
     Возвращает словарь: { 'USD': Decimal('92.5000'), 'EUR': ... }
     """
     # ЦБ ожидает дату в формате dd/mm/yyyy
+    import time
     params = {"date_req": date.strftime("%d/%m/%Y")}
-    resp = requests.get(CBR_DAILY_URL, params=params, timeout=10)
+    # ЦБ ограничивает частоту запросов (429): пауза между днями и повтор с нарастающим ожиданием
+    for attempt in range(6):
+        time.sleep(0.7 if attempt == 0 else 5 * 2 ** (attempt - 1))
+        resp = requests.get(CBR_DAILY_URL, params=params, timeout=15)
+        if resp.status_code != 429:
+            break
     resp.raise_for_status()
 
     result = {}
@@ -38,7 +48,8 @@ def fetch_cbr_rates_for_date(date: datetime.date) -> dict:
         try:
             nominal = Decimal(nominal_text.replace(",", "."))
             value = Decimal(value_text.replace(",", "."))
-            rate = (value / nominal).quantize(Decimal("0.0001"))
+            step = FINE_STEP if char_code in FINE_PRECISION else Decimal("0.0001")
+            rate = (value / nominal).quantize(step)
         except Exception as e:
             logger.warning("Ошибка парсинга курса %s: %s", char_code, e)
             continue
@@ -75,8 +86,8 @@ class Command(BaseCommand):
             "--currencies",
             dest="currencies",
             help=(
-                "Список валют через запятую (например: USD,EUR,CNY,HKD,AED). "
-                "Если не указано — по умолчанию USD,EUR,CNY,HKD,AED."
+                "Список валют через запятую (например: USD,EUR,CNY,HKD,AED, KGS). "
+                "Если не указано — по умолчанию USD,EUR,CNY,HKD,AED, KGS."
             ),
         )
         parser.add_argument(
@@ -131,8 +142,8 @@ class Command(BaseCommand):
         if options["currencies"]:
             currencies = [c.strip().upper() for c in options["currencies"].split(",")]
         else:
-            # по умолчанию — наши 5 основных валют
-            currencies = ["USD", "EUR", "CNY", "HKD", "AED"]
+            # по умолчанию — наши 6 основных валют
+            currencies = ["USD", "EUR", "CNY", "HKD", "AED", "AMD", "KGS", "KZT", "GBP"]
 
         for c in currencies:
             if c not in valid_currencies:

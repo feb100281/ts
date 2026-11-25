@@ -1,0 +1,218 @@
+/* ============================================
+   СТРАНИЦА СОДЕРЖАНИЯ — ДЕЛОВОЙ СТИЛЬ
+   ============================================ */
+
+/* Страница содержания — отдельная, строгий стиль */
+.toc-page {
+    position: relative;
+    box-sizing: border-box;
+    background: var(--cover-surface);
+    margin-top: calc(-1 * var(--page-margin-top));
+    margin-right: calc(-1 * var(--page-margin-right));
+    margin-bottom: calc(-1 * var(--page-margin-bottom));
+    margin-left: calc(-1 * var(--page-margin-left));
+    width: calc(100% + var(--page-margin-left) + var(--page-margin-right));
+    height: 277mm;
+    padding: calc(25mm + var(--page-margin-top)) calc(20mm + var(--page-margin-right)) calc(14mm + var(--page-margin-bottom)) calc(20mm + var(--page-margin-left));
+    page-break-after: always;
+    border-radius: 0;
+}
+
+/* Левая акцентная полоса (как на обложке) */
+.toc-page::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    background: var(--cover-primary);
+}
+
+/* Шапка оглавления */
+.toc-header {
+    margin-bottom: 12mm;
+}
+
+.toc-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--cover-primary-dark);
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    margin-bottom: 3mm;
+}
+
+.toc-date {
+    font-size: 9px;
+    color: var(--cover-muted);
+    letter-spacing: 0.3px;
+}
+
+.toc-divider {
+    height: 2px;
+    background: var(--cover-primary);
+    width: 40px;
+    margin-bottom: 12mm;
+}
+
+/* Контейнер всех элементов */
+.toc-items {
+    display: flex;
+    flex-direction: column;
+    gap: 5mm;
+}
+
+/* Группа: раздел + его подразделы */
+.toc-section {
+    margin-bottom: 2mm;
+}
+
+/* Основной пункт (раздел) */
+.toc-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--cover-line);
+    padding-bottom: 2.5mm;
+    margin-bottom: 2.5mm;
+}
+
+.toc-item-left {
+    display: flex;
+    align-items: baseline;
+    gap: 8mm;
+}
+
+.toc-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--cover-primary);
+    min-width: 28px;
+    letter-spacing: 0.5px;
+}
+
+.toc-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--cover-ink);
+    letter-spacing: 0.2px;
+}
+
+.toc-dots {
+    flex: 1;
+    margin-left: 8mm;
+    border-bottom: 1px dotted var(--cover-line-strong);
+    height: 1px;
+}
+
+.toc-item:hover .toc-dots {
+    border-bottom-color: var(--cover-primary);
+}
+
+.toc-link {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    align-items: baseline;
+    gap: 8mm;
+    flex: 1;
+}
+
+.toc-link:hover {
+    color: var(--cover-primary);
+}
+
+/* ============================================
+   ПОДПУНКТЫ — АККУРАТНОЕ ВЫРАВНИВАНИЕ
+   ============================================ */
+
+.toc-subitems {
+    margin-left: 36px;  /* Отступ относительно номера раздела */
+    margin-bottom: 3mm;
+}
+
+.toc-subitem {
+    display: flex;
+    align-items: center;
+    padding: 2px 0;
+    border-left: 2px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.toc-subitem:hover {
+    border-left-color: var(--cover-primary);
+}
+
+.toc-subitem .toc-link {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    padding: 2px 0 2px 12px;
+}
+
+.toc-subnum {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--cover-muted);
+    min-width: 32px;
+    letter-spacing: 0.3px;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}
+
+.toc-subtext {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--cover-ink-light);
+    letter-spacing: 0.15px;
+    line-height: 1.4;
+}
+
+.toc-subitem:hover .toc-subnum {
+    color: var(--cover-primary);
+}
+
+.toc-subitem:hover .toc-subtext {
+    color: var(--cover-ink);
+    font-weight: 450;
+}
+
+/* Для подпунктов без точек — добавляем пунктирную линию справа */
+.toc-subitem .toc-link::after {
+    content: "";
+    flex: 1;
+    margin-left: 12px;
+    border-bottom: 1px dotted var(--cover-line);
+    height: 1px;
+    align-self: center;
+}
+
+/* При ховере линия становится заметнее */
+.toc-subitem:hover .toc-link::after {
+    border-bottom-color: var(--cover-primary);
+}
+
+/* ============================================
+   УТИЛИТЫ И ОЧИСТКА
+   ============================================ */
+
+.toc-page {
+    border: none;
+}
+
+.toc-items {
+    border: none;
+}
+
+.toc-section:last-child .toc-item:last-child {
+    border-bottom: none;
+}
+
+/* Для PDF-печати */
+@media print {
+    .toc-subitem .toc-link::after {
+        border-bottom-style: dotted;
+    }
+}

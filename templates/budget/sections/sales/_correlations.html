@@ -1,0 +1,126 @@
+<div id="section-sales-correlations"></div>
+
+<div class="page-break"></div>
+
+<!-- Раздел I.3: Корреляции и взаимосвязи -->
+<div class="section-header">
+    <span class="section-number">I.3</span>
+    <div class="section-title-with-num">Корреляции и взаимосвязи</div>
+</div>
+
+{% if qty_price_daily_chart_base64 %}
+<!-- Подраздел I.3.1: Дневная корреляция -->
+<div class="subsection-header">
+    <span class="subsection-number">I.3.1</span>
+    <div class="subsection-title">Дневная корреляция количества продаж и цены</div>
+</div>
+
+<div class="chart-box chart-box-narrow">
+    <img src="data:image/png;base64,{{ qty_price_daily_chart_base64 }}" alt="Дневная корреляция">
+</div>
+
+{% if daily_correlation %}
+<div class="insight-box">
+    <strong>Коэффициент корреляции:</strong> {{ daily_correlation.value }}<br>
+    {{ daily_correlation.comment }}
+    {% if daily_correlation.note %}
+    <br><span class="muted">{{ daily_correlation.note }}</span>
+    {% endif %}
+</div>
+{% endif %}
+{% endif %}
+
+{% if sales_correlations %}
+<!-- Подраздел I.3.2: Анализ взаимосвязи показателей -->
+<div class="subsection-header">
+    <span class="subsection-number">I.3.2</span>
+    <div class="subsection-title">Анализ взаимосвязи показателей</div>
+</div>
+
+<table class="data">
+    <thead>
+        <tr>
+            <th style="width:24%;">Пара показателей</th>
+            <th style="width:11%;">Корреляция</th>
+            <th style="width:18%;">Характер связи</th>
+            <th style="width:47%;">Практическая интерпретация</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="left">Средняя цена ↔ чистая выручка</td>
+            <td class="center {{ sales_correlations.price_revenue.class }}">
+                {{ sales_correlations.price_revenue.value }}
+            </td>
+            <td class="left {{ sales_correlations.price_revenue.class }}">
+                {{ sales_correlations.price_revenue.text }}
+            </td>
+            <td class="left">{{ sales_correlations.price_revenue.meaning }}</td>
+        </tr>
+        <tr>
+            <td class="left">Количество продаж ↔ средняя цена</td>
+            <td class="center {{ sales_correlations.qty_price.class }}">
+                {{ sales_correlations.qty_price.value }}
+            </td>
+            <td class="left {{ sales_correlations.qty_price.class }}">
+                {{ sales_correlations.qty_price.text }}
+            </td>
+            <td class="left">{{ sales_correlations.qty_price.meaning }}</td>
+        </tr>
+        <tr>
+            <td class="left">Количество продаж ↔ чистая выручка</td>
+            <td class="center {{ sales_correlations.qty_revenue.class }}">
+                {{ sales_correlations.qty_revenue.value }}
+            </td>
+            <td class="left {{ sales_correlations.qty_revenue.class }}">
+                {{ sales_correlations.qty_revenue.text }}
+            </td>
+            <td class="left">{{ sales_correlations.qty_revenue.meaning }}</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="insight-box">
+    <strong>Вывод:</strong><br>
+    {{ sales_correlations.driver_comment }}
+</div>
+{% endif %}
+
+{% if qty_price_combo_chart_base64 %}
+<!-- Подраздел I.3.3: Динамика количества и цены -->
+ <div class="page-break"></div>
+<div class="subsection-header">
+    <span class="subsection-number">I.3.3</span>
+    <div class="subsection-title">Динамика количества продаж и средней цены</div>
+</div>
+
+<div class="chart-box">
+    <img src="data:image/png;base64,{{ qty_price_combo_chart_base64 }}" alt="Динамика количества и цены">
+</div>
+<div class="small-note">
+    Столбцы отражают количество продаж, линия — среднюю цену продажи за 1 шт.
+    Подписи Δ показывают изменение количества продаж относительно предыдущего месяца.
+</div>
+
+{% if qty_price_auto_comment %}
+<div class="insight-box">
+    <strong>Комментарий:</strong><br>
+    {{ qty_price_auto_comment }}
+</div>
+{% endif %}
+{% endif %}
+
+{% if qty_price_chart_base64 %}
+<!-- Подраздел I.3.4: Диаграмма зависимости -->
+<div class="subsection-header">
+    <span class="subsection-number">I.3.4</span>
+    <div class="subsection-title">Зависимость количества продаж от средней цены</div>
+</div>
+
+<div class="chart-box chart-box-narrow">
+    <img src="data:image/png;base64,{{ qty_price_chart_base64 }}" alt="Связь количества и цены">
+</div>
+<div class="small-note">
+    Диаграмма рассеяния показывает, как меняется средняя цена продажи при изменении объема продаж по месяцам.
+</div>
+{% endif %}

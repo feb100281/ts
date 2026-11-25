@@ -1,10 +1,14 @@
-from datetime import date
-
-from django.http import JsonResponse
+# ts/views.py
+from datetime import date, datetime
+from django.http import JsonResponse, HttpResponse, HttpResponseBadRequest
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Count
+from django.db.models import Q
+from django.contrib.admin.views.decorators import staff_member_required
 
+from contracts.models import Contracts, Conditions, CfItemAuto
 from counterparties.models import Counterparty
+
 
 
 @login_required
@@ -91,3 +95,94 @@ def treasury_status(request):
             "admin_url": f"{changelist}?cp_final__isnull=1",
         },
     })
+    
+
+
+    
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def contracts_issues_status(request):
+    qs_no_accrual = Contracts.objects.filter(conditions__isnull=True).distinct()
+
+    return JsonResponse({
+        "ok": True,
+        "no_accrual_fn": {
+            "total": qs_no_accrual.count(),
+            "admin_url": "/admin/contracts/contracts/?has_accrual_fn=no",
+        },
+    })
+    
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def accruals_control_status(request):
+    today = date.today()
+
+    # Активные условия на сегодня
+    active_conditions = (
+        Conditions.objects
+        .filter(date_start__lte=today)
+        .filter(Q(date_finish__isnull=True) | Q(date_finish__gte=today))
+        .select_related("accounting_method", "contract")
+    )
+
+    # 1) Accrual активные
+    accrual_contract_ids = (
+        active_conditions
+        .filter(accounting_method__code="accrual")
+        .values_list("contract_id", flat=True)
+        .distinct()
+    )
+    accrual_total = accrual_contract_ids.count()
+
+    # 2) Cash based активные
+    cash_contract_ids = (
+        active_conditions
+        .filter(accounting_method__code="cash_based")
+        .values_list("contract_id", flat=True)
+        .distinct()
+    )
+    cash_total = cash_contract_ids.count()
+
+    # 3) Cash based без автоматизации CF
+    cash_without_cf_total = (
+        Contracts.objects
+        .filter(id__in=cash_contract_ids)
+        .annotate(cf_auto_cnt=Count("cfitemauto", distinct=True))
+        .filter(cf_auto_cnt=0)
+        .count()
+    )
+
+    # 4) Договоры без условий начисления
+    no_conditions_total = Contracts.objects.filter(conditions__isnull=True).distinct().count()
+
+    return JsonResponse({
+        "ok": True,
+        "month": today.strftime("%Y-%m"),
+        "accrual": {
+            "total": accrual_total,
+            "admin_url": "/admin/contracts/contracts/?acc_method=accrual_active",
+        },
+        "cash_based": {
+            "total": cash_total,
+            "admin_url": "/admin/contracts/contracts/?acc_method=cash_active",
+        },
+        "cash_without_cf": {
+            "total": cash_without_cf_total,
+            "admin_url": "/admin/contracts/contracts/?acc_method=cash_active",
+        },
+        "no_conditions": {
+            "total": no_conditions_total,
+            "admin_url": "/admin/contracts/contracts/?has_accrual_fn=no",
+        },
+    })
+    
+    
+
+
+
+
+
+
+

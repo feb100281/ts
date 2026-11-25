@@ -1,0 +1,116 @@
+-- НДС по операциям, справочно (лист «НДС по операциям»).
+-- Строки: (me, kind, code, item, cost_item, cp, value), value — сумма НДС в рублях со знаком учёта.
+--   sales — НДС с продаж WB: с цены покупателя, как в P&L (pl_sales.vat_amount);
+--   comm  — НДС с вознаграждения WB по отчёту (как «Сверка НДС WB», стр. 2.2);
+--   wb    — НДС с расходов и продвижения WB: расчётно по ставке строки;
+--   gl    — НДС из учёта (gl.fact, chapter VAT_ACCURALS), разнесённый по счёту
+--           группе статей, статье и контрагенту парной проводки P&L (тот же pid).
+WITH
+-- @include vat_bs130.txt
+sales_vat AS (
+    SELECT LAST_DAY(date_from)::DATE AS me, 'sales' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp,
+           SUM(vat_amount) AS value
+    FROM pl_sales
+    WHERE date_from::DATE <= $date_from
+    GROUP BY 1
+),
+comm_vat AS (
+    SELECT LAST_DAY(rr_dt::DATE)::DATE AS me, 'comm' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp,
+           COALESCE(SUM(ppvz_vw_nds) FILTER (WHERE COALESCE(sop_name, '') = 'Продажа'), 0)
+           - COALESCE(SUM(ppvz_vw_nds) FILTER (WHERE COALESCE(sop_name, '') = 'Возврат'), 0)
+           + COALESCE(SUM(ppvz_vw_nds) FILTER (
+                 WHERE COALESCE(sop_name, '') NOT IN ('Продажа', 'Возврат')), 0) AS value
+    FROM sales.wb_raw
+    WHERE rr_dt::DATE <= $date_from
+    GROUP BY 1
+),
+wb_vat AS (
+    SELECT me::DATE AS me, 'wb' AS kind,
+           CASE WHEN account = 'WB Deduction' THEN 'promo' ELSE 'selling' END AS code,
+           '' AS item, '' AS cost_item, '' AS cp,
+           -SUM((dt - cr) * COALESCE(vat_rate, 20) / (100 + COALESCE(vat_rate, 20))) / 100
+               AS value
+    FROM wb_costs
+    WHERE date_from::DATE <= $date_from
+      AND account != 'Other income / loss'
+    GROUP BY 1, 2, 3
+),
+-- НДС с выплат WB по программе сотрудничества: НДС внутри суммы, по ставке строки
+wbpay_vat AS (
+    SELECT me::DATE AS me, 'wbpay' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp,
+           SUM((dt - cr) * COALESCE(vat_rate, 22) / (100 + COALESCE(vat_rate, 22))) / 100 AS value
+    FROM wb_costs
+    WHERE date_from::DATE <= $date_from AND cost_item = '5.4. Выплаты WB по программе сотрудничества'
+    GROUP BY 1
+),
+gl_vat AS (
+    SELECT LAST_DAY(v.date_from)::DATE AS me, 'gl' AS kind,
+           COALESCE(LEFT(CAST(a.code AS VARCHAR), 3), '') AS code,
+           COALESCE(NULLIF(TRIM(concat_ws(' ', sp.code, sp.name)), ''), 'Без группы') AS item,
+           COALESCE(NULLIF(TRIM(concat_ws(' ', s.code, s.name)), ''), 'Без статьи') AS cost_item,
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без контрагента') AS cp,
+           SUM(v.dt - v.cr) / 100.0 AS value
+    FROM pg.gl.fact v
+    -- статья и договор — из строки начисления (accural_distribution): при режиме
+    -- vat_only проводки в P&L нет, а счёт P&L в начислении есть
+    LEFT JOIN pg.gl.accural_distribution p ON p.id = v.pid
+    LEFT JOIN pg.gl.fact pf ON pf.pid = v.pid AND pf.chapter = 'PL_ACCURALS'
+    -- без счёта P&L (закупки на баланс: упаковка, материалы) — счёт BS
+    LEFT JOIN pg.public.corporate_coa a ON a.id = COALESCE(p.acc_pl, pf.acc_id, p.acc_bs)
+    LEFT JOIN pg.public.corporate_cfitems s ON s.id = COALESCE(p.subconto_pl, pf.subconto_id, p.subconto_bs)
+    LEFT JOIN pg.public.corporate_cfitems sp ON sp.id = s.parent_id
+    LEFT JOIN pg.public.contracts_contracts c ON c.id = COALESCE(p.contract_id, v.contract_id)
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
+    WHERE v.chapter = 'VAT_ACCURALS'
+      AND v.date_from <= $date_from
+      AND COALESCE(p.contract_id, v.contract_id) NOT IN (SELECT cid FROM bs130)
+    GROUP BY 1, 2, 3, 4, 5, 6
+),
+-- НДС по закупке товаров — из УПД поставщиков (upd_income_lines), по дате УПД.
+-- goods_base — справочно сумма закупок без НДС в рублях, для сверки полноты.
+goods_cash_vat AS (
+    SELECT g.me, 'goods_cash' AS kind, '' AS code,
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика') AS item,
+           COALESCE(ct.title, 'Договор') || ' № ' || COALESCE(c.number, 'б/н') || ' · id '
+               || CAST(c.id AS VARCHAR) AS cost_item,
+           'НДС по оплатам, не покрытый УПД' AS cp, SUM(g.vat) AS value
+    FROM bs130_vat g
+    JOIN pg.public.contracts_contracts c ON c.id = g.cid
+    LEFT JOIN pg.public.contracts_contractstitle ct ON ct.id = c.title_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = c.cp_id
+    WHERE ABS(g.vat) >= 0.01
+    GROUP BY 1, 2, 3, 4, 5, 6
+),
+goods_vat AS (
+    SELECT LAST_DAY(d.date)::DATE AS me, 'goods' AS kind, '' AS code,
+           CASE WHEN COALESCE(l.upd_vat_rate, 0) = 0 THEN 'НДС 0% (импорт / без НДС)'
+                ELSE 'НДС ' || CAST(CAST(l.upd_vat_rate AS INTEGER) AS VARCHAR) || '%' END AS item,
+           COALESCE(NULLIF(TRIM(cp.name), ''), 'Без поставщика') AS cost_item,
+           'УПД № ' || d.number || ' от ' || strftime(d.date, '%d.%m.%Y') AS cp,
+           SUM(COALESCE(l.upd_vat_amount,
+                        l.upd_amount_vatless * COALESCE(l.upd_vat_rate, 0) / 100)) AS value
+    FROM pg.public.upd_income_lines l
+    JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+    LEFT JOIN pg.public.counterparties_counterparty cp ON cp.id = d.counterparty_id
+    WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+    GROUP BY 1, 2, 3, 4, 5, 6
+),
+goods_base AS (
+    SELECT LAST_DAY(d.date)::DATE AS me, 'goods_base' AS kind, '' AS code, '' AS item,
+           '' AS cost_item, '' AS cp, SUM(l.upd_amount_vatless) AS value
+    FROM pg.public.upd_income_lines l
+    JOIN pg.public.cards_upddocument d ON d.id = l.upd_document_id
+    WHERE d.date <= $date_from AND COALESCE(l.currency_code, 'RUB') = 'RUB'
+    GROUP BY 1
+)
+SELECT * FROM sales_vat
+UNION ALL SELECT * FROM goods_vat
+UNION ALL SELECT * FROM goods_base
+UNION ALL SELECT * FROM goods_cash_vat
+UNION ALL SELECT * FROM comm_vat
+UNION ALL SELECT * FROM wb_vat
+UNION ALL SELECT * FROM wbpay_vat
+UNION ALL SELECT * FROM gl_vat
