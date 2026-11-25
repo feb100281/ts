@@ -7,7 +7,7 @@ from django.db.models import Count, Q, F, Sum, ExpressionWrapper, DecimalField
 from django.utils.html import format_html
 from .reporting.builder import MissingFieldsReportGenerator
 from .models import (
-    Lot, LotFile, UpdDocument, UpdDocumentFile, WbProduct
+    Lot, LotFile, UpdDocument, UpdDocumentFile, WbProduct, UPDData
 )
 from django.urls import path
 from django.shortcuts import render
@@ -96,11 +96,50 @@ class UpdProblemFilter(admin.SimpleListFilter):
         return queryset
 
 
+from django import forms as dj_forms
+
+
+class UpdDocumentForm(dj_forms.ModelForm):
+    apply_channel_to_lines = dj_forms.BooleanField(
+        required=False,
+        label="Применить канал ко всем строкам",
+        help_text="Сбросит канал у всех строк УПД — они возьмут «Канал по умолчанию».",
+    )
+
+    class Meta:
+        model = UpdDocument
+        fields = "__all__"
+
+
 @admin.register(UpdDocument)
 class UpdDocumentAdmin(admin.ModelAdmin):
     change_list_template = "admin/cards/upddocument/change_list.html"
     date_hierarchy = "date"
-    actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf', 'export_upd_separate_files', 'cost_note']
+    form = UpdDocumentForm
+    actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf', 'export_upd_separate_files', 'cost_note',
+               'lines_channel_default', 'lines_channel_wb', 'lines_channel_retail']
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if form.cleaned_data.get("apply_channel_to_lines"):
+            n = obj.income_lines.update(channel=None)
+            self.message_user(request, f"Канал «{obj.get_default_channel_display()}» применён к строкам: {n}")
+
+    def _set_lines_channel(self, request, queryset, channel, label):
+        n = UPDData.objects.filter(upd_document__in=queryset).update(channel=channel)
+        self.message_user(request, f"{label}: строк {n} в {queryset.count()} УПД")
+
+    @admin.action(description='🔁 Каналы строк = канал по умолчанию УПД')
+    def lines_channel_default(self, request, queryset):
+        self._set_lines_channel(request, queryset, None, "Каналы строк сброшены на канал УПД")
+
+    @admin.action(description='🟣 Все строки → ВБ')
+    def lines_channel_wb(self, request, queryset):
+        self._set_lines_channel(request, queryset, "wb", "Канал «ВБ»")
+
+    @admin.action(description='🟢 Все строки → Розница')
+    def lines_channel_retail(self, request, queryset):
+        self._set_lines_channel(request, queryset, "retail", "Канал «Розница»")
 
     list_display = (
         'counterparty_short',
