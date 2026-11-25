@@ -5,7 +5,6 @@ import dash_mantine_components as dmc
 import base64
 
 from .data import (
-    size_label,
     update_channel,
     update_size,
     get_grid_data,
@@ -61,14 +60,14 @@ def register_callbacks(app):
 
     @app.callback(
         Output("dummy", "children"),
-        Output("upd-grid", "rowTransaction"),
         Input("upd-grid", "cellValueChanged"),
         prevent_initial_call=True,
     )
     def save_grid_change(changes):
-        """Сохраняет все правки (размер, канал) и обновляет только эти строки, без перезагрузки таблицы."""
+        """Сохраняет все правки (размер, канал). Таблицу не обновляем: значение уже в ячейке,
+        а обновление строки заново применило бы фильтры и скрыло её."""
         if not changes:
-            return no_update, no_update
+            return no_update
         if not isinstance(changes, list):
             changes = [changes]
         rows = []
@@ -85,12 +84,8 @@ def register_callbacks(app):
             elif col == "chrt_id" and value not in (None, ""):
                 chrt_id = str(value).split("|")[0].strip()
                 update_size(row_id, chrt_id)
-                row["chrt_id"] = int(chrt_id)
-                row["tech_size"] = size_label(chrt_id)
                 rows.append(row)
-        if not rows:
-            return no_update, no_update
-        return "", {"update": rows}
+        return "" if rows else no_update
 
     @app.callback(
         Output(
