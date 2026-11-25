@@ -117,7 +117,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     form = UpdDocumentForm
     actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf', 'export_upd_separate_files', 'cost_note',
-               'lines_channel_default', 'lines_channel_wb', 'lines_channel_retail']
+               'lines_channel_default', 'lines_channel_wb', 'lines_channel_retail', 'link_cards_by_sa']
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -128,6 +128,45 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     def _set_lines_channel(self, request, queryset, channel, label):
         n = UPDData.objects.filter(upd_document__in=queryset).update(channel=channel)
         self.message_user(request, f"{label}: строк {n} в {queryset.count()} УПД")
+
+    @admin.action(description='🔗 Привязать карточки и размеры по артикулу (пустые)')
+    def link_cards_by_sa(self, request, queryset):
+        from .models import UskUpd, WbSizes
+        lines = UPDData.objects.filter(upd_document__in=queryset).filter(
+            Q(nm__isnull=True) | Q(chrt__isnull=True)).exclude(upd_sa_name__isnull=True)
+        sas = {l.upd_sa_name.strip().upper() for l in lines if l.upd_sa_name}
+        # словарь УПД → USK, иначе карточка с точно таким артикулом (только если она одна)
+        usk = {}
+        for r in UskUpd.objects.all().values("upd_sa_name", "usk"):
+            k = (r["upd_sa_name"] or "").strip().upper()
+            if k in sas:
+                usk.setdefault(k, set()).add(r["usk"])
+        cards = {}
+        for r in WbProduct.objects.exclude(sa_name__isnull=True).values("card_id", "sa_name"):
+            k = r["sa_name"].strip().upper()
+            if k in sas:
+                cards.setdefault(k, set()).add(r["card_id"])
+        nm_set = chrt_set = skipped = 0
+        for l in lines:
+            k = l.upd_sa_name.strip().upper()
+            nm = l.nm_id
+            if nm is None:
+                cand = usk.get(k) if len(usk.get(k, ())) == 1 else cards.get(k)
+                if not cand or len(cand) != 1:
+                    skipped += 1
+                    continue
+                nm = next(iter(cand))
+                l.nm_id = nm
+                nm_set += 1
+            if l.chrt_id is None and l.upd_size:
+                ch = list(WbSizes.objects.filter(nm_id=nm, tech_size__iexact=l.upd_size.strip())
+                          .values_list("chrt_id", flat=True)[:2])
+                if len(ch) == 1:
+                    l.chrt_id = ch[0]
+                    chrt_set += 1
+            l.save(update_fields=["nm", "chrt"])
+        self.message_user(request, f"Привязано карточек: {nm_set}, размеров: {chrt_set}; "
+                                   f"не найдено или неоднозначно: {skipped}")
 
     @admin.action(description='🔁 Каналы строк = канал по умолчанию УПД')
     def lines_channel_default(self, request, queryset):
