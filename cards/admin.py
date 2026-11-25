@@ -96,6 +96,24 @@ class UpdProblemFilter(admin.SimpleListFilter):
         return queryset
 
 
+WB_LINE = Q(income_lines__channel='wb') | (Q(income_lines__channel__isnull=True) & Q(default_channel='wb'))
+
+
+class WbGapFilter(admin.SimpleListFilter):
+    title = 'Пробелы на ВБ'
+    parameter_name = 'wb_gap'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Есть: нет карточки или размера'), ('no', 'Нет пробелов'))
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(Q(wb_nm_missing__gt=0) | Q(wb_chrt_missing__gt=0))
+        if self.value() == 'no':
+            return queryset.filter(wb_nm_missing=0, wb_chrt_missing=0)
+        return queryset
+
+
 from django import forms as dj_forms
 
 
@@ -117,7 +135,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     form = UpdDocumentForm
     actions = ['export_complete_package', 'export_registry_excel',  'export_registry_pdf', 'export_upd_separate_files', 'cost_note',
-               'lines_channel_default', 'lines_channel_wb', 'lines_channel_retail', 'link_cards_by_sa']
+               'lines_channel_default', 'lines_channel_wb', 'lines_channel_retail', 'link_cards_by_sa', 'wb_gaps_excel']
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -168,6 +186,14 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         self.message_user(request, f"Привязано карточек: {nm_set}, размеров: {chrt_set}; "
                                    f"не найдено или неоднозначно: {skipped}")
 
+    @admin.action(description='📋 Пробелы ВБ — Excel (нет карточки / размера)')
+    def wb_gaps_excel(self, request, queryset):
+        from .exports.wb_gaps import build_wb_gaps_xlsx
+        content, name = build_wb_gaps_xlsx(list(queryset.values_list('id', flat=True)))
+        resp = HttpResponse(content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = f'attachment; filename="{name}"'
+        return resp
+
     @admin.action(description='🔁 Каналы строк = канал по умолчанию УПД')
     def lines_channel_default(self, request, queryset):
         self._set_lines_channel(request, queryset, None, "Каналы строк сброшены на канал УПД")
@@ -193,6 +219,8 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         'total_qty_display',
         'lines_count_display',
         'channels_display',
+        'wb_nm_missing_count',
+        'wb_chrt_missing_count',
         'nm_missing_count',
         'chrt_missing_count',
         'vat_mismatch_count',
@@ -201,7 +229,7 @@ class UpdDocumentAdmin(admin.ModelAdmin):
     
     list_display_links = ('counterparty_short', 'upd_link')
 
-    list_filter = ('counterparty', 'default_channel')
+    list_filter = (WbGapFilter, 'counterparty', 'default_channel')
 
     search_fields = (
         'number', 'comment',
@@ -230,6 +258,9 @@ class UpdDocumentAdmin(admin.ModelAdmin):
             lines_count=Count('income_lines'),
             nm_missing=Count('income_lines', filter=Q(income_lines__nm__isnull=True)),
             chrt_missing=Count('income_lines', filter=Q(income_lines__chrt__isnull=True)),
+            wb_nm_missing=Count('income_lines', filter=WB_LINE & Q(income_lines__nm__isnull=True)),
+            wb_chrt_missing=Count('income_lines', filter=WB_LINE & Q(income_lines__nm__isnull=False)
+                                  & Q(income_lines__chrt__isnull=True)),
             vat_mismatch=Count(
                 'income_lines',
                 filter=(
@@ -574,6 +605,14 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         names = {'wb': 'ВБ', 'retail': 'Розница', 'none': 'Не распр.'}
         return ' · '.join(f"{names.get(r['ch'], r['ch'])} {r['q'] or 0:,.0f}".replace(',', ' ')
                           for r in rows) or '—'
+
+    @admin.display(description='ВБ: нет карточки', ordering='wb_nm_missing')
+    def wb_nm_missing_count(self, obj):
+        return self.problem_cell(obj.wb_nm_missing)
+
+    @admin.display(description='ВБ: нет размера', ordering='wb_chrt_missing')
+    def wb_chrt_missing_count(self, obj):
+        return self.problem_cell(obj.wb_chrt_missing)
 
     @admin.display(description='Нет nm_id', ordering='nm_missing')
     def nm_missing_count(self, obj):
