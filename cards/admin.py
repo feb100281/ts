@@ -191,7 +191,8 @@ class UpdDocumentAdmin(admin.ModelAdmin):
         from .exports.wb_gaps import build_wb_gaps_xlsx
         content, name = build_wb_gaps_xlsx(list(queryset.values_list('id', flat=True)))
         resp = HttpResponse(content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        resp['Content-Disposition'] = f'attachment; filename="{name}"'
+        from urllib.parse import quote
+        resp['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(name)}"
         return resp
 
     @admin.action(description='🔁 Каналы строк = канал по умолчанию УПД')

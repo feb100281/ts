@@ -4,20 +4,11 @@ from __future__ import annotations
 
 from datetime import date
 from io import BytesIO
+import re
 
 from django.db.models import Q
 
 from cards.models import UpdDocument, UPDData, WbProduct, WbSizes
-
-NOTES = [
-    ("Что в файле", "Строки УПД канала «ВБ» (свой канал строки, иначе канал УПД по умолчанию), "
-                    "у которых не указана карточка WB (NM_ID) или код размера (chrt_id)."),
-    ("Нет карточки", "Строке не присвоен NM_ID. Если в колонке «Карточка с таким артикулом» стоит номер — "
-                     "в админке УПД отметьте документ и запустите «Привязать карточки и размеры по артикулу»."),
-    ("Нет размера", "Карточка указана, но не выбран размер WB. Выберите размер в таблице строк УПД; "
-                    "доступные размеры карточки — в колонке «Размеры WB»."),
-    ("Розница", "Строки канала «Розница» и «Не распределено» в файл не попадают."),
-]
 
 
 def _wb_lines(doc_ids):
@@ -102,18 +93,17 @@ def build_wb_gaps_xlsx(doc_ids) -> tuple[bytes, str]:
                  l_cols, rows, totals=True, freeze_cols=4, header_max=14,
                  col_formats={0: "@", 3: "0", 9: "0", 13: mp.FMT_MONEY_DEC, 14: mp.FMT_MONEY_DEC})
 
-    ws = wb.create_sheet("Как читать")
-    mp.sheet_setup(ws, landscape=False)
-    mp.title_band(ws, "Как читать", "Пробелы разметки ВБ", 4, show_back=False)
-    ws.column_dimensions["A"].width = 2
-    ws.column_dimensions["B"].width = 22
-    ws.column_dimensions["C"].width = 100
-    for i, (t, v) in enumerate(NOTES):
-        mp.write(ws, 7 + i, 2, t, font=Font(name=mp.FONT, size=9, bold=True, color=mp.NAVY_3),
-                 align="left", border=mp.B_BOTTOM)
-        mp.write(ws, 7 + i, 3, v, font=Font(name=mp.FONT, size=9, color=mp.TEXT),
-                 align="left", wrap=True, border=mp.B_BOTTOM)
-
     buf = BytesIO()
     wb.save(buf)
-    return buf.getvalue(), f"upd_wb_gaps_{today:%Y-%m-%d}.xlsx"
+    return buf.getvalue(), _file_name(docs, today)
+
+
+def _file_name(docs, today):
+    """Одна УПД: «номер дата поставщик»; несколько — их число и дата выгрузки."""
+    if len(docs) == 1:
+        d = next(iter(docs.values()))
+        name = f"{d.number} {d.date:%d.%m.%Y} {getattr(d.counterparty, 'name', '') or ''}".strip()
+    else:
+        name = f"Пробелы ВБ {len(docs)} УПД {today:%d.%m.%Y}"
+    name = re.sub(r'[\\/:*?"<>|]+', '-', name)
+    return f"{name}.xlsx"
